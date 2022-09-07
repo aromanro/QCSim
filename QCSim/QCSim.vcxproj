@@ -70,6 +70,18 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>C:\LIBs\eigen;$(VCInstallDir)PlatformSDK\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>C:\LIBs\eigen;$(VCInstallDir)PlatformSDK\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <IncludePath>C:\LIBs\eigen;$(VC_IncludePath);C:\Program Files %28x86%29\Windows Kits\10\Include\10.0.10240.0\ucrt;$(IncludePath);$(WindowsSDK_IncludePath)include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(VCInstallDir)PlatformSDK\include;$(VCInstallDir)PlatformSDK\common\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Include;C:\Program Files (x86)\Java\jdk1.6.0_20\include;C:\Program Files (x86)\Java\jdk1.6.0_20\include\win32</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <IncludePath>C:\LIBs\eigen;$(VC_IncludePath);C:\Program Files %28x86%29\Windows Kits\10\Include\10.0.10240.0\ucrt;$(IncludePath);$(WindowsSDK_IncludePath)include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(VCInstallDir)PlatformSDK\include;$(VCInstallDir)PlatformSDK\common\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Include;C:\Program Files (x86)\Java\jdk1.6.0_20\include;C:\Program Files (x86)\Java\jdk1.6.0_20\include\win32</IncludePath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -128,6 +140,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="QCSim.cpp" />
+    <ClCompile Include="QuantumGate.cpp" />
+    <ClCompile Include="QubitRegister.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="QuantumGate.h" />
+    <ClInclude Include="QubitRegister.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

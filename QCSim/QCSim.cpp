@@ -3,6 +3,9 @@
 
 #include <iostream>
 
+#include "QubitRegister.h"
+
+
 int main()
 {
     std::cout << "Hello Quantum World!\n";
