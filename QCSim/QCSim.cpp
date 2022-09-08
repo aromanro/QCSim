@@ -28,5 +28,8 @@ int main()
     {
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
     }
+
+    QC::HadamardGate hadamard;
+    std::cout << hadamard.getOperatorMatrix(3, 2) << std::endl;
 }
 

@@ -6,6 +6,10 @@
 #include <random>
 #include <complex>
 
+#include "QuantumGate.h"
+
+// Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
+
 namespace QC {
 
 	class QubitRegister
@@ -32,6 +36,11 @@ namespace QC {
 		void Normalize();
 
 		unsigned int Measure();
+
+		void ApplyGate(const QuantumGate& gate, unsigned int qubit, unsigned int controllingQubit = 0)
+		{
+			registerStorage *= gate.getOperatorMatrix(NrQubits, qubit, controllingQubit);
+		}
 
 	protected:
 		unsigned int NrQubits;
