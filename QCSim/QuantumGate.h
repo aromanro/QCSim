@@ -29,6 +29,14 @@ namespace QC {
 	public:
 		HadamardGate();
 	};
+
+	class PhaseShiftGate : public SingleQubitGate
+	{
+	public:
+		PhaseShiftGate(double theta = 0);
+
+		void SetPhaseShift(double theta);
+	};
 }
 
 

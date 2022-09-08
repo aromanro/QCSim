@@ -71,4 +71,9 @@ namespace QC {
 
 		return state;
 	}
+
+	void QubitRegister::ApplyGate(const QuantumGate& gate, unsigned int qubit, unsigned int controllingQubit)
+	{
+		registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit) * registerStorage;
+	}
 }

@@ -37,10 +37,7 @@ namespace QC {
 
 		unsigned int Measure();
 
-		void ApplyGate(const QuantumGate& gate, unsigned int qubit, unsigned int controllingQubit = 0)
-		{
-			registerStorage *= gate.getOperatorMatrix(NrQubits, qubit, controllingQubit);
-		}
+		void ApplyGate(const QuantumGate& gate, unsigned int qubit, unsigned int controllingQubit = 0);
 
 	protected:
 		unsigned int NrQubits;

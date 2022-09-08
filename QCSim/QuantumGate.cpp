@@ -27,6 +27,7 @@ namespace QC {
 		return extOperatorMat;
 	}
 
+
 	HadamardGate::HadamardGate()
 	{
 		static const double norm = 1. / sqrt(2.);
@@ -34,5 +35,16 @@ namespace QC {
 		operatorMat(0, 1) = norm;
 		operatorMat(1, 0) = norm;
 		operatorMat(1, 1) = -norm;
+	}
+
+	PhaseShiftGate::PhaseShiftGate(double theta)
+	{
+		operatorMat(0, 0) = 1;
+		SetPhaseShift(theta);
+	}
+
+	void PhaseShiftGate::SetPhaseShift(double theta)
+	{
+		operatorMat(1, 1) = exp(std::complex<double>(0, theta));
 	}
 }
