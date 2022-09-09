@@ -24,12 +24,30 @@
     <ClCompile Include="QuantumGate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QuantumAlgorithm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GroverAlgorithm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Oracle.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QubitRegister.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QuantumGate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QuantumAlgorithm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GroverAlgorithm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Oracle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
