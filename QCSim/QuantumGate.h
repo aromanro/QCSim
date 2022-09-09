@@ -41,7 +41,37 @@ namespace QC {
 		void SetPhaseShift(double theta);
 	};
 
-	class TwoQubitsControlledGate : public QuantumGateWithOp
+	class PauliXGate : public SingleQubitGate
+	{
+	public:
+		PauliXGate();
+	};
+
+	class PauliYGate : public SingleQubitGate
+	{
+	public:
+		PauliYGate();
+	};
+
+	class PauliZGate : public SingleQubitGate
+	{
+	public:
+		PauliZGate();
+	};
+
+	class TwoQubitsGate : public QuantumGateWithOp
+	{
+	public:
+		TwoQubitsGate();
+	};
+
+	class SwapGate : public TwoQubitsGate
+	{
+	public:
+		SwapGate();
+	};
+
+	class TwoQubitsControlledGate : public TwoQubitsGate
 	{
 	public:
 		TwoQubitsControlledGate();
@@ -63,6 +93,12 @@ namespace QC {
 		ControlledPhaseShiftGate(double theta = 0);
 
 		void SetPhaseShift(double theta);
+	};
+
+	class ControlledZGate : public TwoQubitsControlledGate
+	{
+	public:
+		ControlledZGate();
 	};
 }
 

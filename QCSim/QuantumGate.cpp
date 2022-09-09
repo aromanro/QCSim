@@ -46,9 +46,39 @@ namespace QC {
 	}
 
 
-	TwoQubitsControlledGate::TwoQubitsControlledGate()
+	PauliXGate::PauliXGate()
+	{
+		operatorMat(0, 1) = 1;
+		operatorMat(1, 0) = 1;
+	}
+
+	PauliYGate::PauliYGate()
+	{
+		operatorMat(0, 1) = std::complex<double>(0,-1);
+		operatorMat(1, 0) = std::complex<double>(0, 1);
+	}
+
+	PauliZGate::PauliZGate()
+	{
+		operatorMat(0, 0) = 1;
+		operatorMat(1, 1) = -1;
+	}
+
+	TwoQubitsGate::TwoQubitsGate()
 	{
 		operatorMat = Eigen::MatrixXcd::Identity(4, 4);
+	}
+
+	SwapGate::SwapGate()
+	{
+		operatorMat(1, 1) = 0;
+		operatorMat(2, 2) = 0;
+		operatorMat(1, 2) = 1;
+		operatorMat(2, 1) = 1;
+	}
+
+	TwoQubitsControlledGate::TwoQubitsControlledGate()
+	{
 	}
 
 	void TwoQubitsControlledGate::SetOperation(const Eigen::MatrixXcd& U)
@@ -56,6 +86,7 @@ namespace QC {
 		assert(U.rows() == 2 && U.cols() == 2);
 		operatorMat.block(2, 2, 2, 2) = U;
 	}
+
 
 	Eigen::MatrixXcd TwoQubitsControlledGate::getOperatorMatrix(unsigned int nrQubits, unsigned int qubit, unsigned int controllingQubit) const
 	{
@@ -95,5 +126,10 @@ namespace QC {
 	void ControlledPhaseShiftGate::SetPhaseShift(double theta)
 	{
 		operatorMat(3, 3) = exp(std::complex<double>(0, theta));
+	}
+
+	ControlledZGate::ControlledZGate()
+	{
+		operatorMat(3, 3) = -1;
 	}
 }
