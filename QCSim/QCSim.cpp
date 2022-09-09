@@ -21,7 +21,7 @@ int main()
     std::map<int, int> measurements;
     const int nrMeasurements = 1000000;
 
-    //QC::HadamardGate hadamard;
+    QC::HadamardGate hadamard;
     //QC::PhaseShiftGate phaseShift;
     
     //std::cout << hadamard.getOperatorMatrix(3, 1) << std::endl;
@@ -96,11 +96,82 @@ int main()
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
         */
 
+    /*
     Grover::GroverAlgorithm algo;
     algo.setCorrectQuestionState(3);
     for (int i = 0; i < nrMeasurements; ++i)
     {
         unsigned int state = algo.Execute();
+        ++measurements[state];
+    }
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+        */
+
+    QC::CNOTGate cnot;
+
+    Eigen::MatrixXcd m = cnot.getOperatorMatrix(3, 0, 1);
+    std::cout << m << std::endl;
+
+    std::cout << "*************************************" << std::endl;
+    m = cnot.getOperatorMatrix(3, 2, 1);
+    std::cout << m << std::endl;
+
+    measurements.clear();
+    std::cout << "a) CNOT: entangled state" << std::endl;
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        reg.setToBasisState(0);
+        reg.ApplyGate(hadamard, 1);
+        reg.ApplyGate(cnot, 2, 1);
+        unsigned int state = reg.Measure();
+        ++measurements[state];
+    }
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+    measurements.clear();
+    std::cout << "b) CNOT: cat state" << std::endl;
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        reg.setToBasisState(0);
+        reg.ApplyGate(hadamard, 1);
+        reg.ApplyGate(cnot, 2, 1);
+        reg.ApplyGate(cnot, 0, 1);
+        unsigned int state = reg.Measure();
+        ++measurements[state];
+    }
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+    measurements.clear();
+    std::cout << "c) unobserved superposition" << std::endl;
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        reg.setToBasisState(0);
+        reg.ApplyGate(hadamard, 1);
+        reg.ApplyGate(hadamard, 1);
+        unsigned int state = reg.Measure();
+        ++measurements[state];
+    }
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+    measurements.clear();
+    std::cout << "d) CNOT: observed superposition" << std::endl;
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        reg.setToBasisState(0);
+        reg.ApplyGate(hadamard, 1);
+        reg.ApplyGate(cnot, 2, 1);
+        //reg.ApplyGate(cnot, 2, 1);
+        reg.ApplyGate(hadamard, 1);
+
+        unsigned int state = reg.Measure();
         ++measurements[state];
     }
     for (auto m : measurements)

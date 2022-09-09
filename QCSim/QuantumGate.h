@@ -40,6 +40,22 @@ namespace QC {
 
 		void SetPhaseShift(double theta);
 	};
+
+	class TwoQubitsControlledGate : public QuantumGateWithOp
+	{
+	public:
+		TwoQubitsControlledGate();
+
+		void SetOperation(const Eigen::MatrixXcd& U);
+
+		Eigen::MatrixXcd getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const override;
+	};
+
+	class CNOTGate : public TwoQubitsControlledGate
+	{
+	public:
+		CNOTGate();
+	};
 }
 
 
