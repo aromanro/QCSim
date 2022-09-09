@@ -76,4 +76,9 @@ namespace QC {
 	{
 		registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit) * registerStorage;
 	}
+
+	void QubitRegister::ApplyOperatorMatrix(const Eigen::MatrixXcd& m)
+	{
+		registerStorage = m * registerStorage;
+	}
 }

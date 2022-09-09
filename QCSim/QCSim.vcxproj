@@ -139,11 +139,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GroverAlgorithm.cpp" />
+    <ClCompile Include="Oracle.cpp" />
     <ClCompile Include="QCSim.cpp" />
+    <ClCompile Include="QuantumAlgorithm.cpp" />
     <ClCompile Include="QuantumGate.cpp" />
     <ClCompile Include="QubitRegister.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="GroverAlgorithm.h" />
+    <ClInclude Include="Oracle.h" />
+    <ClInclude Include="QuantumAlgorithm.h" />
     <ClInclude Include="QuantumGate.h" />
     <ClInclude Include="QubitRegister.h" />
   </ItemGroup>

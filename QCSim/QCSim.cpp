@@ -5,6 +5,7 @@
 #include <map>
 
 #include "QubitRegister.h"
+#include "GroverAlgorithm.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -20,9 +21,10 @@ int main()
     std::map<int, int> measurements;
     const int nrMeasurements = 1000000;
 
-    QC::HadamardGate hadamard;
-    QC::PhaseShiftGate phaseShift;
-    std::cout << hadamard.getOperatorMatrix(3, 1) << std::endl;
+    //QC::HadamardGate hadamard;
+    //QC::PhaseShiftGate phaseShift;
+    
+    //std::cout << hadamard.getOperatorMatrix(3, 1) << std::endl;
 
     /*
     for (int i = 0; i < nrMeasurements; ++i)
@@ -35,6 +37,7 @@ int main()
     }
     */
 
+    /*
     // a)
     std::cout << "a)" << std::endl;
     for (int i = 0; i < nrMeasurements; ++i)
@@ -87,6 +90,17 @@ int main()
         reg.ApplyGate(phaseShift, 2);
         reg.ApplyGate(hadamard, 2);
         unsigned int state = reg.Measure();
+        ++measurements[state];
+    }
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+        */
+
+    Grover::GroverAlgorithm algo;
+    algo.setCorrectQuestionState(3);
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        unsigned int state = algo.Execute();
         ++measurements[state];
     }
     for (auto m : measurements)

@@ -9,19 +9,22 @@ namespace QC {
 	class QuantumGate
 	{
 	public:
-		virtual Eigen::MatrixXcd getOperatorMatrix(unsigned int nrQubits, unsigned int qubit, unsigned int controllingQubit = 0) const = 0;
+		virtual Eigen::MatrixXcd getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const = 0;
+	};
 
+	class QuantumGateWithOp : public QuantumGate
+	{
 	protected:
 		Eigen::MatrixXcd operatorMat;
 	};
 
-	class SingleQubitGate : public QuantumGate
+	class SingleQubitGate : public QuantumGateWithOp
 	{
 	public:
 		SingleQubitGate();
 
 		// controllingQubit is ignored, it will be used for two qubit gates
-		Eigen::MatrixXcd getOperatorMatrix(unsigned int nrQubits, unsigned int qubit, unsigned int controllingQubit = 0) const override;
+		Eigen::MatrixXcd getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const override;
 	};
 
 	class HadamardGate : public SingleQubitGate

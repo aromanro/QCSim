@@ -38,6 +38,7 @@ namespace QC {
 		unsigned int Measure();
 
 		void ApplyGate(const QuantumGate& gate, unsigned int qubit, unsigned int controllingQubit = 0);
+		void ApplyOperatorMatrix(const Eigen::MatrixXcd& m);
 
 	protected:
 		unsigned int NrQubits;
