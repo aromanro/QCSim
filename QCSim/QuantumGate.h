@@ -56,6 +56,14 @@ namespace QC {
 	public:
 		CNOTGate();
 	};
+
+	class ControlledPhaseShiftGate : public TwoQubitsControlledGate
+	{
+	public:
+		ControlledPhaseShiftGate(double theta = 0);
+
+		void SetPhaseShift(double theta);
+	};
 }
 
 

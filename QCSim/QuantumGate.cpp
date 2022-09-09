@@ -86,4 +86,14 @@ namespace QC {
 		SetOperation(U);
 	}
 
+
+	ControlledPhaseShiftGate::ControlledPhaseShiftGate(double theta)
+	{
+		SetPhaseShift(theta);
+	}
+
+	void ControlledPhaseShiftGate::SetPhaseShift(double theta)
+	{
+		operatorMat(3, 3) = exp(std::complex<double>(0, theta));
+	}
 }
