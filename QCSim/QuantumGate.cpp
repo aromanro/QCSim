@@ -14,15 +14,12 @@ namespace QC {
 		const unsigned int qubitBit = 1u << qubit;
 
 		for (unsigned int i = 0; i < nrBasisStates; ++i)
+		{ 
+			const unsigned int ind1 = i | qubitBit;
 			for (unsigned int j = 0; j < nrBasisStates; ++j)
-			{
-				// force the qubit bit to 1
-				const unsigned int ind1 = i | qubitBit;
-				const unsigned int ind2 = j | qubitBit;
-
-				if (ind1 == ind2)
+				if (ind1 == (j | qubitBit))
 					extOperatorMat(i, j) = operatorMat(i & qubitBit ? 1 : 0, j & qubitBit ? 1 : 0);
-			}
+		}
 
 		return extOperatorMat;
 	}
