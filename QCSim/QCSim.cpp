@@ -6,7 +6,7 @@
 
 #include "QubitRegister.h"
 #include "GroverAlgorithm.h"
-#include "QuantumFourierTransform.h"
+#include "ShorAlgorithm.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -180,15 +180,31 @@ int main()
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
         */
 
-    Grover::GroverAlgorithm algo(8);
-    algo.setCorrectQuestionState(13);
+/*
+    measurements.clear();
+    Grover::GroverAlgorithm galgo(8);
+    galgo.setCorrectQuestionState(13);
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        unsigned int state = algo.Execute();
+        unsigned int state = galgo.Execute();
         ++measurements[state];
     }
     for (auto m : measurements)
-    std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+*/
+    measurements.clear();
+
+    Shor::ShorAlgorithm shorAlgo;
+    shorAlgo.setA(7);
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        unsigned int state = shorAlgo.Execute();
+        state &= 0x7; //only the l bits matter
+        ++measurements[state];
+    }
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 }
 
 

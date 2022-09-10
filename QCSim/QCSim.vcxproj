@@ -152,6 +152,7 @@
     <ClInclude Include="QuantumFourierTransform.h" />
     <ClInclude Include="QuantumGate.h" />
     <ClInclude Include="QubitRegister.h" />
+    <ClInclude Include="ShorAlgorithm.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

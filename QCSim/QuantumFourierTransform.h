@@ -35,6 +35,9 @@ namespace QC {
 			QFT(sQubit, eQubit);
 		}
 
+		unsigned int getStartQubit() const { return sQubit; };
+		unsigned int getEndQubit() const { return eQubit; };
+
 	protected:
 		void QFT(unsigned int sq, unsigned int eq)
 		{
