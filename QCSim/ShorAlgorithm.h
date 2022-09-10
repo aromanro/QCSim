@@ -24,13 +24,14 @@ namespace Shor {
 			// now the f(x)
 
 			// TODO: FIX IT!!!!!
+			// don't forget to uncomment the inverse fourier when period finding works
 
 			// for each l qubit from x (0 - L-1 range)
 			// construct a controlled gate by the qubit 
 
 			const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates();
-			const unsigned int lmask = (1 << (fRegisterStartQubit + 1)) - 1;
-			const unsigned int mmask = ~lmask;
+			const unsigned int xmask = (1 << fRegisterStartQubit) - 1;
+			const unsigned int fmask = ~xmask;
 
 
 			unsigned int An = A;
@@ -38,21 +39,21 @@ namespace Shor {
 			{
 				MatrixClass gateOperator = MatrixClass::Zero(BasisStatesNo, BasisStatesNo);
 
-				unsigned int lbit = 1u << l;
+				const unsigned int lbit = 1u << l;
 
 				for (unsigned int k = 0; k < BasisStatesNo; ++k)
 				{
 					if (k & lbit)
 					{
-						unsigned int f = (k & mmask) >> fRegisterStartQubit;
+						unsigned int f = (k & fmask) >> fRegisterStartQubit;
 
 						if (f >= Number)
 							gateOperator(k, k) = 1;
 						else
 						{
-							f = mod(An * f);
-							f = (f << fRegisterStartQubit) | lbit;
-							gateOperator(f, k) = 1;
+							f = mod(An);
+							f <<= fRegisterStartQubit;
+						    gateOperator(f | lbit, k) = 1;
 						}
 					}
 					else
@@ -66,7 +67,8 @@ namespace Shor {
 			}
 
 			// then perform an inverse fourier transform
-			QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
+			// TODO: Uncomment it
+			//QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
 
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
 		}
@@ -81,11 +83,8 @@ namespace Shor {
 	protected:
 		void Init()
 		{
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates() - 1);
-			const unsigned int lmask = (1 << (fRegisterStartQubit + 1)) - 1;
-			const unsigned int mmask = ~lmask;
-
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(mmask);
+			unsigned int state = 1 << fRegisterStartQubit;
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(state);
 		}
 
 		static int gcd(int a, int b)

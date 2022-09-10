@@ -20,7 +20,7 @@ int main()
     QC::QubitRegister reg;
 
     std::map<int, int> measurements;
-    const int nrMeasurements = 1000;
+    const int nrMeasurements = 1000000;
 
     QC::HadamardGate hadamard;
     //QC::PhaseShiftGate phaseShift;
@@ -195,14 +195,30 @@ int main()
     measurements.clear();
 
     Shor::ShorAlgorithm shorAlgo;
-    shorAlgo.setA(7);
+
+    // with 2 (default) f should be 1, 2, 4, 8 for performing period finding
+    //shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13
+    //shorAlgo.setA(4); // should be 1, 4
+    shorAlgo.setA(8); // 1, 8, 4, 2
+    //shorAlgo.setA(11); // 1, 11
+    //shorAlgo.setA(13); // 1, 13, 4, 7
+    //shorAlgo.setA(14); // 1, 14
+
+    std::map<int, int> fmeasurements;
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
         unsigned int state = shorAlgo.Execute();
-        state &= 0x7; //only the l bits matter
-        ++measurements[state];
+        ++measurements[state & 0x7]; //only the l bits matter
+
+        ++fmeasurements[state >> 3]; //save the f register measurements for debugging
     }
+
+    std::cout << "f register" << std::endl;
+    for (auto m : fmeasurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+    std::cout << "x register" << std::endl;
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 }
