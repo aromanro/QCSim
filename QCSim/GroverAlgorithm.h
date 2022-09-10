@@ -13,7 +13,7 @@ namespace Grover {
         public QC::QuantumAlgorithm<VectorClass, MatrixClass>
     {
     public:
-        GroverAlgorithm(int N = 3, int addseed = 0) 
+        GroverAlgorithm(unsigned int N = 3, int addseed = 0) 
             : QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
         {
             J j;

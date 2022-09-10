@@ -35,5 +35,8 @@
     <ClInclude Include="Oracle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QuantumFourierTransform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

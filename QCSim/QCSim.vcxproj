@@ -149,6 +149,7 @@
     <ClInclude Include="GroverAlgorithm.h" />
     <ClInclude Include="Oracle.h" />
     <ClInclude Include="QuantumAlgorithm.h" />
+    <ClInclude Include="QuantumFourierTransform.h" />
     <ClInclude Include="QuantumGate.h" />
     <ClInclude Include="QubitRegister.h" />
   </ItemGroup>

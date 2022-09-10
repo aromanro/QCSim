@@ -6,6 +6,7 @@
 
 #include "QubitRegister.h"
 #include "GroverAlgorithm.h"
+#include "QuantumFourierTransform.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>

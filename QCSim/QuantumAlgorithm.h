@@ -7,13 +7,14 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumAlgorithm
 	{
 	public:
-		QuantumAlgorithm(int N = 3, int addseed = 0)
+		QuantumAlgorithm(unsigned int N = 3, int addseed = 0)
 			: reg(N, addseed)
 		{
 		}
 
 		virtual unsigned int Execute() = 0;
 
+	protected:
 		QubitRegister<VectorClass, MatrixClass> reg;
 	};
 

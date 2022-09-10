@@ -107,6 +107,11 @@ namespace QC {
 			registerStorage = m * registerStorage;
 		}
 
+		void getRegisterStorage() const
+		{
+			return registerStorage;
+		}
+
 	protected:
 		unsigned int NrQubits;
 		unsigned int NrBasisStates;
