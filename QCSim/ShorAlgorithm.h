@@ -1,0 +1,112 @@
+#pragma once
+
+#include "QuantumFourierTransform.h"
+
+namespace Shor {
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumFourierTransform<VectorClass, MatrixClass>
+	{
+	public:
+		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
+			: QC::QuantumFourierTransform<VectorClass, MatrixClass>(N, 0, L - 1, addseed), Number(C), fRegisterStartQubit(L), A(2)
+		{
+		}
+
+		unsigned int Execute() override
+		{
+			Init();
+
+			// apply hadamard over each qubit from the x-register
+			// reuse the hadamard gate from the fourier transform base class
+			for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(QC::QuantumFourierTransform<VectorClass, MatrixClass>::hadamard, i);
+
+			// now the f(x)
+
+			// TODO: FIX IT!!!!!
+
+			// for each l qubit from x (0 - L-1 range)
+			// construct a controlled gate by the qubit 
+
+			const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates();
+			const unsigned int lmask = (1 << (fRegisterStartQubit + 1)) - 1;
+			const unsigned int mmask = ~lmask;
+
+
+			unsigned int An = A;
+			for (unsigned int l = 0; l < fRegisterStartQubit; ++l)
+			{
+				MatrixClass gateOperator = MatrixClass::Zero(BasisStatesNo, BasisStatesNo);
+
+				unsigned int lbit = 1u << l;
+
+				for (unsigned int k = 0; k < BasisStatesNo; ++k)
+				{
+					if (k & lbit)
+					{
+						unsigned int f = (k & mmask) >> fRegisterStartQubit;
+
+						if (f >= Number)
+							gateOperator(k, k) = 1;
+						else
+						{
+							f = mod(An * f);
+							f = (f << fRegisterStartQubit) | lbit;
+							gateOperator(f, k) = 1;
+						}
+					}
+					else
+						gateOperator(k, k) = 1;
+				}
+
+				// apply it
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyOperatorMatrix(gateOperator);
+
+				An *= An;
+			}
+
+			// then perform an inverse fourier transform
+			QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
+
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
+		}
+
+		void setA(unsigned int a)
+		{
+			A = a;
+		}
+
+
+
+	protected:
+		void Init()
+		{
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates() - 1);
+			const unsigned int lmask = (1 << (fRegisterStartQubit + 1)) - 1;
+			const unsigned int mmask = ~lmask;
+
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(mmask);
+		}
+
+		static int gcd(int a, int b)
+		{
+			while (b)
+			{
+				const int t = b;
+				b = a % b;
+				a = t;
+			}
+
+			return a;
+		}
+
+		unsigned int mod(unsigned int v)
+		{
+			return v % Number;
+		}
+
+		unsigned int Number;
+		unsigned int fRegisterStartQubit;
+		unsigned int A;
+	};
+}
