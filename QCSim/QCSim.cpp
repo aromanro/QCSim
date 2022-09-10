@@ -19,7 +19,7 @@ int main()
     QC::QubitRegister reg;
 
     std::map<int, int> measurements;
-    const int nrMeasurements = 1000000;
+    const int nrMeasurements = 1000;
 
     QC::HadamardGate hadamard;
     //QC::PhaseShiftGate phaseShift;
@@ -108,6 +108,7 @@ int main()
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
         */
 
+    /*
     QC::CNOTGate cnot;
 
     Eigen::MatrixXcd m = cnot.getOperatorMatrix(3, 0, 1);
@@ -176,6 +177,17 @@ int main()
     }
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+        */
+
+    Grover::GroverAlgorithm algo(8);
+    algo.setCorrectQuestionState(13);
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        unsigned int state = algo.Execute();
+        ++measurements[state];
+    }
+    for (auto m : measurements)
+    std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 }
 
 

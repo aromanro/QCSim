@@ -3,17 +3,21 @@
 #include "QuantumAlgorithm.h"
 #include "Oracle.h"
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+
 namespace Grover {
 
-    class GroverAlgorithm :
-        public QC::QuantumAlgorithm
+    template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class GroverAlgorithm :
+        public QC::QuantumAlgorithm<VectorClass, MatrixClass>
     {
     public:
         GroverAlgorithm(int N = 3, int addseed = 0) 
-            : QC::QuantumAlgorithm(N, addseed)
+            : QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
         {
             J j;
-            JOp = j.getOperatorMatrix(reg.getNrQubits());
+            JOp = j.getOperatorMatrix(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits());
             
             setCorrectQuestionState(0);
         }
@@ -22,36 +26,49 @@ namespace Grover {
         {
             Oracle o;
             o.setCorrectQuestionState(state);
-            OracleOp = o.getOperatorMatrix(reg.getNrQubits());
+            OracleOp = o.getOperatorMatrix(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits());
         }
 
-        unsigned int Execute() override;
+        unsigned int Execute() override
+        {
+            Init();
+
+            const unsigned int repeatNo = static_cast<unsigned int>(round(M_PI / 4. * sqrt(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates())));
+
+            for (unsigned int i = 0; i < repeatNo; ++i)
+            {
+                QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyOperatorMatrix(OracleOp);
+                ApplyDiffusionOperator();
+            }
+
+            return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
+        }
  
     protected:
         void Init()
         {
             //reg.setToBasisState(0);
             //ApplyHadamardOnAllQubits();
-            reg.setToEqualSuperposition(); // the same thing as commented above
+            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToEqualSuperposition(); // the same thing as commented above
         }
 
         void ApplyHadamardOnAllQubits()
         {
-            for (unsigned int i = 0; i < reg.getNrQubits(); ++i)
-                reg.ApplyGate(hadamard, i);
+            for (unsigned int i = 0; i < QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits(); ++i)
+                QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, i);
         }
 
         void ApplyDiffusionOperator()
         {
             ApplyHadamardOnAllQubits();
-            reg.ApplyOperatorMatrix(JOp);
+            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyOperatorMatrix(JOp);
             ApplyHadamardOnAllQubits();
         }
 
-        Eigen::MatrixXcd OracleOp;
-        Eigen::MatrixXcd JOp;
+        MatrixClass OracleOp;
+        MatrixClass JOp;
 
-        QC::HadamardGate hadamard;
+        QC::HadamardGate<MatrixClass> hadamard;
     };
 
 }
