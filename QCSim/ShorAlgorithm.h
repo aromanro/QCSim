@@ -34,7 +34,7 @@ namespace Shor {
 			const unsigned int fmask = ~xmask;
 
 
-			unsigned int An = A;
+			unsigned long long int An = A;
 			for (unsigned int l = 0; l < fRegisterStartQubit; ++l)
 			{
 				MatrixClass gateOperator = MatrixClass::Zero(BasisStatesNo, BasisStatesNo);
@@ -51,7 +51,7 @@ namespace Shor {
 							gateOperator(k, k) = 1;
 						else
 						{
-							f = mod(An);
+							f = mod(mod(An) * f);
 							f <<= fRegisterStartQubit;
 						    gateOperator(f | lbit, k) = 1;
 						}
@@ -99,7 +99,7 @@ namespace Shor {
 			return a;
 		}
 
-		unsigned int mod(unsigned int v)
+		unsigned int mod(unsigned long long int v)
 		{
 			return v % Number;
 		}

@@ -20,7 +20,7 @@ int main()
     QC::QubitRegister reg;
 
     std::map<int, int> measurements;
-    const int nrMeasurements = 1000000;
+    const int nrMeasurements = 1000;
 
     QC::HadamardGate hadamard;
     //QC::PhaseShiftGate phaseShift;
@@ -197,9 +197,9 @@ int main()
     Shor::ShorAlgorithm shorAlgo;
 
     // with 2 (default) f should be 1, 2, 4, 8 for performing period finding
-    //shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13
+    shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13
     //shorAlgo.setA(4); // should be 1, 4
-    shorAlgo.setA(8); // 1, 8, 4, 2
+    //shorAlgo.setA(8); // 1, 8, 4, 2
     //shorAlgo.setA(11); // 1, 11
     //shorAlgo.setA(13); // 1, 13, 4, 7
     //shorAlgo.setA(14); // 1, 14
