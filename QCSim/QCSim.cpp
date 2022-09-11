@@ -208,7 +208,7 @@ int main()
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        unsigned int state = shorAlgo.Execute();
+        const unsigned int state = shorAlgo.Execute();
         ++measurements[state & 0x7]; //only the l bits matter
 
         ++fmeasurements[state >> 3]; //save the f register measurements for debugging

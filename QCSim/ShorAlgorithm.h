@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include "QuantumFourierTransform.h"
 
 namespace Shor {
@@ -63,6 +65,62 @@ namespace Shor {
 				// apply it
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyOperatorMatrix(gateOperator);
 
+				// check to see if in every column there is a one (and only one):
+				/*
+				for (int z = 0; z < BasisStatesNo; ++z)
+				{
+					int cnt = 0;
+					for (int l = 0; l < BasisStatesNo; ++l)
+					{
+						if (abs(gateOperator(l, z).real()) > 0.001)
+							++cnt;
+					}
+
+					if (cnt == 0)
+					{
+						std::cout << "Ooops, I found a column with all zeros: " << z << std::endl;
+						exit(0);
+					}
+					else if (cnt > 1)
+					{
+						std::cout << "Ooops, I found a column with more than one non-zero: " << cnt << " in column: " << z << std::endl;
+
+						for (int l = 0; l < BasisStatesNo; ++l)
+						{
+							if (abs(gateOperator(l, z).real()) > 0.001)
+							{
+								std::cout << "Line: " << l << " Value: " << gateOperator(l, z) << std::endl;
+							}
+						}
+
+						exit(0);
+					}
+				}
+				*/
+				
+				// check unitrity:
+				/*
+				MatrixClass mm = gateOperator.adjoint() * gateOperator;
+				for (int z = 0; z < BasisStatesNo; ++z)
+				{
+					if (abs(mm(z,z).real()-1) > 0.00000001)
+					{
+						std::cout << "i,j: " << z << std::endl;
+						exit(1);
+					}
+
+					for (int z2 = 0; z2 < BasisStatesNo; ++z2)
+					{
+						if (z != z2 && abs(mm(z, z2).real()) > 1E-20)
+						{
+							std::cout << "i: " << z << " j: " << z2 << " Val: " << mm(z, z2) << std::endl;
+							exit(2);
+						}
+					}
+				}
+				exit(0);
+				*/
+
 				An *= An;
 			}
 
@@ -83,7 +141,7 @@ namespace Shor {
 	protected:
 		void Init()
 		{
-			unsigned int state = 1 << fRegisterStartQubit;
+			const unsigned int state = 1 << fRegisterStartQubit;
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(state);
 		}
 
