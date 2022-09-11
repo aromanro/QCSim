@@ -45,7 +45,7 @@ namespace Shor {
 
 				for (unsigned int k = 0; k < BasisStatesNo; ++k)
 				{
-					if (k & lbit)
+					if ((k & xmask) == lbit) //ok, this seems to make it a permutation matrix (unitary) but still doesn't work as expected
 					{
 						unsigned int f = (k & fmask) >> fRegisterStartQubit;
 
@@ -157,10 +157,10 @@ namespace Shor {
 						}
 					}
 				}
-				exit(0);
+				//exit(0);
 				*/
 				
-
+				
 				An *= An;
 			}
 
