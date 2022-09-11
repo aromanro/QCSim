@@ -39,6 +39,10 @@ namespace QC {
 		unsigned int getEndQubit() const { return eQubit; };
 
 	protected:
+
+		// TODO: Both QFT and IQFT need after each step to 'flip' the outputs
+		// or the below implementation needs rethinking to have it 'upside down'
+
 		void QFT(unsigned int sq, unsigned int eq)
 		{
 			if (sq == eq)
@@ -67,7 +71,7 @@ namespace QC {
 				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, sq);
 
 				double phase = M_PI / 2.;
-				for (unsigned int i = sq; i < eq; ++i)
+				for (unsigned int i = sq + 1; i <= eq; ++i)
 				{
 					phaseShift.SetPhaseShift(phase);
 					phase *= 0.5;
