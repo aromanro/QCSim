@@ -65,8 +65,9 @@ namespace Shor {
 				// apply it
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyOperatorMatrix(gateOperator);
 
-				// check to see if in every column there is a one (and only one):
 				/*
+				// check to see if in every column there is a one (and only one):
+				
 				for (int z = 0; z < BasisStatesNo; ++z)
 				{
 					int cnt = 0;
@@ -96,10 +97,43 @@ namespace Shor {
 						exit(0);
 					}
 				}
-				*/
 				
-				// check unitrity:
-				/*
+				// check to see if in every line there is a one (and only one), otherwise (together with the above condition) it's not a permutation matrix:
+				
+				for (int z = 0; z < BasisStatesNo; ++z)
+				{
+					int cnt = 0;
+					for (int l = 0; l < BasisStatesNo; ++l)
+					{
+						if (abs(gateOperator(z, l).real()) > 0.001)
+							++cnt;
+					}
+
+					if (cnt == 0)
+					{
+						std::cout << "Ooops, I found a line with all zeros: " << z << std::endl;
+						exit(0);
+					}
+					else if (cnt > 1)
+					{
+						std::cout << "Ooops, I found a line with more than one non-zero: " << cnt << " in line: " << z << std::endl;
+
+						for (int l = 0; l < BasisStatesNo; ++l)
+						{
+							if (abs(gateOperator(z, l).real()) > 0.001)
+							{
+								std::cout << "Column: " << l << " Value: " << gateOperator(z, l) << std::endl;
+							}
+						}
+
+						std::cout << std::endl << gateOperator.block(0, 0, 10, 10) << std::endl;
+
+						exit(0);
+					}
+				}
+
+				// check unitarity:
+				
 				MatrixClass mm = gateOperator.adjoint() * gateOperator;
 				for (int z = 0; z < BasisStatesNo; ++z)
 				{
@@ -114,12 +148,18 @@ namespace Shor {
 						if (z != z2 && abs(mm(z, z2).real()) > 1E-20)
 						{
 							std::cout << "i: " << z << " j: " << z2 << " Val: " << mm(z, z2) << std::endl;
+
+							std::cout << mm.block(0,0,10,10) << std::endl;
+
+							std::cout << std::endl << gateOperator.block(0, 0, 10, 10) << std::endl;
+
 							exit(2);
 						}
 					}
 				}
 				exit(0);
 				*/
+				
 
 				An *= An;
 			}
