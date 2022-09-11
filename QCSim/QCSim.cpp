@@ -20,7 +20,7 @@ int main()
     QC::QubitRegister reg;
 
     std::map<int, int> measurements;
-    const int nrMeasurements = 1000;
+    const int nrMeasurements = 100;
 
     QC::HadamardGate hadamard;
     //QC::PhaseShiftGate phaseShift;

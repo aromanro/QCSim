@@ -53,7 +53,7 @@ namespace Shor {
 							gateOperator(k, k) = 1;
 						else
 						{
-							f = mod(mod(An) * f);
+							f = mod(mod(An)*f);
 							f <<= fRegisterStartQubit;
 						    gateOperator(f | lbit, k) = 1;
 						}
@@ -161,12 +161,11 @@ namespace Shor {
 				*/
 				
 				
-				An *= An;
+				An *= A;
 			}
 
 			// then perform an inverse fourier transform
-			// TODO: Uncomment it
-			//QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
+			QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
 
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
 		}
