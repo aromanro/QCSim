@@ -14,7 +14,6 @@ namespace QC {
 
 		virtual unsigned int Execute() = 0;
 
-	protected:
 		QubitRegister<VectorClass, MatrixClass> reg;
 	};
 

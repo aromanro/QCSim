@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include "QubitRegister.h"
 #include "QuantumGate.h"
 
@@ -28,62 +30,85 @@ namespace QC {
 		void QFT()
 		{
 			QFT(sQubit, eQubit);
+			Swap(sQubit, eQubit);
 		}
 
 		void IQFT()
 		{
-			QFT(sQubit, eQubit);
+			Swap(sQubit, eQubit);
+			IQFT(sQubit, eQubit);
+			//Swap(sQubit, eQubit);
 		}
 
 		unsigned int getStartQubit() const { return sQubit; };
 		unsigned int getEndQubit() const { return eQubit; };
 
 	protected:
-
-		// TODO: Both QFT and IQFT need after each step to 'flip' the outputs
-		// or the below implementation needs rethinking to have it 'upside down'
-
-		void QFT(unsigned int sq, unsigned int eq)
+		void Swap(unsigned int startQubit, unsigned int endQubit)
 		{
-			if (sq == eq)
-				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
-			else
+			while (startQubit < endQubit)
 			{
-				QFT(sq + 1, eq);
-
-				for (unsigned int i = eq; i > sq; --i)
-				{
-					phaseShift.SetPhaseShift(M_PI / pow(2, sq - i));
-					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, i, sq);
-				}
-
-				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, sq);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(swapOp, startQubit, endQubit);
+				++startQubit;
+				--endQubit;
 			}
 		}
 
-
 		void IQFT(unsigned int sq, unsigned int eq)
-		{
-			if (sq == eq)
-				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
-			else
-			{
-				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, sq);
+		{			
+			QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
+			//std::cout << "Hadamard on " << eq << std::endl;
 
-				double phase = M_PI / 2.;
-				for (unsigned int i = sq + 1; i <= eq; ++i)
+			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
+			{
+				int div = (int)pow(2, eq - curQubit + 1);
+				double phase = M_PI / div;
+				for (unsigned int ctrlq = eq; ctrlq >= curQubit; --ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
-					phase *= 0.5;
-					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, i, sq);
+					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, ctrlq, curQubit - 1);
+
+					//std::cout << curQubit - 1 << " controls pi/" << div << " on " << ctrlq << std::endl;
+					phase *= 2;
+					//div /= 2;
 				}
 
-				IQFT(sq + 1, eq);
+				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, curQubit - 1);
+
+				//std::cout << "Hadamard on " << curQubit - 1 << std::endl;
 			}
+			//exit(0);
+		}
+
+		void QFT(unsigned int sq, unsigned int eq)
+		{
+			for (unsigned int curQubit = sq; curQubit < eq; ++curQubit)
+			{
+				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, curQubit);
+
+				//std::cout << "Hadamard on " << curQubit << std::endl;
+
+				double phase = M_PI_2;
+				//int div = 2;
+				for (unsigned int ctrlq = curQubit + 1; ctrlq <= eq; ++ctrlq)
+				{
+					phaseShift.SetPhaseShift(phase);
+					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, curQubit, ctrlq);
+
+					//std::cout << curQubit << " controls pi/" << div << " on " << ctrlq << std::endl;
+					phase /= 2;
+					//div *= 2;
+				}
+			}
+			QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
+
+			//std::cout << "Hadamard on " << eq << std::endl;
+			//exit(0);
 		}
 
 		HadamardGate<MatrixClass> hadamard;
 		ControlledPhaseShiftGate<MatrixClass> phaseShift;
+		SwapGate<MatrixClass> swapOp;
 
 		unsigned int sQubit;
 		unsigned int eQubit;

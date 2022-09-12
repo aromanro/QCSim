@@ -221,6 +221,24 @@ int main()
     std::cout << "x register" << std::endl;
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+    measurements.clear();
+
+    QC::QuantumFourierTransform fourier;
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        fourier.reg.setToBasisState(1);
+        //fourier.reg.setToEqualSuperposition();
+        fourier.QFT();
+        fourier.IQFT();
+        const unsigned int state = fourier.reg.Measure();
+        ++measurements[state];
+    }
+
+    std::cout << "Fourier" << std::endl;
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 }
 
 

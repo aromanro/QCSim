@@ -113,17 +113,7 @@ namespace QC {
 		}
 	};
 
-	template<class MatrixClass = Eigen::MatrixXcd> class SwapGate : public TwoQubitsGate<MatrixClass>
-	{
-	public:
-		SwapGate()
-		{
-			QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = 0;
-			QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
-			QuantumGateWithOp<MatrixClass>::operatorMat(1, 2) = 1;
-			QuantumGateWithOp<MatrixClass>::operatorMat(2, 1) = 1;
-		}
-	};
+
 
 	template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsControlledGate : public TwoQubitsGate<MatrixClass>
 	{
@@ -153,6 +143,18 @@ namespace QC {
 			}
 
 			return extOperatorMat;
+		}
+	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class SwapGate : public TwoQubitsControlledGate<MatrixClass>
+	{
+	public:
+		SwapGate()
+		{
+			QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(1, 2) = 1;
+			QuantumGateWithOp<MatrixClass>::operatorMat(2, 1) = 1;
 		}
 	};
 
