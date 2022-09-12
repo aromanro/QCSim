@@ -111,20 +111,6 @@ namespace QC {
 		{
 			QuantumGateWithOp<MatrixClass>::operatorMat = MatrixClass::Identity(4, 4);
 		}
-	};
-
-
-
-	template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsControlledGate : public TwoQubitsGate<MatrixClass>
-	{
-	public:
-		TwoQubitsControlledGate() {};
-
-		void SetOperation(const MatrixClass& U)
-		{
-			assert(U.rows() == 2 && U.cols() == 2);
-			QuantumGateWithOp<MatrixClass>::operatorMat.block(2, 2, 2, 2) = U;
-		}
 
 		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const override
 		{
@@ -146,7 +132,7 @@ namespace QC {
 		}
 	};
 
-	template<class MatrixClass = Eigen::MatrixXcd> class SwapGate : public TwoQubitsControlledGate<MatrixClass>
+	template<class MatrixClass = Eigen::MatrixXcd> class SwapGate : public TwoQubitsGate<MatrixClass>
 	{
 	public:
 		SwapGate()
@@ -157,6 +143,20 @@ namespace QC {
 			QuantumGateWithOp<MatrixClass>::operatorMat(2, 1) = 1;
 		}
 	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsControlledGate : public TwoQubitsGate<MatrixClass>
+	{
+	public:
+		TwoQubitsControlledGate() {};
+
+		void SetOperation(const MatrixClass& U)
+		{
+			assert(U.rows() == 2 && U.cols() == 2);
+			QuantumGateWithOp<MatrixClass>::operatorMat.block(2, 2, 2, 2) = U;
+		}		
+	};
+
+
 
 	template<class MatrixClass = Eigen::MatrixXcd> class CNOTGate : public TwoQubitsControlledGate<MatrixClass>
 	{

@@ -54,7 +54,7 @@ namespace QC {
 			}
 		}
 
-		void IQFT(unsigned int sq, unsigned int eq)
+		void QFT(unsigned int sq, unsigned int eq)
 		{			
 			QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
 			//std::cout << "Hadamard on " << eq << std::endl;
@@ -80,7 +80,7 @@ namespace QC {
 			//exit(0);
 		}
 
-		void QFT(unsigned int sq, unsigned int eq)
+		void IQFT(unsigned int sq, unsigned int eq)
 		{
 			for (unsigned int curQubit = sq; curQubit < eq; ++curQubit)
 			{

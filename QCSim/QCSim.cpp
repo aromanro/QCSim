@@ -239,6 +239,22 @@ int main()
     std::cout << "Fourier" << std::endl;
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+
+    measurements.clear();
+    QC::SwapGate sg;
+  
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        reg.setToBasisState(2);
+        reg.ApplyGate(sg, 0, 1);
+        const unsigned int state = reg.Measure();
+        ++measurements[state];
+    }
+
+    std::cout << "Swap" << std::endl;
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 }
 
 
