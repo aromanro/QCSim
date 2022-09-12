@@ -35,9 +35,9 @@ namespace QC {
 
 		void IQFT()
 		{
-			Swap(sQubit, eQubit);
-			IQFT(sQubit, eQubit);
 			//Swap(sQubit, eQubit);
+			IQFT(sQubit, eQubit);
+			Swap(sQubit, eQubit);
 		}
 
 		unsigned int getStartQubit() const { return sQubit; };
@@ -58,6 +58,7 @@ namespace QC {
 		{			
 			QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
 			//std::cout << "Hadamard on " << eq << std::endl;
+			//MatrixClass m = hadamard.getOperatorMatrix(QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits(),eq);
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
@@ -68,16 +69,31 @@ namespace QC {
 					phaseShift.SetPhaseShift(phase);
 					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, ctrlq, curQubit - 1);
 
+					//MatrixClass ps = phaseShift.getOperatorMatrix(QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits(), ctrlq, curQubit - 1);
+					//m = ps * m;
+
 					//std::cout << curQubit - 1 << " controls pi/" << div << " on " << ctrlq << std::endl;
 					phase *= 2;
 					//div /= 2;
 				}
 
 				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, curQubit - 1);
-
+				
+				//MatrixClass m1 = hadamard.getOperatorMatrix(QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits(), curQubit-1);
+				//m = m1 * m;
+			
 				//std::cout << "Hadamard on " << curQubit - 1 << std::endl;
 			}
-			//exit(0);
+
+			/*
+			QC::SwapGate sg;
+			m = sg.getOperatorMatrix(QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits(), 0, 1) * m;
+			std::cout << m << std::endl;
+
+			VectorClass v = VectorClass::Ones(QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates());
+			std::cout << std::endl << m * 0.5 * v << std::endl;
+			exit(0);
+			*/
 		}
 
 		void IQFT(unsigned int sq, unsigned int eq)

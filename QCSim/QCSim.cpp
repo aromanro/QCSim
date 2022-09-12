@@ -192,6 +192,7 @@ int main()
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 */
+
     measurements.clear();
 
     Shor::ShorAlgorithm shorAlgo;
@@ -222,14 +223,20 @@ int main()
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
+
     measurements.clear();
 
-    QC::QuantumFourierTransform fourier;
+    QC::QuantumFourierTransform fourier(2);
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        fourier.reg.setToBasisState(1);
-        //fourier.reg.setToEqualSuperposition();
+        // qft from total superposition should go into state 0
+        // and from state 0 into total superposition
+
+        // the same for inverse qft
+
+        //fourier.reg.setToBasisState(0);
+        fourier.reg.setToEqualSuperposition();
         fourier.QFT();
         fourier.IQFT();
         const unsigned int state = fourier.reg.Measure();
