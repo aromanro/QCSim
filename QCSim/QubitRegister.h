@@ -48,6 +48,16 @@ namespace QC {
 			registerStorage(State) = 1;
 		}
 
+		void setToQubitState(unsigned int q)
+		{
+			if (q >= NrQubits) return;
+
+			unsigned int state = 1u << q;
+
+			registerStorage.setZero();
+			registerStorage(state) = 1;
+		}
+
 		void setToCatState()
 		{
 			registerStorage.setZero();

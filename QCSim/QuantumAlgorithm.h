@@ -14,6 +14,11 @@ namespace QC {
 
 		virtual unsigned int Execute() = 0;
 
+		static unsigned int getQubitState(unsigned int q)
+		{
+			return 1u << q;
+		}
+
 		QubitRegister<VectorClass, MatrixClass> reg;
 	};
 
