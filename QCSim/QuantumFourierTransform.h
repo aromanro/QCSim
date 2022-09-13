@@ -35,9 +35,9 @@ namespace QC {
 
 		void IQFT()
 		{
-			//Swap(sQubit, eQubit);
-			IQFT(sQubit, eQubit);
 			Swap(sQubit, eQubit);
+			IQFT(sQubit, eQubit);
+			//Swap(sQubit, eQubit);
 		}
 
 		unsigned int getStartQubit() const { return sQubit; };
@@ -62,12 +62,13 @@ namespace QC {
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
+				const unsigned int curQubitm1 = curQubit - 1;
 				int div = (int)pow(2, eq - curQubit + 1);
 				double phase = M_PI / div;
 				for (unsigned int ctrlq = eq; ctrlq >= curQubit; --ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
-					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, ctrlq, curQubit - 1);
+					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, ctrlq, curQubitm1);
 
 					//MatrixClass ps = phaseShift.getOperatorMatrix(QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits(), ctrlq, curQubit - 1);
 					//m = ps * m;
@@ -77,7 +78,7 @@ namespace QC {
 					//div /= 2;
 				}
 
-				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, curQubit - 1);
+				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, curQubitm1);
 				
 				//MatrixClass m1 = hadamard.getOperatorMatrix(QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits(), curQubit-1);
 				//m = m1 * m;

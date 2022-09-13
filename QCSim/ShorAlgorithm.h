@@ -42,7 +42,8 @@ namespace Shor {
 
 				for (unsigned int k = 0; k < BasisStatesNo; ++k)
 				{
-					if ((k & xmask) == lbit) //ok, this seems to make it a permutation matrix (unitary) but still doesn't work as expected
+					const unsigned int xbits = k & xmask;
+					if (xbits & lbit)
 					{
 						unsigned int f = (k & fmask) >> fRegisterStartQubit;
 
@@ -52,7 +53,8 @@ namespace Shor {
 						{
 							f = mod(mod(An)*f);
 							f <<= fRegisterStartQubit;
-						    gateOperator(f | lbit, k) = 1;
+
+						    gateOperator(f | xbits, k) = 1;
 						}
 					}
 					else
@@ -62,9 +64,9 @@ namespace Shor {
 				// apply it
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyOperatorMatrix(gateOperator);
 
-				An *= A;
+				An *= An;
 			}
-
+			
 			// then perform an inverse fourier transform
 			QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
 

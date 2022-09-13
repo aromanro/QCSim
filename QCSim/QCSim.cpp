@@ -223,7 +223,7 @@ int main()
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
-
+    /*
     measurements.clear();
 
     QC::QuantumFourierTransform fourier(2);
@@ -246,8 +246,9 @@ int main()
     std::cout << "Fourier" << std::endl;
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+    */
 
-
+    /*
     measurements.clear();
     QC::SwapGate sg;
   
@@ -262,6 +263,7 @@ int main()
     std::cout << "Swap" << std::endl;
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+    */
 }
 
 
