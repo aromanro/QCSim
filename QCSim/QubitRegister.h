@@ -107,6 +107,74 @@ namespace QC {
 			return state;
 		}
 
+		// measure a 'subregister' as a separate register
+		// can measure a single qubit, if firstQubit == secondQubit
+		// will return a 'state' as if the measured sequence is in a separate register (that is, the 'firstQubit' is on position 0 and so on)
+		// so 0 means that all measured qubits are zero, 1 means that firstQubit is 1 and all other measured ones are zero, 2 means that the next one 1 one and all others are zero and so on
+		
+		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
+		{
+			const double prob = uniformZeroOne(rng);
+			double accum = 0;
+
+			const unsigned int firstPartMask = (1u << firstQubit) - 1;
+			const unsigned int measuredPartMask = (1u << (secondQubit + 1)) - 1 - firstPartMask;
+			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+
+			const unsigned int secondPartMax = secondPartMask >> secondQubit;
+
+			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+
+			unsigned int measuredState = maxMeasuredState;
+			
+			double norm = 1;
+			for (unsigned int state = 0; state < maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+				double stateProbability = 0;
+
+				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				{
+					const unsigned int secondPart = secondPartBits << secondQubit;
+					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+					{
+						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
+						stateProbability += (std::conj(registerStorage[wholeState]) * registerStorage[wholeState]).real();
+					}
+				}
+
+				accum += stateProbability;
+				if (prob < accum)
+				{
+					measuredState = state;
+					norm = 1. / sqrt(stateProbability);
+					break;
+				}
+			}
+
+			// collapse
+			for (unsigned int state = 0; state < maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+
+				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				{
+					const unsigned int secondPart = secondPartBits << secondQubit;
+					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+					{
+						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
+						
+						if (state == measuredState)
+							registerStorage[wholeState] *= norm;
+						else
+							registerStorage[wholeState] = 0;
+					}
+				}
+			}
+
+			return measuredState;
+		}
+
 		void ApplyGate(const QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0)
 		{
 			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit) * registerStorage;

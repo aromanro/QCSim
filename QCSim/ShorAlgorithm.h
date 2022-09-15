@@ -67,6 +67,10 @@ namespace Shor {
 				An *= An;
 			}
 			
+			// it doesn't really matter if you measure the qubits from f and when you do after the above
+			// or if you measure them several times in a row
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits() - 1);
+
 			// then perform an inverse fourier transform
 			QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
 
