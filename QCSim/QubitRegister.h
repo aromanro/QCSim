@@ -92,17 +92,18 @@ namespace QC {
 		{
 			const double prob = uniformZeroOne(rng);
 			double accum = 0;
+			unsigned int state = NrBasisStates - 1;
 			for (unsigned int i = 0; i < NrBasisStates; ++i)
 			{
 				accum += (std::conj(registerStorage(i)) * registerStorage(i)).real();
 				if (prob < accum)
 				{
-					setToBasisState(i); // collapse
-					return i;
+					state = i;
+					break;
 				}
 			}
-			const unsigned int state = NrBasisStates - 1;
-			setToBasisState(state);
+
+			setToBasisState(state); // collapse
 
 			return state;
 		}
