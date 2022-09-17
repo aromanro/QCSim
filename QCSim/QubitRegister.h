@@ -118,25 +118,26 @@ namespace QC {
 			const double prob = uniformZeroOne(rng);
 			double accum = 0;
 
+			const unsigned int secondQubitp1 = secondQubit + 1;
+
 			const unsigned int firstPartMask = (1u << firstQubit) - 1;
-			const unsigned int measuredPartMask = (1u << (secondQubit + 1)) - 1 - firstPartMask;
+			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
 			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
-			const unsigned int secondPartMax = secondPartMask >> secondQubit;
-
+			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
 			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
 
 			unsigned int measuredState = maxMeasuredState;
 			
 			double norm = 1;
-			for (unsigned int state = 0; state < maxMeasuredState; ++state)
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
 			{
 				const unsigned int stateRegBits = state << firstQubit;
 				double stateProbability = 0;
 
 				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 				{
-					const unsigned int secondPart = secondPartBits << secondQubit;
+					const unsigned int secondPart = secondPartBits << secondQubitp1;
 					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 					{
 						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
@@ -153,25 +154,43 @@ namespace QC {
 				}
 			}
 
+			int cnt = 0;
 			// collapse
-			for (unsigned int state = 0; state < maxMeasuredState; ++state)
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
 			{
 				const unsigned int stateRegBits = state << firstQubit;
 
-				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				if (state == measuredState)
 				{
-					const unsigned int secondPart = secondPartBits << secondQubit;
-					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 					{
-						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
-						
-						if (state == measuredState)
+						const unsigned int secondPart = secondPartBits << secondQubitp1;
+						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						{
+							const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
+
 							registerStorage[wholeState] *= norm;
-						else
+							++cnt;
+						}
+					}
+				}
+				else
+				{
+					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+					{
+						const unsigned int secondPart = secondPartBits << secondQubitp1;
+						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						{
+							const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
+							
 							registerStorage[wholeState] = 0;
+							++cnt;
+						}
 					}
 				}
 			}
+
+			assert(cnt == NrBasisStates);
 
 			return measuredState;
 		}

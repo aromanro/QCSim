@@ -209,10 +209,14 @@ int main()
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        const unsigned int state = shorAlgo.Execute();
+        unsigned int state = shorAlgo.Execute();
         ++measurements[state & 0x7]; //only the l bits matter
 
+        // this should work only if Execute calls full register measurement, otherwise use the commented part below
         ++fmeasurements[state >> 3]; //save the f register measurements for debugging
+        
+        //state = shorAlgo.reg.Measure(3, 6);
+        //++fmeasurements[state];
     }
 
     std::cout << "f register" << std::endl;
