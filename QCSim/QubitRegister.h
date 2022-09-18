@@ -82,10 +82,10 @@ namespace QC {
 
 		void Normalize()
 		{
-			const double accum = (registerStorage.adjoint() * registerStorage)(0).real();
-			if (accum < 1E-20) return;
+			const double accum = (registerStorage.adjoint()*registerStorage)(0).real();
+			if (abs(accum) < 1E-20) return;
 
-			registerStorage = 1. / sqrt(accum) * registerStorage;
+			registerStorage *= 1. / sqrt(accum);
 		}
 
 		unsigned int Measure()
