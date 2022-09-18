@@ -154,7 +154,7 @@ namespace QC {
 				}
 			}
 
-			int cnt = 0;
+			//int cnt = 0;
 			// collapse
 			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
 			{
@@ -170,7 +170,7 @@ namespace QC {
 							const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
 
 							registerStorage[wholeState] *= norm;
-							++cnt;
+							//++cnt;
 						}
 					}
 				}
@@ -184,13 +184,13 @@ namespace QC {
 							const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
 							
 							registerStorage[wholeState] = 0;
-							++cnt;
+							//++cnt;
 						}
 					}
 				}
 			}
 
-			assert(cnt == NrBasisStates);
+			//assert(cnt == NrBasisStates);
 
 			return measuredState;
 		}
