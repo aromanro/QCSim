@@ -319,6 +319,64 @@ int main()
     std::cout << "Subregister measurement, second qubit" << std::endl;
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+    // now do the measurements one after another
+
+    // TODO: check the register to be left in the expected state after subregister measurements
+
+    measurements.clear();
+    fmeasurements.clear();
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        reg.setToBasisState(0); //overriden below
+
+        reg.setRawAmplitude(0, 0.5);
+        reg.setRawAmplitude(1, std::complex<double>(0, -0.5));
+        reg.setRawAmplitude(3, 1. / sqrt(2));
+
+        reg.Normalize(); // already normalized, but better to ensure it
+
+        unsigned int state = reg.Measure(0, 0);
+        ++measurements[state];
+
+        state = reg.Measure(1, 1);
+        ++fmeasurements[state];
+    }
+
+    std::cout << "Subregister measurement, first qubit again" << std::endl;
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+    std::cout << "Subregister measurement, second qubit again" << std::endl;
+    for (auto m : fmeasurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+    measurements.clear();
+    fmeasurements.clear();
+
+    for (int i = 0; i < nrMeasurements; ++i)
+    {
+        reg.setToBasisState(0); //overriden below
+
+        reg.setRawAmplitude(0, 0.5);
+        reg.setRawAmplitude(1, std::complex<double>(0, -0.5));
+        reg.setRawAmplitude(3, 1. / sqrt(2));
+
+        reg.Normalize(); // already normalized, but better to ensure it
+
+        unsigned int state = reg.Measure(1, 1);
+        ++measurements[state];
+
+        state = reg.Measure(0, 0);
+        ++fmeasurements[state];
+    }
+
+    std::cout << "Subregister measurement, second qubit now" << std::endl;
+    for (auto m : measurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+    std::cout << "Subregister measurement, first qubit now" << std::endl;
+    for (auto m : fmeasurements)
+        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 }
 
 
