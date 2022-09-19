@@ -205,7 +205,7 @@ namespace QC {
 			registerStorage = m * registerStorage;
 		}
 
-		void getRegisterStorage() const
+		VectorClass getRegisterStorage() const
 		{
 			return registerStorage;
 		}

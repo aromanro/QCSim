@@ -10,6 +10,11 @@ bool approxEqual(double val1, double val2)
     return abs(val1 - val2) < 1E-10;
 }
 
+bool approxEqual(std::complex<double> val1, std::complex<double> val2)
+{
+    return approxEqual(val1.real(), val2.real()) && approxEqual(val1.imag(), val2.imag());
+}
+
 bool tests()
 {
 	std::map<int, int> measurements;
@@ -25,6 +30,9 @@ bool tests()
 
     QC::QubitRegister reg(2); // only a two qubit register
 
+    std::complex<double> c0(0, 0);
+    std::complex<double> c1(1, 0);
+
     for (int i = 0; i < nrMeasurements; ++i)
     {
         reg.setToBasisState(0); //overriden below
@@ -39,6 +47,31 @@ bool tests()
 
         const unsigned int state = reg.Measure(0, 0);
         ++measurements[state];
+
+        Eigen::VectorXcd amplitudes = reg.getRegisterStorage();
+        if (1 == state)
+        {
+            if (!approxEqual(amplitudes(0), c0) || !approxEqual(amplitudes(1), std::complex<double>(0, -1. / sqrt(3.))) ||
+                !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), std::complex<double>(sqrt(2.) / sqrt(3.), 0)))
+            {
+                std::cout << "Wrong state after measuring the first qubit to 1" << std::endl;
+                exit(1);
+            }
+        }
+        else if (0 == state)
+        {
+            if (!approxEqual(amplitudes(0), c1) || !approxEqual(amplitudes(1), c0) ||
+                !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), c0))
+            {
+                std::cout << "Wrong state after measuring the first qubit to 0" << std::endl;
+                exit(1);
+            }
+        }
+        else
+        {
+            std::cout << "Wrong state returned after measuring the first qubit" << std::endl;
+            exit(1);
+        }
     }
 
     // should get 3/4 1 and 1/4 0
@@ -61,6 +94,32 @@ bool tests()
 
         const unsigned int state = reg.Measure(1, 1);
         ++measurements[state];
+
+        Eigen::VectorXcd amplitudes = reg.getRegisterStorage();
+        if (1 == state)
+        {
+            if (!approxEqual(amplitudes(0), c0) || !approxEqual(amplitudes(1), c0) ||
+                !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), c1))
+            {
+                std::cout << "Wrong state after measuring the second qubit to 1" << std::endl;
+                exit(1);
+            }
+            
+        }
+        else if (0 == state)
+        {
+            if (!approxEqual(amplitudes(0), std::complex<double>(0.5 * sqrt(2), 0)) || !approxEqual(amplitudes(1), std::complex<double>(0, -0.5 * sqrt(2))) ||
+                !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), c0))
+            {
+                std::cout << "Wrong state after measuring the second qubit to 0" << std::endl;
+                exit(1);
+            }
+        }
+        else
+        {
+            std::cout << "Wrong state returned after measuring the second qubit" << std::endl;
+            exit(1);
+        }
     }
 
     // should have 1/2 probability for 0 and 1
@@ -69,8 +128,6 @@ bool tests()
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
     // now do the measurements one after another
-
-    // TODO: check the register to be left in the expected state after subregister measurements
 
     measurements.clear();
     fmeasurements.clear();
