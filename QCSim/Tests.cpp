@@ -15,12 +15,12 @@ bool approxEqual(std::complex<double> val1, std::complex<double> val2)
     return approxEqual(val1.real(), val2.real()) && approxEqual(val1.imag(), val2.imag());
 }
 
-bool tests()
+bool registerMeasurementsTests()
 {
-	std::map<int, int> measurements;
+    std::map<int, int> measurements;
     std::map<int, int> fmeasurements;
 
-	const int nrMeasurements = 10000;
+    const int nrMeasurements = 10000;
 
 
     // testing subregister measurement
@@ -55,7 +55,7 @@ bool tests()
                 !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), std::complex<double>(sqrt(2.) / sqrt(3.), 0)))
             {
                 std::cout << "Wrong state after measuring the first qubit to 1" << std::endl;
-                exit(1);
+                return false;
             }
         }
         else if (0 == state)
@@ -64,13 +64,13 @@ bool tests()
                 !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), c0))
             {
                 std::cout << "Wrong state after measuring the first qubit to 0" << std::endl;
-                exit(1);
+                return false;
             }
         }
         else
         {
             std::cout << "Wrong state returned after measuring the first qubit" << std::endl;
-            exit(1);
+            return false;
         }
     }
 
@@ -102,9 +102,9 @@ bool tests()
                 !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), c1))
             {
                 std::cout << "Wrong state after measuring the second qubit to 1" << std::endl;
-                exit(1);
+                return false;
             }
-            
+
         }
         else if (0 == state)
         {
@@ -112,13 +112,13 @@ bool tests()
                 !approxEqual(amplitudes(2), c0) || !approxEqual(amplitudes(3), c0))
             {
                 std::cout << "Wrong state after measuring the second qubit to 0" << std::endl;
-                exit(1);
+                return false;
             }
         }
         else
         {
             std::cout << "Wrong state returned after measuring the second qubit" << std::endl;
-            exit(1);
+            return false;
         }
     }
 
@@ -183,6 +183,12 @@ bool tests()
     for (auto m : fmeasurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
+    return true;
+}
 
-	return true;
+bool tests()
+{
+    bool res = registerMeasurementsTests();
+
+    return res;
 }
