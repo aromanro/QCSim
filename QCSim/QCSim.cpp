@@ -195,6 +195,9 @@ int main()
 
     Shor::ShorAlgorithm shorAlgo;
 
+    //unsigned int p1, p2;
+    //shorAlgo.factorize(15, p1, p2);
+
     // with 2 (default) f should be 1, 2, 4, 8 for performing period finding
     shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13
     //shorAlgo.setA(4); // should be 1, 4

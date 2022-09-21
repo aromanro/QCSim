@@ -188,6 +188,8 @@ bool registerMeasurementsTests()
 
 bool tests()
 {
+    std::cout << "\nTests\n";
+
     bool res = registerMeasurementsTests();
 
     return res;
