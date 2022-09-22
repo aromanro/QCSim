@@ -26,7 +26,7 @@ void setRegister(QC::QubitRegister<>& reg)
     reg.Normalize(); // already normalized, but better to ensure it
 }
 
-bool registerMeasurementsTests()
+bool checkAmplitudesAfterSingleQubitMeasurement()
 {
     std::map<int, int> measurements;
     std::map<int, int> fmeasurements;
@@ -125,10 +125,23 @@ bool registerMeasurementsTests()
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
-    // now do the measurements one after another
+    return true;
+}
 
-    measurements.clear();
-    fmeasurements.clear();
+
+bool checkSingleQubitMeasurements()
+{
+    std::map<int, int> measurements;
+    std::map<int, int> fmeasurements;
+
+    const int nrMeasurements = 10000;
+
+    // testing subregister measurement
+
+    // state is 1/2 |00> - i / 2 |01> + 1/sqrt(2) |11>
+    // qubits are in little endian order, that is, the first one is to the right
+
+    QC::QubitRegister reg(2); // only a two qubit register
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
@@ -170,6 +183,11 @@ bool registerMeasurementsTests()
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
     return true;
+}
+
+bool registerMeasurementsTests()
+{
+    return checkAmplitudesAfterSingleQubitMeasurement() && checkSingleQubitMeasurements();
 }
 
 bool tests()
