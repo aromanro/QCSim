@@ -15,6 +15,17 @@ bool approxEqual(std::complex<double> val1, std::complex<double> val2)
     return approxEqual(val1.real(), val2.real()) && approxEqual(val1.imag(), val2.imag());
 }
 
+void setRegister(QC::QubitRegister<>& reg)
+{
+    reg.setToBasisState(0); //overriden below
+
+    reg.setRawAmplitude(0, 0.5);
+    reg.setRawAmplitude(1, std::complex<double>(0, -0.5));
+    reg.setRawAmplitude(3, 1. / sqrt(2));
+
+    reg.Normalize(); // already normalized, but better to ensure it
+}
+
 bool registerMeasurementsTests()
 {
     std::map<int, int> measurements;
@@ -35,13 +46,7 @@ bool registerMeasurementsTests()
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        reg.setToBasisState(0); //overriden below
-
-        reg.setRawAmplitude(0, 0.5);
-        reg.setRawAmplitude(1, std::complex<double>(0, -0.5));
-        reg.setRawAmplitude(3, 1. / sqrt(2));
-
-        reg.Normalize(); // already normalized, but better to ensure it
+        setRegister(reg);
 
         // measure first qubit only
 
@@ -82,13 +87,7 @@ bool registerMeasurementsTests()
     measurements.clear();
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        reg.setToBasisState(0); //overriden below
-
-        reg.setRawAmplitude(0, 0.5);
-        reg.setRawAmplitude(1, std::complex<double>(0, -0.5));
-        reg.setRawAmplitude(3, 1. / sqrt(2));
-
-        reg.Normalize(); // already normalized, but better to ensure it
+        setRegister(reg);
 
         // measure second qubit only
 
@@ -104,7 +103,6 @@ bool registerMeasurementsTests()
                 std::cout << "Wrong state after measuring the second qubit to 1" << std::endl;
                 return false;
             }
-
         }
         else if (0 == state)
         {
@@ -134,13 +132,7 @@ bool registerMeasurementsTests()
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        reg.setToBasisState(0); //overriden below
-
-        reg.setRawAmplitude(0, 0.5);
-        reg.setRawAmplitude(1, std::complex<double>(0, -0.5));
-        reg.setRawAmplitude(3, 1. / sqrt(2));
-
-        reg.Normalize(); // already normalized, but better to ensure it
+        setRegister(reg);
 
         unsigned int state = reg.Measure(0, 0);
         ++measurements[state];
@@ -161,13 +153,7 @@ bool registerMeasurementsTests()
 
     for (int i = 0; i < nrMeasurements; ++i)
     {
-        reg.setToBasisState(0); //overriden below
-
-        reg.setRawAmplitude(0, 0.5);
-        reg.setRawAmplitude(1, std::complex<double>(0, -0.5));
-        reg.setRawAmplitude(3, 1. / sqrt(2));
-
-        reg.Normalize(); // already normalized, but better to ensure it
+        setRegister(reg);
 
         unsigned int state = reg.Measure(1, 1);
         ++measurements[state];
