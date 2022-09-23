@@ -137,7 +137,7 @@ namespace Shor {
 			unsigned int state = Execute();
 			while (!state) state = Execute();
 
-			const double d = pow(2, fRegisterStartQubit);
+			const int d = static_cast<int>(pow(2, fRegisterStartQubit));
 			const double val = static_cast<double>(state) / d;
 
 			// TODO: implement it 
@@ -170,6 +170,23 @@ namespace Shor {
 		unsigned int mod(unsigned long long int v)
 		{
 			return v % Number;
+		}
+
+		std::vector<int> continuedFraction(double val, int limitIter, double limitPrecision = 1E-5)
+		{
+			std::vector<int> res;
+
+			int intPart = static_cast<int>(val);
+			while (limitIter--)
+			{
+				res.push_back(intPart);
+				val -= intPart;
+				if (abs(val) < limitPrecision) break;
+				val = 1. / val;
+				intPart = static_cast<int>(val);
+			}
+
+			return res;
 		}
 
 		unsigned int Number;
