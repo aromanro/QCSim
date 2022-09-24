@@ -19,6 +19,12 @@ namespace QC {
 			return 1u << q;
 		}
 
+		const QubitRegister<VectorClass, MatrixClass>& getRegister() const
+		{
+			return reg;
+		}
+
+	protected:
 		QubitRegister<VectorClass, MatrixClass> reg;
 	};
 
