@@ -147,6 +147,7 @@
     <ClCompile Include="Tests.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Function.h" />
     <ClInclude Include="GroverAlgorithm.h" />
     <ClInclude Include="Oracle.h" />
     <ClInclude Include="QuantumAlgorithm.h" />
