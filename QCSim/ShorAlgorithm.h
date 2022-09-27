@@ -1,32 +1,23 @@
 #pragma once
 
+#include "Function.h"
 #include "QuantumFourierTransform.h"
 
 namespace Shor {
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumFourierTransform<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class Fx : public QC::Function<VectorClass, MatrixClass>
 	{
 	public:
-		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
-			: QC::QuantumFourierTransform<VectorClass, MatrixClass>(N, 0, L - 1, addseed), Number(C), fRegisterStartQubit(L), A(2)
+		Fx(unsigned int L)
+			: fRegisterStartQubit(L)
 		{
 		}
 
-		unsigned int Execute() override
+		void Apply(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			Init();
-
-			// apply hadamard over each qubit from the x-register
-			// reuse the hadamard gate from the fourier transform base class
-			for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(QC::QuantumFourierTransform<VectorClass, MatrixClass>::hadamard, i);
-
-			// now the f(x)
-
 			// for each l qubit from x (0 - L-1 range)
 			// construct a controlled gate by the qubit 
-
-			const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates();
+			const unsigned int BasisStatesNo = reg.getNrBasisStates();
 			const unsigned int xmask = (1 << fRegisterStartQubit) - 1;
 			const unsigned int fmask = ~xmask;
 
@@ -49,10 +40,10 @@ namespace Shor {
 							gateOperator(k, k) = 1;
 						else
 						{
-							f = mod(mod(An)*f);
+							f = mod(mod(An) * f);
 							f <<= fRegisterStartQubit;
 
-						    gateOperator(f | xbits, k) = 1;
+							gateOperator(f | xbits, k) = 1;
 						}
 					}
 					else
@@ -60,10 +51,51 @@ namespace Shor {
 				}
 
 				// apply it
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyOperatorMatrix(gateOperator);
+				reg.ApplyOperatorMatrix(gateOperator);
 
 				An *= An;
 			}
+		}
+
+		void setParams(unsigned int N, unsigned int a)
+		{
+			Number = N;
+			A = a;
+		}
+
+	protected:
+		unsigned int mod(unsigned long long int v)
+		{
+			return v % Number;
+		}
+
+		unsigned int fRegisterStartQubit;
+		unsigned int Number;
+		unsigned int A;
+	};
+
+
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumFourierTransform<VectorClass, MatrixClass>
+	{
+	public:
+		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
+			: QC::QuantumFourierTransform<VectorClass, MatrixClass>(N, 0, L - 1, addseed), Number(C), fRegisterStartQubit(L), A(2), fx(L)
+		{
+		}
+
+		unsigned int Execute() override
+		{
+			Init();
+
+			// apply hadamard over each qubit from the x-register
+			// reuse the hadamard gate from the fourier transform base class
+			for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(QC::QuantumFourierTransform<VectorClass, MatrixClass>::hadamard, i);
+
+			// now the f(x)
+			fx.setParams(Number, A);
+			fx.Apply(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 			
 			// it doesn't really matter if you measure the qubits from f and when you do after the above
 			// or if you measure them several times in a row
@@ -167,11 +199,6 @@ namespace Shor {
 			return a;
 		}
 
-		unsigned int mod(unsigned long long int v)
-		{
-			return v % Number;
-		}
-
 		std::vector<int> continuedFraction(double val, int limitIter, double limitPrecision = 1E-5)
 		{
 			std::vector<int> res;
@@ -192,5 +219,7 @@ namespace Shor {
 		unsigned int Number;
 		unsigned int fRegisterStartQubit;
 		unsigned int A;
+
+		Fx<VectorClass, MatrixClass> fx;
 	};
 }
