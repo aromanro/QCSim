@@ -199,7 +199,7 @@ namespace Shor {
 			return a;
 		}
 
-		std::vector<int> continuedFraction(double val, int limitIter, double limitPrecision = 1E-5)
+		static std::vector<int> continuedFraction(double val, int limitIter, double limitPrecision = 1E-5)
 		{
 			std::vector<int> res;
 
@@ -214,6 +214,32 @@ namespace Shor {
 			}
 
 			return res;
+		}
+
+		static void getFractions(const std::vector<int> contFrac, std::vector<int>& nums, std::vector<int>& denoms)
+		{
+			unsigned int sz = contFrac.size();
+			nums.resize(sz);
+			denoms.resize(sz);
+
+			int n2 = 0;
+			int n1 = 1;
+			int d2 = 1;
+			int d1 = 0;
+
+			for (unsigned int i = 0; i < sz; ++i)
+			{
+				const int n = contFrac[i] * n1 + n2;
+				const int d = contFrac[i] * d1 + d2;
+
+				nums[i] = n;
+				denoms[i] = d;
+
+				n2 = n1;
+				d2 = d1;
+				n1 = n;
+				d1 = d;
+			}
 		}
 
 		unsigned int Number;
