@@ -242,6 +242,11 @@ namespace Shor {
 			}
 		}
 
+		unsigned int getNBits() const
+		{
+			return  QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits() - fRegisterStartQubit;
+		}
+
 		unsigned int Number;
 		unsigned int fRegisterStartQubit;
 		unsigned int A;
