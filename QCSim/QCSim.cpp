@@ -192,12 +192,21 @@ int main()
 */
 
     measurements.clear();
+    
+    /*
+    for (int i = 0; i < 10;)
+    {
+        Shor::ShorAlgorithm shorAlgo(21, 14, 9);
+        unsigned int p1;
+        unsigned int p2;
+        bool res = shorAlgo.factorize(p1, p2);
+        std::cout << (res ? "Quantum algo: " : "Classical algo: ") << p1 << " " << p2 << std::endl;
+        if (res) ++i;
+    }
+    return 0;
+    */
 
     Shor::ShorAlgorithm shorAlgo;
-
-    //unsigned int p1, p2;
-    //shorAlgo.factorize(15, p1, p2);
-
     // with 2 (default) f should be 1, 2, 4, 8 for performing period finding
     shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13
     //shorAlgo.setA(4); // should be 1, 4

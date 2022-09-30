@@ -8,8 +8,8 @@ namespace Shor {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class Fx : public QC::Function<VectorClass, MatrixClass>
 	{
 	public:
-		Fx(unsigned int L)
-			: fRegisterStartQubit(L)
+		Fx(unsigned int L, unsigned int C)
+			: fRegisterStartQubit(L), Number(C), A(2)
 		{
 		}
 
@@ -57,18 +57,17 @@ namespace Shor {
 			}
 		}
 
-		void setParams(unsigned int N, unsigned int a)
+		void setParam(unsigned int a)
 		{
-			Number = N;
 			A = a;
 		}
 
-	protected:
 		unsigned int mod(unsigned long long int v)
 		{
 			return v % Number;
 		}
 
+	protected:
 		unsigned int fRegisterStartQubit;
 		unsigned int Number;
 		unsigned int A;
@@ -80,7 +79,7 @@ namespace Shor {
 	{
 	public:
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
-			: QC::QuantumFourierTransform<VectorClass, MatrixClass>(N, 0, L - 1, addseed), Number(C), fRegisterStartQubit(L), A(2), fx(L)
+			: QC::QuantumFourierTransform<VectorClass, MatrixClass>(N, 0, L - 1, addseed), Number(C), fRegisterStartQubit(L), A(2), fx(L, C)
 		{
 		}
 
@@ -94,7 +93,6 @@ namespace Shor {
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(QC::QuantumFourierTransform<VectorClass, MatrixClass>::hadamard, i);
 
 			// now the f(x)
-			fx.setParams(Number, A);
 			fx.Apply(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 			
 			// it doesn't really matter if you measure the qubits from f and when you do after the above
@@ -114,29 +112,28 @@ namespace Shor {
 		void setA(unsigned int a)
 		{
 			A = a;
+			fx.setParam(A);
 		}
 
-		// this is not yet fully implemented!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-		
 		// returns false is Shor algorithm was not used, otherwise true 
-		bool factorize(unsigned int c, unsigned int& p1, unsigned int& p2)
+		bool factorize(unsigned int& p1, unsigned int& p2, unsigned int numAttempts = 10)
 		{
-			if (c >= 20) 
+			if (Number > 22) 
 			{
 				// don't allow too large numbers
 				p1 = p2 = 0;
 				return false;
 			}
 
-			if (c % 2 == 0)
+			if (Number % 2 == 0)
 			{
 				p1 = 2;
-				p2 = c / 2;
+				p2 = Number / 2;
 				return false;
 			}
 
-			const unsigned int sq = static_cast<unsigned int>(round(sqrt(c)));
-			if (sq * sq == c)
+			const unsigned int sq = static_cast<unsigned int>(round(sqrt(Number)));
+			if (sq * sq == Number)
 			{
 				p1 = p2 = sq;
 				return false;
@@ -144,40 +141,78 @@ namespace Shor {
 
 			std::random_device rd;
 			std::mt19937 gen(rd());
-			std::uniform_int_distribution<> dist(2, c-1);
-			const int a = dist(gen);
+			std::uniform_int_distribution<> dist(2, Number - 1);
 
-			setA(a);
-
-			const unsigned int g = gcd(c, a);
-			if (g > 1)
+			// well, this probably should be more optimized, but it seems to work
+			for (unsigned int t = 0; t < numAttempts; ++t)
 			{
-				p1 = g;
-				p2 = c / g;
-				return false;
+				const int a = dist(gen);
+				setA(a);
+
+				const unsigned int g = gcd(Number, a);
+				if (g > 1)
+				{
+					p1 = g;
+					p2 = Number / g;
+					return false;
+				}
+
+				// period finding
+
+				const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates();
+				const unsigned int xmask = (1 << fRegisterStartQubit) - 1;
+
+				// use a single measurement to guess the period (but not zero)
+
+				unsigned int state = Execute() & xmask;
+				while (!state) state = Execute() & xmask;
+
+				const int d = static_cast<int>(pow(2, fRegisterStartQubit));
+				const double val = static_cast<double>(state) / d;
+
+				// p is guessed from here using continued fractions
+				std::vector<int> nums;
+				std::vector<int> divs;
+				getFractions(continuedFraction(val, fRegisterStartQubit), nums, divs);
+
+				for (size_t i = 1; i < divs.size(); ++i) // skip first as it's for the integer part
+				{
+					unsigned int p = divs[i];
+					if (p % 2) p *= 2;
+					while (p < Number)
+					{
+						if (fx.mod(static_cast<unsigned int>(pow(A, p))) == 1)
+						{
+							const unsigned int v = static_cast<unsigned int>(pow(A, p / 2));
+							const unsigned int m = fx.mod(v);
+							if (m != 1 && m != Number - 1)
+							{
+								p1 = gcd(m - 1, Number);
+								p2 = gcd(m + 1, Number);
+
+								// either both or at least one are factors
+								const unsigned int t1 = Number / p1;
+								const unsigned int t2 = Number / p2;
+								if (p1 * t1 == Number)
+									p2 = t1;
+								else
+									p1 = t2;
+
+								//if (!((p1 == 1 && p2 == Number) || (p1 == Number && p2 == 1)))
+								return true;
+							}
+						}
+
+						p *= 2;
+					}
+
+				}
 			}
 
-			// period finding
-			
-			std::map<int, int> measurements;
-			const int nrMeasurements = 100;
-			const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates();
-			const unsigned int xmask = (1 << fRegisterStartQubit) - 1;
+			p1 = 1;
+			p2 = Number;
 
-			// use a single measurement to guess the period (but not zero)
-
-			unsigned int state = Execute();
-			while (!state) state = Execute();
-
-			const int d = static_cast<int>(pow(2, fRegisterStartQubit));
-			const double val = static_cast<double>(state) / d;
-
-			// TODO: implement it 
-
-			// p is guessed from here using continued fractions
-
-
-			return true;
+			return false;
 		}
 
 	protected:
@@ -218,7 +253,7 @@ namespace Shor {
 
 		static void getFractions(const std::vector<int> contFrac, std::vector<int>& nums, std::vector<int>& denoms)
 		{
-			unsigned int sz = contFrac.size();
+			size_t sz = contFrac.size();
 			nums.resize(sz);
 			denoms.resize(sz);
 
@@ -227,7 +262,7 @@ namespace Shor {
 			int d2 = 1;
 			int d1 = 0;
 
-			for (unsigned int i = 0; i < sz; ++i)
+			for (size_t i = 0; i < sz; ++i)
 			{
 				const int n = contFrac[i] * n1 + n2;
 				const int d = contFrac[i] * d1 + d2;
