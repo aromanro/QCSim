@@ -205,7 +205,6 @@ namespace Shor {
 
 						p *= 2;
 					}
-
 				}
 			}
 
