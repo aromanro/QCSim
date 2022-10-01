@@ -147,15 +147,17 @@ namespace Shor {
 			for (unsigned int t = 0; t < numAttempts; ++t)
 			{
 				const int a = dist(gen);
-				setA(a);
 
 				const unsigned int g = gcd(Number, a);
 				if (g > 1)
 				{
+					//continue;
 					p1 = g;
 					p2 = Number / g;
 					return false;
 				}
+
+				setA(a);
 
 				// period finding
 
