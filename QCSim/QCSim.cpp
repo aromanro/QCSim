@@ -178,34 +178,9 @@ int main()
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
         */
 
-/*
-    measurements.clear();
-    Grover::GroverAlgorithm galgo(8);
-    galgo.setCorrectQuestionState(13);
-    for (int i = 0; i < nrMeasurements; ++i)
-    {
-        unsigned int state = galgo.Execute();
-        ++measurements[state];
-    }
-    for (auto m : measurements)
-        std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
-*/
 
     measurements.clear();
     
-    /*
-    for (int i = 0; i < 10;)
-    {
-        Shor::ShorAlgorithm shorAlgo(21, 14, 9);
-        unsigned int p1;
-        unsigned int p2;
-        bool res = shorAlgo.factorize(p1, p2);
-        std::cout << (res ? "Quantum algo: " : "Classical algo: ") << p1 << " " << p2 << std::endl;
-        if (res) ++i;
-    }
-    return 0;
-    */
-
     Shor::ShorAlgorithm shorAlgo;
     // with 2 (default) f should be 1, 2, 4, 8 for performing period finding
     shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13

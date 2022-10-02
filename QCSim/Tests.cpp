@@ -2,6 +2,9 @@
 
 #include "QubitRegister.h"
 
+#include "GroverAlgorithm.h"
+#include "ShorAlgorithm.h"
+
 #include <iostream>
 #include <map>
 
@@ -214,7 +217,79 @@ bool checkSingleQubitMeasurements()
 
 bool registerMeasurementsTests()
 {
+    std::cout << "\nTesting measurements..." << std::endl;
+
     return checkAmplitudesAfterSingleQubitMeasurement() && checkSingleQubitMeasurements();
+}
+
+
+bool ShorTests()
+{
+    std::cout << "\nTesting Shor..." << std::endl;
+
+    for (int i = 0; i < 10;)
+    {
+        Shor::ShorAlgorithm shorAlgo;//(21, 14, 9)
+        unsigned int p1;
+        unsigned int p2;
+        bool res = shorAlgo.factorize(p1, p2);
+        if (p2 > p1) std::swap(p1, p2);
+
+        std::cout << (res ? "Quantum algo: " : "Classical algo: ") << p1 << " " << p2 << std::endl;
+
+        if (p1 != 5 && p2 != 3) return false;
+
+        if (res) ++i;
+    }
+
+    return true;
+}
+
+bool GroverTests()
+{
+    std::cout << "\nTesting Grover..." << std::endl;
+
+    bool res = true;
+
+    std::map<int, int> measurements;
+    const int nrMeasurements = 100;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(0, 0xf);
+
+    for (int i = 0; i < 5; ++i)
+    {
+        const int ans = dist(gen);
+
+        std::cout << "Testing for answer: " << ans << std::endl;
+
+        measurements.clear();
+        Grover::GroverAlgorithm galgo(8);
+        galgo.setCorrectQuestionState(ans);
+        for (int i = 0; i < nrMeasurements; ++i)
+        {
+            unsigned int state = galgo.Execute();
+            ++measurements[state];
+        }
+
+        bool found = false;
+        for (auto m : measurements)
+        {
+            std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+            if (m.first == ans)
+            {
+                found = true;
+                if (static_cast<double>(m.second) / nrMeasurements < 0.9)
+                    res = false;
+            }
+        }
+
+        if (!found) res = false;
+    }
+
+    return res;
 }
 
 bool tests()
@@ -222,6 +297,8 @@ bool tests()
     std::cout << "\nTests\n";
 
     bool res = registerMeasurementsTests();
+    if (res) res = GroverTests();
+    if (res) res = ShorTests();
 
     std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 
