@@ -168,7 +168,7 @@ namespace QC {
 			U(0, 1) = 1;
 			U(1, 0) = 1;
 
-			SetOperation(U);
+			TwoQubitsControlledGate<MatrixClass>::SetOperation(U);
 		}
 	};
 

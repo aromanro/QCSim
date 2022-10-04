@@ -44,7 +44,7 @@ namespace QC {
 		{
 			if (State >= NrBasisStates) return;
 
-			registerStorage.setZero();
+			Clear();
 			registerStorage(State) = 1;
 		}
 
@@ -54,13 +54,13 @@ namespace QC {
 
 			unsigned int state = 1u << q;
 
-			registerStorage.setZero();
+			Clear();
 			registerStorage(state) = 1;
 		}
 
 		void setToCatState()
 		{
-			registerStorage.setZero();
+			Clear();
 			static const double OneOverSqrt2 = 1. / sqrt(2.);
 
 			registerStorage(0) = OneOverSqrt2;
@@ -78,6 +78,11 @@ namespace QC {
 			if (State >= NrBasisStates) return;
 
 			registerStorage(State) = val;
+		}
+
+		void Clear()
+		{
+			registerStorage.setZero();
 		}
 
 		void Normalize()

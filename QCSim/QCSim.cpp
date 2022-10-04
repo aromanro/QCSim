@@ -5,6 +5,7 @@
 
 #include "GroverAlgorithm.h"
 #include "ShorAlgorithm.h"
+#include "Teleportation.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -253,6 +254,19 @@ int main()
     for (auto m : measurements)
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
     */
+
+
+    Teleportation::QuantumTeleportationRealization qt;
+
+    qt.SetState(1, 0); // set the qubit to teleport to 'down'
+    unsigned int state = qt.Execute();
+
+    std::cout << "\nTeleported 0, measured: " << state << std::endl;
+
+    qt.SetState(0, 1); // set the qubit to teleport to 'up'
+    state = qt.Execute();
+
+    std::cout << "\nTeleported 1, measured: " << state << std::endl;
 
     tests();
 }
