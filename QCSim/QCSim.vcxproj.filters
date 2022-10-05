@@ -53,5 +53,8 @@
     <ClInclude Include="Teleportation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SuperdenseCoding.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

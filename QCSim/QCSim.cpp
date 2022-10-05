@@ -6,6 +6,7 @@
 #include "GroverAlgorithm.h"
 #include "ShorAlgorithm.h"
 #include "Teleportation.h"
+#include "SuperdenseCoding.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -279,6 +280,24 @@ int main()
 
     std::cout << "\nTeleported 1/sqrt(2) (|0>-i|1>), measured: " << state << std::endl;
 
+    Coding::SuperdenseCoding coding;
+
+    // bit1 is on position 0, bit2 is on position 1
+    coding.SetBits(false, false);
+    classicalBits = coding.Execute();
+    std::cout << "\n\nSent 00 using superdense coding, received: " << classicalBits << std::endl;
+
+    coding.SetBits(true, false);
+    classicalBits = coding.Execute();
+    std::cout << "Sent 01 using superdense coding, received: " << classicalBits << std::endl;
+
+    coding.SetBits(false, true);
+    classicalBits = coding.Execute();
+    std::cout << "Sent 10 using superdense coding, received: " << classicalBits << std::endl;
+
+    coding.SetBits(true, true);
+    classicalBits = coding.Execute();
+    std::cout << "Sent 11 using superdense coding, received: " << classicalBits << std::endl;
 
     tests();
 }
