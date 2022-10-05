@@ -17,7 +17,8 @@ namespace QC {
 		unsigned int getNrQubits() const { return reg.getNrQubits(); };
 		unsigned int getNrBasisStates() const { return reg.getNrBasisStates(); };
 
-		std::complex<double> getBasisStateAmplitude(unsigned int State) const {
+		std::complex<double> getBasisStateAmplitude(unsigned int State) const 
+		{
 			return reg.getBasisStateAmplitude(State);
 		}
 

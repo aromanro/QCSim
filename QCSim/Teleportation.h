@@ -16,7 +16,7 @@ namespace Teleportation
     };
 
 
-    template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportationRealization : QuantumTeleportation<VectorClass, MatrixClass>
+    template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportationRealization : public QuantumTeleportation<VectorClass, MatrixClass>
     {
     public:
         QuantumTeleportationRealization(int addseed = 0)
@@ -37,7 +37,8 @@ namespace Teleportation
         // considers the initial state already set
         // the qubits to be entangled start as |00> and they are entangled to a EPR state using cnot and hadamard gates 
         // the first two qubits are on the Alice side, the third belongs to Bob
-        void Teleport()
+        // returns the values of the two measured qubits
+        unsigned int Teleport(bool explicitClassicalTransmission = false)
         {
             // make an EPR pair out of the second and third qubit:
 
@@ -50,13 +51,25 @@ namespace Teleportation
             QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 0);
 
             // measurements can be actually done all at the end, but let's pretend
-
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(0, 1);
+            const unsigned int measuredValues = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(0, 1);
 
             // now that they are measured they go to Bob, which uses the values to act on its entangled qubit:
+            
+            if (explicitClassicalTransmission)
+            {
+                const bool firstQubitMeasurement = (measuredValues & 0x1) ? true : false;
+                const bool secondQubitMeasurement = (measuredValues & 0x2) ? true : false;
 
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 2, 1);
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cz, 2, 0);
+                if (secondQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(x, 2);
+                if (firstQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(z, 2);
+            }
+            else
+            {
+                QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 2, 1);
+                QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cz, 2, 0);
+            }
+
+            return measuredValues;
         }
 
         // called only if one wants the teleported qubit to be measured, otherwise just check the register contents
@@ -74,6 +87,10 @@ namespace Teleportation
         QC::CNOTGate<MatrixClass> cnot; // also needed on Alice side
         // needed on receiving side:
         QC::ControlledZGate<MatrixClass> cz;
+
+        // needed on Bob side, if the classical transmission is explicit (simple one qubit gates that are applied or not depending on the value of the classical bit):
+        QC::PauliXGate<MatrixClass> x;
+        QC::PauliZGate<MatrixClass> z;
     };
 
 }

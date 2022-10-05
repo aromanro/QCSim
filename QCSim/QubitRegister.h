@@ -35,7 +35,7 @@ namespace QC {
 		unsigned int getNrBasisStates() const { return NrBasisStates; };
 
 		std::complex<double> getBasisStateAmplitude(unsigned int State) const {
-			if (State >= NrBasisStates) return std::complex<double>(0);
+			if (State >= NrBasisStates) return 0;
 
 			return registerStorage(State);
 		}

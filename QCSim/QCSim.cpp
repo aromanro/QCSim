@@ -268,6 +268,18 @@ int main()
 
     std::cout << "\nTeleported 1, measured: " << state << std::endl;
 
+    // now let's try something more interesting:
+    qt.SetState(1 / sqrt(2) * std::complex<double>(1,0), 1 / sqrt(2) * std::complex<double>(0,-1));
+
+    unsigned int classicalBits = qt.Teleport(true); // also explicitely force the 'sending' of the classical measured values, although it shouldn't make any difference
+    std::cout << "\n\nMeasured values for the two qubits: " << classicalBits << std::endl;
+
+    // how is the whole thing looking before Bob's measurement?
+    std::cout << "Teleported state: " << qt.getBasisStateAmplitude(classicalBits) << "|0> + " << qt.getBasisStateAmplitude(0x4 | classicalBits) << "|1>" << std::endl;
+
+    std::cout << "\nTeleported 1/sqrt(2) (|0>-i|1>), measured: " << state << std::endl;
+
+
     tests();
 }
 
