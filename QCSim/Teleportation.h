@@ -57,8 +57,8 @@ namespace Teleportation
             
             if (explicitClassicalTransmission)
             {
-                const bool firstQubitMeasurement = (measuredValues & 0x1) ? true : false;
-                const bool secondQubitMeasurement = (measuredValues & 0x2) ? true : false;
+                const bool firstQubitMeasurement = (measuredValues & 0x1) != 0;
+                const bool secondQubitMeasurement = (measuredValues & 0x2) != 0;
 
                 if (secondQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(x, 2);
                 if (firstQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(z, 2);

@@ -256,49 +256,6 @@ int main()
         std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
     */
 
-
-    Teleportation::QuantumTeleportationRealization qt;
-
-    qt.SetState(1, 0); // set the qubit to teleport to 'down'
-    unsigned int state = qt.Execute();
-
-    std::cout << "\nTeleported 0, measured: " << state << std::endl;
-
-    qt.SetState(0, 1); // set the qubit to teleport to 'up'
-    state = qt.Execute();
-
-    std::cout << "\nTeleported 1, measured: " << state << std::endl;
-
-    // now let's try something more interesting:
-    qt.SetState(1 / sqrt(2) * std::complex<double>(1,0), 1 / sqrt(2) * std::complex<double>(0,-1));
-
-    unsigned int classicalBits = qt.Teleport(true); // also explicitely force the 'sending' of the classical measured values, although it shouldn't make any difference
-    std::cout << "\n\nMeasured values for the two qubits: " << classicalBits << std::endl;
-
-    // how is the whole thing looking before Bob's measurement?
-    std::cout << "Teleported state: " << qt.getBasisStateAmplitude(classicalBits) << "|0> + " << qt.getBasisStateAmplitude(0x4 | classicalBits) << "|1>" << std::endl;
-
-    std::cout << "\nTeleported 1/sqrt(2) (|0>-i|1>), measured: " << state << std::endl;
-
-    Coding::SuperdenseCoding coding;
-
-    // bit1 is on position 0, bit2 is on position 1
-    coding.SetBits(false, false);
-    classicalBits = coding.Execute();
-    std::cout << "\n\nSent 00 using superdense coding, received: " << classicalBits << std::endl;
-
-    coding.SetBits(true, false);
-    classicalBits = coding.Execute();
-    std::cout << "Sent 01 using superdense coding, received: " << classicalBits << std::endl;
-
-    coding.SetBits(false, true);
-    classicalBits = coding.Execute();
-    std::cout << "Sent 10 using superdense coding, received: " << classicalBits << std::endl;
-
-    coding.SetBits(true, true);
-    classicalBits = coding.Execute();
-    std::cout << "Sent 11 using superdense coding, received: " << classicalBits << std::endl;
-
     tests();
 }
 

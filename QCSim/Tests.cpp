@@ -4,6 +4,8 @@
 
 #include "GroverAlgorithm.h"
 #include "ShorAlgorithm.h"
+#include "Teleportation.h"
+#include "SuperdenseCoding.h"
 
 #include <iostream>
 #include <map>
@@ -292,6 +294,98 @@ bool GroverTests()
     return res;
 }
 
+
+bool TeleportationTests()
+{
+    std::cout << "\nTesting teleportation..." << std::endl;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist_bool(0, 1);
+
+    Teleportation::QuantumTeleportationRealization qt;
+
+    for (int i = 0; i < 30; ++i)
+    {
+        if (dist_bool(gen))
+        {
+            qt.SetState(0, 1); // set the qubit to teleport to 'up'
+            unsigned int state = qt.Execute();
+
+            std::cout << "Teleported 1, measured: " << state << std::endl;
+
+            if (state != 1) return false;
+        }
+        else
+        {
+            qt.SetState(1, 0); // set the qubit to teleport to 'down'
+            unsigned int state = qt.Execute();
+
+            std::cout << "Teleported 0, measured: " << state << std::endl;
+
+            if (state != 0) return false;
+        }
+    }
+
+    std::uniform_real_distribution<> dist_ampl(-1., 1.);
+    
+    std::cout << "Now testing teleporting a generic state:" << std::endl;
+
+    for (int i = 0; i < 16; ++i)
+    {
+        // generate and normalize
+        std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
+        std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
+
+        const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
+        alpha /= norm;
+        beta /= norm;
+
+        qt.SetState(alpha, beta);
+        std::cout << "Teleporting " << alpha << "|0>" << " + " << beta << "|1>";
+
+        unsigned int classicalBits = qt.Teleport(i < 8 ? false : true); // also test sending explicitely the two classical bits for half the tests, although it should not make a difference
+        std::cout << " Measured values for the two qubits: " << classicalBits;
+
+        // how is the whole thing looking before Bob's measurement?
+        std::complex<double> receivedAlpha = qt.getBasisStateAmplitude(classicalBits);
+        std::complex<double> receivedBeta = qt.getBasisStateAmplitude(0x4 | classicalBits);
+        std::cout << "... Teleported state: " << receivedAlpha << "|0> + " << receivedBeta << "|1>" << std::endl;
+
+        if (!approxEqual(alpha, receivedAlpha) || !approxEqual(beta, receivedBeta)) return false;
+    }
+
+    return true;
+}
+
+bool SuperdenseCodingTests()
+{
+    std::cout << "\nTesting superdense coding..." << std::endl;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist_bool(0, 1);
+
+    Coding::SuperdenseCoding coding;
+
+    for (int i = 0; i < 30; ++i)
+    {
+        // bit1 is on position 0, bit2 is on position 1
+        const bool bit1 = dist_bool(gen) == 1;
+        const bool bit2 = dist_bool(gen) == 1;
+        coding.SetBits(bit1, bit2);
+        unsigned int classicalBits = coding.Execute();
+
+        const bool recvbit1 = (classicalBits & 1) != 0;
+        const bool recvbit2 = (classicalBits & 2) != 0;
+        std::cout << "Sent " << (bit1 ? "1" : "0") << (bit2 ? "1" : "0") << " using superdense coding, received: " << (recvbit1 ? "1" : "0") << (recvbit2 ? "1" : "0") << std::endl;
+
+        if (bit1 != recvbit1 || bit2 != recvbit2) return false;
+    }
+
+    return true;
+}
+
 bool tests()
 {
     std::cout << "\nTests\n";
@@ -299,6 +393,8 @@ bool tests()
     bool res = registerMeasurementsTests();
     if (res) res = GroverTests();
     if (res) res = ShorTests();
+    if (res) res = TeleportationTests();
+    if (res) res = SuperdenseCodingTests();
 
     std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 
