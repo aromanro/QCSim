@@ -342,7 +342,7 @@ bool TeleportationTests()
         beta /= norm;
 
         qt.SetState(alpha, beta);
-        std::cout << "Teleporting " << alpha << "|0>" << " + " << beta << "|1>";
+        std::cout << "Teleporting " << alpha << "|0> + " << beta << "|1>";
 
         unsigned int classicalBits = qt.Teleport(i < 8 ? false : true); // also test sending explicitely the two classical bits for half the tests, although it should not make a difference
         std::cout << " Measured values for the two qubits: " << classicalBits;
