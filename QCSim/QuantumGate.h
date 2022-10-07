@@ -59,6 +59,16 @@ namespace QC {
 		}
 	};
 
+	template<class MatrixClass = Eigen::MatrixXcd> class PhaseGate : public SingleQubitGate<MatrixClass>
+	{
+	public:
+		PhaseGate(double theta = 0)
+		{
+			QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = 1;
+			QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::complex<double>(0, 1);
+		}
+	};
+
 	template<class MatrixClass = Eigen::MatrixXcd> class PhaseShiftGate : public SingleQubitGate<MatrixClass>
 	{
 	public:
@@ -169,6 +179,15 @@ namespace QC {
 			U(1, 0) = 1;
 
 			TwoQubitsControlledGate<MatrixClass>::SetOperation(U);
+		}
+	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class ControlledPhaseGate : public TwoQubitsControlledGate<MatrixClass>
+	{
+	public:
+		ControlledPhaseGate()
+		{
+			QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = std::complex<double>(0, 1);
 		}
 	};
 
