@@ -200,9 +200,10 @@ namespace QC {
 			return measuredState;
 		}
 
-		void ApplyGate(const QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0)
+		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
+		void ApplyGate(const QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)
 		{
-			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit) * registerStorage;
+			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)

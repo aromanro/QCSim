@@ -9,7 +9,8 @@ namespace QC {
 	template<class MatrixClass = Eigen::MatrixXcd> class QuantumGate
 	{
 	public:
-		virtual MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const = 0;
+		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
+		virtual MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const = 0;
 	};
 
 	template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
@@ -27,7 +28,7 @@ namespace QC {
 		}
 
 		// controllingQubit is ignored, it will be used for two qubit gates
-		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const override
+		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
 		{
 			const unsigned int nrBasisStates = 1u << nrQubits;
 			MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
@@ -122,19 +123,22 @@ namespace QC {
 			QuantumGateWithOp<MatrixClass>::operatorMat = MatrixClass::Identity(4, 4);
 		}
 
-		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const override
+		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
 		{
+			assert(qubit != controllingQubit1);
+
 			const unsigned int nrBasisStates = 1u << nrQubits;
 			MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
 			const unsigned int qubitBit = 1u << qubit;
-			const unsigned int ctrlQubitBit = 1u << controllingQubit;
+			const unsigned int ctrlQubitBit = 1u << controllingQubit1;
+			const unsigned int mask = qubitBit | ctrlQubitBit;
 
 			for (unsigned int i = 0; i < nrBasisStates; ++i)
 			{
-				const unsigned int ind1 = i | qubitBit | ctrlQubitBit;
+				const unsigned int ind1 = i | mask;
 				for (unsigned int j = 0; j < nrBasisStates; ++j)
-					if (ind1 == (j | qubitBit | ctrlQubitBit))
+					if (ind1 == (j | mask))
 						extOperatorMat(i, j) = QuantumGateWithOp<MatrixClass>::operatorMat((i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 2 : 0) | (j & qubitBit ? 1 : 0));
 			}
 
@@ -173,12 +177,20 @@ namespace QC {
 	public:
 		CNOTGate()
 		{
+			/*
 			MatrixClass U = MatrixClass::Zero(2, 2);
 
 			U(0, 1) = 1;
 			U(1, 0) = 1;
 
 			TwoQubitsControlledGate<MatrixClass>::SetOperation(U);
+			*/
+
+			// the commented code above is correct, but this one should be faster
+			QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(2, 3) = 1;
+			QuantumGateWithOp<MatrixClass>::operatorMat(3, 2) = 1;
 		}
 	};
 
@@ -213,6 +225,75 @@ namespace QC {
 			QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = -1;
 		}
 	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public QuantumGateWithOp<MatrixClass>
+	{
+	public:
+		ThreeQubitsGate()
+		{
+			QuantumGateWithOp<MatrixClass>::operatorMat = MatrixClass::Identity(8, 8);
+		}
+
+		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
+		{
+			assert(qubit != controllingQubit1 && controllingQubit1 != controllingQubit2);
+
+			const unsigned int nrBasisStates = 1u << nrQubits;
+			MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
+
+			const unsigned int qubitBit = 1u << qubit;
+			const unsigned int qubitBit2 = 1u << controllingQubit1;
+			const unsigned int ctrlQubitBit = 1u << controllingQubit2;
+			const unsigned int mask = qubitBit | qubitBit2 | ctrlQubitBit;
+
+			for (unsigned int i = 0; i < nrBasisStates; ++i)
+			{
+				const unsigned int ind1 = i | mask;
+				for (unsigned int j = 0; j < nrBasisStates; ++j)
+					if (ind1 == (j | mask))
+						extOperatorMat(i, j) = QuantumGateWithOp<MatrixClass>::operatorMat((i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 4 : 0) | (j & qubitBit2 ? 2 : 0) | (j & qubitBit ? 1 : 0));
+			}
+
+			return extOperatorMat;
+		}
+	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsControlledGate : public ThreeQubitsGate<MatrixClass>
+	{
+	public:
+		ThreeQubitsControlledGate() {};
+
+		void SetOperation(const MatrixClass& U)
+		{
+			assert(U.rows() == 4 && U.cols() == 4);
+			QuantumGateWithOp<MatrixClass>::operatorMat.block(4, 4, 4, 4) = U;
+		}
+	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class ToffoliGate : public ThreeQubitsControlledGate<MatrixClass>
+	{
+	public:
+		ToffoliGate()
+		{
+			QuantumGateWithOp<MatrixClass>::operatorMat(6, 6) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(7, 7) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(6, 7) = 1;
+			QuantumGateWithOp<MatrixClass>::operatorMat(7, 6) = 1;
+		}
+	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class FredkinGate : public ThreeQubitsControlledGate<MatrixClass>
+	{
+	public:
+		FredkinGate()
+		{
+			QuantumGateWithOp<MatrixClass>::operatorMat(5, 5) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(6, 6) = 0;
+			QuantumGateWithOp<MatrixClass>::operatorMat(5, 6) = 1;
+			QuantumGateWithOp<MatrixClass>::operatorMat(6, 5) = 1;
+		}
+	};
+
 }
 
 

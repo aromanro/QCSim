@@ -12,7 +12,7 @@ namespace Grover {
             correctQuestionState = state;
         }
 
-        MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const override
+        MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
         {
             const unsigned int nrBasisStates = 1u << nrQubits;
             MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
@@ -30,7 +30,7 @@ namespace Grover {
     template<class MatrixClass = Eigen::MatrixXcd> class J : public QC::QuantumGate<MatrixClass>
     {
     public:
-        MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit = 0) const override
+        MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
         {
             const unsigned int nrBasisStates = 1u << nrQubits;
             MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
