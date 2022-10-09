@@ -92,4 +92,13 @@ namespace QC {
 		QubitRegister<VectorClass, MatrixClass> reg;
 	};
 
+
+	// TODO: implement & use it
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BellState
+	{
+	public:		
+	protected:
+		QC::HadamardGate<MatrixClass> hadamard;
+		QC::CNOTGate<MatrixClass> cnot;
+	};
 }
