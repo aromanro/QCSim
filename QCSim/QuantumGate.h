@@ -15,6 +15,17 @@ namespace QC {
 
 	template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
 	{
+	public:
+		QuantumGateWithOp(const MatrixClass& U) 
+			: operatorMat(U)
+		{
+		};
+
+		const MatrixClass& getOperatorMatrix() const
+		{
+			return operatorMat;
+		};
+
 	protected:
 		MatrixClass operatorMat;
 	};
@@ -23,9 +34,14 @@ namespace QC {
 	{
 	public:
 		SingleQubitGate()
+			: QuantumGateWithOp<MatrixClass>(MatrixClass::Zero(2, 2))
 		{
-			QuantumGateWithOp<MatrixClass>::operatorMat = MatrixClass::Zero(2, 2);
-		}
+		};
+
+		SingleQubitGate(const MatrixClass& U)
+			: QuantumGateWithOp<MatrixClass>(U)
+		{
+		};
 
 		// controllingQubit is ignored, it will be used for two qubit gates
 		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
@@ -44,7 +60,7 @@ namespace QC {
 			}
 
 			return extOperatorMat;
-		}
+		};
 	};
 
 	template<class MatrixClass = Eigen::MatrixXcd> class HadamardGate : public SingleQubitGate<MatrixClass>
@@ -119,8 +135,8 @@ namespace QC {
 	{
 	public:
 		TwoQubitsGate()
+			: QuantumGateWithOp<MatrixClass>(MatrixClass::Identity(4, 4))
 		{
-			QuantumGateWithOp<MatrixClass>::operatorMat = MatrixClass::Identity(4, 4);
 		}
 
 		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override

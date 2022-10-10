@@ -2,6 +2,7 @@
 
 #include "QuantumAlgorithm.h"
 #include "QuantumGate.h"
+#include "Utils.h"
 
 namespace Coding
 {
@@ -53,9 +54,10 @@ namespace Coding
 		{
 			// prepare the entangled pair
 			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 1, 0);
+			bellState.setBellState00(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 0);
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 1, 0);
 		}
 
 		void Decode()
@@ -71,8 +73,9 @@ namespace Coding
 			if (bit1) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(z, 0);
 		}
 
+		QC::BellState<VectorClass, MatrixClass> bellState;
 
-		// gates used to obtain the entangled qubits and then at the end for decoding
+		// gates used at the end for decoding
 		QC::HadamardGate<MatrixClass> hadamard;
 		QC::CNOTGate<MatrixClass> cnot;
 
