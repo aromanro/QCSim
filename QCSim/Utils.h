@@ -68,7 +68,7 @@ namespace QC {
 			if (qubit >= reg.getNrQubits())
 				return false;
 
-			static const SingleQubitGate<MatrixClass> U(swapg.getOperatorMatrix().adjoint() * hadamard.getOperatorMatrix());
+			static const SingleQubitGate<MatrixClass> U(hadamard.getOperatorMatrix() * s.getOperatorMatrix().adjoint());
 
 			reg.ApplyGate(U, qubit);
 
@@ -89,7 +89,7 @@ namespace QC {
 	protected:
 		QC::HadamardGate<MatrixClass> hadamard;
 		QC::CNOTGate<MatrixClass> cnot;
-		QC::SwapGate<MatrixClass> swapg;
+		QC::PhaseGate<MatrixClass> s;
 	};
 
 }
