@@ -2,11 +2,7 @@
 //
 
 #include <iostream>
-
-#include "GroverAlgorithm.h"
-#include "ShorAlgorithm.h"
-#include "Teleportation.h"
-#include "SuperdenseCoding.h"
+#include <string>
 
 #define _USE_MATH_DEFINES
 #include <math.h>

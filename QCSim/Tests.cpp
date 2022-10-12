@@ -6,18 +6,19 @@
 #include "ShorAlgorithm.h"
 #include "Teleportation.h"
 #include "SuperdenseCoding.h"
+#include "CheckCHSHInequality.h"
 
 #include <iostream>
 #include <map>
 
-bool approxEqual(double val1, double val2)
+bool approxEqual(double val1, double val2, double err = 1E-10)
 {
-    return abs(val1 - val2) < 1E-10;
+    return abs(val1 - val2) < err;
 }
 
-bool approxEqual(std::complex<double> val1, std::complex<double> val2)
+bool approxEqual(std::complex<double> val1, std::complex<double> val2, double err = 1E-10)
 {
-    return approxEqual(val1.real(), val2.real()) && approxEqual(val1.imag(), val2.imag());
+    return approxEqual(val1.real(), val2.real(), err) && approxEqual(val1.imag(), val2.imag(), err);
 }
 
 void setRegister(QC::QubitRegister<>& reg)
@@ -386,6 +387,33 @@ bool SuperdenseCodingTests()
     return true;
 }
 
+bool BellInequalitiesTests()
+{
+    std::cout << "\nTesting CHSH inequality..." << std::endl;
+
+    static const double expected = 2. * sqrt(2.);
+
+    BellInequalities::CheckCHSHInequality test;
+    for (int i = 0; i < 10; ++i)
+    {
+        test.ResetStatistics();
+        for (int i = 0; i < 100000; ++i)
+            test.Execute();
+
+        const double val = test.getValue();
+        std::cout << "Value: " << val << (val <= 2. ? " Inequality obeyed (you won the lottery!)" : " Inequality violated") << std::endl;
+
+        if (val <= 2.) return false;
+        else if (!approxEqual(val, expected, 0.1))
+        {
+            std::cout << "Expected value to be about 2*sqrt(2), got a value that's too different" << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool tests()
 {
     std::cout << "\nTests\n";
@@ -395,6 +423,7 @@ bool tests()
     if (res) res = ShorTests();
     if (res) res = TeleportationTests();
     if (res) res = SuperdenseCodingTests();
+    if (res) res = BellInequalitiesTests();
 
     std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 

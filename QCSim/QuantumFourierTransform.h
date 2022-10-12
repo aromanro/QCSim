@@ -2,7 +2,7 @@
 
 #include "QubitRegister.h"
 #include "QuantumGate.h"
-
+#include "QuantumAlgorithm.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>

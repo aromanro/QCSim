@@ -24,7 +24,7 @@ namespace Grover {
 
         void setCorrectQuestionState(unsigned int state)
         {
-            Oracle o;
+            Oracle<MatrixClass> o;
             o.setCorrectQuestionState(state);
             OracleOp = o.getOperatorMatrix(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits());
         }
