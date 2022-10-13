@@ -394,14 +394,16 @@ bool BellInequalitiesTests()
     static const double expected = 2. * sqrt(2.);
 
     BellInequalities::CheckCHSHInequality test;
-    for (int i = 0; i < 10; ++i)
+    bool separateMeasurements = false;
+    for (int i = 0; i < 20; ++i)
     {
+        if (i >= 10) separateMeasurements = true;
         test.ResetStatistics();
         for (int i = 0; i < 100000; ++i)
-            test.Execute();
+            test.Check(separateMeasurements);
 
         const double val = test.getValue();
-        std::cout << "Value: " << val << (val <= 2. ? " Inequality obeyed (you won the lottery!)" : " Inequality violated") << std::endl;
+        std::cout << (separateMeasurements ? "Measurements separated" : "Measurements together") << " Value: " << val << (val <= 2. ? " Inequality obeyed (you won the lottery!)" : " Inequality violated") << std::endl;
 
         if (val <= 2.) return false;
         else if (!approxEqual(val, expected, 0.1))

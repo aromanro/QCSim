@@ -36,6 +36,12 @@ namespace BellInequalities {
 
 		unsigned int Execute() override
 		{
+			return Check();
+		}
+
+		// allows separate measurements on qubits, obviously the results should be the same but it's better to have a way to test it
+		unsigned int Check(bool separateMeasurements = false)
+		{
 			// start with the Bell state:
 			bellState.setBellState11(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 
@@ -47,20 +53,34 @@ namespace BellInequalities {
 			const QC::SingleQubitGate<MatrixClass>& aliceMeasurement = aM ? dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(R) : dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(Q);
 			measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
 
-			//unsigned int state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0,0);
-			//const int res1 = (state & 1) ? 1 : -1;
+			unsigned int state = 0;
+
+			int res1 = -1;
+			if (separateMeasurements)
+			{
+				state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0,0);
+				if (state) res1 = 1;
+			}
 
 			// Bob:
 			const bool bM = dist_bool(rng) == 1;
 			const QC::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(T) : dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(S);
 			measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, bobMeasurement.getRawOperatorMatrix(), 1);
 
-			//state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(1, 1);
-			//const int res2 = (state & 1) ? 1 : -1;
-			
-			const unsigned int state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
-			const int res1 = (state & 1) ? 1 : -1;
-			const int res2 = (state & 2) ? 1 : -1;
+			unsigned int res2 = -1;
+			if (separateMeasurements)
+			{
+				state |= QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(1, 1) << 1;
+
+				if (state & 2) res2 = 1;
+				//const int res2 = (state & 1) ? 1 : -1;
+			}
+			else
+			{
+				state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+				if (state & 1) res1 = 1;
+				if (state & 2) res2 = 1;
+			}
 
 			const int prod = res1 * res2;
 
