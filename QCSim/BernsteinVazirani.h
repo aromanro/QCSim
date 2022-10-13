@@ -57,6 +57,7 @@ namespace BV {
         BernsteinVazirani(unsigned int N = 3, int addseed = 0)
 			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
 		{
+            setString(0); // prevent issues if the string is not set before execution
 		}
 
         void setString(unsigned int str)

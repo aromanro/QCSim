@@ -460,7 +460,7 @@ bool BernsteinVaziraniTests()
     unsigned int b5 = 32;
 
     BV::BernsteinVazirani bvBig(6);
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < 30; ++i)
     {
         const bool bit0 = dist_bool(gen) == 1;
         const bool bit1 = dist_bool(gen) == 1;
