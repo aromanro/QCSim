@@ -7,6 +7,7 @@
 #include "Teleportation.h"
 #include "SuperdenseCoding.h"
 #include "CheckCHSHInequality.h"
+#include "BernsteinVazirani.h"
 
 #include <iostream>
 #include <map>
@@ -416,11 +417,86 @@ bool BellInequalitiesTests()
     return true;
 }
 
+bool BernsteinVaziraniTests()
+{
+    std::cout << "\nTesting Bernstein-Vazirani..." << std::endl;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist_bool(0, 1);
+    
+    std::cout << "Three qubits:" << std::endl;
+    BV::BernsteinVazirani bv;
+
+    unsigned int b0 = 1;
+    unsigned int b1 = 2;
+    unsigned int b2 = 4;
+
+    for (int i = 0; i < 10; ++i)
+    {
+        const bool bit0 = dist_bool(gen) == 1;
+        const bool bit1 = dist_bool(gen) == 1;
+        const bool bit2 = dist_bool(gen) == 1;
+
+        unsigned int str = 0;
+        if (bit0) str |= b0;
+        if (bit1) str |= b1;
+        if (bit2) str |= b2;
+
+        std::cout << "Setting string to: " << str << std::endl;
+        bv.setString(str);
+        unsigned int state = bv.Execute();
+
+        if (state != str)
+        {
+            std::cout << "Failed, obtained a different string: " << state << std::endl;
+            return false;
+        }
+    }
+
+    std::cout << "Six qubits:" << std::endl;
+    unsigned int b3 = 8;
+    unsigned int b4 = 16;
+    unsigned int b5 = 32;
+
+    BV::BernsteinVazirani bvBig(6);
+    for (int i = 0; i < 10; ++i)
+    {
+        const bool bit0 = dist_bool(gen) == 1;
+        const bool bit1 = dist_bool(gen) == 1;
+        const bool bit2 = dist_bool(gen) == 1;
+        const bool bit3 = dist_bool(gen) == 1;
+        const bool bit4 = dist_bool(gen) == 1;
+        const bool bit5 = dist_bool(gen) == 1;
+
+        unsigned int str = 0;
+        if (bit0) str |= b0;
+        if (bit1) str |= b1;
+        if (bit2) str |= b2;
+        if (bit3) str |= b3;
+        if (bit4) str |= b4;
+        if (bit5) str |= b5;
+
+        std::cout << "Setting string to: " << str << std::endl;
+        bvBig.setString(str);
+        unsigned int state = bvBig.Execute();
+
+        if (state != str)
+        {
+            std::cout << "Failed, obtained a different string: " << state << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool tests()
 {
     std::cout << "\nTests\n";
 
     bool res = registerMeasurementsTests();
+    if (res) res = BernsteinVaziraniTests();
     if (res) res = GroverTests();
     if (res) res = ShorTests();
     if (res) res = TeleportationTests();
