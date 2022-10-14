@@ -8,6 +8,7 @@
 #include "SuperdenseCoding.h"
 #include "CheckCHSHInequality.h"
 #include "BernsteinVazirani.h"
+#include "QuantumCryptograpy.h"
 
 #include <iostream>
 #include <map>
@@ -491,6 +492,53 @@ bool BernsteinVaziraniTests()
     return true;
 }
 
+bool QuantumCryptograpyTests()
+{
+    std::cout << "\nTesting BB84 protocol..." << std::endl;
+
+    QuantumCryptograpy::BB84Protocol bb84;
+
+    for (int i = 0; i < 30; ++i)
+    {
+        const bool eavesdrop = i > 9;
+        const bool randomEavesdrop = i > 19;
+        
+        bb84.setEavesdropping(eavesdrop);
+        bb84.setRandomEavesdropping(randomEavesdrop);
+
+        std::cout << "Transmission with" << (eavesdrop ? " eavesdropping" : "out eavesdropping") << (eavesdrop ? (randomEavesdrop ? " randomly" : " each time") : "") << std::endl;
+
+        const unsigned int match = bb84.Execute();
+        if (match)
+        {
+            if (eavesdrop)
+            {
+                std::cout << "Match, but eavesdropped" << std::endl;
+                return false;
+            }
+
+            // additional check, this is only done for tests, the key remains a secret in 'real life'
+            if (!bb84.compareKeys())
+            {
+                std::cout << "Despite a match for checked bits, the keys do not match" << std::endl;
+                return false;
+            }
+        }
+        else
+        {
+            // mismatch
+            if (!eavesdrop)
+            {
+                std::cout << "Mismatch, but not eavesdropped" << std::endl;
+                return false;
+            }
+        }
+        //std::cout << "Key length: " << bb84.getReceivedKey().size() << std::endl;
+    }
+
+    return true;
+}
+
 bool tests()
 {
     std::cout << "\nTests\n";
@@ -501,6 +549,7 @@ bool tests()
     if (res) res = ShorTests();
     if (res) res = TeleportationTests();
     if (res) res = SuperdenseCodingTests();
+    if (res) res = QuantumCryptograpyTests();
     if (res) res = BellInequalitiesTests();
 
     std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;

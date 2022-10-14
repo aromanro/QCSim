@@ -151,7 +151,7 @@ namespace QC {
 			}
 			
 			if (switchBack)
-				U = U.adjoint();
+				U.adjointInPlace();
 
 			const QC::SingleQubitGate<MatrixClass> gate(U);
 			reg.ApplyGate(gate, qubit);

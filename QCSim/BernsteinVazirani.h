@@ -1,6 +1,8 @@
 #pragma once
 
 #include "QuantumAlgorithm.h"
+#include "QuantumGate.h"
+#include "Utils.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>

@@ -5,10 +5,10 @@ Quantum computation simulator
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)
 
 Work in progress, but the following seem to work:
-* Grover's algorithm
-* Shor's algorithm
-* Bernstein–Vazirani algorithm
-* Quantum teleportation
-* Superdense coding
-* CHSH inequality violation
-
+*  Grover's algorithm
+*  Shor's algorithm
+*  Bernstein–Vazirani algorithm
+*  Quantum teleportation
+*  Superdense coding
+*  Quantum cryptography: BB84 protocol
+*  CHSH inequality violation
