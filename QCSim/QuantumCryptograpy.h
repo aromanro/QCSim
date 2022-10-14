@@ -11,8 +11,8 @@
 
 namespace QuantumCryptograpy {
 
-	// about half of the tranmitted bits will have a matched measurement basis, out of those 25% will be used to check for eavesdropping and discarded afterwards
-	template<int nrBits = 400, class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BB84Protocol :
+	// about half of the tranmitted bits will have a matched measurement basis, out of those 50% will be used to check for eavesdropping and discarded afterwards (some other percentage, like 25% or 20% is also possible, but currently it's hardwired to 50%)
+	template<int nrBits = 512, class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BB84Protocol :
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
@@ -162,10 +162,13 @@ namespace QuantumCryptograpy {
 		bool checkBitsMismatched()
 		{
 			// 4 values, if it's 0 then pick it up, so about 25% will be verified
+			//std::uniform_int_distribution<> dist_percent(0, 3);
+			
+			// about 50% verified
+			std::uniform_int_distribution<> dist_percent(0, 1);
+
 			// those will be discarded because they are publicly shared
 			// the remaining ones will be the actual key
-			std::uniform_int_distribution<> dist_percent(0, 3);
-
 			bool match = true;
 			for (unsigned int b = 0; b < nrBits; ++b)
 				if (commonBasis[b] && dist_percent(rng) == 0)
