@@ -92,6 +92,11 @@ namespace QC {
 		// or for the case when one wants to switch to some other basis along the algoritm, measure, then switch back to the computational basis, then continue
 		// an application could be in quantum cryptography - see for example BB84 protocol
 
+		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const QC::SingleQubitGate<MatrixClass>& gate, unsigned int qubit = 0, bool switchBack = false)
+		{
+			return switchToOperatorBasis(reg, gate.getRawOperatorMatrix(), qubit, switchBack);
+		}
+
 		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const MatrixClass& op, unsigned int qubit = 0, bool switchBack = false)
 		{
 			if (qubit >= reg.getNrQubits()) return false;

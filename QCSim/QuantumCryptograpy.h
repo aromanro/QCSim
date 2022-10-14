@@ -35,19 +35,12 @@ namespace QuantumCryptograpy {
 			// key generation & transmission
 			for (unsigned int b = 0; b < nrBits; ++b)
 			{
-				// use this to generate a random value used to pick a measurement basis
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToCatState();
-				unsigned int state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
-
-				sendBasis[b] = state; // 0 - Z basis, 1 - X basis
-
-				// now generate a random value to send
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToCatState();
-				send[b] = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+				sendBasis[b] = chooseMeasurementBasisForSending(); // 0 - Z basis, 1 - X basis
+				send[b] = generateRandomBitToSend();
 				
 				// switch back to computational basis if Alice measured in X basis
-				if (state) 
-					measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, X.getRawOperatorMatrix(), 0, true);
+				if (sendBasis[b])
+					measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, X, 0, true);
 
 				if (eavesdropping) 
 				{
@@ -179,6 +172,23 @@ namespace QuantumCryptograpy {
 				}
 
 			return match;
+		}
+
+		unsigned int chooseMeasurementBasisForSending()
+		{
+			// use this to generate a random value used to pick a measurement basis
+			// alternatively you can use a random number generator or a pregenerated sequence in whatever way you want
+			// but I like this way more
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToCatState();
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+		}
+
+		unsigned int generateRandomBitToSend()
+		{
+			// another way would be to simply generate a random value for the state in some other way (0 or 1) and then simply set the register - one qubit - to that state
+			// but as for generating the random value above, I like this method more
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToCatState();
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 		}
 
 		bool getRandomBool()
