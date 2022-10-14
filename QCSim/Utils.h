@@ -6,7 +6,6 @@
 
 namespace QC {
 
-	// TODO: implement & use it
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BellState
 	{
 	public:
@@ -92,7 +91,6 @@ namespace QC {
 		// for example for the cases when one wants to start with some other basis for register initialization then switch to the computational (Z) basis
 		// or for the case when one wants to switch to some other basis along the algoritm, measure, then switch back to the computational basis, then continue
 		// an application could be in quantum cryptography - see for example BB84 protocol
-		// for now it's not used anywhere
 
 		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const MatrixClass& op, unsigned int qubit = 0, bool switchBack = false)
 		{
