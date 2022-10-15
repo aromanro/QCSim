@@ -7,7 +7,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-namespace BV {
+namespace BernsteinVazirani {
 
     template<class MatrixClass = Eigen::MatrixXcd> class Oracle :
         public QC::QuantumGate<MatrixClass>
@@ -52,11 +52,11 @@ namespace BV {
         unsigned int stringFunction = 0;
     };
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BernsteinVazirani :
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BernsteinVaziraniAlgorithm :
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-        BernsteinVazirani(unsigned int N = 3, int addseed = 0)
+        BernsteinVaziraniAlgorithm(unsigned int N = 3, int addseed = 0)
 			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
 		{
             setString(0); // prevent issues if the string is not set before execution

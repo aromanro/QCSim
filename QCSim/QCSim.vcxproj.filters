@@ -68,5 +68,8 @@
     <ClInclude Include="QuantumCryptograpy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="DeutschJozsa.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -427,7 +427,7 @@ bool BernsteinVaziraniTests()
     std::uniform_int_distribution<> dist_bool(0, 1);
     
     std::cout << "Three qubits:" << std::endl;
-    BV::BernsteinVazirani bv;
+    BernsteinVazirani::BernsteinVaziraniAlgorithm bv;
 
     unsigned int b0 = 1;
     unsigned int b1 = 2;
@@ -460,7 +460,7 @@ bool BernsteinVaziraniTests()
     unsigned int b4 = 16;
     unsigned int b5 = 32;
 
-    BV::BernsteinVazirani bvBig(6);
+    BernsteinVazirani::BernsteinVaziraniAlgorithm bvBig(6);
     for (int i = 0; i < 30; ++i)
     {
         const bool bit0 = dist_bool(gen) == 1;

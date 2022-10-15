@@ -149,6 +149,7 @@
   <ItemGroup>
     <ClInclude Include="BernsteinVazirani.h" />
     <ClInclude Include="CheckCHSHInequality.h" />
+    <ClInclude Include="DeutschJozsa.h" />
     <ClInclude Include="Function.h" />
     <ClInclude Include="GroverAlgorithm.h" />
     <ClInclude Include="Oracle.h" />
