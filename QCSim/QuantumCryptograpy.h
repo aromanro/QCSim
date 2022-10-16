@@ -37,18 +37,18 @@ namespace QuantumCryptograpy {
 			{
 				sendBasis[b] = chooseMeasurementBasisForSending(); // 0 - Z basis, 1 - X basis
 				send[b] = generateRandomBitToSend();
-				
+
 				// switch back to computational basis if Alice measured in X basis
 				if (sendBasis[b])
 					measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, X, 0, true);
 
-				if (eavesdropping) 
+				if (eavesdropping)
 				{
 					// Eve
 					if (!randomEavesdropping || getRandomBool())
 						Receive(b, ereceive, ereceiveBasis, true);
 				}
-				
+
 				// Bob
 				Receive(b, receive, receiveBasis);
 			}
@@ -59,7 +59,7 @@ namespace QuantumCryptograpy {
 
 			// then the matches/mismatches of the measurements basis are publicly announced
 			// the mismatched values are discarded on both Alice and Bob ends
-			
+
 			// share publicly a subset of the bits measured in the same basis, so the other end can check them against what he/she measured
 			return checkBitsMismatched() ? 1 : 0;
 		}
@@ -97,7 +97,7 @@ namespace QuantumCryptograpy {
 		std::vector<bool> getReceivedKey() const
 		{
 			std::vector<bool> key;
-			
+
 			for (unsigned int b = 0; b < nrBits; ++b)
 				if (commonBasis[b] && !compare[b])
 					key.push_back(receive[b]);
@@ -133,12 +133,12 @@ namespace QuantumCryptograpy {
 		{
 			// pick a basis for measurement
 			const bool basis = getRandomBool();
-			
+
 			// if false, it's Z, the computational basis, so remain in that one, otherwise use X
 			recvBasis[b] = basis;
 			if (basis)
 				measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, X.getRawOperatorMatrix());
- 
+
 			recv[b] = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 
 			if (basis && switchBackToZ) // switch back to computational basis if needed
@@ -156,7 +156,7 @@ namespace QuantumCryptograpy {
 		{
 			// 4 values, if it's 0 then pick it up, so about 25% will be verified
 			//std::uniform_int_distribution<> dist_percent(0, 3);
-			
+
 			// about 50% verified
 			std::uniform_int_distribution<> dist_percent(0, 1);
 

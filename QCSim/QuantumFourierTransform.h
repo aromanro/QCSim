@@ -14,7 +14,7 @@ namespace QC {
 	public:
 		QuantumFourierTransform(unsigned int N = 3, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX, int addseed = 0)
 			: QuantumAlgorithm<VectorClass, MatrixClass>::QuantumAlgorithm(N, addseed), sQubit(startQubit), eQubit(std::min(N - 1, endQubit))
-		{	
+		{
 		}
 
 		unsigned int Execute() override
@@ -52,7 +52,7 @@ namespace QC {
 		}
 
 		void QFT(unsigned int sq, unsigned int eq)
-		{			
+		{
 			QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)

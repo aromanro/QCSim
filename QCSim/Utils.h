@@ -152,7 +152,7 @@ namespace QC {
 				if (op(0, 0).real() < op(1, 1).real())
 					U.col(0).swap(U.col(1));
 			}
-			
+
 			if (switchBack)
 				U.adjointInPlace();
 

@@ -87,7 +87,7 @@ namespace QC {
 
 		void Normalize()
 		{
-			const double accum = (registerStorage.adjoint()*registerStorage)(0).real();
+			const double accum = (registerStorage.adjoint() * registerStorage)(0).real();
 			if (abs(accum) < 1E-20) return;
 
 			registerStorage *= 1. / sqrt(accum);
@@ -117,7 +117,7 @@ namespace QC {
 		// can measure a single qubit, if firstQubit == secondQubit
 		// will return a 'state' as if the measured sequence is in a separate register (that is, the 'firstQubit' is on position 0 and so on)
 		// so 0 means that all measured qubits are zero, 1 means that firstQubit is 1 and all other measured ones are zero, 2 means that the next one 1 one and all others are zero and so on
-		
+
 		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
 		{
 			const double prob = uniformZeroOne(rng);
@@ -133,7 +133,7 @@ namespace QC {
 			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
 
 			unsigned int measuredState = maxMeasuredState;
-			
+
 			double norm = 1;
 			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
 			{
@@ -187,7 +187,7 @@ namespace QC {
 						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 						{
 							const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
-							
+
 							registerStorage[wholeState] = 0;
 							//++cnt;
 						}

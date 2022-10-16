@@ -5,92 +5,92 @@
 namespace Teleportation
 {
 
-    template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportation :
-        public QC::QuantumAlgorithm<VectorClass, MatrixClass>
-    {
-    public:
-        QuantumTeleportation(unsigned int N = 3, int addseed = 0)
-            : QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
-        {
-        }
-    };
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportation :
+		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
+	{
+	public:
+		QuantumTeleportation(unsigned int N = 3, int addseed = 0)
+			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
+		{
+		}
+	};
 
 
-    template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportationRealization : public QuantumTeleportation<VectorClass, MatrixClass>
-    {
-    public:
-        QuantumTeleportationRealization(int addseed = 0)
-            : QuantumTeleportation<VectorClass, MatrixClass>(3, addseed)
-        {
-        }
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportationRealization : public QuantumTeleportation<VectorClass, MatrixClass>
+	{
+	public:
+		QuantumTeleportationRealization(int addseed = 0)
+			: QuantumTeleportation<VectorClass, MatrixClass>(3, addseed)
+		{
+		}
 
-        void SetState(std::complex<double> alpha, std::complex<double> beta)
-        {
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Clear();
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setRawAmplitude(0, alpha);
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setRawAmplitude(1, beta);
+		void SetState(std::complex<double> alpha, std::complex<double> beta)
+		{
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Clear();
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setRawAmplitude(0, alpha);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setRawAmplitude(1, beta);
 
-            // ensure it's normalized:
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Normalize();
-        }
+			// ensure it's normalized:
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Normalize();
+		}
 
-        // considers the initial state already set
-        // the qubits to be entangled start as |00> and they are entangled to a EPR state using cnot and hadamard gates 
-        // the first two qubits are on the Alice side, the third belongs to Bob
-        // returns the values of the two measured qubits
-        unsigned int Teleport(bool explicitClassicalTransmission = false)
-        {
-            // make an EPR pair out of the second and third qubit:
+		// considers the initial state already set
+		// the qubits to be entangled start as |00> and they are entangled to a EPR state using cnot and hadamard gates 
+		// the first two qubits are on the Alice side, the third belongs to Bob
+		// returns the values of the two measured qubits
+		unsigned int Teleport(bool explicitClassicalTransmission = false)
+		{
+			// make an EPR pair out of the second and third qubit:
 
-            // starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 1);
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 2, 1);
+			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 1);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 2, 1);
 
-            // interacting the sending qubit (0) with the Alice's side of the entangled pair:
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 1, 0);
-            QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 0);
+			// interacting the sending qubit (0) with the Alice's side of the entangled pair:
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 1, 0);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 0);
 
-            // measurements can be actually done all at the end, but let's pretend
-            const unsigned int measuredValues = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(0, 1);
+			// measurements can be actually done all at the end, but let's pretend
+			const unsigned int measuredValues = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(0, 1);
 
-            // now that they are measured they go to Bob, which uses the values to act on its entangled qubit:
-            
-            if (explicitClassicalTransmission)
-            {
-                const bool firstQubitMeasurement = (measuredValues & 0x1) != 0;
-                const bool secondQubitMeasurement = (measuredValues & 0x2) != 0;
+			// now that they are measured they go to Bob, which uses the values to act on its entangled qubit:
 
-                if (secondQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(x, 2);
-                if (firstQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(z, 2);
-            }
-            else
-            {
-                QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 2, 1);
-                QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cz, 2, 0);
-            }
+			if (explicitClassicalTransmission)
+			{
+				const bool firstQubitMeasurement = (measuredValues & 0x1) != 0;
+				const bool secondQubitMeasurement = (measuredValues & 0x2) != 0;
 
-            return measuredValues;
-        }
+				if (secondQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(x, 2);
+				if (firstQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(z, 2);
+			}
+			else
+			{
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 2, 1);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cz, 2, 0);
+			}
 
-        // called only if one wants the teleported qubit to be measured, otherwise just check the register contents
-        unsigned int Execute() override
-        {
-            Teleport();
+			return measuredValues;
+		}
 
-            return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(2, 2); // teleported qubit
-        }
+		// called only if one wants the teleported qubit to be measured, otherwise just check the register contents
+		unsigned int Execute() override
+		{
+			Teleport();
 
-    protected:
-        // the initial state to be teleported can be set directly or set up from something simple using some gate (hadamard, phase shift)
-        // needed to create the Bell states
-        QC::HadamardGate<MatrixClass> hadamard;
-        QC::CNOTGate<MatrixClass> cnot; // also needed on Alice side
-        // needed on receiving side:
-        QC::ControlledZGate<MatrixClass> cz;
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(2, 2); // teleported qubit
+		}
 
-        // needed on Bob side, if the classical transmission is explicit (simple one qubit gates that are applied or not depending on the value of the classical bit):
-        QC::PauliXGate<MatrixClass> x;
-        QC::PauliZGate<MatrixClass> z;
-    };
+	protected:
+		// the initial state to be teleported can be set directly or set up from something simple using some gate (hadamard, phase shift)
+		// needed to create the Bell states
+		QC::HadamardGate<MatrixClass> hadamard;
+		QC::CNOTGate<MatrixClass> cnot; // also needed on Alice side
+		// needed on receiving side:
+		QC::ControlledZGate<MatrixClass> cz;
+
+		// needed on Bob side, if the classical transmission is explicit (simple one qubit gates that are applied or not depending on the value of the classical bit):
+		QC::PauliXGate<MatrixClass> x;
+		QC::PauliZGate<MatrixClass> z;
+	};
 
 }

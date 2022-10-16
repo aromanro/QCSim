@@ -94,7 +94,7 @@ namespace Shor {
 
 			// now the f(x)
 			fx.Apply(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-			
+
 			// it doesn't really matter if you measure the qubits from f and when you do after the above
 			// or if you measure them several times in a row
 			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits() - 1);
@@ -104,7 +104,7 @@ namespace Shor {
 
 			// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 			// the f should be measured separately to find out its content
-			
+
 			//return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(0, fRegisterStartQubit - 1);
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
 		}
@@ -118,7 +118,7 @@ namespace Shor {
 		// returns false is Shor algorithm was not used, otherwise true 
 		bool factorize(unsigned int& p1, unsigned int& p2, unsigned int numAttempts = 10)
 		{
-			if (Number > 22) 
+			if (Number > 22)
 			{
 				// don't allow too large numbers
 				p1 = p2 = 0;

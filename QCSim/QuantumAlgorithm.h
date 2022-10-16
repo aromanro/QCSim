@@ -3,7 +3,7 @@
 #include "QubitRegister.h"
 
 namespace QC {
-	
+
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumAlgorithm
 	{
 	public:
@@ -17,7 +17,7 @@ namespace QC {
 		unsigned int getNrQubits() const { return reg.getNrQubits(); };
 		unsigned int getNrBasisStates() const { return reg.getNrBasisStates(); };
 
-		std::complex<double> getBasisStateAmplitude(unsigned int State) const 
+		std::complex<double> getBasisStateAmplitude(unsigned int State) const
 		{
 			return reg.getBasisStateAmplitude(State);
 		}

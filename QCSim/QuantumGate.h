@@ -16,7 +16,7 @@ namespace QC {
 	template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
 	{
 	public:
-		QuantumGateWithOp(const MatrixClass& U) 
+		QuantumGateWithOp(const MatrixClass& U)
 			: operatorMat(U)
 		{
 		};
@@ -183,7 +183,7 @@ namespace QC {
 		{
 			assert(U.rows() == 2 && U.cols() == 2);
 			QuantumGateWithOp<MatrixClass>::operatorMat.block(2, 2, 2, 2) = U;
-		}		
+		}
 	};
 
 

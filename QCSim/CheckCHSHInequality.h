@@ -31,7 +31,7 @@ namespace BellInequalities {
 
 		double getValue() const
 		{
-			return (QScount ? static_cast<double>(QSaccum)/QScount : 0.) + (RScount ? static_cast<double>(RSaccum)/RScount : 0.) + (RTcount ? static_cast<double>(RTaccum) / RTcount : 0.) - (QTcount ? static_cast<double>(QTaccum) / QTcount : 0.);
+			return (QScount ? static_cast<double>(QSaccum) / QScount : 0.) + (RScount ? static_cast<double>(RSaccum) / RScount : 0.) + (RTcount ? static_cast<double>(RTaccum) / RTcount : 0.) - (QTcount ? static_cast<double>(QTaccum) / QTcount : 0.);
 		}
 
 		unsigned int Execute() override
@@ -58,7 +58,7 @@ namespace BellInequalities {
 			int res1 = -1;
 			if (separateMeasurements)
 			{
-				state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0,0);
+				state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0, 0);
 				if (state) res1 = 1;
 			}
 
