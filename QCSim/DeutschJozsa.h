@@ -99,7 +99,7 @@ namespace DeutschJozsa {
 			for (unsigned int stateBra = 0; stateBra < nrBasisStates; ++stateBra)
 				for (unsigned int stateKet = 0; stateKet < nrBasisStates; ++stateKet)
 				{
-					const int yval = (stateKet & ymask) ? 1 : 0;
+					const unsigned int yval = (stateKet & ymask) ? 1 : 0;
 
 					U(stateBra, stateKet) = (stateBra & ymask) == (f(stateKet & xmask) + yval) % 2;
 				}
