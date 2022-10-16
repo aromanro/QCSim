@@ -30,6 +30,13 @@ namespace DeutschJozsa {
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 		}
 
+		bool WasConstantResult(unsigned int state) const
+		{
+			const unsigned int xmask = (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates() - 1) >> 1;
+
+			return (state & xmask) == 0;
+		}
+
 		enum class FunctionType : unsigned char
 		{
 			constantZero = 0,

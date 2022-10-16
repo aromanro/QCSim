@@ -345,7 +345,7 @@ bool DeutschTests()
 		if (i < 10)
 		{
 			// constant
-			if ((state & 0x3) != 0)
+			if (!deutsch.WasConstantResult(state))
 			{
 				std::cout << "Expected constant result, got balanced" << std::endl;
 				return false;
@@ -355,7 +355,7 @@ bool DeutschTests()
 		else
 		{
 			// balanced
-			if ((state & 0x3) == 0)
+			if (deutsch.WasConstantResult(state))
 			{
 				std::cout << "Expected balanced result, got constant" << std::endl;
 				return false;
@@ -389,7 +389,7 @@ bool DeutschJozsaTests()
 		if (i < 20)
 		{
 			// constant
-			if ((state & 0xFF) != 0)
+			if (!deutschJozsa.WasConstantResult(state))
 			{
 				std::cout << "Expected constant result, got balanced" << std::endl;
 				return false;
@@ -399,7 +399,7 @@ bool DeutschJozsaTests()
 		else
 		{
 			// balanced
-			if ((state & 0xFF) == 0)
+			if (deutschJozsa.WasConstantResult(state))
 			{
 				std::cout << "Expected balanced result, got constant" << std::endl;
 				return false;
