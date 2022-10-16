@@ -9,6 +9,7 @@
 #include "CheckCHSHInequality.h"
 #include "BernsteinVazirani.h"
 #include "QuantumCryptograpy.h"
+#include "DeutschJozsa.h"
 
 #include <iostream>
 #include <map>
@@ -539,11 +540,90 @@ bool QuantumCryptograpyTests()
 	return true;
 }
 
+bool DeutschJozsaTests()
+{
+	std::cout << "\nTesting Deutsch-Jozsa..." << std::endl;
+
+	// first the simplest case, Deutsch's algorithm (N=3)
+	std::cout << "First, Deutsch's algorithm..." << std::endl;
+	DeutschJozsa::DeutschJozsaAlgorithm deutsch;
+	for (int i = 0; i < 15; ++i)
+	{
+		if (i < 5)
+			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantZero);
+		else if (i < 10)
+			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantOne);
+		else
+			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::balanced);
+
+		unsigned int state = deutsch.Execute();
+
+		if (i < 10)
+		{
+			// constant
+			if ((state & 0x3) != 0)
+			{
+				std::cout << "Expected constant result, got balanced" << std::endl;
+				return false;
+			}
+			else std::cout << "Constant " << (i < 5 ? "zero" : "one") << " function set, got constant, ok" << std::endl;
+		}
+		else
+		{
+			// balanced
+			if ((state & 0x3) == 0)
+			{
+				std::cout << "Expected balanced result, got constant" << std::endl;
+				return false;
+			}
+			else std::cout << "Balanced function set, got balanced, ok" << std::endl;
+		}
+	}
+
+	std::cout << "Now, general Deutsch-Jozsa..." << std::endl;
+	DeutschJozsa::DeutschJozsaAlgorithm deutschJozsa(9);
+	for (int i = 0; i < 30; ++i)
+	{
+		if (i < 10)
+			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantZero);
+		else if (i < 20)
+			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantOne);
+		else
+			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::balanced);
+
+		unsigned int state = deutsch.Execute();
+
+		if (i < 20)
+		{
+			// constant
+			if ((state & 0xFF) != 0)
+			{
+				std::cout << "Expected constant result, got balanced" << std::endl;
+				return false;
+			}
+			else std::cout << "Constant " << (i < 10 ? "zero" : "one") << " function set, got constant, ok" << std::endl;
+		}
+		else
+		{
+			// balanced
+			if ((state & 0xFF) == 0)
+			{
+				std::cout << "Expected balanced result, got constant" << std::endl;
+				return false;
+			}
+			else std::cout << "Balanced function set, got balanced, ok" << std::endl;
+		}
+	}
+
+	return true;
+}
+
 bool tests()
 {
 	std::cout << "\nTests\n";
 
 	bool res = registerMeasurementsTests();
+	if (res) res = DeutschJozsaTests();
 	if (res) res = BernsteinVaziraniTests();
 	if (res) res = GroverTests();
 	if (res) res = ShorTests();

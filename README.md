@@ -6,6 +6,7 @@ Quantum computation simulator
 
 Work in progress, but the following seem to work:
 *  Grover's algorithm
+*  Deutsch-Jozsa algorithm
 *  Shor's algorithm
 *  Bernstein–Vazirani algorithm
 *  Quantum teleportation
