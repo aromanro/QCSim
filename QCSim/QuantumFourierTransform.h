@@ -21,7 +21,7 @@ namespace QC {
 		{
 			QFT(sQubit, eQubit);
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 		}
 
 		// execute this to avoid measurement
@@ -45,7 +45,7 @@ namespace QC {
 		{
 			while (startQubit < endQubit)
 			{
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(swapOp, startQubit, endQubit);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(swapOp, startQubit, endQubit);
 				++startQubit;
 				--endQubit;
 			}
@@ -53,7 +53,7 @@ namespace QC {
 
 		void QFT(unsigned int sq, unsigned int eq)
 		{
-			QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
+			QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, eq);
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
@@ -63,12 +63,12 @@ namespace QC {
 				for (unsigned int ctrlq = eq; ctrlq >= curQubit; --ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
-					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, ctrlq, curQubitm1);
+					QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(phaseShift, ctrlq, curQubitm1);
 
 					phase *= 2;
 				}
 
-				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, curQubitm1);
+				QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, curQubitm1);
 			}
 		}
 
@@ -76,18 +76,18 @@ namespace QC {
 		{
 			for (unsigned int curQubit = sq; curQubit < eq; ++curQubit)
 			{
-				QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, curQubit);
+				QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, curQubit);
 
 				double phase = M_PI_2;
 				for (unsigned int ctrlq = curQubit + 1; ctrlq <= eq; ++ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
-					QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(phaseShift, curQubit, ctrlq);
+					QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(phaseShift, curQubit, ctrlq);
 
 					phase /= 2;
 				}
 			}
-			QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, eq);
+			QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, eq);
 		}
 
 		HadamardGate<MatrixClass> hadamard;

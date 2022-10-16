@@ -90,14 +90,14 @@ namespace Shor {
 			// apply hadamard over each qubit from the x-register
 			// reuse the hadamard gate from the fourier transform base class
 			for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(QC::QuantumFourierTransform<VectorClass, MatrixClass>::hadamard, i);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(QC::QuantumFourierTransform<VectorClass, MatrixClass>::hadamard, i);
 
 			// now the f(x)
 			fx.Apply(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 
 			// it doesn't really matter if you measure the qubits from f and when you do after the above
 			// or if you measure them several times in a row
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits() - 1);
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
 
 			// then perform an inverse fourier transform
 			QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
@@ -105,8 +105,8 @@ namespace Shor {
 			// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 			// the f should be measured separately to find out its content
 
-			//return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure(0, fRegisterStartQubit - 1);
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
+			//return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0, fRegisterStartQubit - 1);
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 		}
 
 		void setA(unsigned int a)
@@ -161,7 +161,7 @@ namespace Shor {
 
 				// period finding
 
-				const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrBasisStates();
+				const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 				const unsigned int xmask = (1 << fRegisterStartQubit) - 1;
 
 				// use a single measurement to guess the period (but not zero)
@@ -220,7 +220,7 @@ namespace Shor {
 		void Init()
 		{
 			const unsigned int state = 1 << fRegisterStartQubit;
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(state);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(state);
 		}
 
 		static int gcd(int a, int b)
@@ -280,7 +280,7 @@ namespace Shor {
 
 		unsigned int getNBits() const
 		{
-			return  QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.getNrQubits() - fRegisterStartQubit;
+			return  QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - fRegisterStartQubit;
 		}
 
 		unsigned int Number;

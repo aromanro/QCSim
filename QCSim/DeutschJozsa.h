@@ -20,6 +20,25 @@ namespace DeutschJozsa {
 		}
 
 	protected:
+		void Init()
+		{
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToQubitState(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
+		}
+
+		void ApplyHadamardOnAllQubits()
+		{
+			for (unsigned int i = 0; i < QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits(); ++i)
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, i);
+		}
+
+		void ApplyHadamardOnAllQubitsExceptLast()
+		{
+			const unsigned int limit = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1;
+			for (unsigned int i = 0; i < limit; ++i)
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, i);
+		}
+
+		QC::HadamardGate<MatrixClass> hadamard;
 	};
 
 }

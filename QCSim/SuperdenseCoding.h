@@ -32,7 +32,7 @@ namespace Coding
 		{
 			Decode();
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Measure();
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 		}
 
 		// needed in case Execute is used, that one will call Send and Receive one after another
@@ -56,21 +56,21 @@ namespace Coding
 			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
 			bellState.setBellState00(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 0);
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 1, 0);
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
 		}
 
 		void Decode()
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(cnot, 1, 0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(hadamard, 0);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
 		}
 
 		void Encode(bool bit1, bool bit2)
 		{
 			// the resemblance with the 'explicit' teleportation code is not a coincidence, teleportation and superdense coding are sort of opposite to each other
-			if (bit2) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(x, 0);
-			if (bit1) QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.ApplyGate(z, 0);
+			if (bit2) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(x, 0);
+			if (bit1) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(z, 0);
 		}
 
 		QC::BellState<VectorClass, MatrixClass> bellState;
