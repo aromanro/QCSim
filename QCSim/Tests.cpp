@@ -540,10 +540,8 @@ bool QuantumCryptograpyTests()
 	return true;
 }
 
-bool DeutschJozsaTests()
+bool DeutschTests()
 {
-	std::cout << "\nTesting Deutsch-Jozsa..." << std::endl;
-
 	// first the simplest case, Deutsch's algorithm (N=3)
 	std::cout << "First, Deutsch's algorithm..." << std::endl;
 	DeutschJozsa::DeutschJozsaAlgorithm deutsch;
@@ -580,18 +578,27 @@ bool DeutschJozsaTests()
 		}
 	}
 
+	return true;
+}
+
+bool DeutschJozsaTests()
+{
+	std::cout << "\nTesting Deutsch-Jozsa..." << std::endl;
+
+	if (!DeutschTests()) return false;
+
 	std::cout << "Now, general Deutsch-Jozsa..." << std::endl;
 	DeutschJozsa::DeutschJozsaAlgorithm deutschJozsa(9);
 	for (int i = 0; i < 30; ++i)
 	{
 		if (i < 10)
-			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantZero);
+			deutschJozsa.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantZero);
 		else if (i < 20)
-			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantOne);
+			deutschJozsa.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::constantOne);
 		else
-			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::balanced);
+			deutschJozsa.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::balanced);
 
-		unsigned int state = deutsch.Execute();
+		unsigned int state = deutschJozsa.Execute();
 
 		if (i < 20)
 		{
