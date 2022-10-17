@@ -83,6 +83,11 @@ namespace QC {
 			return reg.Measure();
 		}
 
+		unsigned int Measure(unsigned int qubit)
+		{
+			return reg.Measure(qubit);
+		}
+		
 		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
 		{
 			return reg.Measure(firstQubit, secondQubit);

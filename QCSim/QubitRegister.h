@@ -113,6 +113,12 @@ namespace QC {
 			return state;
 		}
 
+		// shortcut for measuring a single qubit
+		unsigned int Measure(unsigned int qubit)
+		{
+			return Measure(qubit, qubit);
+		}
+
 		// measure a 'subregister' as a separate register
 		// can measure a single qubit, if firstQubit == secondQubit
 		// will return a 'state' as if the measured sequence is in a separate register (that is, the 'firstQubit' is on position 0 and so on)
