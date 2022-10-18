@@ -48,6 +48,11 @@ namespace QC {
 			reg.setRawAmplitude(State, val);
 		}
 
+		void Clear()
+		{
+			reg.Clear();
+		}
+
 		void Normalize()
 		{
 			reg.Normalize();

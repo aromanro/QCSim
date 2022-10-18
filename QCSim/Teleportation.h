@@ -26,7 +26,7 @@ namespace Teleportation
 
 		void SetState(std::complex<double> alpha, std::complex<double> beta)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.Clear();
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(0, alpha);
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(1, beta);
 
