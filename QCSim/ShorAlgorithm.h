@@ -75,11 +75,12 @@ namespace Shor {
 
 
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumFourierTransform<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
-			: QC::QuantumFourierTransform<VectorClass, MatrixClass>(N, 0, L - 1, addseed), Number(C), fRegisterStartQubit(L), A(2), fx(L, C)
+			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed), 
+			fourier(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, 0, L - 1), Number(C), fRegisterStartQubit(L), A(2), fx(L, C)
 		{
 		}
 
@@ -90,7 +91,7 @@ namespace Shor {
 			// apply hadamard over each qubit from the x-register
 			// reuse the hadamard gate from the fourier transform base class
 			for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(QC::QuantumFourierTransform<VectorClass, MatrixClass>::hadamard, i);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(fourier.hadamard, i);
 
 			// now the f(x)
 			fx.Apply(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
@@ -100,7 +101,7 @@ namespace Shor {
 			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
 
 			// then perform an inverse fourier transform
-			QC::QuantumFourierTransform<VectorClass, MatrixClass>::IQFT();
+			fourier.IQFT();
 
 			// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 			// the f should be measured separately to find out its content
@@ -282,6 +283,8 @@ namespace Shor {
 		{
 			return  QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - fRegisterStartQubit;
 		}
+
+		QC::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 
 		unsigned int Number;
 		unsigned int fRegisterStartQubit;
