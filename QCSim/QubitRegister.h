@@ -31,6 +31,8 @@ namespace QC {
 			rng.seed(seed);
 		}
 
+		virtual ~QubitRegister() {}
+
 		unsigned int getNrQubits() const { return NrQubits; };
 		unsigned int getNrBasisStates() const { return NrBasisStates; };
 

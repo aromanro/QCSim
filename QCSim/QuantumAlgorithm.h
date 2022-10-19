@@ -12,6 +12,8 @@ namespace QC {
 		{
 		}
 
+		virtual ~QuantumAlgorithm() {};
+
 		virtual unsigned int Execute() = 0;
 
 		unsigned int getNrQubits() const { return reg.getNrQubits(); };

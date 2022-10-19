@@ -54,6 +54,11 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class MeasurementBasis
 	{
 	public:
+		MeasurementBasis()
+		{
+			s.SetPhaseShift(M_PI_2);
+		}
+
 		bool switchToXBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
 		{
 			if (qubit >= reg.getNrQubits())
@@ -83,6 +88,43 @@ namespace QC {
 
 			reg.ApplyGate(cnot, qubit2, qubit1);
 			reg.ApplyGate(hadamard, qubit1);
+
+			return true;
+		};
+
+		// 'computational' is Z
+		// if the operator to switch to a basis was U, the one to switch back is U^t
+		// if it's a product of two (as in two gates used for changing the basis) then (O1 * O2)^t = O2^t * O1^t
+
+		bool switchToComputationalFromXBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
+		{
+			if (qubit >= reg.getNrQubits())
+				return false;
+
+			reg.ApplyGate(hadamard, qubit);
+
+			return true;
+		}
+
+		bool switchToComputationalFromYBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
+		{
+			if (qubit >= reg.getNrQubits())
+				return false;
+
+			static const SingleQubitGate<MatrixClass> U(s.getOperatorMatrix() * hadamard.getOperatorMatrix());
+
+			reg.ApplyGate(U, qubit);
+
+			return true;
+		}
+
+		bool switchToComputationalFromBellBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1)
+		{
+			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
+				return false;
+
+			reg.ApplyGate(hadamard, qubit1);
+			reg.ApplyGate(cnot, qubit2, qubit1);
 
 			return true;
 		};
@@ -165,7 +207,7 @@ namespace QC {
 	protected:
 		QC::HadamardGate<MatrixClass> hadamard;
 		QC::CNOTGate<MatrixClass> cnot;
-		QC::PhaseGate<MatrixClass> s;
+		QC::PhaseShiftGate<MatrixClass> s;
 	};
 
 }
