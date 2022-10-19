@@ -56,7 +56,7 @@ namespace QC {
 	public:
 		MeasurementBasis()
 		{
-			s.SetPhaseShift(M_PI_2);
+			//s.SetPhaseShift(M_PI_2); // no need for this, PhaseShift has already the proper phase
 		}
 
 		bool switchToXBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
@@ -207,7 +207,7 @@ namespace QC {
 	protected:
 		QC::HadamardGate<MatrixClass> hadamard;
 		QC::CNOTGate<MatrixClass> cnot;
-		QC::PhaseShiftGate<MatrixClass> s;
+		QC::PhaseGate<MatrixClass> s;
 	};
 
 }
