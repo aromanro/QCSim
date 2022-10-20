@@ -80,7 +80,7 @@ namespace Shor {
 	public:
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
 			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed), 
-			fourier(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, 0, L - 1), Number(C), fRegisterStartQubit(L), A(2), fx(L, C)
+			fourier(N, 0, L - 1), Number(C), fRegisterStartQubit(L), A(2), fx(L, C)
 		{
 		}
 
@@ -101,7 +101,7 @@ namespace Shor {
 			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
 
 			// then perform an inverse fourier transform
-			fourier.IQFT();
+			fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 
 			// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 			// the f should be measured separately to find out its content

@@ -12,48 +12,48 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumFourierTransform : public QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		QuantumFourierTransform(QubitRegister<VectorClass, MatrixClass>& r, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-			: QuantumSubAlgorithm<VectorClass, MatrixClass>::QuantumSubAlgorithm(r), sQubit(startQubit), eQubit(std::min(r.getNrQubits() - 1, endQubit))
+		QuantumFourierTransform(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			: sQubit(startQubit), eQubit(std::max(startQubit, std::min(N - 1, endQubit)))
 		{
 		}
 
-		unsigned int Execute() override
+		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			QFT(sQubit, eQubit);
+			QFT(reg, sQubit, eQubit);
 
-			return QC::QuantumSubAlgorithm<VectorClass, MatrixClass>::Measure();
+			return reg.Measure();
 		}
 
 		// execute this to avoid measurement
-		void QFT()
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg)
 		{
-			QFT(sQubit, eQubit);
-			Swap(sQubit, eQubit);
+			QFT(reg, sQubit, eQubit);
+			Swap(reg, sQubit, eQubit);
 		}
 
-		void IQFT()
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg)
 		{
-			Swap(sQubit, eQubit);
-			IQFT(sQubit, eQubit);
+			Swap(reg, sQubit, eQubit);
+			IQFT(reg, sQubit, eQubit);
 		}
 
 		unsigned int getStartQubit() const { return sQubit; };
 		unsigned int getEndQubit() const { return eQubit; };
 
 	protected:
-		void Swap(unsigned int startQubit, unsigned int endQubit)
+		void Swap(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int startQubit, unsigned int endQubit)
 		{
 			while (startQubit < endQubit)
 			{
-				QC::QuantumSubAlgorithm<VectorClass, MatrixClass>::ApplyGate(swapOp, startQubit, endQubit);
+				reg.ApplyGate(swapOp, startQubit, endQubit);
 				++startQubit;
 				--endQubit;
 			}
 		}
 
-		void QFT(unsigned int sq, unsigned int eq)
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq)
 		{
-			QuantumSubAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, eq);
+			reg.ApplyGate(hadamard, eq);
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
@@ -63,31 +63,31 @@ namespace QC {
 				for (unsigned int ctrlq = eq; ctrlq >= curQubit; --ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
-					QuantumSubAlgorithm<VectorClass, MatrixClass>::ApplyGate(phaseShift, ctrlq, curQubitm1);
+					reg.ApplyGate(phaseShift, ctrlq, curQubitm1);
 
 					phase *= 2;
 				}
 
-				QuantumSubAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, curQubitm1);
+				reg.ApplyGate(hadamard, curQubitm1);
 			}
 		}
 
-		void IQFT(unsigned int sq, unsigned int eq)
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq)
 		{
 			for (unsigned int curQubit = sq; curQubit < eq; ++curQubit)
 			{
-				QuantumSubAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, curQubit);
+				reg.ApplyGate(hadamard, curQubit);
 
 				double phase = M_PI_2;
 				for (unsigned int ctrlq = curQubit + 1; ctrlq <= eq; ++ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
-					QuantumSubAlgorithm<VectorClass, MatrixClass>::ApplyGate(phaseShift, curQubit, ctrlq);
+					reg.ApplyGate(phaseShift, curQubit, ctrlq);
 
 					phase /= 2;
 				}
 			}
-			QuantumSubAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, eq);
+			reg.ApplyGate(hadamard, eq);
 		}
 
 	public:
