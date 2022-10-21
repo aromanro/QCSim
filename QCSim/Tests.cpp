@@ -10,6 +10,7 @@
 #include "BernsteinVazirani.h"
 #include "QuantumCryptograpy.h"
 #include "DeutschJozsa.h"
+#include "PauliStringSimulation.h"
 
 #include <iostream>
 #include <map>
@@ -411,6 +412,111 @@ bool DeutschJozsaTests()
 	return true;
 }
 
+bool SimulationTests()
+{
+	std::cout << "\nTesting simulations..." << std::endl;
+
+	// this is a temporary Hamiltonian I've got from here: https://medium.com/quantum-untangled/hamiltonian-simulation-with-quantum-computation-fedc7cdc02e0
+	// it has results so I can check against them
+	// already I get the same 'exact' solution but until I figure out the issues I'll leave this here
+
+	// in the end I should use randomly generated Hamiltonians for tests
+
+	const double simTime = -1. / (2. * M_PI); // negative because others use e^iHt as evolution op
+
+	QuantumSimulation::PauliDecomposedHamiltonianSimulation sim(3, simTime, 50);
+	sim.setToBasisState(0);
+
+	QuantumSimulation::PauliStringSimulation term;
+
+	term.setOperatorForQubit(0, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
+	term.setOperatorForQubit(1, QuantumSimulation::PauliStringSimulation<>::PauliOp::opZ);
+	term.setOperatorForQubit(2, QuantumSimulation::PauliStringSimulation<>::PauliOp::opY);
+
+	sim.AddTerm(2, term);
+
+	term.setOperatorForQubit(0, QuantumSimulation::PauliStringSimulation<>::PauliOp::opZ);
+	term.setOperatorForQubit(1, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
+	term.setOperatorForQubit(2, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
+
+	sim.AddTerm(5, term);
+
+	term.setOperatorForQubit(0, QuantumSimulation::PauliStringSimulation<>::PauliOp::opY);
+	term.setOperatorForQubit(1, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
+	term.setOperatorForQubit(2, QuantumSimulation::PauliStringSimulation<>::PauliOp::opZ);
+
+	sim.AddTerm(2, term);
+
+	Eigen::MatrixXcd evOp = sim.getEvolutionOperator(simTime);
+	Eigen::VectorXcd regValsEx = sim.getRegisterStorage();
+	regValsEx = evOp * regValsEx;
+
+	std::complex<double> v = abs(regValsEx[0]) > 1E-5 ? regValsEx[0] : std::complex<double>(1, 0);
+	std::complex<double> accum(0);
+	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+	{
+		regValsEx[i] /= v;
+
+		accum += regValsEx[i] * std::conj(regValsEx[i]);
+	}
+	double norm = 1. / sqrt(accum.real());
+	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		regValsEx[i] *= norm;
+
+	std::cout << "Exact:" << std::endl;
+
+	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		std::cout << regValsEx[i] << std::endl;
+
+	
+		
+	std::cout << "*************************************" << std::endl;
+
+	sim.setToBasisState(0);
+
+	sim.Execute();
+
+	Eigen::VectorXcd regVals = sim.getRegisterStorage();
+
+	v = abs(regVals[0]) > 1E-5 ? regVals[0] : std::complex<double>(1, 0);
+	accum = std::complex<double>(0, 0);
+	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+	{
+		regVals[i] /= v;
+
+		accum += regVals[i] * std::conj(regVals[i]);
+	}
+	norm = 1. / sqrt(accum.real());
+	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		regVals[i] *= norm;
+
+	std::cout << "Simulation:" << std::endl;
+
+	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		std::cout << regVals[i] << std::endl;
+
+	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+	{
+		if (!approxEqual(regVals(i), regValsEx(i), 1E-2))
+		{
+			std::cout << "Value from simultation does not match the value from the 'exact' computation!" << std::endl;
+			return false;
+		}
+	}
+
+	const double fidelity = sim.stateFidelity(regValsEx);
+	std::cout << "Fidelity: " << fidelity << std::endl;
+
+	if (fidelity < 0.98)
+	{
+		std::cout << "Fidelity too low, failure!" << std::endl;
+
+		return false;
+	}
+    
+	return true;
+}
+
 bool tests()
 {
 	std::cout << "\nTests\n";
@@ -424,6 +530,13 @@ bool tests()
 	if (res) res = SuperdenseCodingTests();
 	if (res) res = QuantumCryptograpyTests();
 	if (res) res = BellInequalitiesTests();
+
+	if (res)
+	{
+		std::cout << "\nTesting simulations of quantum simulations..." << std::endl;
+
+		res = SimulationTests();
+	}
 
 	std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 

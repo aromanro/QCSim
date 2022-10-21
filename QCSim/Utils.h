@@ -59,7 +59,7 @@ namespace QC {
 			//s.SetPhaseShift(M_PI_2); // no need for this, PhaseShift has already the proper phase
 		}
 
-		bool switchToXBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
+		bool switchToXBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
@@ -69,19 +69,19 @@ namespace QC {
 			return true;
 		};
 
-		bool switchToYBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
+		bool switchToYBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
 
-			static const SingleQubitGate<MatrixClass> U(hadamard.getOperatorMatrix() * s.getOperatorMatrix().adjoint());
+			//static const SingleQubitGate<MatrixClass> U(hadamard.getRawOperatorMatrix() * s.getRawOperatorMatrix().adjoint());
 
-			reg.ApplyGate(U, qubit);
+			reg.ApplyGate(hy, qubit);
 
 			return true;
 		};
 
-		bool switchToBellBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1)
+		bool switchToBellBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1) const
 		{
 			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
 				return false;
@@ -96,7 +96,7 @@ namespace QC {
 		// if the operator to switch to a basis was U, the one to switch back is U^t
 		// if it's a product of two (as in two gates used for changing the basis) then (O1 * O2)^t = O2^t * O1^t
 
-		bool switchToComputationalFromXBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
+		bool switchToComputationalFromXBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
@@ -106,19 +106,19 @@ namespace QC {
 			return true;
 		}
 
-		bool switchToComputationalFromYBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0)
+		bool switchToComputationalFromYBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
 
-			static const SingleQubitGate<MatrixClass> U(s.getOperatorMatrix() * hadamard.getOperatorMatrix());
-
-			reg.ApplyGate(U, qubit);
+			//static const QC::SingleQubitGate<MatrixClass> U(s.getRawOperatorMatrix() * hadamard.getRawOperatorMatrix());
+			
+			reg.ApplyGate(hy, qubit);
 
 			return true;
 		}
 
-		bool switchToComputationalFromBellBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1)
+		bool switchToComputationalFromBellBasis(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1) const
 		{
 			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
 				return false;
@@ -134,12 +134,12 @@ namespace QC {
 		// or for the case when one wants to switch to some other basis along the algoritm, measure, then switch back to the computational basis, then continue
 		// an application could be in quantum cryptography - see for example BB84 protocol
 
-		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const QC::SingleQubitGate<MatrixClass>& gate, unsigned int qubit = 0, bool switchBack = false)
+		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const QC::SingleQubitGate<MatrixClass>& gate, unsigned int qubit = 0, bool switchBack = false) const
 		{
 			return switchToOperatorBasis(reg, gate.getRawOperatorMatrix(), qubit, switchBack);
 		}
 
-		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const MatrixClass& op, unsigned int qubit = 0, bool switchBack = false)
+		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const MatrixClass& op, unsigned int qubit = 0, bool switchBack = false) const
 		{
 			if (qubit >= reg.getNrQubits()) return false;
 			else if (op.rows() != 2 || op.cols() != 2) return false;
@@ -206,8 +206,9 @@ namespace QC {
 
 	protected:
 		QC::HadamardGate<MatrixClass> hadamard;
+		QC::HyGate<MatrixClass> hy;
 		QC::CNOTGate<MatrixClass> cnot;
-		QC::PhaseGate<MatrixClass> s;
+		//QC::PhaseGate<MatrixClass> s;
 	};
 
 }

@@ -100,6 +100,12 @@ namespace QC {
 			return reg.Measure(firstQubit, secondQubit);
 		}
 
+		// to check how well the computed state matches some 'exact' known one
+		double stateFidelity(const VectorClass& state) const
+		{
+			return reg.stateFidelity(state);
+		}
+
 	protected:
 		QubitRegister<VectorClass, MatrixClass> reg;
 	};
@@ -114,7 +120,7 @@ namespace QC {
 		
 		virtual ~QuantumSubAlgorithm() {};
 
-		virtual unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) = 0;
+		virtual unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const = 0;
 	};
 
 }

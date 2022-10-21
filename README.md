@@ -13,3 +13,5 @@ Work in progress, but the following seem to work:
 *  Superdense coding
 *  Quantum cryptography: BB84 protocol
 *  CHSH inequality violation
+Simulation of quantum simulation:
+*  Evolution in time with a Hamiltonian given as a sum of Pauli products with real coefficients

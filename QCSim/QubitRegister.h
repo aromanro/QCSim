@@ -90,7 +90,7 @@ namespace QC {
 		void Normalize()
 		{
 			const double accum = (registerStorage.adjoint() * registerStorage)(0).real();
-			if (abs(accum) < 1E-20) return;
+			if (accum < 1E-20) return;
 
 			registerStorage *= 1. / sqrt(accum);
 		}
@@ -222,6 +222,14 @@ namespace QC {
 		VectorClass getRegisterStorage() const
 		{
 			return registerStorage;
+		}
+
+		// to check how well the computed state matches some 'exact' known one
+		double stateFidelity(const VectorClass& state) const
+		{
+			if (registerStorage.size() != state.size()) return 0;
+
+			return (registerStorage.adjoint() * state)(0).real();
 		}
 
 	protected:

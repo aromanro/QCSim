@@ -74,5 +74,8 @@
     <ClInclude Include="DeutschJozsa.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="PauliStringSimulation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

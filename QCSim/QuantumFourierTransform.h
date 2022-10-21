@@ -17,7 +17,7 @@ namespace QC {
 		{
 		}
 
-		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
+		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
 		{
 			QFT(reg, sQubit, eQubit);
 
@@ -25,13 +25,13 @@ namespace QC {
 		}
 
 		// execute this to avoid measurement
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg)
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg) const
 		{
 			QFT(reg, sQubit, eQubit);
 			Swap(reg, sQubit, eQubit);
 		}
 
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg)
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg) const
 		{
 			Swap(reg, sQubit, eQubit);
 			IQFT(reg, sQubit, eQubit);
@@ -41,7 +41,7 @@ namespace QC {
 		unsigned int getEndQubit() const { return eQubit; };
 
 	protected:
-		void Swap(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int startQubit, unsigned int endQubit)
+		void Swap(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int startQubit, unsigned int endQubit) const
 		{
 			while (startQubit < endQubit)
 			{
@@ -51,9 +51,11 @@ namespace QC {
 			}
 		}
 
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq)
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq) const
 		{
 			reg.ApplyGate(hadamard, eq);
+			
+			ControlledPhaseShiftGate<MatrixClass> phaseShift;
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
@@ -72,11 +74,13 @@ namespace QC {
 			}
 		}
 
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq)
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq) const
 		{
 			for (unsigned int curQubit = sq; curQubit < eq; ++curQubit)
 			{
 				reg.ApplyGate(hadamard, curQubit);
+
+				ControlledPhaseShiftGate<MatrixClass> phaseShift;
 
 				double phase = M_PI_2;
 				for (unsigned int ctrlq = curQubit + 1; ctrlq <= eq; ++ctrlq)
@@ -94,7 +98,6 @@ namespace QC {
 		HadamardGate<MatrixClass> hadamard; // public, let others use it
 
 	protected:
-		ControlledPhaseShiftGate<MatrixClass> phaseShift;
 		SwapGate<MatrixClass> swapOp;
 
 		unsigned int sQubit;
