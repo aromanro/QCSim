@@ -145,6 +145,7 @@
   <ItemGroup>
     <ClCompile Include="MeasurementsTests.cpp" />
     <ClCompile Include="QCSim.cpp" />
+    <ClCompile Include="SimulationTests.cpp" />
     <ClCompile Include="Tests.cpp" />
   </ItemGroup>
   <ItemGroup>
