@@ -114,7 +114,7 @@ bool SimulationTests()
 
 		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
 		{
-			if (!approxEqual(regVals(i), regValsEx(i), 0.2)) // in some circumstances some values can differ quite a bit but the fidelity is still high
+			if (!approxEqual(regVals(i), regValsEx(i), 0.5)) // in some circumstances some values can differ quite a bit but the fidelity is still high
 			{
 				std::cout << "\nValue from simulation does not match the value from the 'exact' computation!" << std::endl;
 

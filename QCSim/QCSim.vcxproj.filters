@@ -80,5 +80,8 @@
     <ClInclude Include="PauliStringSimulation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Schrodinger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

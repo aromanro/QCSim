@@ -161,6 +161,7 @@
     <ClInclude Include="QuantumFourierTransform.h" />
     <ClInclude Include="QuantumGate.h" />
     <ClInclude Include="QubitRegister.h" />
+    <ClInclude Include="Schrodinger.h" />
     <ClInclude Include="ShorAlgorithm.h" />
     <ClInclude Include="SuperdenseCoding.h" />
     <ClInclude Include="Teleportation.h" />
