@@ -414,7 +414,7 @@ bool DeutschJozsaTests()
 
 bool SimulationTests()
 {
-	std::cout << "\nTesting simulations..." << std::endl;
+	std::cout << "\nTesting quantum simulations..." << std::endl;
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -423,19 +423,20 @@ bool SimulationTests()
 	std::uniform_real_distribution<double> dist_coeff(0.1, 10.);
 
 	const double simTime = 1. / (2. * M_PI);
+	const unsigned int nrSteps = 100;
 
 	for (int i = 0; i < 10; ++i)
 	{
 		std::cout << "Generating and trying Hamiltonian... ";
 
-		QuantumSimulation::PauliDecomposedHamiltonianSimulation sim(3, simTime, 150);
+		QuantumSimulation::PauliDecomposedHamiltonianSimulation sim(3, simTime, nrSteps);
 		sim.setToBasisState(0);
 
 		QuantumSimulation::PauliStringSimulation term;
 
 		const int numTerms = dist_num_terms(gen);
 
-		std::cout << numTerms << " terms... ";
+		std::cout << numTerms << " term" << (numTerms > 1 ? "s" : ".") << "... ";
 
 		for (int t = 0; t < numTerms; ++t)
 		{
@@ -484,7 +485,7 @@ bool SimulationTests()
 
 		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
 		{
-			if (!approxEqual(regVals(i), regValsEx(i), 0.3)) // in some circumstances some values can differ quite a bit but the fidelity is still high
+			if (!approxEqual(regVals(i), regValsEx(i), 0.2)) // in some circumstances some values can differ quite a bit but the fidelity is still high
 			{
 				std::cout << "Value from simulation does not match the value from the 'exact' computation!" << std::endl;
 
