@@ -483,25 +483,6 @@ bool SimulationTests()
 		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
 			regVals[i] *= norm;
 
-		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-		{
-			if (!approxEqual(regVals(i), regValsEx(i), 0.2)) // in some circumstances some values can differ quite a bit but the fidelity is still high
-			{
-				std::cout << "Value from simulation does not match the value from the 'exact' computation!" << std::endl;
-
-				std::cout << "Exact:" << std::endl;
-				for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-					std::cout << regValsEx[i] << std::endl;
-				std::cout << "*************************************" << std::endl;
-
-				std::cout << "Simulation:" << std::endl;
-				for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-					std::cout << regVals[i] << std::endl;
-
-				return false;
-			}
-		}
-
 		const double fidelity = sim.stateFidelity(regValsEx);
 		std::cout << " Simulation result with fidelity: " << fidelity;
 
@@ -520,7 +501,27 @@ bool SimulationTests()
 
 			return false;
 		}
-		else std::cout << " OK!" << std::endl;
+
+		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		{
+			if (!approxEqual(regVals(i), regValsEx(i), 0.2)) // in some circumstances some values can differ quite a bit but the fidelity is still high
+			{
+				std::cout << "\nValue from simulation does not match the value from the 'exact' computation!" << std::endl;
+
+				std::cout << "Exact:" << std::endl;
+				for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+					std::cout << regValsEx[i] << std::endl;
+				std::cout << "*************************************" << std::endl;
+
+				std::cout << "Simulation:" << std::endl;
+				for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+					std::cout << regVals[i] << std::endl;
+
+				return false;
+			}
+		}
+
+		std::cout << " OK!" << std::endl;
 	}
 
 	return true;
