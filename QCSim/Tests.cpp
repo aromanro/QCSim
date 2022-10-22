@@ -416,104 +416,112 @@ bool SimulationTests()
 {
 	std::cout << "\nTesting simulations..." << std::endl;
 
-	// this is a temporary Hamiltonian I've got from here: https://medium.com/quantum-untangled/hamiltonian-simulation-with-quantum-computation-fedc7cdc02e0
-	// it has results so I can check against them
-	// already I get the same 'exact' solution but until I figure out the issues I'll leave this here
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dist_num_terms(1, 5);
+	std::uniform_int_distribution<> dist_op(0, 2);
+	std::uniform_real_distribution<double> dist_coeff(0.1, 10.);
 
-	// in the end I should use randomly generated Hamiltonians for tests
+	const double simTime = 1. / (2. * M_PI);
 
-	const double simTime = -1. / (2. * M_PI); // negative because others use e^iHt as evolution op
-
-	QuantumSimulation::PauliDecomposedHamiltonianSimulation sim(3, simTime, 50);
-	sim.setToBasisState(0);
-
-	QuantumSimulation::PauliStringSimulation term;
-
-	term.setOperatorForQubit(0, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
-	term.setOperatorForQubit(1, QuantumSimulation::PauliStringSimulation<>::PauliOp::opZ);
-	term.setOperatorForQubit(2, QuantumSimulation::PauliStringSimulation<>::PauliOp::opY);
-
-	sim.AddTerm(2, term);
-
-	term.setOperatorForQubit(0, QuantumSimulation::PauliStringSimulation<>::PauliOp::opZ);
-	term.setOperatorForQubit(1, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
-	term.setOperatorForQubit(2, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
-
-	sim.AddTerm(5, term);
-
-	term.setOperatorForQubit(0, QuantumSimulation::PauliStringSimulation<>::PauliOp::opY);
-	term.setOperatorForQubit(1, QuantumSimulation::PauliStringSimulation<>::PauliOp::opX);
-	term.setOperatorForQubit(2, QuantumSimulation::PauliStringSimulation<>::PauliOp::opZ);
-
-	sim.AddTerm(2, term);
-
-	Eigen::MatrixXcd evOp = sim.getEvolutionOperator(simTime);
-	Eigen::VectorXcd regValsEx = sim.getRegisterStorage();
-	regValsEx = evOp * regValsEx;
-
-	std::complex<double> v = abs(regValsEx[0]) > 1E-5 ? regValsEx[0] : std::complex<double>(1, 0);
-	std::complex<double> accum(0);
-	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+	for (int i = 0; i < 10; ++i)
 	{
-		regValsEx[i] /= v;
+		std::cout << "Generating and trying Hamiltonian... ";
 
-		accum += regValsEx[i] * std::conj(regValsEx[i]);
-	}
-	double norm = 1. / sqrt(accum.real());
-	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-		regValsEx[i] *= norm;
+		QuantumSimulation::PauliDecomposedHamiltonianSimulation sim(3, simTime, 150);
+		sim.setToBasisState(0);
 
-	std::cout << "Exact:" << std::endl;
+		QuantumSimulation::PauliStringSimulation term;
 
-	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-		std::cout << regValsEx[i] << std::endl;
+		const int numTerms = dist_num_terms(gen);
 
-	
-		
-	std::cout << "*************************************" << std::endl;
+		std::cout << numTerms << " terms... ";
 
-	sim.setToBasisState(0);
-
-	sim.Execute();
-
-	Eigen::VectorXcd regVals = sim.getRegisterStorage();
-
-	v = abs(regVals[0]) > 1E-5 ? regVals[0] : std::complex<double>(1, 0);
-	accum = std::complex<double>(0, 0);
-	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-	{
-		regVals[i] /= v;
-
-		accum += regVals[i] * std::conj(regVals[i]);
-	}
-	norm = 1. / sqrt(accum.real());
-	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-		regVals[i] *= norm;
-
-	std::cout << "Simulation:" << std::endl;
-
-	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-		std::cout << regVals[i] << std::endl;
-
-	for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-	{
-		if (!approxEqual(regVals(i), regValsEx(i), 1E-2))
+		for (int t = 0; t < numTerms; ++t)
 		{
-			std::cout << "Value from simultation does not match the value from the 'exact' computation!" << std::endl;
+			for (int q = 0; q < 3; ++q)
+			{
+				const QuantumSimulation::PauliStringSimulation<>::PauliOp trm = (QuantumSimulation::PauliStringSimulation<>::PauliOp)dist_op(gen);
+				term.setOperatorForQubit(q, trm);
+			}
+			
+			sim.AddTerm(-dist_coeff(gen), term);
+		}
+
+		Eigen::MatrixXcd evOp = sim.getEvolutionOperator(simTime);
+		Eigen::VectorXcd regValsEx = sim.getRegisterStorage();
+		regValsEx = evOp * regValsEx;
+
+		std::complex<double> v = abs(regValsEx[0]) > 1E-5 ? regValsEx[0] : std::complex<double>(1, 0);
+		std::complex<double> accum(0);
+		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		{
+			regValsEx[i] /= v;
+
+			accum += regValsEx[i] * std::conj(regValsEx[i]);
+		}
+		double norm = 1. / sqrt(accum.real());
+		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+			regValsEx[i] *= norm;
+
+		sim.setToBasisState(0);
+
+		sim.Execute();
+
+		Eigen::VectorXcd regVals = sim.getRegisterStorage();
+
+		v = abs(regVals[0]) > 1E-5 ? regVals[0] : std::complex<double>(1, 0);
+		accum = std::complex<double>(0, 0);
+		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		{
+			regVals[i] /= v;
+
+			accum += regVals[i] * std::conj(regVals[i]);
+		}
+		norm = 1. / sqrt(accum.real());
+		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+			regVals[i] *= norm;
+
+		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		{
+			if (!approxEqual(regVals(i), regValsEx(i), 0.3)) // in some circumstances some values can differ quite a bit but the fidelity is still high
+			{
+				std::cout << "Value from simulation does not match the value from the 'exact' computation!" << std::endl;
+
+				std::cout << "Exact:" << std::endl;
+				for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+					std::cout << regValsEx[i] << std::endl;
+				std::cout << "*************************************" << std::endl;
+
+				std::cout << "Simulation:" << std::endl;
+				for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+					std::cout << regVals[i] << std::endl;
+
+				return false;
+			}
+		}
+
+		const double fidelity = sim.stateFidelity(regValsEx);
+		std::cout << " Simulation result with fidelity: " << fidelity;
+
+		if (fidelity < 0.999)
+		{
+			std::cout << "\nFidelity too low, failure!" << std::endl;
+
+			std::cout << "Exact:" << std::endl;
+			for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+				std::cout << regValsEx[i] << std::endl;
+			std::cout << "*************************************" << std::endl;
+
+			std::cout << "Simulation:" << std::endl;
+			for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+				std::cout << regVals[i] << std::endl;
+
 			return false;
 		}
+		else std::cout << " OK!" << std::endl;
 	}
 
-	const double fidelity = sim.stateFidelity(regValsEx);
-	std::cout << "Fidelity: " << fidelity << std::endl;
-
-	if (fidelity < 0.98)
-	{
-		std::cout << "Fidelity too low, failure!" << std::endl;
-
-		return false;
-	}
-    
 	return true;
 }
 

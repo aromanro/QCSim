@@ -229,7 +229,9 @@ namespace QC {
 		{
 			if (registerStorage.size() != state.size()) return 0;
 
-			return (registerStorage.adjoint() * state)(0).real();
+			const std::complex<double> p = (registerStorage.adjoint() * state)(0);
+
+			return (conj(p) * p).real();
 		}
 
 	protected:
