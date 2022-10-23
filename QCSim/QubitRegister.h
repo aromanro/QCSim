@@ -95,6 +95,21 @@ namespace QC {
 			registerStorage *= 1. / sqrt(accum);
 		}
 
+		// to be able to compare different results
+		void AdjustPhaseAndNormalize()
+		{
+			const std::complex<double> v0 = registerStorage[0];
+			const double av0 = abs(v0);
+
+			if (av0 >= 1E-5)
+			{
+				for (unsigned int i = 0; i < getNrBasisStates(); ++i)
+					registerStorage[i] /= v0;
+
+				Normalize();
+			}
+		}
+
 		unsigned int Measure()
 		{
 			const double prob = uniformZeroOne(rng);

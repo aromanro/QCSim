@@ -60,6 +60,11 @@ namespace QC {
 			reg.Normalize();
 		}
 
+		void AdjustPhaseAndNormalize()
+		{
+			reg.AdjustPhaseAndNormalize();
+		}
+
 		static unsigned int getQubitState(unsigned int q)
 		{
 			return 1u << q;
@@ -104,6 +109,22 @@ namespace QC {
 		double stateFidelity(const VectorClass& state) const
 		{
 			return reg.stateFidelity(state);
+		}
+
+		static void AdjustPhaseAndNormalize(Eigen::VectorXcd& regVals)
+		{
+			std::complex<double> v = abs(regVals[0]) > 1E-5 ? regVals[0] : std::complex<double>(1, 0);
+			std::complex<double> accum(0, 0);
+			const unsigned int nrBasisStates = static_cast<unsigned int>(regVals.size());
+			for (unsigned int i = 0; i < nrBasisStates; ++i)
+			{
+				regVals[i] /= v;
+
+				accum += regVals[i] * std::conj(regVals[i]);
+			}
+			const double norm = 1. / sqrt(accum.real());
+			for (unsigned int i = 0; i < nrBasisStates; ++i)
+				regVals[i] *= norm;
 		}
 
 	protected:

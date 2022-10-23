@@ -6,22 +6,6 @@
 #include <iostream>
 #include <map>
 
-
-void Normalize(Eigen::VectorXcd& regVals, unsigned int nrBasisStates)
-{
-	std::complex<double> v = abs(regVals[0]) > 1E-5 ? regVals[0] : std::complex<double>(1, 0);
-	std::complex<double> accum(0, 0);
-	for (unsigned int i = 0; i < nrBasisStates; ++i)
-	{
-		regVals[i] /= v;
-
-		accum += regVals[i] * std::conj(regVals[i]);
-	}
-	const double norm = 1. / sqrt(accum.real());
-	for (unsigned int i = 0; i < nrBasisStates; ++i)
-		regVals[i] *= norm;
-}
-
 void PrintState(const Eigen::VectorXcd& regVals, unsigned int nrBasisStates)
 {
 	for (unsigned int i = 0; i < nrBasisStates; ++i)
@@ -80,25 +64,14 @@ bool SimulationTests()
 		Eigen::VectorXcd regValsEx = sim.getRegisterStorage();
 		regValsEx = evOp * regValsEx;
 
-		std::complex<double> v = abs(regValsEx[0]) > 1E-5 ? regValsEx[0] : std::complex<double>(1, 0);
-		std::complex<double> accum(0);
-		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-		{
-			regValsEx[i] /= v;
-
-			accum += regValsEx[i] * std::conj(regValsEx[i]);
-		}
-		double norm = 1. / sqrt(accum.real());
-		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
-			regValsEx[i] *= norm;
+		sim.AdjustPhaseAndNormalize(regValsEx);
 
 		sim.setToBasisState(0);
 
 		sim.Execute();
 
+		sim.AdjustPhaseAndNormalize();
 		Eigen::VectorXcd regVals = sim.getRegisterStorage();
-
-		Normalize(regVals, sim.getNrBasisStates());
 
 		const double fidelity = sim.stateFidelity(regValsEx);
 		std::cout << " Simulation result with fidelity: " << fidelity;
