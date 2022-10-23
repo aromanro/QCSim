@@ -83,5 +83,8 @@
     <ClInclude Include="Schrodinger.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QuantumAdder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -156,6 +156,7 @@
     <ClInclude Include="GroverAlgorithm.h" />
     <ClInclude Include="Oracle.h" />
     <ClInclude Include="PauliStringSimulation.h" />
+    <ClInclude Include="QuantumAdder.h" />
     <ClInclude Include="QuantumAlgorithm.h" />
     <ClInclude Include="QuantumCryptograpy.h" />
     <ClInclude Include="QuantumFourierTransform.h" />

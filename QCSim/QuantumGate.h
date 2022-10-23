@@ -12,6 +12,11 @@ namespace QC {
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 		virtual MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const = 0;
 		virtual ~QuantumGate() {};
+
+		virtual unsigned int getQubitsNumber() const
+		{
+			return 0; // 0 at this point means 'unknown', should be overriden if needed
+		}
 	};
 
 	template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
@@ -25,6 +30,19 @@ namespace QC {
 		const MatrixClass& getRawOperatorMatrix() const
 		{
 			return operatorMat;
+		};
+
+		unsigned int getQubitsNumber() const override
+		{
+			unsigned int sz = static_cast<unsigned int>(operatorMat.rows());
+
+			unsigned int res = 0;
+			while (sz) {
+				++res;
+				sz >>= 1;
+			}
+
+			return res;
 		};
 
 	protected:
@@ -43,6 +61,11 @@ namespace QC {
 			: QuantumGateWithOp<MatrixClass>(U)
 		{
 		};
+
+		unsigned int getQubitsNumber() const override
+		{
+			return 1;
+		}
 
 		// controllingQubit is ignored, it will be used for two qubit gates
 		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
@@ -223,6 +246,11 @@ namespace QC {
 		{
 		}
 
+		unsigned int getQubitsNumber() const override
+		{
+			return 2;
+		}
+
 		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
 		{
 			assert(qubit != controllingQubit1);
@@ -346,6 +374,11 @@ namespace QC {
 		ThreeQubitsGate()
 		{
 			QuantumGateWithOp<MatrixClass>::operatorMat = MatrixClass::Identity(8, 8);
+		}
+
+		unsigned int getQubitsNumber() const override
+		{
+			return 3;
 		}
 
 		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
