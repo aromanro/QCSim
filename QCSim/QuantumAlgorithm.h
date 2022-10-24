@@ -80,7 +80,7 @@ namespace QC {
 			return reg.getRegisterStorage();
 		}
 
-		void ApplyGate(const QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0)
+		void ApplyGate(const Gates::QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0)
 		{
 			reg.ApplyGate(gate, qubit, controllingQubit);
 		}

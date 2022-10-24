@@ -122,7 +122,7 @@ namespace DeutschJozsa {
 			return fvalues[xstate] ? 1 : 0;
 		}
 
-		QC::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
 		FunctionType functionType;
 		std::vector<bool> fvalues; // for balanced only
 	};

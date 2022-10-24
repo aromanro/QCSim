@@ -50,7 +50,7 @@ namespace BellInequalities {
 			// pick which one to measure at random
 			// Alice: 
 			const bool aM = dist_bool(rng) == 1;
-			const QC::SingleQubitGate<MatrixClass>& aliceMeasurement = aM ? dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(R) : dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(Q);
+			const QC::Gates::SingleQubitGate<MatrixClass>& aliceMeasurement = aM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(R) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(Q);
 			measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
 
 			unsigned int state = 0;
@@ -64,7 +64,7 @@ namespace BellInequalities {
 
 			// Bob:
 			const bool bM = dist_bool(rng) == 1;
-			const QC::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(T) : dynamic_cast<QC::SingleQubitGate<MatrixClass>&>(S);
+			const QC::Gates::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(T) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(S);
 			measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, bobMeasurement.getRawOperatorMatrix(), 1);
 
 			unsigned int res2 = -1;
@@ -113,12 +113,12 @@ namespace BellInequalities {
 		QC::MeasurementBasis<VectorClass, MatrixClass> measurementBasis;
 
 		// Alice measurement basis operators
-		QC::PauliZGate<MatrixClass> Q;
-		QC::PauliXGate<MatrixClass> R;
+		QC::Gates::PauliZGate<MatrixClass> Q;
+		QC::Gates::PauliXGate<MatrixClass> R;
 
 		// Bob measurement basis operators
-		QC::SingleQubitGate<MatrixClass> S;
-		QC::SingleQubitGate<MatrixClass> T;
+		QC::Gates::SingleQubitGate<MatrixClass> S;
+		QC::Gates::SingleQubitGate<MatrixClass> T;
 
 		std::mt19937_64 rng;
 		std::uniform_int_distribution<> dist_bool;

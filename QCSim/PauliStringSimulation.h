@@ -44,8 +44,8 @@ namespace QuantumSimulation {
 		}
 
 	protected:
-		QC::CNOTGate<MatrixClass> cnot;
-		QC::RzGate<MatrixClass> rz;
+		QC::Gates::CNOTGate<MatrixClass> cnot;
+		QC::Gates::RzGate<MatrixClass> rz;
 	};
 
 	// you may decompose a Hamiltonian in a sum of such terms with real coeffcients
@@ -83,8 +83,6 @@ namespace QuantumSimulation {
 		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) const override
 		{
 			const unsigned int nrQubits = reg.getNrQubits();
-
-			static const QC::PauliZGate<MatrixClass> Z;
 
 			// switch to proper basis
 			for (unsigned int qubit = 0; qubit < nrQubits; ++qubit)
@@ -165,9 +163,9 @@ namespace QuantumSimulation {
 		// this is here only for testing purposes
 		MatrixClass getEvolutionOperator(double t) const
 		{
-			static const QC::PauliXGate<MatrixClass> X;
-			static const QC::PauliYGate<MatrixClass> Y;
-			static const QC::PauliZGate<MatrixClass> Z;
+			static const QC::Gates::PauliXGate<MatrixClass> X;
+			static const QC::Gates::PauliYGate<MatrixClass> Y;
+			static const QC::Gates::PauliZGate<MatrixClass> Z;
 
 			MatrixClass H = MatrixClass::Zero(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates(), QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates());
 

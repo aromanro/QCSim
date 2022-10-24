@@ -55,7 +55,7 @@ namespace QC {
 		{
 			reg.ApplyGate(hadamard, eq);
 			
-			ControlledPhaseShiftGate<MatrixClass> phaseShift;
+			Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
@@ -80,7 +80,7 @@ namespace QC {
 			{
 				reg.ApplyGate(hadamard, curQubit);
 
-				ControlledPhaseShiftGate<MatrixClass> phaseShift;
+				Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
 
 				double phase = M_PI_2;
 				for (unsigned int ctrlq = curQubit + 1; ctrlq <= eq; ++ctrlq)
@@ -95,10 +95,10 @@ namespace QC {
 		}
 
 	public:
-		HadamardGate<MatrixClass> hadamard; // public, let others use it
+		Gates::HadamardGate<MatrixClass> hadamard; // public, let others use it
 
 	protected:
-		SwapGate<MatrixClass> swapOp;
+		Gates::SwapGate<MatrixClass> swapOp;
 
 		unsigned int sQubit;
 		unsigned int eQubit;

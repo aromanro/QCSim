@@ -83,14 +83,14 @@ namespace Teleportation
 	protected:
 		// the initial state to be teleported can be set directly or set up from something simple using some gate (hadamard, phase shift)
 		// needed to create the Bell states
-		QC::HadamardGate<MatrixClass> hadamard;
-		QC::CNOTGate<MatrixClass> cnot; // also needed on Alice side
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::CNOTGate<MatrixClass> cnot; // also needed on Alice side
 		// needed on receiving side:
-		QC::ControlledZGate<MatrixClass> cz;
+		QC::Gates::ControlledZGate<MatrixClass> cz;
 
 		// needed on Bob side, if the classical transmission is explicit (simple one qubit gates that are applied or not depending on the value of the classical bit):
-		QC::PauliXGate<MatrixClass> x;
-		QC::PauliZGate<MatrixClass> z;
+		QC::Gates::PauliXGate<MatrixClass> x;
+		QC::Gates::PauliZGate<MatrixClass> z;
 	};
 
 }

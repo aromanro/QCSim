@@ -68,7 +68,7 @@ namespace Grover {
 		MatrixClass OracleOp;
 		MatrixClass JOp;
 
-		QC::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
 	};
 
 }

@@ -76,12 +76,12 @@ namespace Coding
 		QC::BellState<VectorClass, MatrixClass> bellState;
 
 		// gates used at the end for decoding
-		QC::HadamardGate<MatrixClass> hadamard;
-		QC::CNOTGate<MatrixClass> cnot;
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::CNOTGate<MatrixClass> cnot;
 
 		// single qubit gates to act on the transmission qubit (depending on the classical bits to be transmitted)
-		QC::PauliXGate<MatrixClass> x;
-		QC::PauliZGate<MatrixClass> z;
+		QC::Gates::PauliXGate<MatrixClass> x;
+		QC::Gates::PauliZGate<MatrixClass> z;
 
 		// store the bits to send for 'Execute'
 		bool b1;

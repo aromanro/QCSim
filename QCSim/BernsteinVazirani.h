@@ -10,7 +10,7 @@
 namespace BernsteinVazirani {
 
 	template<class MatrixClass = Eigen::MatrixXcd> class Oracle :
-		public QC::QuantumGate<MatrixClass>
+		public QC::Gates::QuantumGate<MatrixClass>
 	{
 	public:
 		void setString(unsigned int str)
@@ -94,6 +94,6 @@ namespace BernsteinVazirani {
 		}
 
 		MatrixClass OracleOp;
-		QC::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
 	};
 }

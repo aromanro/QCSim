@@ -197,7 +197,7 @@ namespace QuantumCryptograpy {
 		};
 
 		// to be used for measurement basis
-		QC::PauliXGate<MatrixClass> X;
+		QC::Gates::PauliXGate<MatrixClass> X;
 		QC::MeasurementBasis<VectorClass, MatrixClass> measurementBasis; // 0, use Z, 1 use X
 
 		// Alice

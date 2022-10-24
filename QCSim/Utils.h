@@ -46,8 +46,8 @@ namespace QC {
 		}
 
 	protected:
-		QC::HadamardGate<MatrixClass> hadamard;
-		QC::CNOTGate<MatrixClass> cnot;
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::CNOTGate<MatrixClass> cnot;
 	};
 
 
@@ -134,7 +134,7 @@ namespace QC {
 		// or for the case when one wants to switch to some other basis along the algoritm, measure, then switch back to the computational basis, then continue
 		// an application could be in quantum cryptography - see for example BB84 protocol
 
-		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const QC::SingleQubitGate<MatrixClass>& gate, unsigned int qubit = 0, bool switchBack = false) const
+		bool switchToOperatorBasis(QubitRegister<VectorClass, MatrixClass>& reg, const QC::Gates::SingleQubitGate<MatrixClass>& gate, unsigned int qubit = 0, bool switchBack = false) const
 		{
 			return switchToOperatorBasis(reg, gate.getRawOperatorMatrix(), qubit, switchBack);
 		}
@@ -198,17 +198,17 @@ namespace QC {
 			if (switchBack)
 				U.adjointInPlace();
 
-			const QC::SingleQubitGate<MatrixClass> gate(U);
+			const QC::Gates::SingleQubitGate<MatrixClass> gate(U);
 			reg.ApplyGate(gate, qubit);
 
 			return true;
 		}
 
 	protected:
-		QC::HadamardGate<MatrixClass> hadamard;
-		QC::HyGate<MatrixClass> hy;
-		QC::CNOTGate<MatrixClass> cnot;
-		//QC::PhaseGate<MatrixClass> s;
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::HyGate<MatrixClass> hy;
+		QC::Gates::CNOTGate<MatrixClass> cnot;
+		//QC::Gates::PhaseGate<MatrixClass> s;
 	};
 
 }
