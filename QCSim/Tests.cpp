@@ -413,10 +413,9 @@ bool DeutschJozsaTests()
 	return true;
 }
 
-bool quantumAdderTests()
-{
-	std::cout << "\nTesting quantum adders..." << std::endl;
 
+bool quantumHalfAdderTests()
+{
 	std::cout << "\nTwo qubits half-adder..." << std::endl;
 	QC::QubitRegister regThreeQubits;
 	QC::TwoQubitsHalfAdder halfAdder(0, 1, 2);
@@ -493,6 +492,11 @@ bool quantumAdderTests()
 	}
 	std::cout << " ok" << std::endl;
 
+	return true;
+}
+
+bool quantumFullAdderTests()
+{
 	QC::QubitRegister regFourQubits(4);
 	QC::TwoQubitsFullAdder fullAdder(0, 1, 2, 3);
 	std::cout << "Testing full adder..." << std::endl;
@@ -501,7 +505,7 @@ bool quantumAdderTests()
 	std::cout << "Adding 0 + 0...";
 	regFourQubits.setToBasisState(0);
 	fullAdder.Execute(regFourQubits);
-	res = regFourQubits.Measure();
+	unsigned int res = regFourQubits.Measure();
 	if (res & 3)
 	{
 		std::cout << " Full-adder altered the qubits when adding 0 + 0: " << (res & 3) << std::endl;
@@ -569,11 +573,21 @@ bool quantumAdderTests()
 	}
 	std::cout << " ok" << std::endl;
 
+	return true;
+}
+
+bool quantumAdderTests()
+{
+	std::cout << "\nTesting quantum adders..." << std::endl;
+
+	if (!quantumHalfAdderTests() && !quantumFullAdderTests()) return false;
+
 	std::cout << "\nAdding 3-qubit values..." << std::endl;
+	
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dist_nr(0, 7);
-
+	
 	QC::NQubitsAdderAlgorithm threeQubitsAdder;
 
 	for (int i = 0; i < 10; ++i)
