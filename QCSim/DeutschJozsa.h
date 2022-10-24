@@ -61,6 +61,7 @@ namespace DeutschJozsa {
 				auto rng = std::default_random_engine{};
 				std::shuffle(fvalues.begin(), fvalues.end(), rng);
 			}
+			else fvalues.clear();
 		}
 
 		FunctionType getFunction() const

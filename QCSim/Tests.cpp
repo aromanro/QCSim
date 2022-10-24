@@ -580,16 +580,17 @@ bool quantumAdderTests()
 {
 	std::cout << "\nTesting quantum adders..." << std::endl;
 
-	if (!quantumHalfAdderTests() && !quantumFullAdderTests()) return false;
+	if (!quantumHalfAdderTests() || !quantumFullAdderTests()) return false;
 
-	std::cout << "\nAdding 3-qubit values..." << std::endl;
+	std::cout << "Adding 3-qubit values..." << std::endl;
 	
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dist_nr(0, 7);
 	
+	
 	QC::NQubitsAdderAlgorithm threeQubitsAdder;
-
+	
 	for (int i = 0; i < 10; ++i)
 	{
 		const unsigned int n1 = dist_nr(gen);
