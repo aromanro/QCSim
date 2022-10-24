@@ -31,26 +31,26 @@ namespace QC {
 		unsigned int q2;
 		unsigned int aux;
 
-		QC::ToffoliGate toffoli;
-		QC::CNOTGate cnot;
+		QC::Gates::ToffoliGate<MatrixClass> toffoli;
+		QC::Gates::CNOTGate<MatrixClass> cnot;
 	};
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class TwoQubitsFullAdder : public QuantumHalfAdder<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class TwoQubitsFullAdder : public TwoQubitsHalfAdder<VectorClass, MatrixClass>
 	{
 	public:
-		TwoQubitsFullAdderAdder(unsigned int qubit1, unsigned int qubit2, unsigned int cin, unsigned int qubitaux)
-			: QuantumHalfAdder<VectorClass, MatrixClass>(qubit1, qubit2, qubitaux), ci(cin),
-			halfAdder(qubit2, cin, aux)
+		TwoQubitsFullAdder(unsigned int qubit1, unsigned int qubit2, unsigned int cin, unsigned int qubitaux)
+			: TwoQubitsHalfAdder<VectorClass, MatrixClass>(qubit1, qubit2, qubitaux), ci(cin),
+			halfAdder(qubit2, cin, qubitaux)
 		{
 		}
 
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
 		{
 			// TODO: check if the registry is big enough
-			QuantumHalfAdder<VectorClass, MatrixClass>::Execute(reg);
+			TwoQubitsHalfAdder<VectorClass, MatrixClass>::Execute(reg);
 
 			halfAdder.Execute(reg);
-			reg.ApplyGate(QuantumHalfAdder<VectorClass, MatrixClass>::cnot, qubit2, qubit1);
+			reg.ApplyGate(TwoQubitsHalfAdder<VectorClass, MatrixClass>::cnot, TwoQubitsHalfAdder<VectorClass, MatrixClass>::q2, TwoQubitsHalfAdder<VectorClass, MatrixClass>::q1);
 
 			return 0;
 		}
@@ -58,6 +58,6 @@ namespace QC {
 	protected:
 		unsigned int ci;
 
-		QuantumHalfAdder<VectorClass, MatrixClass> halfAdder;
+		TwoQubitsHalfAdder<VectorClass, MatrixClass> halfAdder;
 	};
 }

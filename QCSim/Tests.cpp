@@ -10,6 +10,7 @@
 #include "BernsteinVazirani.h"
 #include "QuantumCryptograpy.h"
 #include "DeutschJozsa.h"
+#include "QuantumAdder.h"
 
 
 #include <iostream>
@@ -412,11 +413,171 @@ bool DeutschJozsaTests()
 	return true;
 }
 
+bool quantumAdderTests()
+{
+	std::cout << "\nTesting quantum adders..." << std::endl;
+
+	std::cout << "\nTwo qubits half-adder..." << std::endl;
+	QC::QubitRegister regThreeQubits;
+	QC::TwoQubitsHalfAdder halfAdder(0, 1, 2);
+
+	// 00
+	std::cout << "Adding 0 + 0...";
+	regThreeQubits.setToBasisState(0);
+	halfAdder.Execute(regThreeQubits);
+	unsigned int res = regThreeQubits.Measure();
+	if (res & 1)
+	{
+		std::cout << " Half-adder measured 1 on the first qubit when adding 0 + 0" << std::endl;
+		return false;
+	}
+	res >>= 1;
+	if (res != 0)
+	{
+		std::cout << " Half-adder result: " << res << " for adding 0 + 0" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	// 01
+	std::cout << "Adding 0 + 1...";
+	regThreeQubits.setToBasisState(1);
+	halfAdder.Execute(regThreeQubits);
+	res = regThreeQubits.Measure();
+	if ((res & 1) == 0)
+	{
+		std::cout << " Half-adder measured 0 on the first qubit when adding 1 + 0" << std::endl;
+		return false;
+	}
+	res >>= 1;
+	if (res != 1)
+	{
+		std::cout << " Half-adder result: " << res << " for adding 1 + 0" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	// 10
+	std::cout << "Adding 1 + 0...";
+	regThreeQubits.setToBasisState(2);
+	halfAdder.Execute(regThreeQubits);
+	res = regThreeQubits.Measure();
+	if (res & 1)
+	{
+		std::cout << " Half-adder measured 1 on the first qubit when adding 0 + 1" << std::endl;
+		return false;
+	}
+	res >>= 1;
+	if (res != 1)
+	{
+		std::cout << " Half-adder result: " << res << " for adding 0 + 1" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	// 11
+	std::cout << "Adding 1 + 1...";
+	regThreeQubits.setToBasisState(3);
+	halfAdder.Execute(regThreeQubits);
+	res = regThreeQubits.Measure();
+	if ((res & 1) == 0)
+	{
+		std::cout << " Half-adder measured 0 on the first qubit when adding 1 + 1" << std::endl;
+		return false;
+	}
+	res >>= 1;
+	if (res != 2)
+	{
+		std::cout << " Half-adder result: " << res << " for adding 1 + 1" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	QC::QubitRegister regFourQubits(4);
+	QC::TwoQubitsFullAdder fullAdder(0, 1, 2, 3);
+	std::cout << "Testing full adder..." << std::endl;
+
+	// 00
+	std::cout << "Adding 0 + 0...";
+	regFourQubits.setToBasisState(0);
+	fullAdder.Execute(regFourQubits);
+	res = regFourQubits.Measure();
+	if (res & 3)
+	{
+		std::cout << " Full-adder altered the qubits when adding 0 + 0: " << (res & 3) << std::endl;
+		return false;
+	}
+	res >>= 2;
+	if (res != 0)
+	{
+		std::cout << " Full-adder result: " << res << " for adding 0 + 0" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	// 01
+	std::cout << "Adding 0 + 1...";
+	regFourQubits.setToBasisState(1);
+	fullAdder.Execute(regFourQubits);
+	res = regFourQubits.Measure();
+	if ((res & 3) != 1)
+	{
+		std::cout << " Full-adder altered the qubits when adding 1 + 0: " << (res & 3) << std::endl;
+		return false;
+	}
+	res >>= 2;
+	if (res != 1)
+	{
+		std::cout << " Full-adder result: " << res << " for adding 1 + 0" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	// 10
+	std::cout << "Adding 1 + 0...";
+	regFourQubits.setToBasisState(2);
+	fullAdder.Execute(regFourQubits);
+	res = regFourQubits.Measure();
+	if ((res & 3) != 2)
+	{
+		std::cout << " Full-adder altered the qubits when adding 0 + 1: " << (res & 3) << std::endl;
+		return false;
+	}
+	res >>= 2;
+	if (res != 1)
+	{
+		std::cout << " Full-adder result: " << res << " for adding 1 + 0" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	// 11
+	std::cout << "Adding 1 + 1...";
+	regFourQubits.setToBasisState(3);
+	fullAdder.Execute(regFourQubits);
+	res = regFourQubits.Measure();
+	if ((res & 3) != 3)
+	{
+		std::cout << " Full-adder altered the qubits when adding 1 + 1: " << (res & 3) << std::endl;
+		return false;
+	}
+	res >>= 2;
+	if (res != 2)
+	{
+		std::cout << " Full-adder result: " << res << " for adding 1 + 1" << std::endl;
+		return false;
+	}
+	std::cout << " ok" << std::endl;
+
+	return true;
+}
+
 bool tests()
 {
 	std::cout << "\nTests\n";
 
 	bool res = registerMeasurementsTests();
+	if (res) res = quantumAdderTests();
 	if (res) res = DeutschJozsaTests();
 	if (res) res = BernsteinVaziraniTests();
 	if (res) res = GroverTests();

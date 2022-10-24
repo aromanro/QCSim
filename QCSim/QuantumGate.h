@@ -373,8 +373,8 @@ namespace QC {
 		{
 		public:
 			ThreeQubitsGate()
+				: QuantumGateWithOp<MatrixClass>(MatrixClass::Identity(8, 8))
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat = MatrixClass::Identity(8, 8);
 			}
 
 			unsigned int getQubitsNumber() const override
