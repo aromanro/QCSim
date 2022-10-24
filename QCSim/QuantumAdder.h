@@ -17,7 +17,10 @@ namespace QC {
 
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
 		{
-			// TODO: check if the registry is big enough
+			const unsigned int nrQubits = reg.getNrQubits();
+			if (aux >= nrQubits || q2 >= nrQubits || q1 >= nrQubits) return 1; // error code
+			else if (q1 == q2 || q1 == aux || q2 == aux) return 2;
+
 			reg.ApplyGate(toffoli, aux, q1, q2);
 			reg.ApplyGate(cnot, q2, q1);
 
@@ -46,7 +49,13 @@ namespace QC {
 
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
 		{
-			// TODO: check if the registry is big enough
+			const unsigned int nrQubits = reg.getNrQubits();
+			if (TwoQubitsHalfAdder<VectorClass, MatrixClass>::aux >= nrQubits || TwoQubitsHalfAdder<VectorClass, MatrixClass>::q2 >= nrQubits || TwoQubitsHalfAdder<VectorClass, MatrixClass>::q1 >= nrQubits || ci >= nrQubits) 
+				return 1; // error code
+			else if (TwoQubitsHalfAdder<VectorClass, MatrixClass>::q1 == TwoQubitsHalfAdder<VectorClass, MatrixClass>::q2 || TwoQubitsHalfAdder<VectorClass, MatrixClass>::q1 == TwoQubitsHalfAdder<VectorClass, MatrixClass>::aux || 
+				TwoQubitsHalfAdder<VectorClass, MatrixClass>::q2 == TwoQubitsHalfAdder<VectorClass, MatrixClass>::aux || TwoQubitsHalfAdder<VectorClass, MatrixClass>::aux == ci || TwoQubitsHalfAdder<VectorClass, MatrixClass>::q1 == ci || TwoQubitsHalfAdder<VectorClass, MatrixClass>::q2 == ci) 
+				return 2;
+
 			TwoQubitsHalfAdder<VectorClass, MatrixClass>::Execute(reg);
 
 			halfAdder.Execute(reg);
@@ -60,4 +69,41 @@ namespace QC {
 
 		TwoQubitsHalfAdder<VectorClass, MatrixClass> halfAdder;
 	};
+
+	// could be made more general, with N1 and N2 qubits for the two added numbers and even specifying the qubits location in the registry
+	// but this is an example and doing that would make the code too complex without adding much
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class NQubitsAdderAlgorithm : public QuantumAlgorithm<VectorClass, MatrixClass>
+	{
+	public:
+		NQubitsAdderAlgorithm(unsigned int N = 3, int addseed = 0)
+			: QuantumAlgorithm<VectorClass, MatrixClass>(3*N + 1, addseed) // the qubits for the two N inputs, N outputs and one for carry
+		{
+			QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+		}
+
+		unsigned int Execute() override
+		{
+			const unsigned int nrQubits = QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits();
+			assert(nrQubits >= 4);
+
+			const unsigned int nrQubitsNumber = (nrQubits - 1) / 3;
+
+			unsigned int n1q = 0;
+			unsigned int n2q = nrQubitsNumber;
+			unsigned int ci = 2 * nrQubitsNumber;
+
+			while (n1q < nrQubitsNumber)
+			{
+				QC::TwoQubitsFullAdder fullAdder(n1q, n2q, ci, ci + 1);
+				fullAdder.Execute(QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+
+				++n1q;
+				++n2q;
+				++ci;
+			}
+
+			return QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+		}
+	};
+
 }

@@ -569,6 +569,38 @@ bool quantumAdderTests()
 	}
 	std::cout << " ok" << std::endl;
 
+	std::cout << "\nAdding 3-qubit values..." << std::endl;
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dist_nr(0, 7);
+
+	QC::NQubitsAdderAlgorithm threeQubitsAdder;
+
+	for (int i = 0; i < 10; ++i)
+	{
+		const unsigned int n1 = dist_nr(gen);
+		unsigned int n2 = dist_nr(gen);
+		std::cout << "Computing " << n1 << "+" << n2 << "...";
+
+		const unsigned int expected = n1 + n2;
+		n2 <<= 3;
+		n2 |= n1;
+		threeQubitsAdder.setToBasisState(n2);
+		unsigned int res = threeQubitsAdder.Execute();
+		if ((res & 0x3f) != n2)
+		{
+			std::cout << " Adder altered the qubits, the input qubits are now: " << (res & 0x3f) << std::endl;
+			return false;
+		}
+		res >>= 6;
+		if (res != expected)
+		{
+			std::cout << " Adder result wrong: " << res << std::endl;
+			return false;
+		}
+		std::cout << " ok" << std::endl;
+	}
+
 	return true;
 }
 

@@ -9,6 +9,7 @@ Work in progress, but the following seem to work:
 *   Deutsch-Jozsa algorithm
 *   Shor's algorithm
 *   Bernstein–Vazirani algorithm
+*   Quantum adder (half-adder & full-adder for 1-qubits and full adder for two N-qubit numbers)
 *   Quantum teleportation
 *   Superdense coding
 *   Quantum cryptography: BB84 protocol
