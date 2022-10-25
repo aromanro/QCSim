@@ -49,6 +49,9 @@ namespace QuantumSimulation {
 	};
 
 	// you may decompose a Hamiltonian in a sum of such terms with real coeffcients
+	// for details on fermionic Hamiltonians see Jordan-Wigner transformation in 3.1 in "Simulation of Electronic Structure Hamiltonians Using Quantum Computers" by James D. Whitfield, Jacob Biamonte, and Alan Aspuru-Guzik
+	// https://arxiv.org/abs/1001.3855 
+	// or this page: https://learn.microsoft.com/en-us/azure/quantum/user-guide/libraries/chemistry/concepts/jordan-wigner
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PauliStringSimulation :
 		public PauliZStringSimulation<VectorClass, MatrixClass>
@@ -150,14 +153,24 @@ namespace QuantumSimulation {
 			return 0; // don't measure for this one, must be done explicitely, needed to be able to check the register first
 		}
 
-		void SetSimulationTime(double t)
+		void setSimulationTime(double t)
 		{
 			simTime = t;
 		}
 
-		void SetNrSteps(unsigned int nrSteps)
+		double getSimulationTime() const
+		{
+			return simTime;
+		}
+
+		void setNrSteps(unsigned int nrSteps)
 		{
 			steps = nrSteps;
+		}
+
+		unsigned int getNrSteps() const
+		{
+			return steps;
 		}
 
 		// this is here only for testing purposes
