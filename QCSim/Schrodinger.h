@@ -97,11 +97,11 @@ namespace QuantumSimulation {
 
 			// they are diagonal, the potential is in position basis, the kinetic one is in k-basis, where it's switched using the quantum fourier transform
 
-			int halfInterval = nrStates / 2;
+			const double halfX = deltax * 0.5 * (nrStates - 1);
 
 			for (int i = 0; i < nrStates; ++i)
 			{
-				const double x = deltax * (i - halfInterval);
+				const double x = deltax * i - halfX;
 				kineticOp(i) = std::exp(std::complex<double>(0, -0.5) * x * x * deltat);
 				potentialOp(i) = std::exp(std::complex<double>(0, -0.5) * potential[i] * deltat); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
 			}
