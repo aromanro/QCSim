@@ -52,7 +52,7 @@ namespace QuantumSimulation {
 			return potential[pos];
 		}
 
-		void setPotentiak(unsigned int pos, double val)
+		void setPotential(unsigned int pos, double val)
 		{
 			if (pos >= potential.size()) return;
 
@@ -77,6 +77,32 @@ namespace QuantumSimulation {
 		void setNrSteps(unsigned int nrSteps)
 		{
 			steps = nrSteps;
+		}
+
+		// use it to set a square barrier (positive val) or well (negative val) in the middle
+		void setConstantPotentialInTheMiddle(double val, unsigned int halfwidth)
+		{
+			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int halfStates = nrStates / 2;
+
+			for (int i = std::max(1, halfStates - halfwidth); i < std::min(nrStates - 1, halfStates + halfwidth); ++i)
+				setPotential(i, val);
+		}
+
+		// set a gaussian wavefunction in the register, k makes it 'move'
+		void setGaussian(unsigned int pos, double stdev, double k)
+		{
+			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const double a = 1. / (stdev * sqrt(2. * M_PI));
+
+			for (int i = 1; i < nrStates - 1; ++i) // the values at the end should stay zero
+			{
+				const double e = static_cast<double>(i - pos) / stdev;
+				const double val = a * exp(std::complex<double>(-0.5 * e * e, k * i);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
+			}
+
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
 		}
 
 	protected:
@@ -118,6 +144,15 @@ namespace QuantumSimulation {
 			// with a single operator is simple, it would be quite annoying with a lot of quantum gates
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(kineticOp);
 		}
+
+		//*****************************************************************************************************************************************************
+		// Code for finite differences solver - to be used to compare the results from the 'quantum computation'
+		//*****************************************************************************************************************************************************
+
+
+
+
+		//*****************************************************************************************************************************************************
 
 		double simTime;
 		unsigned int steps;

@@ -9,6 +9,9 @@
 #include <complex>
 #include <chrono>
 
+#include <iostream>
+#include <fstream>
+
 #include "QuantumGate.h"
 
 // Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
@@ -247,6 +250,28 @@ namespace QC {
 			const std::complex<double> p = (registerStorage.adjoint() * state)(0);
 
 			return (conj(p) * p).real();
+		}
+
+		// allows saving it into a file to look at the data
+		// for example to check the results of a quantum simulation
+		bool writeToFile(const std::string& name, bool amplitude = true, bool append = false)
+		{
+			try {
+				std::ofstream thefile;
+				thefile.open(name, std::ios::out | (append ? std::ios::app : std::ios::trunc));
+
+				if (!thefile.is_open()) return false;
+
+				if (append) thefile << std::endl << std::endl;
+
+				for (unsigned int i = 0; i < NrBasisStates; ++i)
+					thefile << i << "\t" << (amplitude ? std::abs(registerStorage(i)) : registerStorage(i)) << std::endl;
+
+				return true;
+			}
+			catch (...) {};
+
+			return false;
 		}
 
 	protected:
