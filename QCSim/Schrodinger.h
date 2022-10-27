@@ -98,7 +98,7 @@ namespace QuantumSimulation {
 			for (int i = 1; i < nrStates - 1; ++i) // the values at the end should stay zero
 			{
 				const double e = static_cast<double>(i - pos) / stdev;
-				const double val = a * exp(std::complex<double>(-0.5 * e * e, k * i);
+				const double val = a * exp(std::complex<double>(-0.5 * e * e, k * deltax * i);
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 			}
 
