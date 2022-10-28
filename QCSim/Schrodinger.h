@@ -95,7 +95,7 @@ namespace QuantumSimulation {
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double a = 1. / (stdev * sqrt(2. * M_PI));
 
-			for (int i = 1; i < nrStates - 1; ++i) // the values at the end should stay zero
+			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
 				const double e = static_cast<double>(i - pos) / stdev;
 				const double val = a * exp(std::complex<double>(-0.5 * e * e, k * deltax * i);
@@ -104,6 +104,39 @@ namespace QuantumSimulation {
 
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
 		}
+
+		//*****************************************************************************************************************************************************
+		// Code for finite differences solver - to be used to compare the results from the 'quantum computation'
+		//*****************************************************************************************************************************************************
+
+		// for how it could be implemented see: "Computer-Generated Motion Pictures of One-Dimensional Quantum-Mechanical Transmission and Reflection Phenomena" by Abraham Goldberg and Harry M. Schey
+		// https://aapt.scitation.org/doi/10.1119/1.1973991
+
+		// the problem with some naive application of finite differences is that the resulting numerical time evolution is not unitary anymore
+		// so it needs some special care... there will be some factors of 2 different between that paper and this code, because they consider 2 * m = 1, while I use m = 1 so 1/2 for kinetical term does not dissapear
+
+		void solveWithFiniteDifferences()
+		{
+			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const double deltat = simTime / steps;
+			const double eps2 = deltax * deltax;
+			const double lambda = 2. * eps2 / deltat;
+			std::vector<double> e(nrStates, 0);
+
+			// not time dependent so it can be computed once at the beginning
+			e[1] = 1. - std::complex<double>(0, 1) * lambda + eps2 * potential[1];
+			for (unsigned int i = 2; i < nrStates - 1; ++i)
+				e[i] = 1. - std::complex<double>(0, 1) * lambda + eps2 * potential[i] - 1. / (2. * e[i - 1]);
+
+			for (unsigned int step = 0; step < steps; ++step)
+			{
+
+			}
+		}
+
+
+
+		//*****************************************************************************************************************************************************
 
 	protected:
 		void Init(double deltat)
