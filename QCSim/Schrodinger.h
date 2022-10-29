@@ -122,6 +122,7 @@ namespace QuantumSimulation {
 			const double eps2 = deltax * deltax;
 			const double lambda = 2. * eps2 / deltat;
 			std::vector<double> e(nrStates, 0);
+			std::vector<double> f(nrStates, 0);
 
 			// not time dependent so it can be computed once at the beginning
 			e[1] = 1. - std::complex<double>(0, 1) * lambda + eps2 * potential[1];
@@ -130,7 +131,17 @@ namespace QuantumSimulation {
 
 			for (unsigned int step = 0; step < steps; ++step)
 			{
+				// compute the needed values first
+				for (unsigned int i = 2; i < nrStates - 1; ++i)
+				{
 
+				}
+
+				// now compute the wavefunction
+				for (unsigned int i = nrStates - 2; i > 0; --i)
+				{
+
+				}
 			}
 		}
 
