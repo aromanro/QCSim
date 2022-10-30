@@ -123,6 +123,7 @@ namespace QuantumSimulation {
 			const double lambda = 2. * eps2 / deltat;
 			std::vector<double> e(nrStates, 0);
 			std::vector<double> f(nrStates, 0);
+			std::vector<double> omega(nrStates, 0);
 
 			// not time dependent so it can be computed once at the beginning
 			e[1] = 1. - std::complex<double>(0, 1) * lambda + eps2 * potential[1];
