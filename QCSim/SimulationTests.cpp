@@ -23,9 +23,9 @@ void PrintStates(const Eigen::VectorXcd& regVals, const Eigen::VectorXcd& regVal
 	PrintState(regVals, nrBasisStates);
 }
 
-bool SimulationTests()
+bool PauliSimultationTests()
 {
-	std::cout << "\nTesting quantum simulations..." << std::endl;
+	std::cout << "\nTesting Pauli strings hamiltonian simulations..." << std::endl;
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
@@ -101,4 +101,19 @@ bool SimulationTests()
 	}
 
 	return true;
+}
+
+bool SchrodingerSimulationTests()
+{
+	return true;
+}
+
+bool SimulationTests()
+{
+	std::cout << "\nTesting quantum simulations..." << std::endl;
+
+	bool res = PauliSimultationTests();
+	if (res) res = SchrodingerSimulationTests();
+
+	return res;
 }
