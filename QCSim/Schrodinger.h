@@ -121,32 +121,42 @@ namespace QuantumSimulation {
 			const double deltat = simTime / steps;
 			const double eps2 = deltax * deltax;
 			const double lambda = 2. * eps2 / deltat;
-			std::vector<double> e(nrStates, 0);
-			std::vector<double> f(nrStates, 0);
-			std::vector<double> omega(nrStates, 0);
+			const std::complex<double> ilambda = std::complex<double>(0, 1) * lambda;
+			const std::complex<double> oneplusilambda = std::complex<double>(1., 0.) + ilambda;
+			const std::complex<double> oneminusilambda = std::complex<double>(1., 0.) - ilambda;
+
+			std::vector<std::complex<double>> e(nrStates, 0);
+			std::vector<std::complex<double>> f(nrStates, 0);
+			std::vector<std::complex<double>> omegaterm(nrStates, 0);
 
 			// not time dependent so it can be computed once at the beginning
-			e[1] = 1. - std::complex<double>(0, 1) * lambda + eps2 * potential[1];
+			e[1] = oneminusilambda + eps2 * potential[1];
 			for (unsigned int i = 2; i < nrStates - 1; ++i)
-				e[i] = 1. - std::complex<double>(0, 1) * lambda + eps2 * potential[i] - 1. / (2. * e[i - 1]);
+			{
+				const double eps2pot = eps2 * potential[i];
+				e[i] = oneminusilambda + eps2pot - 1. / (2. * e[i - 1]);
+				omegaterm[0] = 2. * (oneplusilambda + eps2pot);
+			}
 
 			for (unsigned int step = 0; step < steps; ++step)
 			{
 				// compute the needed values first
+				f[1] = omegaterm[1] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(1) - QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(2);
 				for (unsigned int i = 2; i < nrStates - 1; ++i)
 				{
-
+					const std::complex<double> omega = omegaterm[i] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i) - (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i + 1) + QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i - 1));
+					f[i] = omega + f[i - 1] / e[i - 1];
 				}
 
 				// now compute the wavefunction
+				// the limits will stay at zero
 				for (unsigned int i = nrStates - 2; i > 0; --i)
 				{
-
+					const std::complex<double> val = (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i + 1) - f[i]) / e[i];
+					QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 				}
 			}
 		}
-
-
 
 		//*****************************************************************************************************************************************************
 
