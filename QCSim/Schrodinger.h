@@ -18,7 +18,7 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		SchrodingerSimulation(unsigned int N = 8, double t = 0.01, double dx = 0.01, unsigned int nrSteps = 100, bool addSeed = false)
+		SchrodingerSimulation(unsigned int N = 8, double t = 1, double dx = 0.1, unsigned int nrSteps = 100, bool addSeed = false)
 			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), simTime(t), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
 		{
 			potential.resize(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates(), 0.);
@@ -99,7 +99,7 @@ namespace QuantumSimulation {
 			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
 				const double e = (static_cast<double>(i) - static_cast<double>(pos)) / stdev;
-				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, k * deltax * i));
+				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, -k * deltax * i));
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 			}
 
@@ -184,8 +184,8 @@ namespace QuantumSimulation {
 			for (unsigned int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
-				kineticOp(i) = std::exp(std::complex<double>(0, -0.5) * x * x * deltat);
-				potentialOp(i) = std::exp(std::complex<double>(0, -0.5) * potential[i] * deltat); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
+				kineticOp(i, i) = std::exp(std::complex<double>(0, -0.5) * x * x * deltat);
+				potentialOp(i, i) = std::exp(std::complex<double>(0, -0.5) * potential[i] * deltat); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
 			}
 		}
 
