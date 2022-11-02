@@ -18,8 +18,8 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		SchrodingerSimulation(unsigned int N = 5, double t = 0, unsigned int nrSteps = 1, bool addSeed = false)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), simTime(t), steps(nrSteps), deltax(0.01), fourier(N, 0, N - 1)
+		SchrodingerSimulation(unsigned int N = 8, double t = 0.01, double dx = 0.01, unsigned int nrSteps = 100, bool addSeed = false)
+			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), simTime(t), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
 		{
 			potential.resize(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates(), 0.);
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0); // useless if the initialization of the start state is done, but better be safe...
@@ -38,7 +38,7 @@ namespace QuantumSimulation {
 				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 				ApplyKineticOperatorEvolution();
 				fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-				ApplyHalfPotentialOperator();
+				ApplyHalfPotentialOperatorEvolution();
 			}
 
 			return 0;
@@ -85,7 +85,7 @@ namespace QuantumSimulation {
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const int halfStates = nrStates / 2;
 
-			for (int i = std::max(1, halfStates - halfwidth); i < std::min(nrStates - 1, halfStates + halfwidth); ++i)
+			for (int i = std::max<int>(1, halfStates - halfwidth); i < std::min<int>(nrStates - 1, halfStates + halfwidth); ++i)
 				setPotential(i, val);
 		}
 
@@ -95,10 +95,11 @@ namespace QuantumSimulation {
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double a = 1. / (stdev * sqrt(2. * M_PI));
 
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
 			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
-				const double e = static_cast<double>(i - pos) / stdev;
-				const double val = a * exp(std::complex<double>(-0.5 * e * e, k * deltax * i);
+				const double e = (static_cast<double>(i) - static_cast<double>(pos)) / stdev;
+				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, k * deltax * i));
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 			}
 
@@ -117,7 +118,7 @@ namespace QuantumSimulation {
 
 		void solveWithFiniteDifferences()
 		{
-			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double deltat = simTime / steps;
 			const double eps2 = deltax * deltax;
 			const double lambda = 2. * eps2 / deltat;
@@ -180,7 +181,7 @@ namespace QuantumSimulation {
 
 			const double halfX = deltax * 0.5 * (nrStates - 1);
 
-			for (int i = 0; i < nrStates; ++i)
+			for (unsigned int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
 				kineticOp(i) = std::exp(std::complex<double>(0, -0.5) * x * x * deltat);

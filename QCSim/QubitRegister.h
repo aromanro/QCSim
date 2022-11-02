@@ -254,7 +254,7 @@ namespace QC {
 
 		// allows saving it into a file to look at the data
 		// for example to check the results of a quantum simulation
-		bool writeToFile(const std::string& name, bool amplitude = true, bool append = false)
+		bool writeToFile(const std::string& name, bool amplitude = true, bool append = false) const
 		{
 			try {
 				std::ofstream thefile;
@@ -265,7 +265,12 @@ namespace QC {
 				if (append) thefile << std::endl << std::endl;
 
 				for (unsigned int i = 0; i < NrBasisStates; ++i)
-					thefile << i << "\t" << (amplitude ? std::abs(registerStorage(i)) : registerStorage(i)) << std::endl;
+				{
+					thefile << i << "\t"; 
+					if (amplitude) thefile << std::abs(registerStorage(i));
+					else thefile << registerStorage(i);
+					thefile << std::endl;
+				}
 
 				return true;
 			}

@@ -2,6 +2,7 @@
 
 #include "QubitRegister.h"
 #include "PauliStringSimulation.h"
+#include "Schrodinger.h"
 
 #include <iostream>
 #include <map>
@@ -105,6 +106,30 @@ bool PauliSimultationTests()
 
 bool SchrodingerSimulationTests()
 {
+	/*
+	QuantumSimulation::SchrodingerSimulation schrSim;
+	QuantumSimulation::SchrodingerSimulation finDifSim;
+
+	const unsigned int nrStates = schrSim.getNrBasisStates();
+
+	const unsigned int halfWidth = 5;
+
+	schrSim.setConstantPotentialInTheMiddle(0.5, 5);
+	finDifSim.setConstantPotentialInTheMiddle(0.5, 5);
+
+	schrSim.setGaussian(nrStates / 4, 3, 0.1);
+	finDifSim.setGaussian(nrStates / 4, 3, 0.1);
+
+	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_start.dat");
+	finDifSim.getRegister().writeToFile("c:\\temp\\findif_start.dat");
+
+	schrSim.Execute();
+	finDifSim.solveWithFiniteDifferences();
+
+	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_end.dat");
+	finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
+	*/
+
 	return true;
 }
 
