@@ -142,15 +142,16 @@ bool SchrodingerSimulationTests()
 		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
 
 		std::cout << "Fidelity: " << fidelity << std::endl;
+
+		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_end.dat");
+		finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
+
 		if (fidelity < 0.9) 
 		{
 			std::cout << "\nFidelity too low, failure!" << std::endl;
 			return false;
 		}
 	}
-
-	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_end.dat");
-	finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
 	*/
 	
 	return true;

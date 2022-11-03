@@ -100,7 +100,7 @@ namespace QuantumSimulation {
 			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
 				const double e = (static_cast<double>(i) - static_cast<double>(pos)) / stdev;
-				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, k * deltax * i));
+				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, -k * deltax * i));
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 			}
 
@@ -121,24 +121,27 @@ namespace QuantumSimulation {
 		{
 			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double deltat = simTime / steps;
-			const double eps2 = deltax * deltax;
+			const double eps2 =  2. * deltax * deltax; // this is the easiest change - multiplying by 2 - to preserve the formulae 
 			// TODO: Apparently I missed a factor of 2 somewhere, I need to redo the formulae...
 			const double lambda = 2. * eps2 / deltat;
-			const std::complex<double> ilambda = std::complex<double>(0, 1) * lambda;
-			const std::complex<double> oneplusilambda = std::complex<double>(1., 0.) + ilambda;
-			const std::complex<double> oneminusilambda = std::complex<double>(1., 0.) - ilambda;
+			const std::complex<double> ilambda = std::complex<double>(0, lambda);
+			const std::complex<double> twoplusilambda = 2. + ilambda;
+			const std::complex<double> twominusilambda = 2. - ilambda;
 
 			std::vector<std::complex<double>> e(nrStates, 0);
 			std::vector<std::complex<double>> f(nrStates, 0);
 			std::vector<std::complex<double>> omegaterm(nrStates, 0);
 
 			// not time dependent so it can be computed once at the beginning
-			e[1] = 2. * (oneminusilambda + eps2 * potential[1]);
+			double eps2pot = eps2 * potential[1];
+			e[1] = twominusilambda + eps2pot;
+			omegaterm[1] = twoplusilambda + eps2pot;
 			for (unsigned int i = 2; i < nrStates - 1; ++i)
 			{
-				const double eps2pot = eps2 * potential[i];
-				e[i] = 2. * (oneminusilambda + eps2pot) - 1. / e[i - 1];
-				omegaterm[i] = 2. * (oneplusilambda + eps2pot);
+				eps2pot = eps2 * potential[i];
+				// see eq (17)
+				e[i] = twominusilambda + eps2pot - 1. / e[i - 1];
+				omegaterm[i] = twoplusilambda + eps2pot; // see the def of omega, above eq (14)
 			}
 
 			for (unsigned int step = 0; step < steps; ++step)
@@ -147,6 +150,7 @@ namespace QuantumSimulation {
 				f[1] = omegaterm[1] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(1) - QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(2);
 				for (unsigned int i = 2; i < nrStates - 1; ++i)
 				{
+					// see eq (18)
 					const std::complex<double> omega = omegaterm[i] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i) - (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i + 1) + QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i - 1));
 					f[i] = omega + f[i - 1] / e[i - 1];
 				}
@@ -155,6 +159,7 @@ namespace QuantumSimulation {
 				// the limits will stay at zero
 				for (unsigned int i = nrStates - 2; i > 0; --i)
 				{
+					// see eq (20)
 					const std::complex<double> val = (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i + 1) - f[i]) / e[i];
 					QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 				}
@@ -181,12 +186,12 @@ namespace QuantumSimulation {
 
 			// they are diagonal, the potential is in position basis, the kinetic one is in k-basis, where it's switched using the quantum fourier transform
 
-			const double halfX = deltax * 0.5 * (nrStates - 1);
+			const double halfX = deltax * 0.5 * (nrStates - 1.);
 
 			for (unsigned int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
-				kineticOp(i, i) = std::exp(std::complex<double>(0, 0.5) * x * x * deltat);
+				kineticOp(i, i) = std::exp(std::complex<double>(0, -0.5) * x * x * deltat);
 				potentialOp(i, i) = std::exp(std::complex<double>(0, -0.5) * potential[i] * deltat); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
 			}
 		}
@@ -202,15 +207,6 @@ namespace QuantumSimulation {
 			// with a single operator is simple, it would be quite annoying with a lot of quantum gates
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(kineticOp);
 		}
-
-		//*****************************************************************************************************************************************************
-		// Code for finite differences solver - to be used to compare the results from the 'quantum computation'
-		//*****************************************************************************************************************************************************
-
-
-
-
-		//*****************************************************************************************************************************************************
 
 		double simTime;
 		unsigned int steps;
