@@ -18,7 +18,7 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		SchrodingerSimulation(unsigned int N = 8, double t = 1, double dx = 0.1, unsigned int nrSteps = 100, bool addSeed = false)
+		SchrodingerSimulation(unsigned int N = 8, double t = 0.5, double dx = 0.1, unsigned int nrSteps = 50, bool addSeed = false)
 			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), simTime(t), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
 		{
 			potential.resize(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates(), 0.);
@@ -92,14 +92,15 @@ namespace QuantumSimulation {
 		// set a gaussian wavefunction in the register, k makes it 'move'
 		void setGaussian(unsigned int pos, double stdev, double k)
 		{
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
+
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double a = 1. / (stdev * sqrt(2. * M_PI));
 
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
 			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
 				const double e = (static_cast<double>(i) - static_cast<double>(pos)) / stdev;
-				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, -k * deltax * i));
+				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, k * deltax * i));
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 			}
 
@@ -121,6 +122,7 @@ namespace QuantumSimulation {
 			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double deltat = simTime / steps;
 			const double eps2 = deltax * deltax;
+			// TODO: Apparently I missed a factor of 2 somewhere, I need to redo the formulae...
 			const double lambda = 2. * eps2 / deltat;
 			const std::complex<double> ilambda = std::complex<double>(0, 1) * lambda;
 			const std::complex<double> oneplusilambda = std::complex<double>(1., 0.) + ilambda;
@@ -131,12 +133,12 @@ namespace QuantumSimulation {
 			std::vector<std::complex<double>> omegaterm(nrStates, 0);
 
 			// not time dependent so it can be computed once at the beginning
-			e[1] = oneminusilambda + eps2 * potential[1];
+			e[1] = 2. * (oneminusilambda + eps2 * potential[1]);
 			for (unsigned int i = 2; i < nrStates - 1; ++i)
 			{
 				const double eps2pot = eps2 * potential[i];
-				e[i] = oneminusilambda + eps2pot - 1. / (2. * e[i - 1]);
-				omegaterm[0] = 2. * (oneplusilambda + eps2pot);
+				e[i] = 2. * (oneminusilambda + eps2pot) - 1. / e[i - 1];
+				omegaterm[i] = 2. * (oneplusilambda + eps2pot);
 			}
 
 			for (unsigned int step = 0; step < steps; ++step)
@@ -184,7 +186,7 @@ namespace QuantumSimulation {
 			for (unsigned int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
-				kineticOp(i, i) = std::exp(std::complex<double>(0, -0.5) * x * x * deltat);
+				kineticOp(i, i) = std::exp(std::complex<double>(0, 0.5) * x * x * deltat);
 				potentialOp(i, i) = std::exp(std::complex<double>(0, -0.5) * potential[i] * deltat); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
 			}
 		}

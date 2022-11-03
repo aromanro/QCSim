@@ -106,29 +106,53 @@ bool PauliSimultationTests()
 
 bool SchrodingerSimulationTests()
 {
+	std::cout << "\nTesting Schrodinger simulations..." << std::endl;
+
 	/*
 	QuantumSimulation::SchrodingerSimulation schrSim;
 	QuantumSimulation::SchrodingerSimulation finDifSim;
 
 	const unsigned int nrStates = schrSim.getNrBasisStates();
 
-	const unsigned int halfWidth = 5;
+	const unsigned int halfPotWidth = 20;
+	const double potential = 40;
 
-	schrSim.setConstantPotentialInTheMiddle(0.5, 15);
-	finDifSim.setConstantPotentialInTheMiddle(0.5, 15);
+	const double k = 10.;
 
-	schrSim.setGaussian(nrStates / 4, 3, 10.);
-	finDifSim.setGaussian(nrStates / 4, 3, 10.);
+	const unsigned int startPos = nrStates / 4;
+	const double sigma = 3;
+
+	schrSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
+	finDifSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
+
+	schrSim.setGaussian(startPos, sigma, k);
+	finDifSim.setGaussian(startPos, sigma, k);
 
 	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_start.dat");
 	finDifSim.getRegister().writeToFile("c:\\temp\\findif_start.dat");
 
-	schrSim.Execute();
-	finDifSim.solveWithFiniteDifferences();
+	for (unsigned int i = 0; i < 6; ++i)
+	{
+		schrSim.Execute();
+		finDifSim.solveWithFiniteDifferences();
+
+		schrSim.AdjustPhaseAndNormalize();
+		finDifSim.AdjustPhaseAndNormalize();
+
+		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
+
+		std::cout << "Fidelity: " << fidelity << std::endl;
+		if (fidelity < 0.9) 
+		{
+			std::cout << "\nFidelity too low, failure!" << std::endl;
+			return false;
+		}
+	}
 
 	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_end.dat");
 	finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
 	*/
+	
 	return true;
 }
 
