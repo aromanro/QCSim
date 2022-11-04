@@ -130,7 +130,7 @@ namespace QuantumSimulation {
 		{
 			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double deltat = simTime / steps;
-			const double eps2 =  2. * deltax * deltax; // the easiest way to add 1/2. for kinetic term, just multiply with 2 here
+			const double eps2 =  2. * deltax * deltax; // the easiest way to add 1/2. for kinetic term, just having multiplied with 2 here
 			const double lambda = 2. * eps2 / deltat;
 			const std::complex<double> ilambda = std::complex<double>(0, lambda);
 			const std::complex<double> twoplusilambda = 2. + ilambda; 
@@ -155,7 +155,7 @@ namespace QuantumSimulation {
 			for (unsigned int step = 0; step < steps; ++step)
 			{
 				// compute the needed values first
-				f[1] = omegaterm[1] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(1) + QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(2);
+				f[1] = omegaterm[1] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(1) - QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(2);
 				for (unsigned int i = 2; i < nrStates - 1; ++i)
 				{
 					// see eq (18)
@@ -200,7 +200,7 @@ namespace QuantumSimulation {
 			{
 				const double x = deltax * i - halfX;
 				//const double x = deltax * i;
-				kineticOp(i, i) = std::exp(std::complex<double>(0, -0.5 * x * x * deltat));
+				kineticOp(i, i) = std::exp(std::complex<double>(0, 0.5 * x * x * deltat));
 				potentialOp(i, i) = std::exp(std::complex<double>(0, -0.5 * potential[i] * deltat)); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
 			}
 		}

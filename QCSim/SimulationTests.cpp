@@ -108,19 +108,26 @@ bool SchrodingerSimulationTests()
 {
 	std::cout << "\nTesting Schrodinger simulations..." << std::endl;
 
-	/*
-	QuantumSimulation::SchrodingerSimulation schrSim;
-	QuantumSimulation::SchrodingerSimulation finDifSim;
+	const double time = 0.2;
+	const double dx = 0.1;
+	const int nrSteps = 100;
+
+	QuantumSimulation::SchrodingerSimulation schrSim(9, time, dx, nrSteps);
+	QuantumSimulation::SchrodingerSimulation finDifSim(9, time, dx, nrSteps);
 
 	const unsigned int nrStates = schrSim.getNrBasisStates();
+	const double len = dx * (nrStates - 1);
 
-	const unsigned int halfPotWidth = 20;
-	const double potential = 40;
+	const unsigned int halfPotWidth = 25;
+	
 
-	const double k = 10.;
+	double k = nrStates * dx / time;
+	k *= 4;
+
+	const double potential = 60;
 
 	const unsigned int startPos = nrStates / 4;
-	const double sigma = 3;
+	const double sigma = 25;
 
 	schrSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
 	finDifSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
@@ -131,7 +138,7 @@ bool SchrodingerSimulationTests()
 	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_start.dat");
 	finDifSim.getRegister().writeToFile("c:\\temp\\findif_start.dat");
 
-	for (unsigned int i = 0; i < 6; ++i)
+	for (unsigned int i = 0; i < 15; ++i)
 	{
 		schrSim.Execute();
 		finDifSim.solveWithFiniteDifferences();
@@ -141,18 +148,17 @@ bool SchrodingerSimulationTests()
 
 		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
 
-		std::cout << "Fidelity: " << fidelity << std::endl;
+		std::cout << "Part " << i << " Fidelity: " << fidelity << std::endl;
 
 		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_end.dat");
 		finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
 
-		if (fidelity < 0.9) 
+		if (fidelity < 0.5) 
 		{
 			std::cout << "\nFidelity too low, failure!" << std::endl;
 			return false;
 		}
 	}
-	*/
 	
 	return true;
 }
