@@ -35,9 +35,9 @@ namespace QuantumSimulation {
 			for (unsigned int step = 0; step < steps; ++step)
 			{
 				ApplyHalfPotentialOperatorEvolution();
-				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-				ApplyKineticOperatorEvolution();
 				fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+				ApplyKineticOperatorEvolution();
+				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 				ApplyHalfPotentialOperatorEvolution();
 			}
 
@@ -95,12 +95,21 @@ namespace QuantumSimulation {
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
 
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const double halfX = 0.5 * deltax * (nrStates - 1.);
+			
+			stdev *= deltax;
 			const double a = 1. / (stdev * sqrt(2. * M_PI));
+			const double m = deltax * pos - halfX;
 
 			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
-				const double e = (static_cast<double>(i) - static_cast<double>(pos)) / stdev;
-				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, -k * deltax * i));
+				const double x =  deltax * i - halfX;
+				const double e = (x - m) / stdev;
+				//const double e = (i - static_cast<double>(pos)) / stdev;
+
+				// momentum operator is -i d/dx
+				// so it brings down ik to obtain k 
+				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, k * x));
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
 			}
 
@@ -121,11 +130,10 @@ namespace QuantumSimulation {
 		{
 			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double deltat = simTime / steps;
-			const double eps2 =  2. * deltax * deltax; // this is the easiest change - multiplying by 2 - to preserve the formulae 
-			// TODO: Apparently I missed a factor of 2 somewhere, I need to redo the formulae...
+			const double eps2 =  2. * deltax * deltax; // the easiest way to add 1/2. for kinetic term, just multiply with 2 here
 			const double lambda = 2. * eps2 / deltat;
 			const std::complex<double> ilambda = std::complex<double>(0, lambda);
-			const std::complex<double> twoplusilambda = 2. + ilambda;
+			const std::complex<double> twoplusilambda = 2. + ilambda; 
 			const std::complex<double> twominusilambda = 2. - ilambda;
 
 			std::vector<std::complex<double>> e(nrStates, 0);
@@ -147,7 +155,7 @@ namespace QuantumSimulation {
 			for (unsigned int step = 0; step < steps; ++step)
 			{
 				// compute the needed values first
-				f[1] = omegaterm[1] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(1) - QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(2);
+				f[1] = omegaterm[1] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(1) + QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(2);
 				for (unsigned int i = 2; i < nrStates - 1; ++i)
 				{
 					// see eq (18)
@@ -186,13 +194,14 @@ namespace QuantumSimulation {
 
 			// they are diagonal, the potential is in position basis, the kinetic one is in k-basis, where it's switched using the quantum fourier transform
 
-			const double halfX = deltax * 0.5 * (nrStates - 1.);
+			const double halfX = 0.5 * deltax * (nrStates - 1.);
 
 			for (unsigned int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
-				kineticOp(i, i) = std::exp(std::complex<double>(0, -0.5) * x * x * deltat);
-				potentialOp(i, i) = std::exp(std::complex<double>(0, -0.5) * potential[i] * deltat); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
+				//const double x = deltax * i;
+				kineticOp(i, i) = std::exp(std::complex<double>(0, -0.5 * x * x * deltat));
+				potentialOp(i, i) = std::exp(std::complex<double>(0, -0.5 * potential[i] * deltat)); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
 			}
 		}
 

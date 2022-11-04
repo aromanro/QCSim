@@ -28,12 +28,10 @@ namespace QC {
 		void QFT(QubitRegister<VectorClass, MatrixClass>& reg) const
 		{
 			QFT(reg, sQubit, eQubit);
-			Swap(reg, sQubit, eQubit);
 		}
 
 		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg) const
 		{
-			Swap(reg, sQubit, eQubit);
 			IQFT(reg, sQubit, eQubit);
 		}
 
@@ -51,55 +49,63 @@ namespace QC {
 			}
 		}
 
+		// the sign convention is not as in the Quantum Computation and Quantum Information book
+		// also because of the qubits ordering, the circuit is 'mirrored' (they have the binary representation as j1 j2 j3 ... jn, I have it as jn...j1)
+
 		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq) const
 		{
-			reg.ApplyGate(hadamard, eq);
-			
 			Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
+
+			reg.ApplyGate(hadamard, eq);
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
 				const unsigned int curQubitm1 = curQubit - 1;
-				int div = (int)pow(2, eq - curQubit + 1);
-				double phase = M_PI / div;
-				for (unsigned int ctrlq = eq; ctrlq >= curQubit; --ctrlq)
-				{
-					phaseShift.SetPhaseShift(phase);
-					reg.ApplyGate(phaseShift, ctrlq, curQubitm1);
-
-					phase *= 2;
-				}
-
-				reg.ApplyGate(hadamard, curQubitm1);
-			}
-		}
-
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq) const
-		{
-			for (unsigned int curQubit = sq; curQubit < eq; ++curQubit)
-			{
-				reg.ApplyGate(hadamard, curQubit);
-
-				Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
-
-				double phase = M_PI_2;
-				for (unsigned int ctrlq = curQubit + 1; ctrlq <= eq; ++ctrlq)
+				double phase = -M_PI_2;
+				for (int ctrlq = curQubitm1; ctrlq >= static_cast<int>(sq); --ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
 					reg.ApplyGate(phaseShift, curQubit, ctrlq);
 
-					phase /= 2;
+					phase *= 0.5;
+				}
+
+				reg.ApplyGate(hadamard, curQubitm1);
+			}
+
+			Swap(reg, sq, eq);
+		}
+
+		// everything should be in reverse here:
+
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq) const
+		{
+			Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
+
+			Swap(reg, sq, eq);
+
+			for (unsigned int curQubit = sq + 1; curQubit <= eq; ++curQubit)
+			{
+				reg.ApplyGate(hadamard, curQubit - 1);
+
+				int div = (int)pow(2, curQubit - sq);
+				double phase = M_PI / div;
+				for (unsigned int ctrlq = sq; ctrlq < curQubit; ++ctrlq)
+				{
+					phaseShift.SetPhaseShift(phase);
+					reg.ApplyGate(phaseShift, curQubit, ctrlq);
+
+					phase *= 2;
 				}
 			}
 			reg.ApplyGate(hadamard, eq);
 		}
-
+	
 	public:
 		Gates::HadamardGate<MatrixClass> hadamard; // public, let others use it
 
 	protected:
 		Gates::SwapGate<MatrixClass> swapOp;
-
 		unsigned int sQubit;
 		unsigned int eQubit;
 	};
