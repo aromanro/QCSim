@@ -106,11 +106,11 @@ bool PauliSimultationTests()
 
 bool SchrodingerSimulationTests()
 {
-	std::cout << "\nTesting Schrodinger simulations..." << std::endl;
+	std::cout << "\nTesting Schrodinger simulations, this is going to take a while..." << std::endl;
 
 	const double time = 0.2;
 	const double dx = 0.1;
-	const int nrSteps = 100;
+	const int nrSteps = 50;
 
 	QuantumSimulation::SchrodingerSimulation schrSim(9, time, dx, nrSteps);
 	QuantumSimulation::SchrodingerSimulation finDifSim(9, time, dx, nrSteps);
@@ -120,7 +120,6 @@ bool SchrodingerSimulationTests()
 
 	const unsigned int halfPotWidth = 25;
 	
-
 	double k = nrStates * dx / time;
 	k *= 4;
 
@@ -128,6 +127,8 @@ bool SchrodingerSimulationTests()
 
 	const unsigned int startPos = nrStates / 4;
 	const double sigma = 25;
+
+	std::cout << "First, with a potential barrier..." << std::endl;
 
 	schrSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
 	finDifSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
@@ -154,6 +155,36 @@ bool SchrodingerSimulationTests()
 		finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
 
 		if (fidelity < 0.5) 
+		{
+			std::cout << "\nFidelity too low, failure!" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Second, with a potential well..." << std::endl;
+
+	schrSim.setConstantPotentialInTheMiddle(-0.35 * potential, halfPotWidth);
+	finDifSim.setConstantPotentialInTheMiddle(-0.35 * potential, halfPotWidth);
+
+	schrSim.setGaussian(startPos, sigma, k);
+	finDifSim.setGaussian(startPos, sigma, k);
+
+	for (unsigned int i = 0; i < 15; ++i)
+	{
+		schrSim.Execute();
+		finDifSim.solveWithFiniteDifferences();
+
+		schrSim.AdjustPhaseAndNormalize();
+		finDifSim.AdjustPhaseAndNormalize();
+
+		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
+
+		std::cout << "Part " << i << " Fidelity: " << fidelity << std::endl;
+
+		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_well_end.dat");
+		finDifSim.getRegister().writeToFile("c:\\temp\\findif_well_end.dat");
+
+		if (fidelity < 0.5)
 		{
 			std::cout << "\nFidelity too low, failure!" << std::endl;
 			return false;
