@@ -32,7 +32,7 @@ namespace QC {
 
 		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg) const
 		{
-			IQFT(reg, sQubit, eQubit);
+			QFT(reg, sQubit, eQubit, true);
 		}
 
 		unsigned int getStartQubit() const { return sQubit; };
@@ -52,16 +52,18 @@ namespace QC {
 		// the sign convention is not as in the Quantum Computation and Quantum Information book
 		// also because of the qubits ordering, the circuit is 'mirrored' (they have the binary representation as j1 j2 j3 ... jn, I have it as jn...j1)
 
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq) const
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool inverse = false) const
 		{
 			Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
 
 			reg.ApplyGate(hadamard, eq);
 
+			const double startPhase = (inverse ? M_PI_2 : -M_PI_2);
+
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
 				const unsigned int curQubitm1 = curQubit - 1;
-				double phase = -M_PI_2;
+				double phase = startPhase; // starts from R2 = phase shift with 2 PI / 2^2 = PI / 2
 				for (int ctrlq = curQubitm1; ctrlq >= static_cast<int>(sq); --ctrlq)
 				{
 					phaseShift.SetPhaseShift(phase);
@@ -74,31 +76,6 @@ namespace QC {
 			}
 
 			Swap(reg, sq, eq);
-		}
-
-		// everything should be in reverse here:
-
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq) const
-		{
-			Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
-
-			Swap(reg, sq, eq);
-
-			for (unsigned int curQubit = sq + 1; curQubit <= eq; ++curQubit)
-			{
-				reg.ApplyGate(hadamard, curQubit - 1);
-
-				int div = (int)pow(2, curQubit - sq);
-				double phase = M_PI / div;
-				for (unsigned int ctrlq = sq; ctrlq < curQubit; ++ctrlq)
-				{
-					phaseShift.SetPhaseShift(phase);
-					reg.ApplyGate(phaseShift, curQubit, ctrlq);
-
-					phase *= 2;
-				}
-			}
-			reg.ApplyGate(hadamard, eq);
 		}
 	
 	public:
