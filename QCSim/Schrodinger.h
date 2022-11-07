@@ -188,7 +188,7 @@ namespace QuantumSimulation {
 			// for how to do that see for example "Quantum simulation of the single-particle Schrodinger equation" by Giuliano Benenti, Giuliano Strini
 			// https://arxiv.org/abs/0709.1704
 
-			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			kineticOp = MatrixClass::Identity(nrStates, nrStates);
 			potentialOp = MatrixClass::Identity(nrStates, nrStates);
 
@@ -196,7 +196,7 @@ namespace QuantumSimulation {
 
 			const double halfX = 0.5 * deltax * (nrStates - 1.);
 
-			for (unsigned int i = 0; i < nrStates; ++i)
+			for (int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
 				//const double x = deltax * i;

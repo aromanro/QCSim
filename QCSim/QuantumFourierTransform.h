@@ -9,36 +9,19 @@
 
 namespace QC {
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumFourierTransform : public QuantumSubAlgorithm<VectorClass, MatrixClass>
+	// maybe it could be used in some other cases
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitsSwapper : public QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		QuantumFourierTransform(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+		QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
 			: sQubit(startQubit), eQubit(std::max(startQubit, std::min(N - 1, endQubit)))
 		{
-		}
 
-		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
-		{
-			QFT(reg, sQubit, eQubit);
-
-			return reg.Measure();
-		}
-
-		// execute this to avoid measurement
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg) const
-		{
-			QFT(reg, sQubit, eQubit);
-		}
-
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg) const
-		{
-			QFT(reg, sQubit, eQubit, true);
 		}
 
 		unsigned int getStartQubit() const { return sQubit; };
 		unsigned int getEndQubit() const { return eQubit; };
 
-	protected:
 		void Swap(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int startQubit, unsigned int endQubit) const
 		{
 			while (startQubit < endQubit)
@@ -47,6 +30,45 @@ namespace QC {
 				++startQubit;
 				--endQubit;
 			}
+		}
+
+		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
+		{
+			Swap(reg, sQubit, eQubit);
+
+			return reg.Measure();
+		}
+
+	protected:
+		Gates::SwapGate<MatrixClass> swapOp;
+		unsigned int sQubit;
+		unsigned int eQubit;
+	};
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumFourierTransform : public QubitsSwapper<VectorClass, MatrixClass>
+	{
+	public:
+		QuantumFourierTransform(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			: QubitsSwapper<VectorClass, MatrixClass>(N, startQubit, endQubit)
+		{
+		}
+
+		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
+		{
+			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit);
+
+			return reg.Measure();
+		}
+
+		// execute this to avoid measurement
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg) const
+		{
+			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit);
+		}
+
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg) const
+		{
+			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, true);
 		}
 
 		// the sign convention is not as in the Quantum Computation and Quantum Information book
@@ -75,16 +97,10 @@ namespace QC {
 				reg.ApplyGate(hadamard, curQubitm1);
 			}
 
-			Swap(reg, sq, eq);
+			QubitsSwapper<VectorClass, MatrixClass>::Swap(reg, sq, eq);
 		}
 	
-	public:
 		Gates::HadamardGate<MatrixClass> hadamard; // public, let others use it
-
-	protected:
-		Gates::SwapGate<MatrixClass> swapOp;
-		unsigned int sQubit;
-		unsigned int eQubit;
 	};
 
 }
