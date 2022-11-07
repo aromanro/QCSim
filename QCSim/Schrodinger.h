@@ -105,8 +105,7 @@ namespace QuantumSimulation {
 			{
 				const double x =  deltax * i - halfX;
 				const double e = (x - m) / stdev;
-				//const double e = (i - static_cast<double>(pos)) / stdev;
-
+			
 				// momentum operator is -i d/dx
 				// so it brings down ik to obtain k 
 				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, k * x));
@@ -189,8 +188,8 @@ namespace QuantumSimulation {
 			// https://arxiv.org/abs/0709.1704
 
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
-			kineticOp = MatrixClass::Identity(nrStates, nrStates);
-			potentialOp = MatrixClass::Identity(nrStates, nrStates);
+			kineticOp = MatrixClass::Zero(nrStates, nrStates);
+			potentialOp = MatrixClass::Zero(nrStates, nrStates);
 
 			// they are diagonal, the potential is in position basis, the kinetic one is in k-basis, where it's switched using the quantum fourier transform
 
@@ -199,9 +198,12 @@ namespace QuantumSimulation {
 			for (int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
-				//const double x = deltax * i;
-				kineticOp(i, i) = std::exp(std::complex<double>(0, 0.5 * x * x * deltat));
-				potentialOp(i, i) = std::exp(std::complex<double>(0, -0.5 * potential[i] * deltat)); // the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
+
+				double theta = 0.5 * x * x * deltat;
+				kineticOp(i, i) = std::polar(1., theta);
+				// the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
+				theta = -0.5 * potential[i] * deltat;
+				potentialOp(i, i) = std::polar(1., theta); 
 			}
 		}
 

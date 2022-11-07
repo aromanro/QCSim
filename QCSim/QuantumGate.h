@@ -142,7 +142,7 @@ namespace QC {
 
 			void SetPhaseShift(double theta)
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = exp(std::complex<double>(0, theta));
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., theta);
 			}
 		};
 
@@ -234,8 +234,8 @@ namespace QC {
 			{
 				const double t2 = theta * 0.5;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::exp(std::complex<double>(0, -t2));
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::exp(std::complex<double>(0, t2));
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::polar(1., -t2);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., t2);
 			}
 		};
 
@@ -356,7 +356,7 @@ namespace QC {
 
 			void SetPhaseShift(double theta)
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = exp(std::complex<double>(0, theta));
+				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = std::polar(1., theta);
 			}
 		};
 
