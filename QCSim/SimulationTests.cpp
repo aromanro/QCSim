@@ -123,10 +123,10 @@ bool SchrodingerSimulationTests()
 	double k = nrStates * dx / time;
 	k *= 4;
 
-	const double potential = 60;
+	double potential = 60;
 
 	const unsigned int startPos = nrStates / 4;
-	const double sigma = 25;
+	const double sigma = nrStates / 20;
 
 	std::cout << "First, with a potential barrier..." << std::endl;
 
@@ -183,6 +183,37 @@ bool SchrodingerSimulationTests()
 
 		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_well_end.dat");
 		finDifSim.getRegister().writeToFile("c:\\temp\\findif_well_end.dat");
+
+		if (fidelity < 0.5)
+		{
+			std::cout << "\nFidelity too low, failure!" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Third, with a potential step (higher)..." << std::endl;
+
+	potential = 50;
+	schrSim.setConstantPotentialToRight(potential);
+	finDifSim.setConstantPotentialToRight(potential);
+
+	schrSim.setGaussian(startPos, sigma, k);
+	finDifSim.setGaussian(startPos, sigma, k);
+
+	for (unsigned int i = 0; i < 15; ++i)
+	{
+		schrSim.Execute();
+		finDifSim.solveWithFiniteDifferences();
+
+		schrSim.AdjustPhaseAndNormalize();
+		finDifSim.AdjustPhaseAndNormalize();
+
+		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
+
+		std::cout << "Part " << i << " Fidelity: " << fidelity << std::endl;
+
+		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_step_end.dat");
+		finDifSim.getRegister().writeToFile("c:\\temp\\findif_step_end.dat");
 
 		if (fidelity < 0.5)
 		{

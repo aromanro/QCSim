@@ -89,6 +89,16 @@ namespace QuantumSimulation {
 				setPotential(i, val);
 		}
 
+		// use it to set a step potential starting in the middle
+		void setConstantPotentialToRight(double val)
+		{
+			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int halfStates = nrStates / 2;
+
+			for (int i = halfStates; i < nrStates; ++i)
+				setPotential(i, val);
+		}
+
 		// set a gaussian wavefunction in the register, k makes it 'move'
 		void setGaussian(unsigned int pos, double stdev, double k)
 		{

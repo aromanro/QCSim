@@ -16,7 +16,6 @@ namespace QC {
 		QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
 			: sQubit(startQubit), eQubit(std::max(startQubit, std::min(N - 1, endQubit)))
 		{
-
 		}
 
 		unsigned int getStartQubit() const { return sQubit; };
