@@ -108,22 +108,22 @@ bool SchrodingerSimulationTests()
 {
 	std::cout << "\nTesting Schrodinger simulations, this is going to take a while..." << std::endl;
 
-	const double time = 0.2;
-	const double dx = 0.1;
 	const int nrSteps = 50;
 
-	QuantumSimulation::SchrodingerSimulation schrSim(9, time, dx, nrSteps);
-	QuantumSimulation::SchrodingerSimulation finDifSim(9, time, dx, nrSteps);
+	const double dx = 1. / 512.;
+	const double dt = 2. * dx * dx;
 
+	QuantumSimulation::SchrodingerSimulation finDifSim(9, dt, dx, nrSteps);
+	QuantumSimulation::SchrodingerSimulation schrSim(9, dt, dx, nrSteps);
+	
 	const unsigned int nrStates = schrSim.getNrBasisStates();
 	const double len = dx * (nrStates - 1);
 
-	const unsigned int halfPotWidth = 25;
+	const unsigned int halfPotWidth = nrStates / 20;
 	
-	double k = nrStates * dx / time;
-	k *= 4;
+	double k = len / (4. * nrSteps * 15 * dt);
 
-	double potential = 60;
+	double potential = k * k / 2;
 
 	const unsigned int startPos = nrStates / 4;
 	const double sigma = nrStates / 20;
@@ -137,7 +137,6 @@ bool SchrodingerSimulationTests()
 	finDifSim.setGaussian(startPos, sigma, k);
 
 	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_start.dat");
-	finDifSim.getRegister().writeToFile("c:\\temp\\findif_start.dat");
 
 	for (unsigned int i = 0; i < 15; ++i)
 	{

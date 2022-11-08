@@ -18,8 +18,8 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		SchrodingerSimulation(unsigned int N = 8, double t = 0.5, double dx = 0.1, unsigned int nrSteps = 50, bool addSeed = false)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), simTime(t), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
+		SchrodingerSimulation(unsigned int N = 8, double dt = 0.1, double dx = 0.1, unsigned int nrSteps = 50, bool addSeed = false)
+			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), deltat(dt), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
 		{
 			potential.resize(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates(), 0.);
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0); // useless if the initialization of the start state is done, but better be safe...
@@ -27,8 +27,6 @@ namespace QuantumSimulation {
 
 		unsigned int Execute() override
 		{
-			const double deltat = simTime / steps;
-
 			Init(deltat);
 			
 			// Suzuki-Trotter expansion
@@ -69,9 +67,9 @@ namespace QuantumSimulation {
 			deltax = v;
 		}
 
-		void setSimulationTime(double t)
+		void setSimulationTimeInterval(double dt)
 		{
-			simTime = t;
+			deltat = dt;
 		}
 
 		void setNrSteps(unsigned int nrSteps)
@@ -105,6 +103,8 @@ namespace QuantumSimulation {
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
 
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+
+
 			const double halfX = 0.5 * deltax * (nrStates - 1.);
 			
 			stdev *= deltax;
@@ -138,8 +138,7 @@ namespace QuantumSimulation {
 		void solveWithFiniteDifferences()
 		{
 			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
-			const double deltat = simTime / steps;
-			const double eps2 =  2. * deltax * deltax; // the easiest way to add 1/2. for kinetic term, just having multiplied with 2 here
+			const double eps2 =  2 * deltax * deltax; // the easiest way to add 1/2. for kinetic term, just having multiplied with 2 here
 			const double lambda = 2. * eps2 / deltat;
 			const std::complex<double> ilambda = std::complex<double>(0, lambda);
 			const std::complex<double> twoplusilambda = 2. + ilambda; 
@@ -208,8 +207,8 @@ namespace QuantumSimulation {
 			for (int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
-
-				double theta = 0.5 * x * x * deltat;
+				
+				double theta = -0.5 * x * x * deltat;
 				kineticOp(i, i) = std::polar(1., theta);
 				// the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
 				theta = -0.5 * potential[i] * deltat;
@@ -229,7 +228,7 @@ namespace QuantumSimulation {
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(kineticOp);
 		}
 
-		double simTime;
+		double deltat;
 		unsigned int steps;
 		double deltax;
 
