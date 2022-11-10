@@ -94,7 +94,7 @@ bool PauliSimultationTests()
 
 				PrintStates(regVals, regValsEx, sim.getNrBasisStates());
 
-				return false;
+				//return false;
 			}
 		}
 
@@ -109,27 +109,27 @@ bool SchrodingerSimulationTests()
 	std::cout << "\nTesting Schrodinger simulations, this is going to take a while..." << std::endl;
 
 	const int nrSteps = 50;
-
-	const double dx = 1. / 512.;
-	const double dt = 2. * dx * dx;
-
-	QuantumSimulation::SchrodingerSimulation finDifSim(9, dt, dx, nrSteps);
-	QuantumSimulation::SchrodingerSimulation schrSim(9, dt, dx, nrSteps);
+	const unsigned int nrStates = 512;
 	
-	const unsigned int nrStates = schrSim.getNrBasisStates();
-	const double len = dx * (nrStates - 1);
+	const double dx = 1. / (nrStates - 1);
+	const double dt = 2 * dx * dx;
 
-	const unsigned int halfPotWidth = nrStates / 20;
+	const double len = dx * (nrStates - 1);
 	
 	double k = len / (4. * nrSteps * 15 * dt);
-
 	double potential = k * k / 2;
+	
+	const double scale = 1;
 
+	QuantumSimulation::SchrodingerSimulation finDifSim(9, dt, dx, nrSteps);
+	QuantumSimulation::SchrodingerSimulation schrSim(9, dt * scale, dx * scale, nrSteps);
+	
 	const unsigned int startPos = nrStates / 4;
 	const double sigma = nrStates / 20;
 
 	std::cout << "First, with a potential barrier..." << std::endl;
 
+	const unsigned int halfPotWidth = nrStates / 20;
 	schrSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
 	finDifSim.setConstantPotentialInTheMiddle(potential, halfPotWidth);
 
@@ -226,7 +226,7 @@ bool SchrodingerSimulationTests()
 
 bool SimulationTests()
 {
-	std::cout << "\nTesting quantum simulations..." << std::endl;
+	std::cout << "\nTesting simulations of quantum simulations..." << std::endl;
 
 	bool res = PauliSimultationTests();
 	if (res) res = SchrodingerSimulationTests();

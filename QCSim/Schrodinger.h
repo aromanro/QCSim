@@ -32,11 +32,10 @@ namespace QuantumSimulation {
 			// Suzuki-Trotter expansion
 			for (unsigned int step = 0; step < steps; ++step)
 			{
-				ApplyHalfPotentialOperatorEvolution();
+				ApplyPotentialOperatorEvolution();
 				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 				ApplyKineticOperatorEvolution();
 				fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-				ApplyHalfPotentialOperatorEvolution();
 			}
 
 			return 0;
@@ -104,16 +103,13 @@ namespace QuantumSimulation {
 
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 
-
-			const double halfX = 0.5 * deltax * (nrStates - 1.);
-			
 			stdev *= deltax;
 			const double a = 1. / (stdev * sqrt(2. * M_PI));
-			const double m = deltax * pos - halfX;
+			const double m = deltax * pos;
 
 			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
-				const double x =  deltax * i - halfX;
+				const double x = deltax * i;
 				const double e = (x - m) / stdev;
 			
 				// momentum operator is -i d/dx
@@ -202,21 +198,18 @@ namespace QuantumSimulation {
 
 			// they are diagonal, the potential is in position basis, the kinetic one is in k-basis, where it's switched using the quantum fourier transform
 
-			const double halfX = 0.5 * deltax * (nrStates - 1.);
-
 			for (int i = 0; i < nrStates; ++i)
 			{
-				const double x = deltax * i - halfX;
+				const double x = deltax * i;
 				
 				double theta = -0.5 * x * x * deltat;
 				kineticOp(i, i) = std::polar(1., theta);
-				// the reason of 0.5 here is that I'm using a Suzuki-Trotter expansion with a better precision than the one used for Pauli strings, see 'Execute'
-				theta = -0.5 * potential[i] * deltat;
+				theta = -potential[i] * deltat;
 				potentialOp(i, i) = std::polar(1., theta); 
 			}
 		}
 
-		void ApplyHalfPotentialOperatorEvolution()
+		void ApplyPotentialOperatorEvolution()
 		{
 			// with a single operator is simple, it would be quite annoying with a lot of quantum gates
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(potentialOp);
