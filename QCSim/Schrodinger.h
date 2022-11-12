@@ -32,11 +32,10 @@ namespace QuantumSimulation {
 			// Suzuki-Trotter expansion
 			for (unsigned int step = 0; step < steps; ++step)
 			{
-				ApplyHalfPotentialOperatorEvolution();
 				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 				ApplyKineticOperatorEvolution();
 				fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-				ApplyHalfPotentialOperatorEvolution();
+				ApplyPotentialOperatorEvolution();
 			}
 
 			return 0;
@@ -205,12 +204,12 @@ namespace QuantumSimulation {
 				
 				double theta = -0.5 * x * x * deltat;
 				kineticOp(i, i) = std::polar(1., theta);
-				theta = -0.5 * potential[i] * deltat;
+				theta = -potential[i] * deltat;
 				potentialOp(i, i) = std::polar(1., theta); 
 			}
 		}
 
-		void ApplyHalfPotentialOperatorEvolution()
+		void ApplyPotentialOperatorEvolution()
 		{
 			// with a single operator is simple, it would be quite annoying with a lot of quantum gates
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(potentialOp);
