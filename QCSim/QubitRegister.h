@@ -108,8 +108,9 @@ namespace QC {
 			{
 				for (unsigned int i = 0; i < getNrBasisStates(); ++i)
 					registerStorage[i] /= v0;
-				Normalize();
 			}
+
+			Normalize();
 		}
 
 		unsigned int Measure()

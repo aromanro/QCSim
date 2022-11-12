@@ -84,6 +84,10 @@ namespace QuantumSimulation {
 
 			for (int i = std::max<int>(1, halfStates - halfwidth); i < std::min<int>(nrStates - 1, halfStates + halfwidth); ++i)
 				setPotential(i, val);
+
+			// also set high values at the limits
+			setPotential(0, 1E15);
+			setPotential(nrStates - 1, 1E15);
 		}
 
 		// use it to set a step potential starting in the middle
@@ -94,9 +98,14 @@ namespace QuantumSimulation {
 
 			for (int i = halfStates; i < nrStates; ++i)
 				setPotential(i, val);
+
+			// also set high values at the limits
+			setPotential(0, 1E15);
+			setPotential(nrStates - 1, 1E15);
 		}
 
 		// set a gaussian wavefunction in the register, k makes it 'move'
+		// set it to the left side
 		void setGaussian(unsigned int pos, double stdev, double k)
 		{
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
@@ -105,11 +114,12 @@ namespace QuantumSimulation {
 
 			stdev *= deltax;
 			const double a = 1. / (stdev * sqrt(2. * M_PI));
-			const double m = deltax * pos;
+			const double halfX = 0.5 * deltax * (nrStates - 1.);
+			const double m = deltax * pos - halfX;
 
-			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
+			for (int i = 1/*static_cast<int>(0.5 * stdev)*/; i < nrStates - 1 /*static_cast<int>(0.5 * ((nrStates - 1) - stdev))*/; ++i) // the values at the ends should stay zero
 			{
-				const double x = deltax * i;
+				const double x = deltax * i - halfX;
 				const double e = (x - m) / stdev;
 			
 				// momentum operator is -i d/dx
@@ -193,6 +203,8 @@ namespace QuantumSimulation {
 			// https://arxiv.org/abs/0709.1704
 
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const double halfX = 0.5 * deltax * (nrStates - 1.);
+			
 			kineticOp = MatrixClass::Zero(nrStates, nrStates);
 			potentialOp = MatrixClass::Zero(nrStates, nrStates);
 
@@ -200,7 +212,7 @@ namespace QuantumSimulation {
 
 			for (int i = 0; i < nrStates; ++i)
 			{
-				const double x = deltax * i;
+				const double x = deltax * i - halfX;
 				
 				double theta = -0.5 * x * x * deltat;
 				kineticOp(i, i) = std::polar(1., theta);
