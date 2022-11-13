@@ -692,9 +692,8 @@ bool tests()
 	if (res) res = QuantumCryptograpyTests();
 	if (res) res = BellInequalitiesTests();
 	
-	// if (res) res = SimulationTests();
+	if (res) res = SimulationTests();
 	
-
 	std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 
 	return res;

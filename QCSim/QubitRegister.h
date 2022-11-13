@@ -101,13 +101,35 @@ namespace QC {
 		// to be able to compare different results
 		void AdjustPhaseAndNormalize()
 		{
-			const std::complex<double> v0 = registerStorage[0];
-			const double av0 = abs(v0);
+			std::complex<double> v0 = registerStorage[0];
+			double av0 = abs(v0);
 
 			if (av0 >= 1E-5)
 			{
 				for (unsigned int i = 0; i < getNrBasisStates(); ++i)
 					registerStorage[i] /= v0;
+			}
+			else
+			{
+				v0 = registerStorage[NrBasisStates/2];
+				av0 = abs(v0);
+
+				if (av0 >= 1E-5)
+				{
+					for (unsigned int i = 0; i < getNrBasisStates(); ++i)
+						registerStorage[i] /= v0;
+				}
+				else
+				{
+					v0 = registerStorage[NrBasisStates - 1];
+					av0 = abs(v0);
+
+					if (av0 >= 1E-5)
+					{
+						for (unsigned int i = 0; i < getNrBasisStates(); ++i)
+							registerStorage[i] /= v0;
+					}
+				}
 			}
 
 			Normalize();
