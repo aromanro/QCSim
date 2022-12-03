@@ -117,7 +117,7 @@ namespace QuantumSimulation {
 			const double halfX = 0.5 * deltax * (nrStates - 1.);
 			const double m = deltax * pos - halfX;
 
-			for (int i = 1/*static_cast<int>(0.5 * stdev)*/; i < nrStates - 1 /*static_cast<int>(0.5 * ((nrStates - 1) - stdev))*/; ++i) // the values at the ends should stay zero
+			for (int i = 1; i < nrStates - 1; ++i) // the values at the ends should stay zero
 			{
 				const double x = deltax * i - halfX;
 				const double e = (x - m) / stdev;

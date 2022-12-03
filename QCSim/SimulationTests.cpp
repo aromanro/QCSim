@@ -107,47 +107,38 @@ bool PauliSimultationTests()
 bool SchrodingerSimulationTests()
 {
 	std::cout << "\nTesting Schrodinger simulations, this is going to take a while..." << std::endl;
-
-	const int nrStepsFinDif = 50;
-	const int nrStepsSchr = 50;
+	
 	const unsigned int nrStates = 512;
+	const int nrSteps = 50;
+
+	// the following values work for finite differences, unfortunately they do not work for the Schrodinger simulation
+	const double dx = 1. / (nrStates - 1.);
+	const double dt = 2 * dx * dx;
 	
+	//const double dx = 0.01;
+	const double len = dx * (nrStates - 1.);
 
-	const double dxf = 1. / (nrStates - 1);
-	const double dtf = 2 * dxf * dxf;
+	//const double dt = 0.001;
 
-	const double lenf = dxf * (nrStates - 1);
-	
-	double kf = lenf / (2 * nrStepsFinDif * 15 * dtf);
-	double potentialf = kf * kf / 2;
+	// pick a k so the packet will propagate about half the length during the simulation
+	double k = len / (2. * nrSteps * 15 * dt);
+	double E = k * k / 2;
 
-	
-	//const double dxs = 0.1;
-	//const double dts = 0.005;
-	const double dxs = 0.1;
-	const double dts = 0.01; //0.005;
+	QuantumSimulation::SchrodingerSimulation schrSim(9, dt, dx, nrSteps);
+	QuantumSimulation::SchrodingerSimulation finDifSim(9, dt, dx, nrSteps);
 
-	
-	const double lens = dxs * (nrStates - 1);
-
-	const double ks = lens / (2 * 5 /*nrStepsSchr*/ * 15 * dts);
-	double potentials = ks * ks / 2;
-
-	QuantumSimulation::SchrodingerSimulation finDifSim(9, dtf, dxf, nrStepsFinDif);
-
-	QuantumSimulation::SchrodingerSimulation schrSim(9, dts, dxs, nrStepsSchr);
-	
 	const unsigned int startPos = nrStates / 4;
 	const double sigma = nrStates / 20;
+	//const double sigma = nrStates / 30;
 
 	std::cout << "First, with a potential barrier..." << std::endl;
 
 	const unsigned int halfPotWidth = static_cast<unsigned int>(sigma / 4.);
-	schrSim.setConstantPotentialInTheMiddle(potentials, halfPotWidth);
-	finDifSim.setConstantPotentialInTheMiddle(potentialf, halfPotWidth);
+	schrSim.setConstantPotentialInTheMiddle(E, halfPotWidth);
+	finDifSim.setConstantPotentialInTheMiddle(E, halfPotWidth);
 
-	schrSim.setGaussian(startPos, sigma, ks);
-	finDifSim.setGaussian(startPos, sigma, kf);
+	schrSim.setGaussian(startPos, sigma, k);
+	finDifSim.setGaussian(startPos, sigma, k);
 
 	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_start.dat");
 
@@ -166,28 +157,28 @@ bool SchrodingerSimulationTests()
 		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_end.dat");
 		finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
 
-		if (fidelity < 0.5) 
+		if (fidelity < 0.5)
 		{
 			std::cout << "\nFidelity too low, failure!" << std::endl;
-			//return false;
+			return false;
 		}
 	}
 
 	std::cout << "Second, with a potential well..." << std::endl;
 
-	schrSim.setConstantPotentialInTheMiddle(-0.35 * potentials, halfPotWidth);
-	finDifSim.setConstantPotentialInTheMiddle(-0.35 * potentialf, halfPotWidth);
+	schrSim.setConstantPotentialInTheMiddle(-0.35 * E, halfPotWidth);
+	finDifSim.setConstantPotentialInTheMiddle(-0.35 * E, halfPotWidth);
 
-	schrSim.setGaussian(startPos, sigma, ks);
-	finDifSim.setGaussian(startPos, sigma, kf);
+	schrSim.setGaussian(startPos, sigma, k);
+	finDifSim.setGaussian(startPos, sigma, k);
 
 	for (unsigned int i = 0; i < 15; ++i)
 	{
 		schrSim.Execute();
 		finDifSim.solveWithFiniteDifferences();
 
-		//schrSim.AdjustPhaseAndNormalize();
-		//finDifSim.AdjustPhaseAndNormalize();
+		schrSim.AdjustPhaseAndNormalize();
+		finDifSim.AdjustPhaseAndNormalize();
 
 		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
 
@@ -205,19 +196,19 @@ bool SchrodingerSimulationTests()
 
 	std::cout << "Third, with a potential step (higher)..." << std::endl;
 
-	schrSim.setConstantPotentialToRight(potentials);
-	finDifSim.setConstantPotentialToRight(potentialf);
+	schrSim.setConstantPotentialToRight(E);
+	finDifSim.setConstantPotentialToRight(E);
 
-	schrSim.setGaussian(startPos, sigma, ks);
-	finDifSim.setGaussian(startPos, sigma, kf);
+	schrSim.setGaussian(startPos, sigma, k);
+	finDifSim.setGaussian(startPos, sigma, k);
 
 	for (unsigned int i = 0; i < 15; ++i)
 	{
 		schrSim.Execute();
 		finDifSim.solveWithFiniteDifferences();
 
-		//schrSim.AdjustPhaseAndNormalize();
-		//finDifSim.AdjustPhaseAndNormalize();
+		schrSim.AdjustPhaseAndNormalize();
+		finDifSim.AdjustPhaseAndNormalize();
 
 		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
 
@@ -232,7 +223,7 @@ bool SchrodingerSimulationTests()
 			return false;
 		}
 	}
-	
+
 	return true;
 }
 
