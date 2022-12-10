@@ -32,10 +32,10 @@ namespace QuantumSimulation {
 			// Suzuki-Trotter expansion
 			for (unsigned int step = 0; step < steps; ++step)
 			{
+				ApplyPotentialOperatorEvolution();
 				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 				ApplyKineticOperatorEvolution();
 				fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-				ApplyPotentialOperatorEvolution();
 			}
 
 			return 0;
@@ -189,6 +189,22 @@ namespace QuantumSimulation {
 		}
 
 		//*****************************************************************************************************************************************************
+		// Code for a dumb solver for checks, the above is hard to have values that overlap with the range where the schrodinger solver works
+		//*****************************************************************************************************************************************************
+
+		void solveWithFiniteDifferencesSimple()
+		{
+			InitSimpleFiniteDifferences();
+
+			for (unsigned int step = 0; step < steps; ++step)
+			{
+				ApplyPotentialOperatorEvolution();
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(evolutionOp);
+				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize(); // evolution above is not exactly unitary
+			}
+		}
+
+		//*****************************************************************************************************************************************************
 
 	protected:
 		void Init(double deltat)
@@ -204,7 +220,7 @@ namespace QuantumSimulation {
 
 			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
 			const double halfX = 0.5 * deltax * (nrStates - 1.);
-			
+	
 			kineticOp = MatrixClass::Zero(nrStates, nrStates);
 			potentialOp = MatrixClass::Zero(nrStates, nrStates);
 
@@ -213,12 +229,38 @@ namespace QuantumSimulation {
 			for (int i = 0; i < nrStates; ++i)
 			{
 				const double x = deltax * i - halfX;
-				
-				double theta = -0.5 * x * x * deltat;
-				kineticOp(i, i) = std::polar(1., theta);
-				theta = -potential[i] * deltat;
-				potentialOp(i, i) = std::polar(1., theta); 
+	
+				kineticOp(i, i) = std::polar(1., -0.5 * x * x * deltat);
+				potentialOp(i, i) = std::polar(1., -potential[i] * deltat);
 			}
+		}
+
+		void InitSimpleFiniteDifferences()
+		{
+			// ensure that the starting wavefunction is normalized
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+
+			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const double eps = 0.5 * deltat / (deltax * deltax);
+			const std::complex<double> t = std::complex<double>(1., -2. * eps);
+			
+			evolutionOp = MatrixClass::Zero(nrStates, nrStates);
+			potentialOp = MatrixClass::Zero(nrStates, nrStates);
+
+			for (int i = 0; i < nrStates; ++i)
+			{
+				evolutionOp(i, i) = t;
+				potentialOp(i, i) = std::polar(1., -potential[i] * deltat);
+			}
+
+			const std::complex<double> v = std::complex(0., eps);
+			for (int i = 0; i < nrStates - 1; ++i)
+			{
+				evolutionOp(i, i + 1) = v;
+				evolutionOp(i + 1, i) = v;
+			}
+			evolutionOp(0, nrStates - 1) = v;
+			evolutionOp(nrStates - 1, 0) = v;
 		}
 
 		void ApplyPotentialOperatorEvolution()
@@ -242,6 +284,8 @@ namespace QuantumSimulation {
 
 		MatrixClass kineticOp;
 		MatrixClass potentialOp;
+
+		MatrixClass evolutionOp; // not unitary, but should be 'good enough' for tests
 	};
 }
 
