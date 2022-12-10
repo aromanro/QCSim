@@ -86,8 +86,8 @@ namespace QuantumSimulation {
 				setPotential(i, val);
 
 			// also set high values at the limits
-			setPotential(0, 1E15);
-			setPotential(nrStates - 1, 1E15);
+			setPotential(0, 1E150);
+			setPotential(nrStates - 1, 1E150);
 		}
 
 		// use it to set a step potential starting in the middle
@@ -101,7 +101,7 @@ namespace QuantumSimulation {
 
 			// also set high values at the limits
 			setPotential(0, 1E15);
-			setPotential(nrStates - 1, 1E15);
+			setPotential(nrStates - 1, 1E150);
 		}
 
 		// set a gaussian wavefunction in the register, k makes it 'move'
@@ -198,9 +198,9 @@ namespace QuantumSimulation {
 
 			for (unsigned int step = 0; step < steps; ++step)
 			{
-				ApplyPotentialOperatorEvolution();
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(evolutionOp);
-				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize(); // evolution above is not exactly unitary
+				ApplyPotentialOperatorEvolution();
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize(); // evolution above is not exactly unitary
 			}
 		}
 
@@ -253,14 +253,15 @@ namespace QuantumSimulation {
 				potentialOp(i, i) = std::polar(1., -potential[i] * deltat);
 			}
 
+			const int nrStatesMinusOne = nrStates - 1;
 			const std::complex<double> v = std::complex(0., eps);
-			for (int i = 0; i < nrStates - 1; ++i)
+			for (int i = 0; i < nrStatesMinusOne; ++i)
 			{
 				evolutionOp(i, i + 1) = v;
 				evolutionOp(i + 1, i) = v;
 			}
-			evolutionOp(0, nrStates - 1) = v;
-			evolutionOp(nrStates - 1, 0) = v;
+			evolutionOp(0, nrStatesMinusOne) = v;
+			evolutionOp(nrStatesMinusOne, 0) = v;
 		}
 
 		void ApplyPotentialOperatorEvolution()
