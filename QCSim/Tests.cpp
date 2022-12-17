@@ -681,7 +681,6 @@ bool tests()
 	std::cout << "\nTests\n";
 
 	bool res = registerMeasurementsTests();
-	
 	if (res) res = quantumAdderTests();
 	if (res) res = DeutschJozsaTests();
 	if (res) res = BernsteinVaziraniTests();
@@ -691,7 +690,6 @@ bool tests()
 	if (res) res = SuperdenseCodingTests();
 	if (res) res = QuantumCryptograpyTests();
 	if (res) res = BellInequalitiesTests();
-	
 	if (res) res = SimulationTests();
 	
 	std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;

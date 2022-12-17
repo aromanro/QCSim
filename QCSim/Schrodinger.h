@@ -9,6 +9,8 @@
 #include "Utils.h"
 #include "QuantumFourierTransform.h"
 
+#include "FFT.h"
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -201,6 +203,72 @@ namespace QuantumSimulation {
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(evolutionOp);
 				ApplyPotentialOperatorEvolution();
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize(); // evolution above is not exactly unitary
+			}
+		}
+
+		void solveWithFiniteDifferencesSimpler()
+		{
+			// ensure that the starting wavefunction is normalized
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+
+			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const unsigned int nrStatesM1 = nrStates - 1;
+			const std::complex<double> j(0, 1);
+			const double eps = 0.5 * deltat / (deltax * deltax);
+			
+			VectorClass newPsi = VectorClass::Zero(nrStates);
+
+			for (unsigned int step = 0; step < steps; ++step)
+			{	
+				const VectorClass& oldPsi = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getRegisterStorage();
+
+				for (unsigned int i = 1; i < nrStatesM1; ++i)
+					newPsi(i) = oldPsi(i) + j * eps * (oldPsi(i - 1) - 2. * oldPsi(i) + oldPsi(i + 1)) - j * potential[i] * deltat * oldPsi(i);
+				
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRegisterStorage(newPsi); // this also normalizes the wavefunction
+			}
+		}
+
+		// ok, I gave up, it's hard to set values that are ok for finite differences methods and for the schrodinger simulation, so I went with 'classical' FFT
+
+		void solveWithClassicalFFT()
+		{
+			Init(deltat);
+
+			Fourier::FFT fft;
+
+			// Suzuki-Trotter expansion
+			for (unsigned int step = 0; step < steps; ++step)
+			{
+				ApplyPotentialOperatorEvolution();
+
+				{
+					const VectorClass& oldPsi = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getRegisterStorage();
+
+					std::vector<std::complex<double>> vec(oldPsi.size());
+					Eigen::Map<VectorClass>(vec.data(), oldPsi.size()) = oldPsi;
+
+					std::vector<std::complex<double>> newvec(oldPsi.size());
+					fft.fwd(vec.data(), newvec.data(), static_cast<unsigned int>(vec.size()));
+
+					const VectorClass newPsi = Eigen::Map<VectorClass>(newvec.data(), newvec.size());
+					QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRegisterStorage(newPsi);
+				}
+
+				ApplyKineticOperatorEvolution();
+				
+				{
+					const VectorClass& oldPsi = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getRegisterStorage();
+
+					std::vector<std::complex<double>> vec(oldPsi.size());
+					Eigen::Map<VectorClass>(vec.data(), oldPsi.size()) = oldPsi;
+
+					std::vector<std::complex<double>> newvec(oldPsi.size());
+					fft.inv(vec.data(), newvec.data(), static_cast<unsigned int>(vec.size()));
+
+					const VectorClass newPsi = Eigen::Map<VectorClass>(newvec.data(), newvec.size());
+					QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRegisterStorage(newPsi);
+				}
 			}
 		}
 

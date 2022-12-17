@@ -75,9 +75,14 @@ namespace QC {
 			return reg;
 		}
 
-		VectorClass getRegisterStorage() const
+		const VectorClass& getRegisterStorage() const
 		{
 			return reg.getRegisterStorage();
+		}
+
+		void setRegisterStorage(const VectorClass& vals)
+		{
+			reg.setRegisterStorage(vals);
 		}
 
 		void ApplyGate(const Gates::QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0)

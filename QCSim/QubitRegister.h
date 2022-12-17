@@ -259,9 +259,17 @@ namespace QC {
 			registerStorage = m * registerStorage;
 		}
 
-		VectorClass getRegisterStorage() const
+		const VectorClass& getRegisterStorage() const
 		{
 			return registerStorage;
+		}
+
+		void setRegisterStorage(const VectorClass& vals)
+		{
+			if (registerStorage.size() != vals.size()) return;
+
+			registerStorage = vals;
+			Normalize();
 		}
 
 		// to check how well the computed state matches some 'exact' known one

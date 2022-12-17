@@ -112,20 +112,26 @@ bool SchrodingerSimulationTests()
 	const int nrSteps = 50;
 
 	// the following values work for finite differences, unfortunately they do not work for the Schrodinger simulation
-	const double dx = 1. / (nrStates - 1.);
-	const double dt = 2 * dx * dx;
+	//const double dx = 1. / (nrStates - 1.);
+	//const double dt = 2 * dx * dx;
+
+
 	
-	//const double dx = 0.01;
+	const double dx = 0.1;
+	const double dt = 0.01;
+
 	const double len = dx * (nrStates - 1.);
-
-	//const double dt = 0.001;
-
 	// pick a k so the packet will propagate about half the length during the simulation
-	double k = len / (2. * nrSteps * 15 * dt);
+	//double k = len / (2. * nrSteps * 15 * dt); // this should be ok for the finite difference computation
+	
+	 	
+	// the following seem to work ok for schrodinger simulation
+	double k = len / (2. * nrSteps * 15 * dt) + 0.5 * len / dt;
+
 	double E = k * k / 2;
 
 	QuantumSimulation::SchrodingerSimulation schrSim(9, dt, dx, nrSteps);
-	QuantumSimulation::SchrodingerSimulation finDifSim(9, dt, dx, nrSteps);
+	QuantumSimulation::SchrodingerSimulation fftSchr(9, dt, dx, nrSteps);
 
 	const unsigned int startPos = nrStates / 4;
 	const double sigma = nrStates / 20;
@@ -135,29 +141,29 @@ bool SchrodingerSimulationTests()
 
 	const unsigned int halfPotWidth = static_cast<unsigned int>(sigma / 4.);
 	schrSim.setConstantPotentialInTheMiddle(E, halfPotWidth);
-	finDifSim.setConstantPotentialInTheMiddle(E, halfPotWidth);
+	fftSchr.setConstantPotentialInTheMiddle(E, halfPotWidth);
 
 	schrSim.setGaussian(startPos, sigma, k);
-	finDifSim.setGaussian(startPos, sigma, k);
+	fftSchr.setGaussian(startPos, sigma, k);
 
 	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_start.dat");
 
-	for (unsigned int i = 0; i < 60; ++i)
+	for (unsigned int i = 0; i < 6; ++i)
 	{
 		schrSim.Execute();
-		finDifSim.solveWithFiniteDifferences();
+		fftSchr.solveWithClassicalFFT();
 
 		schrSim.AdjustPhaseAndNormalize();
-		finDifSim.AdjustPhaseAndNormalize();
+		fftSchr.AdjustPhaseAndNormalize();
 
-		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
+		const double fidelity = schrSim.stateFidelity(fftSchr.getRegisterStorage());
 
 		std::cout << "Part " << i << " Fidelity: " << fidelity << std::endl;
 
 		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_end.dat");
-		finDifSim.getRegister().writeToFile("c:\\temp\\findif_end.dat");
+		fftSchr.getRegister().writeToFile("c:\\temp\\findif_end.dat");
 
-		if (fidelity < 0.5)
+		if (fidelity < 0.8)
 		{
 			std::cout << "\nFidelity too low, failure!" << std::endl;
 			return false;
@@ -166,28 +172,29 @@ bool SchrodingerSimulationTests()
 
 	std::cout << "Second, with a potential well..." << std::endl;
 
-	schrSim.setConstantPotentialInTheMiddle(-0.35 * E, halfPotWidth);
-	finDifSim.setConstantPotentialInTheMiddle(-0.35 * E, halfPotWidth);
+	const double wellDepth = -0.35 * E;
+	schrSim.setConstantPotentialInTheMiddle(wellDepth, halfPotWidth);
+	fftSchr.setConstantPotentialInTheMiddle(wellDepth, halfPotWidth);
 
 	schrSim.setGaussian(startPos, sigma, k);
-	finDifSim.setGaussian(startPos, sigma, k);
+	fftSchr.setGaussian(startPos, sigma, k);
 
-	for (unsigned int i = 0; i < 15; ++i)
+	for (unsigned int i = 0; i < 6; ++i)
 	{
 		schrSim.Execute();
-		finDifSim.solveWithFiniteDifferences();
+		fftSchr.solveWithClassicalFFT();
 
 		schrSim.AdjustPhaseAndNormalize();
-		finDifSim.AdjustPhaseAndNormalize();
+		fftSchr.AdjustPhaseAndNormalize();
 
-		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
+		const double fidelity = schrSim.stateFidelity(fftSchr.getRegisterStorage());
 
 		std::cout << "Part " << i << " Fidelity: " << fidelity << std::endl;
 
 		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_well_end.dat");
-		finDifSim.getRegister().writeToFile("c:\\temp\\findif_well_end.dat");
+		fftSchr.getRegister().writeToFile("c:\\temp\\findif_well_end.dat");
 
-		if (fidelity < 0.5)
+		if (fidelity < 0.8)
 		{
 			std::cout << "\nFidelity too low, failure!" << std::endl;
 			return false;
@@ -196,28 +203,29 @@ bool SchrodingerSimulationTests()
 
 	std::cout << "Third, with a potential step (higher)..." << std::endl;
 
-	schrSim.setConstantPotentialToRight(E);
-	finDifSim.setConstantPotentialToRight(E);
+	const double stepHeight = E;
+	schrSim.setConstantPotentialToRight(stepHeight);
+	fftSchr.setConstantPotentialToRight(stepHeight);
 
 	schrSim.setGaussian(startPos, sigma, k);
-	finDifSim.setGaussian(startPos, sigma, k);
+	fftSchr.setGaussian(startPos, sigma, k);
 
-	for (unsigned int i = 0; i < 15; ++i)
+	for (unsigned int i = 0; i < 4; ++i)
 	{
 		schrSim.Execute();
-		finDifSim.solveWithFiniteDifferences();
+		fftSchr.solveWithClassicalFFT();
 
 		schrSim.AdjustPhaseAndNormalize();
-		finDifSim.AdjustPhaseAndNormalize();
+		fftSchr.AdjustPhaseAndNormalize();
 
-		const double fidelity = schrSim.stateFidelity(finDifSim.getRegisterStorage());
+		const double fidelity = schrSim.stateFidelity(fftSchr.getRegisterStorage());
 
 		std::cout << "Part " << i << " Fidelity: " << fidelity << std::endl;
 
 		schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_step_end.dat");
-		finDifSim.getRegister().writeToFile("c:\\temp\\findif_step_end.dat");
+		fftSchr.getRegister().writeToFile("c:\\temp\\findif_step_end.dat");
 
-		if (fidelity < 0.5)
+		if (fidelity < 0.8)
 		{
 			std::cout << "\nFidelity too low, failure!" << std::endl;
 			return false;
@@ -232,7 +240,7 @@ bool SimulationTests()
 	std::cout << "\nTesting simulations of quantum simulations..." << std::endl;
 
 	bool res = PauliSimultationTests();
-	//if (res) res = SchrodingerSimulationTests();
+	if (res) res = SchrodingerSimulationTests();
 
 	return res;
 }

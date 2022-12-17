@@ -71,16 +71,24 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\LIBs\eigen;$(VCInstallDir)PlatformSDK\include;$(IncludePath)</IncludePath>
+    <IncludePath>C:\LIBs\fftw-3.3.5-dll64;C:\LIBs\eigen;$(VCInstallDir)PlatformSDK\include;$(IncludePath)</IncludePath>
+    <ExecutablePath>C:\LIBs\fftw-3.3.5-dll64;$(VCInstallDir)PlatformSDK\bin;$(ExecutablePath)</ExecutablePath>
+    <LibraryPath>C:\LIBs\fftw-3.3.5-dll64;$(VCInstallDir)PlatformSDK\lib\amd64;$(VSInstallDir)SDK\v2.0\lib\amd64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\LIBs\eigen;$(VCInstallDir)PlatformSDK\include;$(IncludePath)</IncludePath>
+    <IncludePath>C:\LIBs\fftw-3.3.5-dll64;C:\LIBs\eigen;$(VCInstallDir)PlatformSDK\include;$(IncludePath)</IncludePath>
+    <ExecutablePath>C:\LIBs\fftw-3.3.5-dll64;$(VCInstallDir)PlatformSDK\bin;$(ExecutablePath)</ExecutablePath>
+    <LibraryPath>C:\LIBs\fftw-3.3.5-dll64;$(VCInstallDir)PlatformSDK\lib\amd64;$(VSInstallDir)SDK\v2.0\lib\amd64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>C:\LIBs\eigen;$(VC_IncludePath);C:\Program Files %28x86%29\Windows Kits\10\Include\10.0.10240.0\ucrt;$(IncludePath);$(WindowsSDK_IncludePath)include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(VCInstallDir)PlatformSDK\include;$(VCInstallDir)PlatformSDK\common\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Include;C:\Program Files (x86)\Java\jdk1.6.0_20\include;C:\Program Files (x86)\Java\jdk1.6.0_20\include\win32</IncludePath>
+    <IncludePath>C:\LIBs\fftw-3.3.5-dll32;C:\LIBs\eigen;$(VC_IncludePath);C:\Program Files %28x86%29\Windows Kits\10\Include\10.0.10240.0\ucrt;$(IncludePath);$(WindowsSDK_IncludePath)include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(VCInstallDir)PlatformSDK\include;$(VCInstallDir)PlatformSDK\common\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Include;C:\Program Files (x86)\Java\jdk1.6.0_20\include;C:\Program Files (x86)\Java\jdk1.6.0_20\include\win32</IncludePath>
+    <ExecutablePath>C:\LIBs\fftw-3.3.5-dll32;$(VCInstallDir)PlatformSDK\bin;$(VCInstallDir)PlatformSDK\common\bin;$(ExecutablePath)</ExecutablePath>
+    <LibraryPath>C:\LIBs\fftw-3.3.5-dll32;$(VCInstallDir)PlatformSDK\lib;$(VCInstallDir)PlatformSDK\common\lib;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Lib\x86;C:\Program Files (x86)\Business Objects\Common\3.5;C:\LIBs\JetVC\Intel;C:\LIBs\boost_1_44_0\stage\lib;C:\Program Files (x86)\Java\jdk1.6.0_20\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>C:\LIBs\eigen;$(VC_IncludePath);C:\Program Files %28x86%29\Windows Kits\10\Include\10.0.10240.0\ucrt;$(IncludePath);$(WindowsSDK_IncludePath)include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(VCInstallDir)PlatformSDK\include;$(VCInstallDir)PlatformSDK\common\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Include;C:\Program Files (x86)\Java\jdk1.6.0_20\include;C:\Program Files (x86)\Java\jdk1.6.0_20\include\win32</IncludePath>
+    <IncludePath>C:\LIBs\fftw-3.3.5-dll32;C:\LIBs\eigen;$(VC_IncludePath);C:\Program Files %28x86%29\Windows Kits\10\Include\10.0.10240.0\ucrt;$(IncludePath);$(WindowsSDK_IncludePath)include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(VCInstallDir)PlatformSDK\include;$(VCInstallDir)PlatformSDK\common\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Include;C:\Program Files (x86)\Java\jdk1.6.0_20\include;C:\Program Files (x86)\Java\jdk1.6.0_20\include\win32</IncludePath>
+    <ExecutablePath>C:\LIBs\fftw-3.3.5-dll32;$(VCInstallDir)PlatformSDK\bin;$(VCInstallDir)PlatformSDK\common\bin;$(ExecutablePath)</ExecutablePath>
+    <LibraryPath>C:\LIBs\fftw-3.3.5-dll32;$(VCInstallDir)PlatformSDK\lib;$(VCInstallDir)PlatformSDK\common\lib;C:\Program Files (x86)\Microsoft DirectX SDK (August 2007)\Lib\x86;C:\Program Files (x86)\Business Objects\Common\3.5;C:\LIBs\JetVC\Intel;C:\LIBs\boost_1_44_0\stage\lib;C:\Program Files (x86)\Java\jdk1.6.0_20\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -93,6 +101,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libfftw3-3.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -110,6 +119,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libfftw3-3.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -123,6 +133,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libfftw3-3.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -140,9 +151,11 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libfftw3-3.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FFT.cpp" />
     <ClCompile Include="MeasurementsTests.cpp" />
     <ClCompile Include="QCSim.cpp" />
     <ClCompile Include="SimulationTests.cpp" />
@@ -152,6 +165,7 @@
     <ClInclude Include="BernsteinVazirani.h" />
     <ClInclude Include="CheckCHSHInequality.h" />
     <ClInclude Include="DeutschJozsa.h" />
+    <ClInclude Include="FFT.h" />
     <ClInclude Include="Function.h" />
     <ClInclude Include="GroverAlgorithm.h" />
     <ClInclude Include="Oracle.h" />
