@@ -4,6 +4,9 @@
 #include "QuantumGate.h"
 #include "Utils.h"
 
+// for details see for example "Experimenting quantum phenomena on NISQ computers using high level quantum programming" by Duc M. Tran and Hung Q. Nguyen
+// https://arxiv.org/abs/2111.02896v2
+
 namespace Paradoxes {
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumEraser :
@@ -37,7 +40,7 @@ namespace Paradoxes {
 			// now the action of the next beam splitter:
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
 
-			// the choice of using or not the eraser can be 'delayed' 
+			// the choice of using or not the eraser could be 'delayed' 
 			if (eraser) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 1);
 
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();

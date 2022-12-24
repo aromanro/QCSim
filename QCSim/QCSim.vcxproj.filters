@@ -98,5 +98,8 @@
     <ClInclude Include="QuantumEraser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="GeneralElitzurVaidmanBomb.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

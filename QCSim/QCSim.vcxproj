@@ -168,6 +168,7 @@
     <ClInclude Include="DeutschJozsa.h" />
     <ClInclude Include="FFT.h" />
     <ClInclude Include="Function.h" />
+    <ClInclude Include="GeneralElitzurVaidmanBomb.h" />
     <ClInclude Include="GroverAlgorithm.h" />
     <ClInclude Include="Oracle.h" />
     <ClInclude Include="PauliStringSimulation.h" />
