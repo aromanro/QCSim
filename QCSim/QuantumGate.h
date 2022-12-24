@@ -217,7 +217,7 @@ namespace QC {
 
 				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
 				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(-sin(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(-sin(t2), 0);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(sin(t2), 0);
 				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::complex<double>(cos(t2), 0);
 			}
 		};
