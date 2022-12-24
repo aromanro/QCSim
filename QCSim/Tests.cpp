@@ -120,7 +120,7 @@ bool GroverTests()
 		galgo.setCorrectQuestionState(ans);
 		for (int i = 0; i < nrMeasurements; ++i)
 		{
-			unsigned int state = galgo.Execute();
+			const unsigned int state = galgo.Execute();
 			++measurements[state];
 		}
 
@@ -691,6 +691,7 @@ bool tests()
 	if (res) res = QuantumCryptograpyTests();
 	if (res) res = BellInequalitiesTests();
 	if (res) res = SimulationTests();
+	if (res) res = ParadoxesTests();
 	
 	std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 

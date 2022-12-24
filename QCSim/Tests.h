@@ -8,4 +8,6 @@ bool approxEqual(std::complex<double> val1, std::complex<double> val2, double er
 bool registerMeasurementsTests();
 bool SimulationTests();
 
+bool ParadoxesTests();
+
 bool tests();
