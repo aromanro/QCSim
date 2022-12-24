@@ -20,7 +20,7 @@ Simulation of quantum simulation:
 *   Evolution in time with a Hamiltonian given as a sum of Pauli products with real coefficients
 *   Evolution of a 1D Gaussian packet in time, solving the 1D time-dependent Schrodinger equation using a Trotter decomposition and quantum Fourier transform
 
-Paradoxes (although some of the above might be considered paradoxes as well)
+Paradoxes (although some of the above might be considered paradoxes as well):
 *   Quantum eraser
 *   General Elitzur-Vaidman Bomb tester/interaction free measurement
 
