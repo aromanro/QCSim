@@ -11,6 +11,9 @@
 // https://arxiv.org/abs/2111.02896v2
 // the formula 4 seem to be wrong, though, on the version I looked over
 
+// see also "Interaction-free measurements and counterfactual computation in IBM quantum computers" by J. Alberto Casas and Bryan Zaldivar
+// https://arxiv.org/abs/2005.03547
+
 // the one stage Elitzur-Vaidman bomb is basically equivalent with the quantum eraser circuit without the eraser set
 // and with the following one with a single stage
 
