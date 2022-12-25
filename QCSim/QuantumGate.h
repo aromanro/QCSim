@@ -239,6 +239,27 @@ namespace QC {
 			}
 		};
 
+		// generic rotation gate
+		template<class MatrixClass = Eigen::MatrixXcd> class UGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			UGate(double theta = 0, double phi = 0, double lambda = 0)
+			{
+				SetParams(theta, phi, lambda);
+			}
+
+			virtual void SetParams(double theta = 0, double phi = 0, double lambda = 0)
+			{
+				const double t2 = theta * 0.5;
+
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(-std::polar(1., lambda) * sin(t2), 0);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(std::polar(1., phi) * sin(t2), 0);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., phi + lambda) * std::complex<double>(cos(t2), 0);
+			}
+		};
+
+
 		template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:
