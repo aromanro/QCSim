@@ -85,9 +85,9 @@ namespace QC {
 			reg.setRegisterStorage(vals);
 		}
 
-		void ApplyGate(const Gates::QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0)
+		void ApplyGate(const Gates::QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0, unsigned int controllingQubit2 = 0)
 		{
-			reg.ApplyGate(gate, qubit, controllingQubit);
+			reg.ApplyGate(gate, qubit, controllingQubit, controllingQubit2);
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)

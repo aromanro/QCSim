@@ -101,5 +101,8 @@
     <ClInclude Include="GeneralElitzurVaidmanBomb.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="HardyParadox.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

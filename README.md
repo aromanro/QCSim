@@ -23,5 +23,6 @@ Simulation of quantum simulation:
 Paradoxes (although some of the above might be considered paradoxes as well):
 *   Quantum eraser
 *   General Elitzur-Vaidman Bomb tester/interaction free measurement
+*   Hardy's paradox
 
 Maybe I'll add some more things in the future, like something related with quantum random walks and/or quantum tomography, but for now this will take a break for a while. 
