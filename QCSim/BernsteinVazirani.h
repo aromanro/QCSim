@@ -23,7 +23,6 @@ namespace BernsteinVazirani {
 			const unsigned int nrBasisStates = 1u << nrQubits;
 			MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
 
-			unsigned int sf = stringFunction;
 			for (unsigned int x = 0; x < nrBasisStates; ++x)
 			{
 				if (f(x))

@@ -47,7 +47,7 @@ namespace Grover {
 	protected:
 		void Init()
 		{
-			//reg.setToBasisState(0);
+			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg.setToBasisState(0);
 			//ApplyHadamardOnAllQubits();
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToEqualSuperposition(); // the same thing as commented above
 		}

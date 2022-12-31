@@ -58,7 +58,8 @@ namespace DeutschJozsa {
 				for (unsigned int i = nrOnes; i < funcSize; ++i)
 					fvalues[i] = false;
 
-				auto rng = std::default_random_engine{};
+				const unsigned long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
+				auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
 				std::shuffle(fvalues.begin(), fvalues.end(), rng);
 			}
 			else fvalues.clear();
@@ -96,8 +97,8 @@ namespace DeutschJozsa {
 			// we have U |y>|x> = |y + f(x)> |x>
 			// U is unitary
 
-			// <x|<y| U |y>|x> = <x|x><y|y+f(x)> = <y|y + f(x)>
-			// + is modulo 2 addition here
+			// <x1|<y1| U |y2>|x2> = <x1|x2><y1|y2+f(x2)>
+			// + is modulo 2 addition
 
 			const unsigned int nrQubits = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits();
 			const unsigned int mask = nrBasisStates - 1;
@@ -107,9 +108,10 @@ namespace DeutschJozsa {
 			for (unsigned int stateBra = 0; stateBra < nrBasisStates; ++stateBra)
 				for (unsigned int stateKet = 0; stateKet < nrBasisStates; ++stateKet)
 				{
+					const unsigned int xval = (stateKet & xmask);
 					const unsigned int yval = (stateKet & ymask) ? 1 : 0;
 
-					U(stateBra, stateKet) = (stateBra & ymask) == (f(stateKet & xmask) + yval) % 2;
+					U(stateBra, stateKet) = ((stateBra & ymask) ? 1 : 0) == (f(xval) + yval) % 2;
 				}
 
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(U);
