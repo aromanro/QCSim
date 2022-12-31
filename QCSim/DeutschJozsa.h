@@ -108,10 +108,11 @@ namespace DeutschJozsa {
 			for (unsigned int stateBra = 0; stateBra < nrBasisStates; ++stateBra)
 				for (unsigned int stateKet = 0; stateKet < nrBasisStates; ++stateKet)
 				{
-					const unsigned int xval = (stateKet & xmask);
-					const unsigned int yval = (stateKet & ymask) ? 1 : 0;
+					const unsigned int xval = (stateBra & xmask);
+					const unsigned int yval = (stateBra & ymask) ? 1 : 0;
 
-					U(stateBra, stateKet) = ((stateBra & ymask) ? 1 : 0) == (f(xval) + yval) % 2;
+					// the operator is sumi sumj |i><j|, so line corresponds to ket and column to bra 
+					U(stateKet, stateBra) = ((stateKet & ymask) ? 1 : 0) == (f(xval) + yval) % 2;
 				}
 
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(U);
