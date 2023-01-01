@@ -14,6 +14,21 @@ bool approxEqual(std::complex<double> val1, std::complex<double> val2, double er
 	return approxEqual(val1.real(), val2.real(), err) && approxEqual(val1.imag(), val2.imag(), err);
 }
 
+bool checkUnitary(const Eigen::MatrixXcd& m)
+{
+	const Eigen::MatrixXcd r = m.adjoint() * m;
+	for (unsigned int i = 0; i < r.rows(); ++i)
+		for (unsigned int j = 0; j < r.cols(); ++j)
+		{
+			if (i == j) {
+				if (!approxEqual(r(i, i), std::complex(1., 0.))) return false;
+			} 
+			else if (!approxEqual(r(i, j), std::complex(0., 0.))) return false;
+		}
+
+	return true;
+}
+
 void setRegister(QC::QubitRegister<>& reg)
 {
 	reg.setToBasisState(0); //overriden below
