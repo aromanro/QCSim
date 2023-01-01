@@ -3,6 +3,8 @@
 #include "QuantumAlgorithm.h"
 #include "QuantumGate.h"
 
+#include "Tests.h"
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -112,8 +114,10 @@ namespace DeutschJozsa {
 					const unsigned int yval = (stateBra & ymask) ? 1 : 0;
 
 					// the operator is sumi sumj |i><j|, so line corresponds to ket and column to bra 
-					U(stateKet, stateBra) = ((stateKet & ymask) ? 1 : 0) == (f(xval) + yval) % 2;
+					U(stateKet, stateBra) = ((stateKet & ymask) ? 1 : 0) == (f(xval) + yval) % 2 && xval == (stateKet & xmask);
 				}
+			
+			assert(checkUnitary(U));
 
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(U);
 		}
