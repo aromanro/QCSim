@@ -11,5 +11,6 @@ bool registerMeasurementsTests();
 bool SimulationTests();
 
 bool ParadoxesTests();
+bool quantumAdderTests();
 
 bool tests();
