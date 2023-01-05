@@ -159,7 +159,7 @@ namespace Fourier {
 	class FFT
 	{
 	public:
-		FFT(int numThreads = 0); // zero means let it alone for FFTW to decide
+		explicit FFT(int numThreads = 0); // zero means let it alone for FFTW to decide
 		~FFT();
 
 		// 1D
