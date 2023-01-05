@@ -11,6 +11,7 @@
 #include "QuantumCryptograpy.h"
 #include "DeutschJozsa.h"
 #include "QuantumAdder.h"
+#include "SimonAlgorithm.h"
 
 
 #include <iostream>
@@ -676,6 +677,39 @@ bool quantumAdderTests()
 	return true;
 }
 
+bool SimonTests()
+{
+	std::cout << "\nTesting Simon..." << std::endl;
+
+	for (unsigned int nrQubits = 2; nrQubits <= 4; ++nrQubits)
+	{
+		std::cout << "Nr of qubits: " << nrQubits << std::endl;
+
+		Simon::SimonAlgorithm simonAlgorithm(nrQubits);
+
+		const unsigned int lim = (1 << nrQubits) - 1;
+		for (unsigned int functionString = 0; functionString <= lim; ++functionString)
+		{
+			std::cout << "Trying with string: " << functionString << "...";
+
+			simonAlgorithm.setString(functionString);
+
+			const unsigned int res = simonAlgorithm.Execute();
+
+			if (res != functionString)
+			{
+				std::cout << "\n Result different that the set string: " << res << std::endl;
+
+				return false;
+			}
+
+			std::cout << " ok" << std::endl;
+		}
+	}
+
+	return true;
+}
+
 bool tests()
 {
 	std::cout << "\nTests\n";
@@ -683,6 +717,7 @@ bool tests()
 	bool res = registerMeasurementsTests();
 	if (res) res = quantumAdderTests();
 	if (res) res = DeutschJozsaTests();
+	if (res) res = SimonTests();
 	if (res) res = BernsteinVaziraniTests();
 	if (res) res = GroverTests();
 	if (res) res = ShorTests();

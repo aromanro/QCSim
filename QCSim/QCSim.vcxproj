@@ -182,6 +182,7 @@
     <ClInclude Include="QubitRegister.h" />
     <ClInclude Include="Schrodinger.h" />
     <ClInclude Include="ShorAlgorithm.h" />
+    <ClInclude Include="SimonAlgorithm.h" />
     <ClInclude Include="SuperdenseCoding.h" />
     <ClInclude Include="Teleportation.h" />
     <ClInclude Include="Tests.h" />

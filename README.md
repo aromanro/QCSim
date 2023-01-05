@@ -7,6 +7,7 @@ Quantum computation simulator
 Work in progress, but the following seem to work:
 *   Grover's algorithm
 *   Deutsch-Jozsa algorithm
+*   Simon's algorithm
 *   Shor's algorithm
 *   Bernstein–Vazirani algorithm
 *   Quantum adder (half-adder & full-adder for 1-qubits and full adder for two N-qubit numbers)
@@ -25,4 +26,4 @@ Paradoxes (although some of the above might be considered paradoxes as well):
 *   General Elitzur-Vaidman Bomb tester/interaction free measurement/counterfactual computation
 *   Hardy's paradox
 
-Maybe I'll add some more things in the future, like something related with quantum random walks and/or quantum tomography, but for now this will take a break for a while. 
+
