@@ -479,12 +479,27 @@ bool SimonTests()
 	{
 		std::cout << "Nr of qubits: " << nrQubits << std::endl;
 
+		// also test function generation
+		Simon::Oracle oracle;
+
 		Simon::SimonAlgorithm simonAlgorithm(nrQubits);
 
 		const unsigned int lim = (1 << nrQubits) - 1;
 		for (unsigned int functionString = 0; functionString <= lim; ++functionString)
 		{
 			std::cout << "Trying with string: " << functionString << "...";
+
+			// function testing
+
+			oracle.setString(functionString, nrQubits);
+			if (!oracle.checkFunction())
+			{
+				std::cout << "\n Something is wrong with function contruction, check the oracle code" << std::endl;
+
+				return false;
+			}
+
+			// ***************
 
 			simonAlgorithm.setString(functionString);
 

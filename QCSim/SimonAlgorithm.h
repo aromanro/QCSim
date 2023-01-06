@@ -32,6 +32,7 @@ namespace Simon {
 			std::shuffle(functionTable.begin(), functionTable.end(), rng);
 
 			// add some more randomness, do not look in order to indices when searching for a matching index
+			// this is probably unneeded complexity, but...
 			std::vector<unsigned int> indicesTable(functionTable.size());
 			for (unsigned int i = 0; i < nrBasisStates; ++i)
 				indicesTable[i] = i;
@@ -41,7 +42,7 @@ namespace Simon {
 				for (unsigned int i = 0; i < nrBasisStates; ++i)
 				{
 					const unsigned int y = indicesTable[i];
-					if (x == y) continue;
+					if (y == UINT_MAX || x == y) continue;
 					// note that is the string function is zero, then the function will be one-to-one
 					// because there is always at least a bit that is different between to different values,
 				    // so the assignment below never takes place
@@ -49,6 +50,7 @@ namespace Simon {
 					if ((x ^ y) == stringFunction)
 					{
 						functionTable[x] = functionTable[y];
+						indicesTable[i] = UINT_MAX;
 						break;
 					}
 				}
@@ -86,6 +88,35 @@ namespace Simon {
 			//	std::cout << "Oracle matrix NOT unitary!" << std::endl;
 
 			return extOperatorMat;
+		}
+
+		bool checkFunction() const
+		{
+			if (stringFunction == 0)
+			{
+				std::unordered_set<unsigned int> s(functionTable.begin(), functionTable.end());
+				if (s.size() != functionTable.size()) return false;
+			}
+			else
+			{
+				std::unordered_map<unsigned int, std::unordered_set<unsigned int>> m;
+				for (unsigned int i = 0; i < functionTable.size(); ++i)
+					m[f(i)].insert(i);
+
+				if (m.size() != functionTable.size() / 2) return false;
+
+				for (const auto& s : m)
+				{
+					if (s.second.size() != 2) return false;
+
+					const unsigned int a = *s.second.begin();
+					const unsigned int b = *(++s.second.begin());
+					const unsigned int ab = a ^ b;
+					if (ab != 0 && ab != stringFunction) return false;
+				}
+			}
+
+			return true;
 		}
 
 	protected:
@@ -130,11 +161,11 @@ namespace Simon {
 			const unsigned int nrBasisStates = 1u << N;
 
 			std::unordered_map<unsigned int, unsigned int> measurements;
-			const unsigned int nrMeasurements = N + 60;
+			const unsigned int nrMeasurements = 100;
 
 			// not exactly how it should be done, but again, I'm lazy
 
-			for (unsigned int i = 0;i < nrMeasurements + 45; ++i)
+			for (unsigned int i = 0;i < nrMeasurements; ++i)
 			{
 				Init();
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(OracleOp);
