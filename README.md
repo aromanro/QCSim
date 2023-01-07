@@ -15,7 +15,7 @@ Work in progress, but the following seem to work:
 *   Superdense coding
 *   Quantum cryptography: BB84 protocol
 *   CHSH inequality violation
-*   3-qubit error correcting bit-flip errors
+*   3-qubit error correcting a qubit-flip
 
 Simulation of quantum simulation:
 
