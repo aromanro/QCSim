@@ -11,6 +11,7 @@
 #include "QuantumCryptograpy.h"
 #include "DeutschJozsa.h"
 #include "SimonAlgorithm.h"
+#include "ErrorCorrection3Qubits.h"
 
 #include <iostream>
 #include <map>
@@ -470,7 +471,6 @@ bool DeutschJozsaTests()
 }
 
 
-
 bool SimonTests()
 {
 	std::cout << "\nTesting Simon..." << std::endl;
@@ -519,11 +519,77 @@ bool SimonTests()
 	return true;
 }
 
+bool ErrorCorrectionTests()
+{
+	std::cout << "\nTesting Error Correction for a bit-flip for 3 qubits encoding of a qubit..." << std::endl;
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	ErrorCorrection::ErrorCorrection3Qubits errorCorrection;
+
+	std::uniform_real_distribution<> dist_ampl(-1., 1.);
+
+	for (int i = 0; i < 16; ++i)
+	{
+		// generate and normalize
+		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
+		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
+
+		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
+		alpha /= norm;
+		beta /= norm;
+
+		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
+
+		for (unsigned int q = 0; q <= 3; ++q)
+		{
+			std::cout << "Flipping qubit: " << ((q == 3) ? "No qubit" : std::to_string(q)) << "...";
+			errorCorrection.SetState(alpha, beta);
+			errorCorrection.SetFlipQubit(q); // q = 3 means 'no qubit flip'
+
+			const unsigned int res = errorCorrection.Execute(); // return values: 3 means that the first qubit was flipped, 0 - no flip, 1 - first qubit was flipped, 2 - the second one was flipped
+			
+			// check against return values that show that the qubit flip was not detected:
+			// either some qubit flip was done but not detected (first condition in if)
+			// or no qubit flip was done but one was reported (second condition in if)
+			// or first qubit flip was done but some other detected
+			// or one of the other two qubits was flipped but something else was reported
+			if ((res == 0 && q != 3) || (q == 3 && res != 0) ||
+				(q == 0 && res != 3) ||
+				((res == 1 || res == 2) && res != q))
+			{
+				std::cout << "\n Bit flip was not corrected, result: " << res << std::endl;
+				return false;
+			}
+
+			// now check the fidelity of the wavefunction for the first qubit
+			// due of the measurement, the wavefunction collapsed, whence the complication:
+			QC::QubitRegister reg(3);
+			const unsigned int meas = res << 1;
+			reg.setRawAmplitude(meas, alpha);
+			reg.setRawAmplitude(meas | 1, beta);
+
+			const double fidelity = reg.stateFidelity(errorCorrection.getRegisterStorage());
+			if (fidelity < 0.99999)
+			{
+				std::cout << "\n Bit flip was not corrected, result: " << res << " Fidelity is too small: " << fidelity << std::endl;
+				return false;
+			}
+
+			std::cout << " ok" << std::endl;
+		}
+	}
+
+	return true;
+}
+
 bool tests()
 {
 	std::cout << "\nTests\n";
 
 	bool res = registerMeasurementsTests();
+	if (res) res = ErrorCorrectionTests();
 	if (res) res = quantumAdderTests();
 	if (res) res = DeutschJozsaTests();
 	if (res) res = SimonTests();

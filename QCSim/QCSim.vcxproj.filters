@@ -110,5 +110,8 @@
     <ClInclude Include="SimonAlgorithm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ErrorCorrection3Qubits.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

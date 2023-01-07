@@ -12,6 +12,7 @@ namespace Teleportation
 		QuantumTeleportation(unsigned int N = 3, int addseed = 0)
 			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
 		{
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
 		}
 	};
 
