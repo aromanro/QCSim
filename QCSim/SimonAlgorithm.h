@@ -161,7 +161,7 @@ namespace Simon {
 			const unsigned int nrBasisStates = 1u << N;
 
 			std::unordered_map<unsigned int, unsigned int> measurements;
-			const unsigned int nrMeasurements = 100;
+			const unsigned int nrMeasurements = 300; // make it highly unlikely to fail
 
 			// not exactly how it should be done, but again, I'm lazy
 
