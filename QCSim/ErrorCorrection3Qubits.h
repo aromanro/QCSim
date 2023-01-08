@@ -10,7 +10,7 @@ namespace ErrorCorrection {
 	{
 	public:
 		ErrorCorrection3Qubits(int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(3, addseed), flippedQubit(0)
+			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(3, addseed), errorQubit(3)
 		{
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
 		}
@@ -25,45 +25,110 @@ namespace ErrorCorrection {
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
 		}
 
-		// set it to bigger than two for 'no flip error'
-		void SetFlipQubit(unsigned int q = 0)
+		// set it to bigger than two for 'no error'
+		void SetErrorQubit(unsigned int q = 0)
 		{
-			flippedQubit = q;
+			errorQubit = q;
 		}
 
-		unsigned int GetFlipQubit() const
+		unsigned int GetErrorQubit() const
 		{
-			return flippedQubit;
+			return errorQubit;
+		}
+
+	protected:
+		virtual void ApplyError() = 0;
+		
+
+		void Prepare()
+		{
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 2, 1);
+		}
+
+		void DetectAndCorrect()
+		{
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 2, 0);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ccnot, 0, 1, 2);
+		}
+
+		unsigned int errorQubit;
+
+		QC::Gates::CNOTGate<MatrixClass> cnot;
+		QC::Gates::ToffoliGate<MatrixClass> ccnot;
+		QC::Gates::PauliXGate<MatrixClass> x; // error gate (flip or sign)
+	};
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ErrorCorrection3QubitsFlip :
+		public ErrorCorrection3Qubits<VectorClass, MatrixClass>
+	{
+	public:
+		ErrorCorrection3QubitsFlip(int addseed = 0)
+			: ErrorCorrection3Qubits<VectorClass, MatrixClass>(addseed)
+		{
 		}
 
 		unsigned int Execute() override
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 2, 1);
+			ErrorCorrection3Qubits<VectorClass, MatrixClass>::Prepare();
 
 			ApplyError();
 
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 2, 0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ccnot, 0, 1, 2);
+			ErrorCorrection3Qubits<VectorClass, MatrixClass>::DetectAndCorrect();
 
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(1, 2); // 11 - qubit 0 was flipped and corrected, 01 - qubit 1 was flipped, 10 - qubit 2 was flipped
 		}
 
 	protected:
-		void ApplyError()
+		void ApplyError() override
 		{
-			if (flippedQubit > 2) return;
+			if (ErrorCorrection3Qubits<VectorClass, MatrixClass>::errorQubit > 2) return;
 
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(x, flippedQubit);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrection3Qubits<VectorClass, MatrixClass>::x, ErrorCorrection3Qubits<VectorClass, MatrixClass>::errorQubit);
 		}
-
-		unsigned int flippedQubit;
-
-		QC::Gates::CNOTGate<MatrixClass> cnot;
-		QC::Gates::ToffoliGate<MatrixClass> ccnot;
-		QC::Gates::PauliXGate<MatrixClass> x; // flip error gate
 	};
 
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ErrorCorrection3QubitsSign :
+		public ErrorCorrection3Qubits<VectorClass, MatrixClass>
+	{
+	public:
+		ErrorCorrection3QubitsSign(int addseed = 0)
+			: ErrorCorrection3Qubits<VectorClass, MatrixClass>(addseed)
+		{
+		}
+
+		unsigned int Execute() override
+		{
+			ErrorCorrection3Qubits<VectorClass, MatrixClass>::Prepare();
+			ApplyHadamardOnAllQubits();
+
+			ApplyError();
+
+			ApplyHadamardOnAllQubits(); 
+			ErrorCorrection3Qubits<VectorClass, MatrixClass>::DetectAndCorrect();
+
+			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(1, 2); // 11 - qubit 0 was flipped and corrected, 01 - qubit 1 was flipped, 10 - qubit 2 was flipped
+		}
+
+	protected:
+		void ApplyError() override
+		{
+			if (ErrorCorrection3Qubits<VectorClass, MatrixClass>::errorQubit > 2) return;
+
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrection3Qubits<VectorClass, MatrixClass>::errorQubit);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrection3Qubits<VectorClass, MatrixClass>::x, ErrorCorrection3Qubits<VectorClass, MatrixClass>::errorQubit);
+			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrection3Qubits<VectorClass, MatrixClass>::errorQubit);
+		}
+
+		void ApplyHadamardOnAllQubits()
+		{
+			for (unsigned int i = 0; i < QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits(); ++i)
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, i);
+		}
+
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
+	};
 }
 
