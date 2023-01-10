@@ -169,6 +169,7 @@
     <ClInclude Include="CheckCHSHInequality.h" />
     <ClInclude Include="DeutschJozsa.h" />
     <ClInclude Include="ErrorCorrection3Qubits.h" />
+    <ClInclude Include="ErrorCorrectionBase.h" />
     <ClInclude Include="FFT.h" />
     <ClInclude Include="Function.h" />
     <ClInclude Include="GeneralElitzurVaidmanBomb.h" />
@@ -185,6 +186,7 @@
     <ClInclude Include="QubitRegister.h" />
     <ClInclude Include="Schrodinger.h" />
     <ClInclude Include="ShorAlgorithm.h" />
+    <ClInclude Include="ShorCode.h" />
     <ClInclude Include="SimonAlgorithm.h" />
     <ClInclude Include="SuperdenseCoding.h" />
     <ClInclude Include="Teleportation.h" />

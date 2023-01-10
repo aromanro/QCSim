@@ -116,5 +116,11 @@
     <ClInclude Include="ErrorCorrection3Qubits.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ShorCode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ErrorCorrectionBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
