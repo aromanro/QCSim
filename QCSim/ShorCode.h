@@ -16,7 +16,9 @@ namespace ErrorCorrection {
 		enum ErrorType : int
 		{
 			Flip,
-			Sign
+			Sign,
+			Both,
+			None // another way of specifying 'no error' (the other one is to set the error qubit larger than the last qubit number)
 		};
 
 		void setErrorType(ErrorType t)
@@ -47,11 +49,15 @@ namespace ErrorCorrection {
 
 			if(ErrorType == Flip)
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::x, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
-			else
+			else if (ErrorType == Sign)
 			{
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::x, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
+				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
+				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::x, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
+				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(z, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
+			}
+			else if (ErrorType == Both) {
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(std::complex<double>(0., 1.) * y.getOperatorMatrix(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits(), ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit));
 			}
 		}
 
@@ -85,6 +91,8 @@ namespace ErrorCorrection {
 
 		ErrorType errorType;
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::PauliZGate z;
+		QC::Gates::PauliYGate y;
 	};
 
 }
