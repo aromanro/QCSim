@@ -33,7 +33,7 @@ namespace ErrorCorrection {
 
 		unsigned int Execute() override
 		{
-			Prepare();
+			Encode();
 
 			ApplyError();
 
@@ -54,14 +54,14 @@ namespace ErrorCorrection {
 				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
 				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::x, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
 				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(z, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit);
+				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(z, ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit); // another way of the above
 			}
 			else if (ErrorType == Both) {
 				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(std::complex<double>(0., 1.) * y.getOperatorMatrix(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits(), ErrorCorrectionBase<VectorClass, MatrixClass>::errorQubit));
 			}
 		}
 
-		void Prepare()
+		void Encode()
 		{
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::cnot, 3, 0);
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::cnot, 6, 0);

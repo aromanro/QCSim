@@ -15,7 +15,7 @@ namespace ErrorCorrection {
 		}
 
 	protected:
-		void Prepare()
+		void Encode()
 		{
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::cnot, 1, 0);
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::cnot, 2, 0);
@@ -40,7 +40,7 @@ namespace ErrorCorrection {
 
 		unsigned int Execute() override
 		{
-			ErrorCorrection3Qubits<VectorClass, MatrixClass>::Prepare();
+			ErrorCorrection3Qubits<VectorClass, MatrixClass>::Encode();
 
 			ApplyError();
 
@@ -70,7 +70,7 @@ namespace ErrorCorrection {
 
 		unsigned int Execute() override
 		{
-			ErrorCorrection3Qubits<VectorClass, MatrixClass>::Prepare();
+			ErrorCorrection3Qubits<VectorClass, MatrixClass>::Encode();
 			ApplyHadamardOnAllQubits();
 
 			ApplyError();
