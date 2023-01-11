@@ -1,5 +1,6 @@
 #include "Tests.h"
 #include "ErrorCorrection3Qubits.h"
+#include "ShorCode.h"
 
 #include <iostream>
 #include <map>
@@ -88,7 +89,7 @@ bool SignErrorCorrectionTests()
 			const unsigned int res = errorCorrectionSign.Execute(); // return values: 3 means that the first qubit had a sign change, 0 - no change, 1 - first qubit affected, 2 - the second one affected
 
 			// check against return values that show that the qubit sign change was not detected:
-			// either some qubit signe change was done but not detected (first condition in if)
+			// either some qubit sign change was done but not detected (first condition in if)
 			// or no qubit sign change was done but one was reported (second condition in if)
 			// or first qubit sign change was done but some other detected
 			// or one of the other two qubits was changed but something else was reported
@@ -121,9 +122,80 @@ bool SignErrorCorrectionTests()
 	return true;
 }
 
+bool ShorCodeTests()
+{
+	std::cout << "\nShor Code:" << std::endl;
+	ErrorCorrection::ShorCode errorCorrection;
+	for (int i = 0; i < 16; ++i)
+	{
+		// generate and normalize
+		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
+		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
+
+		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
+		alpha /= norm;
+		beta /= norm;
+
+		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
+
+		for (unsigned int q = 0; q <= 9; ++q)
+		{
+			for (unsigned int c = 0; c <= 2; ++c)
+			{
+			    ErrorCorrection::ShorCode<>::ErrorType errorType = static_cast<ErrorCorrection::ShorCode<>::ErrorType>(c);
+				if (q == 9) errorType = ErrorCorrection::ShorCode<>::ErrorType::None;
+				std::string errorDesc;
+				if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Flip)
+					errorDesc = "Flipping";
+				else if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Sign)
+					errorDesc = "Changing sign for";
+				else if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Both)
+					errorDesc = "Flipping and changing sign for ";
+				else
+					errorDesc = "Doing nothing for";
+
+				std::cout << errorDesc << " qubit: " << ((q == 9) ? "No qubit" : std::to_string(q)) << "...";
+				errorCorrection.SetState(alpha, beta);
+				errorCorrection.SetErrorQubit(q); // q = 9 means 'no error'
+				errorCorrection.setErrorType(errorType);
+
+				const unsigned int res = errorCorrection.Execute();
+
+				// limited check of the result, more reliance on checking the fidelity
+				// this probably could be extended, but I won't bother:
+				if ((res == 0 && q != 9) || (q == 9 && res != 0))
+				{
+					std::cout << "\n Change was not corrected, result: " << res << std::endl;
+					return false;
+				}
+
+				// check the fidelity of the wavefunction for the first qubit
+				// due of the measurement, the wavefunction collapsed, whence the complication:
+				QC::QubitRegister reg(9);
+				const unsigned int meas = res << 1;
+				reg.setRawAmplitude(meas, alpha);
+				reg.setRawAmplitude(meas | 1, beta);
+
+				const double fidelity = reg.stateFidelity(errorCorrection.getRegisterStorage());
+				if (fidelity < 0.99999)
+				{
+					std::cout << "\n Qubit change was not corrected, result: " << res << " Fidelity is too small: " << fidelity << std::endl;
+					return false;
+				}
+
+				std::cout << " ok" << std::endl;
+
+				if (q == 9) break;
+			}
+		}
+	}
+
+	return true;
+}
+
 bool ErrorCorrectionTests()
 {
 	std::cout << "\nTesting Error Correction for 3 qubits encoding of a qubit..." << std::endl;
 
-	return FlipErrorCorrectionTests() && SignErrorCorrectionTests();
+	return FlipErrorCorrectionTests() && SignErrorCorrectionTests() && ShorCodeTests();
 }
