@@ -129,6 +129,21 @@ bool SignErrorCorrectionTests()
 	return true;
 }
 
+std::string getErrorDesc(ErrorCorrection::ShorCode<>::ErrorType errorType)
+{
+	std::string errorDesc;
+	if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Flip)
+		errorDesc = "Flipping";
+	else if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Sign)
+		errorDesc = "Changing sign for";
+	else if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Both)
+		errorDesc = "Flipping and changing sign for ";
+	else
+		errorDesc = "Doing nothing for";
+
+	return errorDesc;
+}
+
 bool ShorCodeTests()
 {
 	std::complex<double> alpha;
@@ -144,23 +159,16 @@ bool ShorCodeTests()
 
 		for (unsigned int q = 0; q <= 9; ++q)
 		{
+			errorCorrection.SetErrorQubit(q); // q = 9 means 'no error'
+
 			for (unsigned int c = 0; c <= 2; ++c)
 			{
 			    ErrorCorrection::ShorCode<>::ErrorType errorType = static_cast<ErrorCorrection::ShorCode<>::ErrorType>(c);
 				if (q == 9) errorType = ErrorCorrection::ShorCode<>::ErrorType::None;
-				std::string errorDesc;
-				if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Flip)
-					errorDesc = "Flipping";
-				else if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Sign)
-					errorDesc = "Changing sign for";
-				else if (errorType == ErrorCorrection::ShorCode<>::ErrorType::Both)
-					errorDesc = "Flipping and changing sign for ";
-				else
-					errorDesc = "Doing nothing for";
+				std::string errorDesc = getErrorDesc(errorType);
 
 				std::cout << errorDesc << " qubit: " << ((q == 9) ? "No qubit" : std::to_string(q)) << "...";
 				errorCorrection.SetState(alpha, beta);
-				errorCorrection.SetErrorQubit(q); // q = 9 means 'no error'
 				errorCorrection.setErrorType(errorType);
 
 				const unsigned int res = errorCorrection.Execute();
