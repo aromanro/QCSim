@@ -20,6 +20,7 @@ Quantum error correction:
 
 *   3-qubit error correcting a qubit-flip
 *   3-qubit error correcting a sign-flip
+*   Shor Code
 
 Simulation of quantum simulation:
 

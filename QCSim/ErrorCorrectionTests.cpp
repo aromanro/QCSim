@@ -6,19 +6,29 @@
 #include <map>
 
 
+std::pair<std::complex<double>, std::complex <double>> getRandomState()
+{
+	// generate and normalize
+	std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
+	std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
+
+	const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
+	alpha /= norm;
+	beta /= norm;
+
+	return { alpha, beta };
+}
+
 bool FlipErrorCorrectionTests()
 {
+	std::complex<double> alpha;
+	std::complex<double> beta;
+
 	std::cout << "Qubit flip:" << std::endl;
 	ErrorCorrection::ErrorCorrection3QubitsFlip errorCorrectionFlip;
 	for (int i = 0; i < 16; ++i)
 	{
-		// generate and normalize
-		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
-		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
-
-		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
-		alpha /= norm;
-		beta /= norm;
+		std::tie(alpha, beta) = getRandomState();
 
 		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
 
@@ -66,17 +76,14 @@ bool FlipErrorCorrectionTests()
 
 bool SignErrorCorrectionTests()
 {
+	std::complex<double> alpha;
+	std::complex<double> beta;
+
 	std::cout << "\nSign change:" << std::endl;
 	ErrorCorrection::ErrorCorrection3QubitsSign errorCorrectionSign;
 	for (int i = 0; i < 16; ++i)
 	{
-		// generate and normalize
-		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
-		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
-
-		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
-		alpha /= norm;
-		beta /= norm;
+		std::tie(alpha, beta) = getRandomState();
 
 		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
 
@@ -124,17 +131,14 @@ bool SignErrorCorrectionTests()
 
 bool ShorCodeTests()
 {
+	std::complex<double> alpha;
+	std::complex<double> beta;
+
 	std::cout << "\nShor Code:" << std::endl;
 	ErrorCorrection::ShorCode errorCorrection;
 	for (int i = 0; i < 16; ++i)
 	{
-		// generate and normalize
-		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
-		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
-
-		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
-		alpha /= norm;
-		beta /= norm;
+		std::tie(alpha, beta) = getRandomState();
 
 		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
 
