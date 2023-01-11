@@ -163,7 +163,7 @@ bool ShorCodeTests()
 
 			for (unsigned int c = 0; c <= 2; ++c)
 			{
-			    ErrorCorrection::ShorCode<>::ErrorType errorType = static_cast<ErrorCorrection::ShorCode<>::ErrorType>(c);
+				ErrorCorrection::ShorCode<>::ErrorType errorType = static_cast<ErrorCorrection::ShorCode<>::ErrorType>(c);
 				if (q == 9) errorType = ErrorCorrection::ShorCode<>::ErrorType::None;
 				std::string errorDesc = getErrorDesc(errorType);
 
