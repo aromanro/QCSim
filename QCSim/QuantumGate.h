@@ -278,10 +278,10 @@ namespace QC {
 			{
 				const double t2 = theta * 0.5;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(-std::polar(1., lambda) * sin(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(std::polar(1., phi) * sin(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., phi + lambda) * std::complex<double>(cos(t2), 0);
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::complex<double>(cos(t2), 0.);
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = -std::polar(1., lambda) * sin(t2);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::polar(1., phi) * sin(t2);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., phi + lambda) * cos(t2);
 			}
 		};
 
