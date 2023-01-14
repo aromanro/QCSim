@@ -158,6 +158,7 @@
     <ClCompile Include="AdderTests.cpp" />
     <ClCompile Include="ErrorCorrectionTests.cpp" />
     <ClCompile Include="FFT.cpp" />
+    <ClCompile Include="GatesTests.cpp" />
     <ClCompile Include="MeasurementsTests.cpp" />
     <ClCompile Include="ParadoxesTests.cpp" />
     <ClCompile Include="QCSim.cpp" />

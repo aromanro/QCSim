@@ -239,8 +239,5 @@ bool SimulationTests()
 {
 	std::cout << "\nTesting simulations of quantum simulations..." << std::endl;
 
-	bool res = PauliSimultationTests();
-	if (res) res = SchrodingerSimulationTests();
-
-	return res;
+	return PauliSimultationTests() && SchrodingerSimulationTests();
 }

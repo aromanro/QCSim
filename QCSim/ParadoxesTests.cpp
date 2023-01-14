@@ -165,9 +165,5 @@ bool ParadoxesTests()
 {
 	std::cout << "\nTesting simulations of quantum paradoxes..." << std::endl;
 
-	bool res = QuantumEraserTests();
-	if (res) res = ElitzurVaidmanBombTests();
-	if (res) res = HardyParadoxTests();
-
-	return res;
+	return QuantumEraserTests() && ElitzurVaidmanBombTests() && HardyParadoxTests();
 }
