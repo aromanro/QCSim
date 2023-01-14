@@ -176,6 +176,32 @@ namespace QC {
 			}
 		};
 
+		template<class MatrixClass = Eigen::MatrixXcd> class NOTSquareRootGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			NOTSquareRootGate()
+			{
+				static const double norm = 1. / sqrt(2.);
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = norm;
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = -norm;
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = norm;
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = norm;
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class SplitterGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			SplitterGate()
+			{
+				static const double norm = 1. / sqrt(2.);
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = norm;
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(0, norm);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(0, norm);
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = norm;
+			}
+		};
+
 		// rotation gates
 
 		template<class MatrixClass = Eigen::MatrixXcd> class RotationGate : public SingleQubitGate<MatrixClass>
@@ -319,6 +345,24 @@ namespace QC {
 				QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
 				QuantumGateWithOp<MatrixClass>::operatorMat(1, 2) = std::complex<double>(0, 1);
 				QuantumGateWithOp<MatrixClass>::operatorMat(2, 1) = std::complex<double>(0, 1);
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class DecrementGate : public TwoQubitsGate<MatrixClass>
+		{
+		public:
+			DecrementGate()
+			{
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = 0;
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = 0;
+				QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
+				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = 0;
+
+				QuantumGateWithOp<MatrixClass>::operatorMat(3, 0) = 1;
+
+				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = 1;
+				QuantumGateWithOp<MatrixClass>::operatorMat(1, 2) = 1;
+				QuantumGateWithOp<MatrixClass>::operatorMat(2, 3) = 1;
 			}
 		};
 
