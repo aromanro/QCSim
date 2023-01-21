@@ -8,7 +8,7 @@ bool quantumHalfAdderTests()
 {
 	std::cout << "\nTwo qubits half-adder..." << std::endl;
 	QC::QubitRegister regThreeQubits;
-	QC::TwoQubitsHalfAdder halfAdder(0, 1, 2);
+	Adders::TwoQubitsHalfAdder halfAdder(0, 1, 2);
 
 	// 00
 	std::cout << "Adding 0 + 0...";
@@ -88,7 +88,7 @@ bool quantumHalfAdderTests()
 bool quantumFullAdderTests()
 {
 	QC::QubitRegister regFourQubits(4);
-	QC::TwoQubitsFullAdder fullAdder(0, 1, 2, 3);
+	Adders::TwoQubitsFullAdder fullAdder(0, 1, 2, 3);
 	std::cout << "Testing full adder..." << std::endl;
 
 	// 00
@@ -179,7 +179,7 @@ bool quantumAdderTests()
 	std::uniform_int_distribution<> dist_nr(0, 7);
 
 
-	QC::NQubitsAdderAlgorithm threeQubitsAdder;
+	Adders::NQubitsAdderAlgorithm threeQubitsAdder;
 
 	for (int i = 0; i < 10; ++i)
 	{
