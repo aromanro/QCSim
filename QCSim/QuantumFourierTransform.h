@@ -31,6 +31,11 @@ namespace QC {
 			}
 		}
 
+		void Swap(QubitRegister<VectorClass, MatrixClass>& reg) const
+		{
+			Swap(reg, sQubit, eQubit);
+		}
+
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const override
 		{
 			Swap(reg, sQubit, eQubit);
