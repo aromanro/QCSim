@@ -60,20 +60,20 @@ namespace QC {
 		}
 
 		// execute this to avoid measurement
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg) const
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true) const
 		{
-			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit);
+			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, false, doSwap);
 		}
 
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg) const
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true) const
 		{
-			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, true);
+			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, true, doSwap);
 		}
 
 		// the sign convention is not as in the Quantum Computation and Quantum Information book
 		// also because of the qubits ordering, the circuit is 'mirrored' (they have the binary representation as j1 j2 j3 ... jn, I have it as jn...j1)
 
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool inverse = false) const
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool inverse = false, bool doSwap = true) const
 		{
 			Gates::ControlledPhaseShiftGate<MatrixClass> phaseShift;
 
@@ -96,7 +96,7 @@ namespace QC {
 				reg.ApplyGate(hadamard, curQubitm1);
 			}
 
-			QubitsSwapper<VectorClass, MatrixClass>::Swap(reg, sq, eq);
+			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg, sq, eq);
 		}
 	
 		Gates::HadamardGate<MatrixClass> hadamard; // public, let others use it

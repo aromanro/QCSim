@@ -25,6 +25,8 @@ namespace QC {
 			: NrQubits(N), NrBasisStates(1u << NrQubits),
 			uniformZeroOne(0, 1)
 		{
+			assert(N > 0);
+
 			registerStorage = VectorClass::Zero(NrBasisStates);
 
 			uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();

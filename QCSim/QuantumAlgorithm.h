@@ -10,6 +10,7 @@ namespace QC {
 		QuantumAlgorithm(unsigned int N = 3, int addseed = 0)
 			: reg(N, addseed)
 		{
+			assert(N > 0);
 		}
 
 		virtual ~QuantumAlgorithm() {};
