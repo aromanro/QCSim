@@ -147,7 +147,7 @@ namespace QC {
 		
 		virtual ~QuantumSubAlgorithm() {};
 
-		virtual unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) const = 0;
+		virtual unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) = 0;
 	};
 
 }

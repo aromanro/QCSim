@@ -15,7 +15,7 @@ namespace Adders {
 		{
 		}
 
-		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) const override
+		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
 			const unsigned int nrQubits = reg.getNrQubits();
 			if (aux >= nrQubits || q2 >= nrQubits || q1 >= nrQubits) return 1; // error code
@@ -47,7 +47,7 @@ namespace Adders {
 		{
 		}
 
-		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) const override
+		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
 			const unsigned int nrQubits = reg.getNrQubits();
 			if (TwoQubitsHalfAdder<VectorClass, MatrixClass>::aux >= nrQubits || TwoQubitsHalfAdder<VectorClass, MatrixClass>::q2 >= nrQubits || TwoQubitsHalfAdder<VectorClass, MatrixClass>::q1 >= nrQubits || ci >= nrQubits) 

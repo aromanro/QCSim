@@ -22,7 +22,7 @@ namespace QuantumSimulation {
 			setTimeInterval(t);
 		}
 
-		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) const override
+		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
 			const unsigned int nrQubits = reg.getNrQubits();
 			const unsigned int lastQubit = nrQubits - 1;
@@ -83,7 +83,7 @@ namespace QuantumSimulation {
 			return ops[qubit];
 		}
 
-		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) const override
+		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
 			const unsigned int nrQubits = reg.getNrQubits();
 
@@ -146,7 +146,7 @@ namespace QuantumSimulation {
 			{
 				// this is slow and it can be improved by obtaining the whole matrix once and just by 'applying' the operator each step
 				// for now I'll leave it as it is but the gains would be quite big here
-				for (const PauliStringSimulation<VectorClass, MatrixClass>& term : terms)
+				for (PauliStringSimulation<VectorClass, MatrixClass>& term : terms)
 					term.Execute(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 			}
 
