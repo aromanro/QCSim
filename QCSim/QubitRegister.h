@@ -139,13 +139,13 @@ namespace QC {
 
 		unsigned int Measure()
 		{
-			const double prob = uniformZeroOne(rng);
+			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 			double accum = 0;
 			unsigned int state = NrBasisStates - 1;
 			for (unsigned int i = 0; i < NrBasisStates; ++i)
 			{
 				accum += (std::conj(registerStorage(i)) * registerStorage(i)).real();
-				if (prob < accum)
+				if (prob <= accum)
 				{
 					state = i;
 					break;
@@ -170,7 +170,7 @@ namespace QC {
 
 		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
 		{
-			const double prob = uniformZeroOne(rng);
+			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 			double accum = 0;
 
 			const unsigned int secondQubitp1 = secondQubit + 1;
@@ -201,7 +201,7 @@ namespace QC {
 				}
 
 				accum += stateProbability;
-				if (prob < accum)
+				if (prob <= accum)
 				{
 					measuredState = state;
 					norm = 1. / sqrt(stateProbability);
