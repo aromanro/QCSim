@@ -125,5 +125,8 @@
     <ClInclude Include="ErrorCorrectionBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="DraperAdder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -10,6 +10,7 @@
 #include <chrono>
 
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 
 #include "QuantumGate.h"
@@ -85,6 +86,13 @@ namespace QC {
 			if (State >= NrBasisStates) return;
 
 			registerStorage(State) = val;
+		}
+
+		std::complex<double> getRawAmplitude(unsigned int State) const
+		{
+			if (State >= NrBasisStates) return 0.;
+
+			return registerStorage(State);
 		}
 
 		void Clear()
@@ -360,6 +368,47 @@ namespace QC {
 			catch (...) {};
 
 			return false;
+		}
+
+		void displayRegister() const
+		{
+			const unsigned int nQubits = getNrQubits();
+			const unsigned int nStates = getNrBasisStates();
+
+			//std::cout << std::fixed;
+			std::cout << std::setprecision(4);
+
+			for (unsigned int state = 0; state < nStates; ++state)
+			{
+				const std::complex<double> val = getBasisStateAmplitude(state);
+				if (abs(real(val)) < 1E-10 && abs(imag(val)) < 1E-10) continue;
+
+				bool r = false;
+				if (abs(real(val)) > 1E-10) {
+					std::cout << real(val) << " ";
+					r = true;
+				}
+				if (abs(imag(val)) > 1E-10) {
+					if (r && imag(val) > 0) std::cout << "+ ";
+
+					if (imag(val) < 0) {
+						std::cout << "-";
+						if (r) std::cout << " ";
+					}
+					std::cout << abs(imag(val)) << "i ";
+				}
+
+				std::cout << "|";
+
+				unsigned int mask = 1 << (nQubits - 1);
+				for (unsigned int qubit = 0; qubit < nQubits; ++qubit)
+				{
+					std::cout << ((state & mask) ? "1" : "0");
+					mask >>= 1;
+				}
+
+				std::cout << ">    ";
+			}
 		}
 
 	protected:

@@ -59,7 +59,7 @@ namespace QC {
 
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit);
+			IQFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit);
 
 			return reg.Measure();
 		}
@@ -67,22 +67,22 @@ namespace QC {
 		// execute this to avoid measurement
 		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
 		{
-			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, false, doSwap);
+			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, doSwap);
 		}
 
 		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
 		{
-			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, true, doSwap);
+			IQFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, doSwap);
 		}
 
 		// the sign convention is not as in the Quantum Computation and Quantum Information book
 		// also because of the qubits ordering, the circuit is 'mirrored' (they have the binary representation as j1 j2 j3 ... jn, I have it as jn...j1)
 
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool inverse = false, bool doSwap = true)
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool doSwap = true)
 		{
 			reg.ApplyGate(hadamard, eq);
 
-			const double startPhase = (inverse ? M_PI_2 : -M_PI_2);
+			const double startPhase = M_PI_2;
 
 			for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
 			{
@@ -100,6 +100,30 @@ namespace QC {
 			}
 
 			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg, sq, eq);
+		}
+
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool doSwap = true)
+		{
+			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg, sq, eq);
+
+			const double startPhase = -M_PI_2;
+
+			for (unsigned int curQubit = sq + 1; curQubit <= eq; ++curQubit)
+			{
+				const unsigned int curQubitm1 = curQubit - 1;
+				reg.ApplyGate(hadamard, curQubitm1);
+
+				double phase = startPhase; // starts from R2 = phase shift with 2 PI / 2^2 = PI / 2
+				for (int ctrlq = curQubitm1; ctrlq >= static_cast<int>(sq); --ctrlq)
+				{
+					cPhaseShift.SetPhaseShift(phase);
+					reg.ApplyGate(cPhaseShift, curQubit, ctrlq);
+
+					phase *= 0.5;
+				}	
+			}
+
+			reg.ApplyGate(hadamard, eq);
 		}
 	
 		// public, let others use them

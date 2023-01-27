@@ -65,7 +65,7 @@ bool ShorTests()
 			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 	}
 	*/
-
+	
 	for (int i = 0; i < 10;)
 	{
 		Shor::ShorAlgorithm shorAlgo;//(21, 14, 9)

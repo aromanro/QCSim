@@ -8,9 +8,9 @@ Work in progress, but the following seem to work:
 *   Grover's algorithm
 *   Deutsch-Jozsa algorithm
 *   Simon's algorithm
+*   Quantum Fourier Transform
 *   Shor's algorithm
 *   Bernstein–Vazirani algorithm
-*   Quantum adder (half-adder & full-adder for 1-qubits and full adder for two N-qubit numbers)
 *   Quantum teleportation
 *   Superdense coding
 *   Quantum cryptography: BB84 protocol
@@ -21,6 +21,13 @@ Quantum error correction:
 *   3-qubit error correcting a qubit-flip
 *   3-qubit error correcting a sign-flip
 *   Shor Code
+
+Quantum adders:
+
+*   Quantum half-adder for 1-qubit
+*   Quantum full-adder for 1-qubits
+*   Full adder for two N-qubit numbers
+*   Draper adder
 
 Simulation of quantum simulation:
 

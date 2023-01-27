@@ -51,6 +51,11 @@ namespace QC {
 			reg.setRawAmplitude(State, val);
 		}
 
+		std::complex<double> getRawAmplitude(unsigned int State) const
+		{
+			return reg.getRawAmplitude(State);
+		}
+
 		void Clear()
 		{
 			reg.Clear();
@@ -146,6 +151,16 @@ namespace QC {
 			const double norm = 1. / sqrt(accum.real());
 			for (unsigned int i = 0; i < nrBasisStates; ++i)
 				regVals[i] *= norm;
+		}
+
+		bool writeToFile(const std::string& name, bool amplitude = true, bool append = false) const
+		{
+			return reg.writeToFile(name, amplitude, append);
+		}
+
+		void displayRegister() const
+		{
+			reg.displayRegister();
 		}
 
 	protected:
