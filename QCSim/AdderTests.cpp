@@ -208,7 +208,8 @@ bool NQubitsAdderTests()
 	return true;
 }
 
-bool DraperAdderTests()
+
+bool SimpleDrapperAdderTests()
 {
 	const unsigned int nQubits = 3;
 
@@ -220,7 +221,7 @@ bool DraperAdderTests()
 	std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dist_nr1(0, 3);
 	std::uniform_int_distribution<> dist_nr2(0, 4);
-	
+
 	Adders::DraperAdder adder(nQubits);
 
 	for (int i = 0; i < 20; ++i)
@@ -280,11 +281,94 @@ bool DraperAdderTests()
 
 			return false;
 		}
-		
+
 		std::cout << " ok, failures/100 tries: " << failures << std::endl;
 	}
 
 	return true;
+}
+
+
+bool DrapperAdderWithCarryTests()
+{
+	const unsigned int nQubits = 3;
+
+	std::cout << "Draper adder with carry, adding " << nQubits << "-qubit values..." << std::endl;
+
+	const unsigned int mask = (1 << nQubits) - 1;
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dist_nr(0, 7);
+
+	Adders::DraperAdderWithCarry adder(nQubits);
+
+	for (int i = 0; i < 30; ++i)
+	{
+		unsigned int n1 = dist_nr(gen);
+		unsigned int n2 = dist_nr(gen);
+
+		std::cout << "Computing " << n1 << "+" << n2 << "...";
+
+		const unsigned int expected = n1 + n2;
+
+		n2 <<= nQubits;
+		n2 |= n1;
+
+		std::map<unsigned int, unsigned int> measurements;
+		int failures = 0;
+
+		for (int t = 0; t < 100; ++t)
+		{
+			adder.setToBasisState(n2);
+			unsigned int res = adder.Execute();
+
+			if ((res & mask) != n1)
+			{
+				std::cout << " Adder altered the first qubits, the result is: " << res << std::endl;
+				return false;
+			}
+			res >>= nQubits;
+
+			if (res != expected)
+				++failures;
+
+			++measurements[res];
+		}
+
+		unsigned int mostFreqRes = measurements.begin()->first;
+		unsigned int freqMax = measurements.begin()->second;
+		for (auto& v : measurements)
+		{
+			unsigned int res = v.first;
+			unsigned int freq = v.second;
+			if (freq > freqMax)
+			{
+				freqMax = freq;
+				mostFreqRes = res;
+			}
+		}
+
+		if (mostFreqRes != expected)
+		{
+			std::cout << " Adder result wrong, number of failures/100 tries: " << failures << " Most frequent result: " << mostFreqRes << std::endl;
+			std::cout << "All results: " << std::endl;
+
+			for (auto& v : measurements)
+				std::cout << v.first << ", " << v.second << " times" << std::endl;
+
+			return false;
+		}
+
+		std::cout << " ok, failures/100 tries: " << failures << std::endl;
+	}
+
+	return true;
+}
+
+bool DraperAdderTests()
+{
+	return SimpleDrapperAdderTests() && DrapperAdderWithCarryTests();
 }
 
 bool quantumAdderTests()

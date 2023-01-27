@@ -25,9 +25,10 @@ Quantum error correction:
 Quantum adders:
 
 *   Quantum half-adder for 1-qubit
-*   Quantum full-adder for 1-qubits
+*   Quantum full-adder for 1-qubit
 *   Full adder for two N-qubit numbers
 *   Draper adder
+*   Draper adder with carry
 
 Simulation of quantum simulation:
 
