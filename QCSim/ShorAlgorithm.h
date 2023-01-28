@@ -23,11 +23,10 @@ namespace Shor {
 
 
 			unsigned long long int An = A;
+			unsigned int lbit = 1;
 			for (unsigned int l = 0; l < fRegisterStartQubit; ++l)
 			{
 				MatrixClass gateOperator = MatrixClass::Zero(BasisStatesNo, BasisStatesNo);
-
-				const unsigned int lbit = 1u << l;
 
 				for (unsigned int k = 0; k < BasisStatesNo; ++k)
 				{
@@ -54,6 +53,7 @@ namespace Shor {
 				reg.ApplyOperatorMatrix(gateOperator);
 
 				An *= An;
+				lbit <<= 1;
 			}
 		}
 

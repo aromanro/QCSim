@@ -180,4 +180,20 @@ namespace QC {
 		virtual unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) = 0;
 	};
 
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithmOnSubregister : public QuantumSubAlgorithm<VectorClass, MatrixClass>
+	{
+	public:
+		QuantumSubAlgorithmOnSubregister(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			: sQubit(startQubit), eQubit(std::max(startQubit, std::min(N - 1, endQubit)))
+		{
+		}
+
+		unsigned int getStartQubit() const { return sQubit; };
+		unsigned int getEndQubit() const { return eQubit; };
+
+	protected:
+		unsigned int sQubit;
+		unsigned int eQubit;
+	};
+
 }

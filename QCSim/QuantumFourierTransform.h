@@ -10,19 +10,20 @@
 namespace QC {
 
 	// maybe it could be used in some other cases
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitsSwapper : public QuantumSubAlgorithm<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitsSwapper : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 	{
 	public:
 		QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-			: sQubit(startQubit), eQubit(std::max(startQubit, std::min(N - 1, endQubit)))
+			: QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>(N, startQubit, endQubit)
 		{
 		}
 
-		unsigned int getStartQubit() const { return sQubit; };
-		unsigned int getEndQubit() const { return eQubit; };
 
-		void Swap(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int startQubit, unsigned int endQubit) const
+		void Swap(QubitRegister<VectorClass, MatrixClass>& reg) const
 		{
+			unsigned int startQubit = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getStartQubit();
+			unsigned int endQubit = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getEndQubit();
+
 			while (startQubit < endQubit)
 			{
 				reg.ApplyGate(swapOp, startQubit, endQubit);
@@ -31,22 +32,15 @@ namespace QC {
 			}
 		}
 
-		void Swap(QubitRegister<VectorClass, MatrixClass>& reg) const
-		{
-			Swap(reg, sQubit, eQubit);
-		}
-
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			Swap(reg, sQubit, eQubit);
+			Swap(reg);
 
 			return reg.Measure();
 		}
 
 	protected:
 		Gates::SwapGate<MatrixClass> swapOp;
-		unsigned int sQubit;
-		unsigned int eQubit;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumFourierTransform : public QubitsSwapper<VectorClass, MatrixClass>
@@ -59,27 +53,21 @@ namespace QC {
 
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			IQFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit);
+			IQFT(reg);
 
 			return reg.Measure();
 		}
 
 		// execute this to avoid measurement
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
-		{
-			QFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, doSwap);
-		}
-
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
-		{
-			IQFT(reg, QubitsSwapper<VectorClass, MatrixClass>::sQubit, QubitsSwapper<VectorClass, MatrixClass>::eQubit, doSwap);
-		}
 
 		// the sign convention is not as in the Quantum Computation and Quantum Information book
 		// also because of the qubits ordering, the circuit is 'mirrored' (they have the binary representation as j1 j2 j3 ... jn, I have it as jn...j1)
 
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool doSwap = true)
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
 		{
+			const unsigned int sq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getStartQubit();
+			const unsigned int eq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getEndQubit();
+
 			reg.ApplyGate(hadamard, eq);
 
 			const double startPhase = M_PI_2;
@@ -99,12 +87,15 @@ namespace QC {
 				reg.ApplyGate(hadamard, curQubitm1);
 			}
 
-			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg, sq, eq);
+			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg);
 		}
 
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, unsigned int sq, unsigned int eq, bool doSwap = true)
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
 		{
-			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg, sq, eq);
+			const unsigned int sq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getStartQubit();
+			const unsigned int eq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getEndQubit();
+
+			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg);
 
 			const double startPhase = -M_PI_2;
 
