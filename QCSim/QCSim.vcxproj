@@ -179,6 +179,7 @@
     <ClInclude Include="HardyParadox.h" />
     <ClInclude Include="Oracle.h" />
     <ClInclude Include="PauliStringSimulation.h" />
+    <ClInclude Include="PhaseEstimation.h" />
     <ClInclude Include="QuantumAdder.h" />
     <ClInclude Include="QuantumAlgorithm.h" />
     <ClInclude Include="QuantumCryptograpy.h" />
@@ -186,6 +187,7 @@
     <ClInclude Include="QuantumFourierTransform.h" />
     <ClInclude Include="QuantumGate.h" />
     <ClInclude Include="QubitRegister.h" />
+    <ClInclude Include="QubitsSwapper.h" />
     <ClInclude Include="Schrodinger.h" />
     <ClInclude Include="ShorAlgorithm.h" />
     <ClInclude Include="ShorCode.h" />

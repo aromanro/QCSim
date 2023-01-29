@@ -128,5 +128,11 @@
     <ClInclude Include="DraperAdder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="PhaseEstimation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QubitsSwapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

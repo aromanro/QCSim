@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Function.h"
-#include "QuantumFourierTransform.h"
+#include "PhaseEstimation.h"
 
 namespace Shor {
 
@@ -73,14 +73,12 @@ namespace Shor {
 		unsigned int A;
 	};
 
-
-
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
 			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed), 
-			fourier(N, 0, L - 1), Number(C), fRegisterStartQubit(L), A(2), fx(L, C)
+			Number(C), A(2), fx(L, C), phaseEstimation(fx, N, L)
 		{
 		}
 
@@ -88,26 +86,7 @@ namespace Shor {
 		{
 			Init();
 
-			// apply hadamard over each qubit from the x-register
-			// reuse the hadamard gate from the fourier transform base class
-			for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(fourier.hadamard, i);
-
-			// now the f(x)
-			fx.Apply(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-
-			// it doesn't really matter if you measure the qubits from f and when you do after the above
-			// or if you measure them several times in a row
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
-
-			// then perform a fourier transform (inverse in the typical quantum literature definition of it)
-			fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-
-			// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
-			// the f should be measured separately to find out its content
-
-			//return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0, fRegisterStartQubit - 1);
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return phaseEstimation.Execute(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 		}
 
 		void setA(unsigned int a)
@@ -163,20 +142,20 @@ namespace Shor {
 				// period finding
 
 				const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
-				const unsigned int xmask = (1 << fRegisterStartQubit) - 1;
+				const unsigned int xmask = (1 << phaseEstimation.getFunctionStartQubit()) - 1;
 
 				// use a single measurement to guess the period (but not zero)
 
 				unsigned int state = Execute() & xmask;
 				while (!state) state = Execute() & xmask;
 
-				const int d = static_cast<int>(pow(2, fRegisterStartQubit));
+				const int d = static_cast<int>(pow(2, phaseEstimation.getFunctionStartQubit()));
 				const double val = static_cast<double>(state) / d;
 
 				// p is guessed from here using continued fractions
 				std::vector<int> nums;
 				std::vector<int> divs;
-				getFractions(continuedFraction(val, fRegisterStartQubit), nums, divs);
+				getFractions(continuedFraction(val, phaseEstimation.getFunctionStartQubit()), nums, divs);
 
 				for (size_t i = 1; i < divs.size(); ++i) // skip first as it's for the integer part
 				{
@@ -220,7 +199,7 @@ namespace Shor {
 	protected:
 		void Init()
 		{
-			const unsigned int state = 1 << fRegisterStartQubit;
+			const unsigned int state = 1 << phaseEstimation.getFunctionStartQubit();
 			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(state);
 		}
 
@@ -281,15 +260,13 @@ namespace Shor {
 
 		unsigned int getNBits() const
 		{
-			return  QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - fRegisterStartQubit;
+			return  QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - phaseEstimation.getFunctionStartQubit();
 		}
 
-		QC::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
-
 		unsigned int Number;
-		unsigned int fRegisterStartQubit;
 		unsigned int A;
 
 		Fx<VectorClass, MatrixClass> fx;
+		QC::PhaseEstimation<VectorClass, MatrixClass> phaseEstimation;
 	};
 }
