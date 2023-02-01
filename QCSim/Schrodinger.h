@@ -35,9 +35,9 @@ namespace QuantumSimulation {
 			for (unsigned int step = 0; step < steps; ++step)
 			{
 				ApplyPotentialOperatorEvolution();
-				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-				ApplyKineticOperatorEvolution();
 				fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+				ApplyKineticOperatorEvolution();
+				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
 			}
 
 			return 0;

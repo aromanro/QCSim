@@ -27,8 +27,8 @@ namespace QC {
 			// or if you measure them several times in a row
 			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(fRegisterStartQubit, QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
 
-			// then perform a fourier transform (inverse in the typical quantum literature definition of it)
-			fourier.QFT(reg);
+			// then perform an inverse fourier transform
+			fourier.IQFT(reg);
 
 			// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 			// the f should be measured separately to find out its content

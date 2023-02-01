@@ -17,7 +17,7 @@ namespace QC {
 
 		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			IQFT(reg);
+			QFT(reg);
 
 			return reg.Measure();
 		}
@@ -27,7 +27,7 @@ namespace QC {
 		// the sign convention is not as in the Quantum Computation and Quantum Information book
 		// also because of the qubits ordering, the circuit is 'mirrored' (they have the binary representation as j1 j2 j3 ... jn, I have it as jn...j1)
 
-		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
+		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
 		{
 			const unsigned int sq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getStartQubit();
 			const unsigned int eq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getEndQubit();
@@ -54,7 +54,7 @@ namespace QC {
 			if (doSwap) QubitsSwapper<VectorClass, MatrixClass>::Swap(reg);
 		}
 
-		void QFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
+		void IQFT(QubitRegister<VectorClass, MatrixClass>& reg, bool doSwap = true)
 		{
 			const unsigned int sq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getStartQubit();
 			const unsigned int eq = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getEndQubit();

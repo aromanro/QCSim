@@ -19,7 +19,7 @@ namespace Adders {
 
 		unsigned int Execute() override
 		{
-			fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
 			
 			// the operations commute with each other, so one can change the ordering
 
@@ -34,7 +34,7 @@ namespace Adders {
 				}
 			}
 			
-			fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
 
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 		}
@@ -56,7 +56,7 @@ namespace Adders {
 
 		unsigned int Execute() override
 		{
-			fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
 
 			// the operations commute with each other, so one can change the ordering
 
@@ -81,7 +81,7 @@ namespace Adders {
 				}
 			}
 
-			fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
 
 			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
 		}
