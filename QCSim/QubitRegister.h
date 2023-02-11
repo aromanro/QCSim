@@ -2,8 +2,6 @@
 
 #include <math.h>
 #include <Eigen/eigen>
-#include <Eigen/sparse>
-
 
 #include <random>
 #include <complex>
