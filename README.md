@@ -4,7 +4,8 @@ Quantum computation simulator
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://www.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=aromanro/QCSim&amp;utm_campaign=Badge_Grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)
 
-Work in progress, but the following seem to work:
+Implemented algorithms:
+
 *   Grover's algorithm
 *   Deutsch-Jozsa algorithm
 *   Simon's algorithm
@@ -39,5 +40,14 @@ Paradoxes (although some of the above might be considered paradoxes as well):
 *   Quantum eraser
 *   General Elitzur-Vaidman Bomb tester/interaction free measurement/counterfactual computation
 *   Hardy's paradox
+
+The most important code to look into are in `QuantumGate.h` (namespace `QC::Gates`), where the quantum gates are implemented. The code is quite straightforward, a little bit more complex being the implementation of `getOperatorMatrix`, which extends the operator matrix from the matrix that involves only the qubits on which the operator is applied, to all qubits from the register. 
+Another header to look into is `QubitRegister.h`. The code is again straightforward, a little bit more complex being the one that does the measurement on a part of the register only.
+Another one is the `QuantumAlgorithm.h` although that one is very simple, mostly a proxy for the qubit register.
+
+To see various algorithms in action, look into the `Test` files.
+
+I intend to come from time to time to add more algorithms, but for now I think I have more here than I intended when I started the project, so I'll leave it like this for a while (except maybe some improvements of the existing code and bug fixes if necessary).
+
 
 

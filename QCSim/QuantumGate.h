@@ -23,6 +23,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
 		{
 		public:
+			typedef QuantumGate<MatrixClass> BaseClass;
+
 			QuantumGateWithOp(const MatrixClass& U)
 				: operatorMat(U)
 			{
@@ -53,13 +55,15 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:
+			typedef QuantumGateWithOp<MatrixClass> BaseClass;
+
 			SingleQubitGate()
-				: QuantumGateWithOp<MatrixClass>(MatrixClass::Zero(2, 2))
+				: BaseClass(MatrixClass::Zero(2, 2))
 			{
 			};
 
 			SingleQubitGate(const MatrixClass& U)
-				: QuantumGateWithOp<MatrixClass>(U)
+				: BaseClass(U)
 			{
 			};
 
@@ -86,7 +90,7 @@ namespace QC {
 					const unsigned int ind1 = i | qubitBit;
 					for (unsigned int j = 0; j < nrBasisStates; ++j)
 						if (ind1 == (j | qubitBit)) // this is just a lot of delta 'functions' for the 'other' qubits, the bit was forced to 1 for the qubit with this operator
-							extOperatorMat(i, j) = QuantumGateWithOp<MatrixClass>::operatorMat(i & qubitBit ? 1 : 0, j & qubitBit ? 1 : 0); // pick the correct matrix element for the qubit operator 
+							extOperatorMat(i, j) = BaseClass::operatorMat(i & qubitBit ? 1 : 0, j & qubitBit ? 1 : 0); // pick the correct matrix element for the qubit operator 
 				}
 
 				return extOperatorMat;
@@ -96,13 +100,16 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class HadamardGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			HadamardGate()
 			{
 				static const double norm = 1. / sqrt(2.);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = -norm;
+				OpClass::operatorMat(0, 0) = norm;
+				OpClass::operatorMat(0, 1) = norm;
+				OpClass::operatorMat(1, 0) = norm;
+				OpClass::operatorMat(1, 1) = -norm;
 			}
 		};
 
@@ -111,94 +118,118 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class HyGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			HyGate()
 			{
 				static const double norm = 1. / sqrt(2.);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(0, -norm);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(0, norm);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = -norm;
+				OpClass::operatorMat(0, 0) = norm;
+				OpClass::operatorMat(0, 1) = std::complex<double>(0, -norm);
+				OpClass::operatorMat(1, 0) = std::complex<double>(0, norm);
+				OpClass::operatorMat(1, 1) = -norm;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class PhaseGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			PhaseGate(double theta = 0)
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::complex<double>(0, 1);
+				OpClass::operatorMat(0, 0) = 1;
+				OpClass::operatorMat(1, 1) = std::complex<double>(0, 1);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class PhaseShiftGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			PhaseShiftGate(double theta = 0)
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = 1;
+				OpClass::operatorMat(0, 0) = 1;
 				SetPhaseShift(theta);
 			}
 
 			void SetPhaseShift(double theta)
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., theta);
+				OpClass::operatorMat(1, 1) = std::polar(1., theta);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliXGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			PauliXGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = 1;
+				OpClass::operatorMat(0, 1) = 1;
+				OpClass::operatorMat(1, 0) = 1;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliYGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			PauliYGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(0, -1);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(0, 1);
+				OpClass::operatorMat(0, 1) = std::complex<double>(0, -1);
+				OpClass::operatorMat(1, 0) = std::complex<double>(0, 1);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliZGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			PauliZGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = -1;
+				OpClass::operatorMat(0, 0) = 1;
+				OpClass::operatorMat(1, 1) = -1;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class NOTSquareRootGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			NOTSquareRootGate()
 			{
 				static const double norm = 1. / sqrt(2.);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = -norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = norm;
+				OpClass::operatorMat(0, 0) = norm;
+				OpClass::operatorMat(0, 1) = -norm;
+				OpClass::operatorMat(1, 0) = norm;
+				OpClass::operatorMat(1, 1) = norm;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class SplitterGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			SplitterGate()
 			{
 				static const double norm = 1. / sqrt(2.);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = norm;
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(0, norm);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(0, norm);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = norm;
+				OpClass::operatorMat(0, 0) = norm;
+				OpClass::operatorMat(0, 1) = std::complex<double>(0, norm);
+				OpClass::operatorMat(1, 0) = std::complex<double>(0, norm);
+				OpClass::operatorMat(1, 1) = norm;
 			}
 		};
 
@@ -207,12 +238,17 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class RotationGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef SingleQubitGate<MatrixClass> BaseClass;
+			
 			virtual void SetTheta(double theta) = 0;
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class RxGate : public RotationGate<MatrixClass>
 		{
 		public:
+			typedef RotationGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			RxGate(double theta = 0)
 			{
 				SetTheta(theta);
@@ -222,16 +258,19 @@ namespace QC {
 			{
 				const double t2 = theta * 0.5;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(0, -sin(t2));
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(0, -sin(t2));
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(0, 1) = std::complex<double>(0, -sin(t2));
+				OpClass::operatorMat(1, 0) = std::complex<double>(0, -sin(t2));
+				OpClass::operatorMat(1, 1) = std::complex<double>(cos(t2), 0);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class RyGate : public RotationGate<MatrixClass>
 		{
 		public:
+			typedef RotationGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			RyGate(double theta = 0)
 			{
 				SetTheta(theta);
@@ -241,16 +280,19 @@ namespace QC {
 			{
 				const double t2 = theta * 0.5;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = std::complex<double>(-sin(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::complex<double>(sin(t2), 0);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(0, 1) = std::complex<double>(-sin(t2), 0);
+				OpClass::operatorMat(1, 0) = std::complex<double>(sin(t2), 0);
+				OpClass::operatorMat(1, 1) = std::complex<double>(cos(t2), 0);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class RzGate : public RotationGate<MatrixClass>
 		{
 		public:
+			typedef RotationGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			RzGate(double theta = 0)
 			{
 				SetTheta(theta);
@@ -260,8 +302,8 @@ namespace QC {
 			{
 				const double t2 = theta * 0.5;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::polar(1., -t2);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., t2);
+				OpClass::operatorMat(0, 0) = std::polar(1., -t2);
+				OpClass::operatorMat(1, 1) = std::polar(1., t2);
 			}
 		};
 
@@ -269,6 +311,9 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class UGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
+			typedef RotationGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			UGate(double theta = 0, double phi = 0, double lambda = 0)
 			{
 				SetParams(theta, phi, lambda);
@@ -278,10 +323,10 @@ namespace QC {
 			{
 				const double t2 = theta * 0.5;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = std::complex<double>(cos(t2), 0.);
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = -std::polar(1., lambda) * sin(t2);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 0) = std::polar(1., phi) * sin(t2);
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = std::polar(1., phi + lambda) * cos(t2);
+				OpClass::operatorMat(0, 0) = std::complex<double>(cos(t2), 0.);
+				OpClass::operatorMat(0, 1) = -std::polar(1., lambda) * sin(t2);
+				OpClass::operatorMat(1, 0) = std::polar(1., phi) * sin(t2);
+				OpClass::operatorMat(1, 1) = std::polar(1., phi + lambda) * cos(t2);
 			}
 		};
 
@@ -289,8 +334,10 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:
+			typedef QuantumGateWithOp<MatrixClass> BaseClass;
+
 			TwoQubitsGate()
-				: QuantumGateWithOp<MatrixClass>(MatrixClass::Identity(4, 4))
+				: BaseClass (MatrixClass::Identity(4, 4))
 			{
 			}
 
@@ -317,7 +364,7 @@ namespace QC {
 					const unsigned int ind1 = i | mask;
 					for (unsigned int j = 0; j < nrBasisStates; ++j)
 						if (ind1 == (j | mask)) // the delta 'function'
-							extOperatorMat(i, j) = QuantumGateWithOp<MatrixClass>::operatorMat((i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 2 : 0) | (j & qubitBit ? 1 : 0));
+							extOperatorMat(i, j) = BaseClass::operatorMat((i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 2 : 0) | (j & qubitBit ? 1 : 0));
 				}
 
 				return extOperatorMat;
@@ -327,54 +374,66 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class SwapGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			SwapGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 2) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 1) = 1;
+				OpClass::operatorMat(1, 1) = 0;
+				OpClass::operatorMat(2, 2) = 0;
+				OpClass::operatorMat(1, 2) = 1;
+				OpClass::operatorMat(2, 1) = 1;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class iSwapGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			iSwapGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 2) = std::complex<double>(0, 1);
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 1) = std::complex<double>(0, 1);
+				OpClass::operatorMat(1, 1) = 0;
+				OpClass::operatorMat(2, 2) = 0;
+				OpClass::operatorMat(1, 2) = std::complex<double>(0, 1);
+				OpClass::operatorMat(2, 1) = std::complex<double>(0, 1);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class DecrementGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			DecrementGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 0) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 1) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = 0;
+				OpClass::operatorMat(0, 0) = 0;
+				OpClass::operatorMat(1, 1) = 0;
+				OpClass::operatorMat(2, 2) = 0;
+				OpClass::operatorMat(3, 3) = 0;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 0) = 1;
+				OpClass::operatorMat(3, 0) = 1;
 
-				QuantumGateWithOp<MatrixClass>::operatorMat(0, 1) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(1, 2) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 3) = 1;
+				OpClass::operatorMat(0, 1) = 1;
+				OpClass::operatorMat(1, 2) = 1;
+				OpClass::operatorMat(2, 3) = 1;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsControlledGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			TwoQubitsControlledGate() {};
 
 			void SetOperation(const MatrixClass& U)
 			{
 				assert(U.rows() == 2 && U.cols() == 2);
-				QuantumGateWithOp<MatrixClass>::operatorMat.block(2, 2, 2, 2) = U;
+				OpClass::operatorMat.block(2, 2, 2, 2) = U;
 			}
 		};
 
@@ -383,6 +442,9 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class CNOTGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			CNOTGate()
 			{
 				/*
@@ -395,25 +457,31 @@ namespace QC {
 				*/
 
 				// the commented code above is correct, but this one should be faster
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 2) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(2, 3) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 2) = 1;
+				OpClass::operatorMat(2, 2) = 0;
+				OpClass::operatorMat(3, 3) = 0;
+				OpClass::operatorMat(2, 3) = 1;
+				OpClass::operatorMat(3, 2) = 1;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledPhaseGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			ControlledPhaseGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = std::complex<double>(0, 1);
+				OpClass::operatorMat(3, 3) = std::complex<double>(0, 1);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledPhaseShiftGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			ControlledPhaseShiftGate(double theta = 0)
 			{
 				SetPhaseShift(theta);
@@ -421,24 +489,29 @@ namespace QC {
 
 			void SetPhaseShift(double theta)
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = std::polar(1., theta);
+				OpClass::operatorMat(3, 3) = std::polar(1., theta);
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledZGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
+			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			ControlledZGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(3, 3) = -1;
+				OpClass::operatorMat(3, 3) = -1;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:
+			typedef QuantumGateWithOp<MatrixClass> BaseClass;
+
 			ThreeQubitsGate()
-				: QuantumGateWithOp<MatrixClass>(MatrixClass::Identity(8, 8))
+				: BaseClass(MatrixClass::Identity(8, 8))
 			{
 			}
 
@@ -466,7 +539,7 @@ namespace QC {
 					const unsigned int ind1 = i | mask;
 					for (unsigned int j = 0; j < nrBasisStates; ++j)
 						if (ind1 == (j | mask)) // the delta 'function'
-							extOperatorMat(i, j) = QuantumGateWithOp<MatrixClass>::operatorMat((i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 4 : 0) | (j & qubitBit2 ? 2 : 0) | (j & qubitBit ? 1 : 0));
+							extOperatorMat(i, j) = BaseClass::operatorMat((i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 4 : 0) | (j & qubitBit2 ? 2 : 0) | (j & qubitBit ? 1 : 0));
 				}
 
 				return extOperatorMat;
@@ -476,36 +549,45 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsControlledGate : public ThreeQubitsGate<MatrixClass>
 		{
 		public:
+			typedef ThreeQubitsGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass OpClass;
+
 			ThreeQubitsControlledGate() {};
 
 			void SetOperation(const MatrixClass& U)
 			{
 				assert(U.rows() == 4 && U.cols() == 4);
-				QuantumGateWithOp<MatrixClass>::operatorMat.block(4, 4, 4, 4) = U;
+				OpClass::operatorMat.block(4, 4, 4, 4) = U;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ToffoliGate : public ThreeQubitsControlledGate<MatrixClass>
 		{
 		public:
+			typedef ThreeQubitsControlledGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			ToffoliGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(6, 6) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(7, 7) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(6, 7) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(7, 6) = 1;
+				OpClass::operatorMat(6, 6) = 0;
+				OpClass::operatorMat(7, 7) = 0;
+				OpClass::operatorMat(6, 7) = 1;
+				OpClass::operatorMat(7, 6) = 1;
 			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class FredkinGate : public ThreeQubitsControlledGate<MatrixClass>
 		{
 		public:
+			typedef ThreeQubitsControlledGate<MatrixClass> BaseClass;
+			typedef BaseClass::BaseClass::BaseClass OpClass;
+
 			FredkinGate()
 			{
-				QuantumGateWithOp<MatrixClass>::operatorMat(5, 5) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(6, 6) = 0;
-				QuantumGateWithOp<MatrixClass>::operatorMat(5, 6) = 1;
-				QuantumGateWithOp<MatrixClass>::operatorMat(6, 5) = 1;
+				OpClass::operatorMat(5, 5) = 0;
+				OpClass::operatorMat(6, 6) = 0;
+				OpClass::operatorMat(5, 6) = 1;
+				OpClass::operatorMat(6, 5) = 1;
 			}
 		};
 
