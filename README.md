@@ -48,6 +48,3 @@ Another one is the `QuantumAlgorithm.h` although that one is very simple, mostly
 To see various algorithms in action, look into the `Test` files.
 
 I intend to come from time to time to add more algorithms, but for now I think I have more here than I intended when I started the project, so I'll leave it like this for a while (except maybe some improvements of the existing code and bug fixes if necessary).
-
-
-
