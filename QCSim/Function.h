@@ -11,9 +11,11 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class Function
 	{
 	public:
+		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+
 		virtual ~Function() {}
 
-		virtual void Apply(QubitRegister<VectorClass, MatrixClass>& reg) = 0;
+		virtual void Apply(RegisterClass& reg) = 0;
 	};
 
 }

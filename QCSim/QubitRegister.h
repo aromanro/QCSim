@@ -20,6 +20,8 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitRegister
 	{
 	public:
+		typedef Gates::QuantumGate<MatrixClass> GateClass;
+
 		QubitRegister(int N = 3, int addseed = 0)
 			: NrQubits(N), NrBasisStates(1u << NrQubits),
 			uniformZeroOne(0, 1)
@@ -308,7 +310,7 @@ namespace QC {
 		}
 
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
-		void ApplyGate(const Gates::QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)
+		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)
 		{
 			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 		}

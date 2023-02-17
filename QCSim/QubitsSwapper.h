@@ -10,16 +10,18 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitsSwapper : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass> BaseClass;
+		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+
 		QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-			: QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>(N, startQubit, endQubit)
+			: BaseClass(N, startQubit, endQubit)
 		{
 		}
 
-
-		void Swap(QubitRegister<VectorClass, MatrixClass>& reg) const
+		void Swap(RegisterClass& reg) const
 		{
-			unsigned int startQubit = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getStartQubit();
-			unsigned int endQubit = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>::getEndQubit();
+			unsigned int startQubit = BaseClass::getStartQubit();
+			unsigned int endQubit = BaseClass::getEndQubit();
 
 			while (startQubit < endQubit)
 			{
@@ -29,7 +31,7 @@ namespace QC {
 			}
 		}
 
-		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
+		unsigned int Execute(RegisterClass& reg) override
 		{
 			Swap(reg);
 

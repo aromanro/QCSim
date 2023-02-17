@@ -8,12 +8,14 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PhaseEstimation : public QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+
 		PhaseEstimation(QC::Function<VectorClass, MatrixClass>& f, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
 			: fRegisterStartQubit(L), fourier(N, 0, L - 1), func(f)
 		{
 		}
 
-		unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) override
+		unsigned int Execute(RegisterClass& reg) override
 		{
 			// apply hadamard over each qubit from the x-register
 			// reuse the hadamard gate from the fourier transform base class

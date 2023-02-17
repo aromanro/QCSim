@@ -7,6 +7,9 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumAlgorithm
 	{
 	public:
+		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		typedef Gates::QuantumGate<MatrixClass> GateClass;
+
 		QuantumAlgorithm(unsigned int N = 3, int addseed = 0)
 			: reg(N, addseed)
 		{
@@ -76,7 +79,7 @@ namespace QC {
 			return 1u << q;
 		}
 
-		const QubitRegister<VectorClass, MatrixClass>& getRegister() const
+		const RegisterClass& getRegister() const
 		{
 			return reg;
 		}
@@ -91,7 +94,7 @@ namespace QC {
 			reg.setRegisterStorage(vals);
 		}
 
-		void ApplyGate(const Gates::QuantumGate<MatrixClass>& gate, unsigned int qubit, unsigned int controllingQubit = 0, unsigned int controllingQubit2 = 0)
+		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit = 0, unsigned int controllingQubit2 = 0)
 		{
 			reg.ApplyGate(gate, qubit, controllingQubit, controllingQubit2);
 		}
@@ -137,7 +140,7 @@ namespace QC {
 			return reg.stateFidelity(state);
 		}
 
-		static void AdjustPhaseAndNormalize(Eigen::VectorXcd& regVals)
+		static void AdjustPhaseAndNormalize(VectorClass& regVals)
 		{
 			std::complex<double> v = abs(regVals[0]) > 1E-5 ? regVals[0] : std::complex<double>(1, 0);
 			std::complex<double> accum(0, 0);
@@ -164,20 +167,22 @@ namespace QC {
 		}
 
 	protected:
-		QubitRegister<VectorClass, MatrixClass> reg;
+		RegisterClass reg;
 	};
 
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithm
 	{
 	public:
+		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+
 		QuantumSubAlgorithm()
 		{
 		}
 		
 		virtual ~QuantumSubAlgorithm() {};
 
-		virtual unsigned int Execute(QubitRegister<VectorClass, MatrixClass>& reg) = 0;
+		virtual unsigned int Execute(RegisterClass& reg) = 0;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithmOnSubregister : public QuantumSubAlgorithm<VectorClass, MatrixClass>
