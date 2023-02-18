@@ -16,8 +16,10 @@ namespace QuantumCryptograpy {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		BB84Protocol(int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(1, addseed),
+			: BaseClass(1, addseed),
 			eavesdropping(false), randomEavesdropping(false),
 			dist_bool(0, 1)
 		{
@@ -40,7 +42,7 @@ namespace QuantumCryptograpy {
 
 				// switch back to computational basis if Alice measured in X basis
 				if (sendBasis[b])
-					measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, X, 0, true);
+					measurementBasis.switchToOperatorBasis(BaseClass::reg, X, 0, true);
 
 				if (eavesdropping)
 				{
@@ -137,12 +139,12 @@ namespace QuantumCryptograpy {
 			// if false, it's Z, the computational basis, so remain in that one, otherwise use X
 			recvBasis[b] = basis;
 			if (basis)
-				measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, X.getRawOperatorMatrix());
+				measurementBasis.switchToOperatorBasis(BaseClass::reg, X.getRawOperatorMatrix());
 
-			recv[b] = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			recv[b] = BaseClass::Measure();
 
 			if (basis && switchBackToZ) // switch back to computational basis if needed
-				measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, X.getRawOperatorMatrix(), 0, true);
+				measurementBasis.switchToOperatorBasis(BaseClass::reg, X.getRawOperatorMatrix(), 0, true);
 		}
 
 		void checkCommonBasisMeasurements()
@@ -179,16 +181,16 @@ namespace QuantumCryptograpy {
 			// use this to generate a random value used to pick a measurement basis
 			// alternatively you can use a random number generator or a pregenerated sequence in whatever way you want
 			// but I like this way more
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToCatState();
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			BaseClass::setToCatState();
+			return BaseClass::Measure();
 		}
 
 		unsigned int generateRandomBitToSend()
 		{
 			// another way would be to simply generate a random value for the state in some other way (0 or 1) and then simply set the register - one qubit - to that state
 			// but as for generating the random value above, I like this method more
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToCatState();
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			BaseClass::setToCatState();
+			return BaseClass::Measure();
 		}
 
 		bool getRandomBool()

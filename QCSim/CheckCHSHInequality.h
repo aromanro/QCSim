@@ -10,8 +10,10 @@ namespace BellInequalities {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		CheckCHSHInequality(int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(2, addseed),
+			: BaseClass(2, addseed),
 			S((-Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (-Z-X)/sqrt(2)=-H
 			T((Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (Z-X)/sqrt(2)
 			dist_bool(0, 1),
@@ -43,7 +45,7 @@ namespace BellInequalities {
 		unsigned int Check(bool separateMeasurements = false)
 		{
 			// start with the Bell state:
-			bellState.setBellState11(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+			bellState.setBellState11(BaseClass::reg);
 
 			// Alice and Bob each get a qubit, they perform measurements on them
 
@@ -51,33 +53,33 @@ namespace BellInequalities {
 			// Alice: 
 			const bool aM = dist_bool(rng) == 1;
 			const QC::Gates::SingleQubitGate<MatrixClass>& aliceMeasurement = aM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(R) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(Q);
-			measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
+			measurementBasis.switchToOperatorBasis(BaseClass::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
 
 			unsigned int state = 0;
 
 			int res1 = -1;
 			if (separateMeasurements)
 			{
-				state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0, 0);
+				state = BaseClass::Measure(0, 0);
 				if (state) res1 = 1;
 			}
 
 			// Bob:
 			const bool bM = dist_bool(rng) == 1;
 			const QC::Gates::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(T) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(S);
-			measurementBasis.switchToOperatorBasis(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, bobMeasurement.getRawOperatorMatrix(), 1);
+			measurementBasis.switchToOperatorBasis(BaseClass::reg, bobMeasurement.getRawOperatorMatrix(), 1);
 
 			unsigned int res2 = -1;
 			if (separateMeasurements)
 			{
-				state |= QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(1, 1) << 1;
+				state |= BaseClass::Measure(1, 1) << 1;
 
 				if (state & 2) res2 = 1;
 				//const int res2 = (state & 1) ? 1 : -1;
 			}
 			else
 			{
-				state = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+				state = BaseClass::Measure();
 				if (state & 1) res1 = 1;
 				if (state & 2) res2 = 1;
 			}

@@ -13,8 +13,10 @@ namespace Paradoxes {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		QuantumEraser(int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(2, addseed), eraser(false)
+			: BaseClass(2, addseed), eraser(false)
 		{
 		}
 
@@ -35,23 +37,23 @@ namespace Paradoxes {
 
 			// the cnot gate has the role of the spontaneous parametric down convertor
 			// from one 'photon' it makes out a pair of them, a 'signal' one and an 'idler' one
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1); //controlling qubit is 0 by default
+			BaseClass::ApplyGate(cnot, 1); //controlling qubit is 0 by default
 
 			// now the action of the next beam splitter:
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
+			BaseClass::ApplyGate(hadamard, 0);
 
 			// the choice of using or not the eraser could be 'delayed' 
-			if (eraser) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 1);
+			if (eraser) BaseClass::ApplyGate(hadamard, 1);
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return BaseClass::Measure();
 		}
 
 	protected:
 		void Init()
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			BaseClass::setToBasisState(0);
 			// the following has the role of the first beam splitter:
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
+			BaseClass::ApplyGate(hadamard, 0);
 		}
 
 		bool eraser;

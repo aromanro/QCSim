@@ -20,11 +20,13 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		SchrodingerSimulation(unsigned int N = 8, double dt = 0.1, double dx = 0.1, unsigned int nrSteps = 50, bool addSeed = false)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), deltat(dt), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
+			: BaseClass(N, addSeed), deltat(dt), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
 		{
-			potential.resize(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates(), 0.);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0); // useless if the initialization of the start state is done, but better be safe...
+			potential.resize(BaseClass::getNrBasisStates(), 0.);
+			BaseClass::setToBasisState(0); // useless if the initialization of the start state is done, but better be safe...
 		}
 
 		unsigned int Execute() override
@@ -35,9 +37,9 @@ namespace QuantumSimulation {
 			for (unsigned int step = 0; step < steps; ++step)
 			{
 				ApplyPotentialOperatorEvolution();
-				fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+				fourier.IQFT(BaseClass::reg);
 				ApplyKineticOperatorEvolution();
-				fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+				fourier.QFT(BaseClass::reg);
 			}
 
 			return 0;
@@ -81,7 +83,7 @@ namespace QuantumSimulation {
 		// use it to set a square barrier (positive val) or well (negative val) in the middle
 		void setConstantPotentialInTheMiddle(double val, unsigned int halfwidth)
 		{
-			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int nrStates = BaseClass::getNrBasisStates();
 			const int halfStates = nrStates / 2;
 
 			for (int i = std::max<int>(1, halfStates - halfwidth); i < std::min<int>(nrStates - 1, halfStates + halfwidth); ++i)
@@ -95,7 +97,7 @@ namespace QuantumSimulation {
 		// use it to set a step potential starting in the middle
 		void setConstantPotentialToRight(double val)
 		{
-			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int nrStates = BaseClass::getNrBasisStates();
 			const int halfStates = nrStates / 2;
 
 			for (int i = halfStates; i < nrStates; ++i)
@@ -110,9 +112,9 @@ namespace QuantumSimulation {
 		// set it to the left side
 		void setGaussian(unsigned int pos, double stdev, double k)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
+			BaseClass::Clear();
 
-			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int nrStates = BaseClass::getNrBasisStates();
 
 			stdev *= deltax;
 			const double a = 1. / (stdev * sqrt(2. * M_PI));
@@ -127,10 +129,10 @@ namespace QuantumSimulation {
 				// momentum operator is -i d/dx
 				// so it brings down ik to obtain k 
 				const std::complex<double> val = a * exp(std::complex<double>(-0.5 * e * e, k * x));
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
+				BaseClass::setRawAmplitude(i, val);
 			}
 
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+			BaseClass::Normalize();
 		}
 
 		//*****************************************************************************************************************************************************
@@ -145,7 +147,7 @@ namespace QuantumSimulation {
 
 		void solveWithFiniteDifferences()
 		{
-			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const unsigned int nrStates = BaseClass::getNrBasisStates();
 			const double eps2 =  2 * deltax * deltax; // the easiest way to add 1/2. for kinetic term, just having multiplied with 2 here
 			const double lambda = 2. * eps2 / deltat;
 			const std::complex<double> ilambda = std::complex<double>(0, lambda);
@@ -171,11 +173,11 @@ namespace QuantumSimulation {
 			for (unsigned int step = 0; step < steps; ++step)
 			{
 				// compute the needed values first
-				f[1] = omegaterm[1] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(1) - QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(2);
+				f[1] = omegaterm[1] * BaseClass::getBasisStateAmplitude(1) - BaseClass::getBasisStateAmplitude(2);
 				for (unsigned int i = 2; i < nrStates - 1; ++i)
 				{
 					// see eq (18)
-					const std::complex<double> omega = omegaterm[i] * QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i) - (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i + 1) + QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i - 1));
+					const std::complex<double> omega = omegaterm[i] * BaseClass::getBasisStateAmplitude(i) - (BaseClass::getBasisStateAmplitude(i + 1) + BaseClass::getBasisStateAmplitude(i - 1));
 					f[i] = omega + f[i - 1] / e[i - 1];
 				}
 
@@ -184,8 +186,8 @@ namespace QuantumSimulation {
 				for (unsigned int i = nrStates - 2; i > 0; --i)
 				{
 					// see eq (20)
-					const std::complex<double> val = (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getBasisStateAmplitude(i + 1) - f[i]) / e[i];
-					QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(i, val);
+					const std::complex<double> val = (BaseClass::getBasisStateAmplitude(i + 1) - f[i]) / e[i];
+					BaseClass::setRawAmplitude(i, val);
 				}
 			}
 		}
@@ -200,18 +202,18 @@ namespace QuantumSimulation {
 
 			for (unsigned int step = 0; step < steps; ++step)
 			{
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(evolutionOp);
+				BaseClass::ApplyOperatorMatrix(evolutionOp);
 				ApplyPotentialOperatorEvolution();
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize(); // evolution above is not exactly unitary
+				BaseClass::Normalize(); // evolution above is not exactly unitary
 			}
 		}
 
 		void solveWithFiniteDifferencesSimpler()
 		{
 			// ensure that the starting wavefunction is normalized
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+			BaseClass::Normalize();
 
-			const unsigned int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const unsigned int nrStates = BaseClass::getNrBasisStates();
 			const unsigned int nrStatesM1 = nrStates - 1;
 			const std::complex<double> j(0, 1);
 			const double eps = 0.5 * deltat / (deltax * deltax);
@@ -220,12 +222,12 @@ namespace QuantumSimulation {
 
 			for (unsigned int step = 0; step < steps; ++step)
 			{	
-				const VectorClass& oldPsi = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getRegisterStorage();
+				const VectorClass& oldPsi = BaseClass::getRegisterStorage();
 
 				for (unsigned int i = 1; i < nrStatesM1; ++i)
 					newPsi(i) = oldPsi(i) + j * eps * (oldPsi(i - 1) - 2. * oldPsi(i) + oldPsi(i + 1)) - j * potential[i] * deltat * oldPsi(i);
 				
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRegisterStorage(newPsi); // this also normalizes the wavefunction
+				BaseClass::setRegisterStorage(newPsi); // this also normalizes the wavefunction
 			}
 		}
 
@@ -243,7 +245,7 @@ namespace QuantumSimulation {
 				ApplyPotentialOperatorEvolution();
 
 				{
-					const VectorClass& oldPsi = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getRegisterStorage();
+					const VectorClass& oldPsi = BaseClass::getRegisterStorage();
 
 					std::vector<std::complex<double>> vec(oldPsi.size());
 					Eigen::Map<VectorClass>(vec.data(), oldPsi.size()) = oldPsi;
@@ -252,13 +254,13 @@ namespace QuantumSimulation {
 					fft.fwd(vec.data(), newvec.data(), static_cast<unsigned int>(vec.size()));
 
 					const VectorClass newPsi = Eigen::Map<VectorClass>(newvec.data(), newvec.size());
-					QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRegisterStorage(newPsi);
+					BaseClass::setRegisterStorage(newPsi);
 				}
 
 				ApplyKineticOperatorEvolution();
 				
 				{
-					const VectorClass& oldPsi = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getRegisterStorage();
+					const VectorClass& oldPsi = BaseClass::getRegisterStorage();
 
 					std::vector<std::complex<double>> vec(oldPsi.size());
 					Eigen::Map<VectorClass>(vec.data(), oldPsi.size()) = oldPsi;
@@ -267,7 +269,7 @@ namespace QuantumSimulation {
 					fft.inv(vec.data(), newvec.data(), static_cast<unsigned int>(vec.size()));
 
 					const VectorClass newPsi = Eigen::Map<VectorClass>(newvec.data(), newvec.size());
-					QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRegisterStorage(newPsi);
+					BaseClass::setRegisterStorage(newPsi);
 				}
 			}
 		}
@@ -278,7 +280,7 @@ namespace QuantumSimulation {
 		void Init(double deltat)
 		{
 			// ensure that the starting wavefunction is normalized
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+			BaseClass::Normalize();
 
 			// the potential and kinetic operators can be constructed from controlled phase shift gates
 			// I'm not going to do that, at least not yet, because it's going to be too slow
@@ -286,7 +288,7 @@ namespace QuantumSimulation {
 			// for how to do that see for example "Quantum simulation of the single-particle Schrodinger equation" by Giuliano Benenti, Giuliano Strini
 			// https://arxiv.org/abs/0709.1704
 
-			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int nrStates = BaseClass::getNrBasisStates();
 			const double halfX = 0.5 * deltax * (nrStates - 1.);
 	
 			kineticOp = MatrixClass::Zero(nrStates, nrStates);
@@ -306,9 +308,9 @@ namespace QuantumSimulation {
 		void InitSimpleFiniteDifferences()
 		{
 			// ensure that the starting wavefunction is normalized
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+			BaseClass::Normalize();
 
-			const int nrStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const int nrStates = BaseClass::getNrBasisStates();
 			const double eps = 0.5 * deltat / (deltax * deltax);
 			const std::complex<double> t = std::complex<double>(1., -2. * eps);
 			
@@ -335,13 +337,13 @@ namespace QuantumSimulation {
 		void ApplyPotentialOperatorEvolution()
 		{
 			// with a single operator is simple, it would be quite annoying with a lot of quantum gates
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(potentialOp);
+			BaseClass::ApplyOperatorMatrix(potentialOp);
 		}
 
 		void ApplyKineticOperatorEvolution()
 		{
 			// with a single operator is simple, it would be quite annoying with a lot of quantum gates
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(kineticOp);
+			BaseClass::ApplyOperatorMatrix(kineticOp);
 		}
 
 		double deltat;

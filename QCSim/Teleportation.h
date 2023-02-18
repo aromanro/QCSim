@@ -9,10 +9,12 @@ namespace Teleportation
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		QuantumTeleportation(unsigned int N = 3, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
+			: BaseClass(N, addseed)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			BaseClass::setToBasisState(0);
 		}
 	};
 
@@ -20,19 +22,22 @@ namespace Teleportation
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportationRealization : public QuantumTeleportation<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QuantumTeleportation<VectorClass, MatrixClass> BaseClass;
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> AlgorithmClass;
+
 		QuantumTeleportationRealization(int addseed = 0)
-			: QuantumTeleportation<VectorClass, MatrixClass>(3, addseed)
+			: BaseClass(3, addseed)
 		{
 		}
 
 		void SetState(std::complex<double> alpha, std::complex<double> beta)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(0, alpha);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(1, beta);
+			AlgorithmClass::Clear();
+			AlgorithmClass::setRawAmplitude(0, alpha);
+			AlgorithmClass::setRawAmplitude(1, beta);
 
 			// ensure it's normalized:
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+			AlgorithmClass::Normalize();
 		}
 
 		// considers the initial state already set
@@ -44,15 +49,15 @@ namespace Teleportation
 			// make an EPR pair out of the second and third qubit:
 
 			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 1);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 2, 1);
+			AlgorithmClass::ApplyGate(hadamard, 1);
+			AlgorithmClass::ApplyGate(cnot, 2, 1);
 
 			// interacting the sending qubit (0) with the Alice's side of the entangled pair:
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
+			AlgorithmClass::ApplyGate(cnot, 1, 0);
+			AlgorithmClass::ApplyGate(hadamard, 0);
 
 			// measurements can be actually done all at the end, but let's pretend
-			const unsigned int measuredValues = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0, 1);
+			const unsigned int measuredValues = AlgorithmClass::Measure(0, 1);
 
 			// now that they are measured they go to Bob, which uses the values to act on its entangled qubit:
 
@@ -61,13 +66,13 @@ namespace Teleportation
 				const bool firstQubitMeasurement = (measuredValues & 0x1) != 0;
 				const bool secondQubitMeasurement = (measuredValues & 0x2) != 0;
 
-				if (secondQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(x, 2);
-				if (firstQubitMeasurement) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(z, 2);
+				if (secondQubitMeasurement) AlgorithmClass::ApplyGate(x, 2);
+				if (firstQubitMeasurement) AlgorithmClass::ApplyGate(z, 2);
 			}
 			else
 			{
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 2, 1);
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cz, 2, 0);
+				AlgorithmClass::ApplyGate(cnot, 2, 1);
+				AlgorithmClass::ApplyGate(cz, 2, 0);
 			}
 
 			return measuredValues;
@@ -78,7 +83,7 @@ namespace Teleportation
 		{
 			Teleport();
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(2, 2); // teleported qubit
+			return AlgorithmClass::Measure(2, 2); // teleported qubit
 		}
 
 	protected:

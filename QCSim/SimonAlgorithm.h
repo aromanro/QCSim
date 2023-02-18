@@ -137,25 +137,27 @@ namespace Simon {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		SimonAlgorithm(unsigned int N = 3, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(2 * N, addseed)
+			: BaseClass(2 * N, addseed)
 		{
 			setString(0); // prevent issues if the string is not set before execution
 		}
 
 		void setString(unsigned int str)
 		{
-			const unsigned int nrQubits = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits();
+			const unsigned int nrQubits = BaseClass::getNrQubits();
 			const int unsigned N = nrQubits >> 1;
 
 			Oracle<MatrixClass> o;
 			o.setString(str, N);
-			OracleOp = o.getOperatorMatrix(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits());
+			OracleOp = o.getOperatorMatrix(BaseClass::getNrQubits());
 		}
 
 		unsigned int Execute() override
 		{
-			const unsigned int nrQubits = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits();
+			const unsigned int nrQubits = BaseClass::getNrQubits();
 			const int unsigned N = nrQubits >> 1;
 			const unsigned int mask = (1u << N) - 1;
 			const unsigned int nrBasisStates = 1u << N;
@@ -168,17 +170,17 @@ namespace Simon {
 			for (unsigned int i = 0;i < nrMeasurements; ++i)
 			{
 				Init();
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(OracleOp);
+				BaseClass::ApplyOperatorMatrix(OracleOp);
 				ApplyHadamardOnHalfQubits();
 
 				// the measurement is always a value that has b * s = 0 property, where s is the string function
 				// unless the string function is zero, in which case all of them could be measured, they have equal probability
 				// either measure only the first half of the qubits
 				 
-				const unsigned int m = QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(0, N - 1);
+				const unsigned int m = BaseClass::Measure(0, N - 1);
 				
 				// or all of them but discard the not interesting ones, using a mask:
-				//const unsigned int m = (QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure() & mask);
+				//const unsigned int m = (BaseClass::Measure() & mask);
 
 				++measurements[m];
 
@@ -218,15 +220,15 @@ namespace Simon {
 	protected:
 		void Init()
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			BaseClass::setToBasisState(0);
 			ApplyHadamardOnHalfQubits();
 		}
 
 		void ApplyHadamardOnHalfQubits()
 		{
-			const unsigned int halfQubits = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() >> 1;
+			const unsigned int halfQubits = BaseClass::getNrQubits() >> 1;
 			for (unsigned int i = 0; i < halfQubits; ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, i);
+				BaseClass::ApplyGate(hadamard, i);
 		}
 
 		MatrixClass OracleOp;

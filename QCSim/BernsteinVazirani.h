@@ -55,8 +55,10 @@ namespace BernsteinVazirani {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		BernsteinVaziraniAlgorithm(unsigned int N = 3, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed)
+			:BaseClass(N, addseed)
 		{
 			setString(0); // prevent issues if the string is not set before execution
 		}
@@ -65,17 +67,17 @@ namespace BernsteinVazirani {
 		{
 			Oracle<MatrixClass> o;
 			o.setString(str);
-			OracleOp = o.getOperatorMatrix(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits());
+			OracleOp = o.getOperatorMatrix(BaseClass::getNrQubits());
 		}
 
 		unsigned int Execute() override
 		{
 			Init();
 
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(OracleOp);
+			BaseClass::ApplyOperatorMatrix(OracleOp);
 			ApplyHadamardOnAllQubits();
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return BaseClass::Measure();
 		}
 
 	protected:
@@ -83,13 +85,13 @@ namespace BernsteinVazirani {
 		{
 			//reg.setToBasisState(0);
 			//ApplyHadamardOnAllQubits();
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToEqualSuperposition(); // the same thing as commented above
+			BaseClass::setToEqualSuperposition(); // the same thing as commented above
 		}
 
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int i = 0; i < QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits(); ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, i);
+			for (unsigned int i = 0; i < BaseClass::getNrQubits(); ++i)
+				BaseClass::ApplyGate(hadamard, i);
 		}
 
 		MatrixClass OracleOp;

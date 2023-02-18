@@ -16,8 +16,10 @@ namespace Coding
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		SuperdenseCoding(int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(2, addseed), b1(false), b2(false)
+			: BaseClass(2, addseed), b1(false), b2(false)
 		{
 		}
 
@@ -32,7 +34,7 @@ namespace Coding
 		{
 			Decode();
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return BaseClass::Measure();
 		}
 
 		// needed in case Execute is used, that one will call Send and Receive one after another
@@ -54,23 +56,23 @@ namespace Coding
 		{
 			// prepare the entangled pair
 			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
-			bellState.setBellState00(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
-			//QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
+			bellState.setBellState00(BaseClass::reg);
+			//BaseClass::setToBasisState(0);
+			//BaseClass::ApplyGate(hadamard, 0);
+			//BaseClass::ApplyGate(cnot, 1, 0);
 		}
 
 		void Decode()
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, 1, 0);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, 0);
+			BaseClass::ApplyGate(cnot, 1, 0);
+			BaseClass::ApplyGate(hadamard, 0);
 		}
 
 		void Encode(bool bit1, bool bit2)
 		{
 			// the resemblance with the 'explicit' teleportation code is not a coincidence, teleportation and superdense coding are sort of opposite to each other
-			if (bit2) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(x, 0);
-			if (bit1) QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(z, 0);
+			if (bit2) BaseClass::ApplyGate(x, 0);
+			if (bit1) BaseClass::ApplyGate(z, 0);
 		}
 
 		QC::BellState<VectorClass, MatrixClass> bellState;

@@ -23,15 +23,17 @@ namespace Paradoxes {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		GeneralElitzurVaidmanBomb(unsigned int maxStages, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(maxStages + 1, addseed), stages(maxStages), theta(M_PI / (maxStages + 1.))
+			: BaseClass(maxStages + 1, addseed), stages(maxStages), theta(M_PI / (maxStages + 1.))
 		{
-			assert((QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() >= 2));
+			assert((BaseClass::getNrQubits() >= 2));
 		}
 
 		void setStages(unsigned int s)
 		{
-			const unsigned int nrQubits = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits();
+			const unsigned int nrQubits = BaseClass::getNrQubits();
 			
 			if (s >= nrQubits) s = nrQubits - 1;
 			else if (s == 0) s = 1;
@@ -65,15 +67,15 @@ namespace Paradoxes {
 
 			for (unsigned int stage = 1; stage < stages; ++stage)
 			{
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, stage);
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ryGate, 0);
+				BaseClass::ApplyGate(cnot, stage);
+				BaseClass::ApplyGate(ryGate, 0);
 			}
 
 			ryGate.SetTheta(theta);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(cnot, stages);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ryGate, 0);
+			BaseClass::ApplyGate(cnot, stages);
+			BaseClass::ApplyGate(ryGate, 0);
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return BaseClass::Measure();
 		}
 
 		double TheoreticalEfficiency() const
@@ -98,10 +100,10 @@ namespace Paradoxes {
 	protected:
 		void Init()
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			BaseClass::setToBasisState(0);
 			// the following has the role of the first beam splitter:
 			ryGate.SetTheta(getThetai());
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(ryGate, 0);
+			BaseClass::ApplyGate(ryGate, 0);
 		}
 
 		unsigned int stages;

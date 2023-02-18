@@ -9,21 +9,23 @@ namespace ErrorCorrection {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		ErrorCorrectionBase(unsigned int N, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed), errorQubit(N)
+			: BaseClass(N, addseed), errorQubit(N)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			BaseClass::setToBasisState(0);
 		}
 
 
 		void SetState(std::complex<double> alpha, std::complex<double> beta)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Clear();
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(0, alpha);
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setRawAmplitude(1, beta);
+			BaseClass::Clear();
+			BaseClass::setRawAmplitude(0, alpha);
+			BaseClass::setRawAmplitude(1, beta);
 
 			// ensure it's normalized:
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::Normalize();
+			BaseClass::Normalize();
 		}
 
 		// set it to bigger than two for 'no error'

@@ -57,8 +57,10 @@ namespace QuantumSimulation {
 		public PauliZStringSimulation<VectorClass, MatrixClass>
 	{
 	public:
+		typedef PauliZStringSimulation<VectorClass, MatrixClass> BaseClass;
+
 		PauliStringSimulation(double t = 0, unsigned int N = 3)
-			: PauliZStringSimulation<VectorClass, MatrixClass>(t), ops(N, PauliOp::opZ)
+			: BaseClass(t), ops(N, PauliOp::opZ)
 		{
 		}
 
@@ -95,7 +97,7 @@ namespace QuantumSimulation {
 					measurementBasis.switchToYBasis(reg, qubit);
 				// for Z we don't have to do anything, that one is the computational basis
 
-			PauliZStringSimulation<VectorClass, MatrixClass>::Execute(reg);
+			BaseClass::Execute(reg);
 
 			// switch back to computational basis
 			for (unsigned int qubit = 0; qubit < nrQubits; ++qubit)
@@ -117,8 +119,10 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		PauliDecomposedHamiltonianSimulation(unsigned int N = 3, double t = 0, unsigned int nrSteps = 1, bool addSeed = false)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addSeed), simTime(t), steps(nrSteps)
+			: BaseClass(N, addSeed), simTime(t), steps(nrSteps)
 		{
 		}
 
@@ -147,7 +151,7 @@ namespace QuantumSimulation {
 				// this is slow and it can be improved by obtaining the whole matrix once and just by 'applying' the operator each step
 				// for now I'll leave it as it is but the gains would be quite big here
 				for (PauliStringSimulation<VectorClass, MatrixClass>& term : terms)
-					term.Execute(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+					term.Execute(BaseClass::reg);
 			}
 
 			return 0; // don't measure for this one, must be done explicitely, needed to be able to check the register first
@@ -180,12 +184,12 @@ namespace QuantumSimulation {
 			static const QC::Gates::PauliYGate<MatrixClass> Y;
 			static const QC::Gates::PauliZGate<MatrixClass> Z;
 
-			MatrixClass H = MatrixClass::Zero(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates(), QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates());
+			MatrixClass H = MatrixClass::Zero(BaseClass::getNrBasisStates(), BaseClass::getNrBasisStates());
 
 			for (unsigned int i = 0; i < terms.size(); ++i)
 			{
 				MatrixClass tm;
-				for (unsigned int qubit = 0; qubit < QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits(); ++qubit)
+				for (unsigned int qubit = 0; qubit < BaseClass::getNrQubits(); ++qubit)
 				{
 					if (terms[i].getOperatorForQubit(qubit) == PauliStringSimulation<>::PauliOp::opX)
 					{

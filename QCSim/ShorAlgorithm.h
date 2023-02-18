@@ -76,8 +76,10 @@ namespace Shor {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed), 
+			: BaseClass(N, addseed),
 			Number(C), A(2), fx(L, C), phaseEstimation(fx, N, L)
 		{
 		}
@@ -86,7 +88,7 @@ namespace Shor {
 		{
 			Init();
 
-			return phaseEstimation.Execute(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg);
+			return phaseEstimation.Execute(BaseClass::reg);
 		}
 
 		void setA(unsigned int a)
@@ -141,7 +143,7 @@ namespace Shor {
 
 				// period finding
 
-				const unsigned int BasisStatesNo = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+				const unsigned int BasisStatesNo = BaseClass::getNrBasisStates();
 				const unsigned int xmask = (1 << phaseEstimation.getFunctionStartQubit()) - 1;
 
 				// use a single measurement to guess the period (but not zero)
@@ -200,7 +202,7 @@ namespace Shor {
 		void Init()
 		{
 			const unsigned int state = 1 << phaseEstimation.getFunctionStartQubit();
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(state);
+			BaseClass::setToBasisState(state);
 		}
 
 		static int gcd(int a, int b)
@@ -260,7 +262,7 @@ namespace Shor {
 
 		unsigned int getNBits() const
 		{
-			return  QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - phaseEstimation.getFunctionStartQubit();
+			return  BaseClass::getNrQubits() - phaseEstimation.getFunctionStartQubit();
 		}
 
 		unsigned int Number;

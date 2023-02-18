@@ -15,8 +15,10 @@ namespace DeutschJozsa {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		DeutschJozsaAlgorithm(unsigned int N = 3, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(N, addseed),
+			: BaseClass(N, addseed),
 			functionType(FunctionType::constantZero)
 		{
 		}
@@ -29,12 +31,12 @@ namespace DeutschJozsa {
 			ApplyOracle();
 			ApplyHadamardOnAllQubitsExceptLast();
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return BaseClass::Measure();
 		}
 
 		bool WasConstantResult(unsigned int state) const
 		{
-			const unsigned int xmask = (QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates() - 1) >> 1;
+			const unsigned int xmask = (BaseClass::getNrBasisStates() - 1) >> 1;
 
 			return (state & xmask) == 0;
 		}
@@ -52,7 +54,7 @@ namespace DeutschJozsa {
 
 			if (functionType == FunctionType::balanced)
 			{
-				const unsigned int funcSize = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates() >> 1;
+				const unsigned int funcSize = BaseClass::getNrBasisStates() >> 1;
 				fvalues.resize(funcSize);
 				const unsigned int nrOnes = funcSize >> 1;
 				for (unsigned int i = 0; i < nrOnes; ++i)
@@ -75,25 +77,25 @@ namespace DeutschJozsa {
 	protected:
 		void Init()
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToQubitState(QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
+			BaseClass::setToQubitState(BaseClass::getNrQubits() - 1);
 		}
 
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int i = 0; i < QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits(); ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, i);
+			for (unsigned int i = 0; i < BaseClass::getNrQubits(); ++i)
+				BaseClass::ApplyGate(hadamard, i);
 		}
 
 		void ApplyHadamardOnAllQubitsExceptLast()
 		{
-			const unsigned int limit = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1;
+			const unsigned int limit = BaseClass::getNrQubits() - 1;
 			for (unsigned int i = 0; i < limit; ++i)
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(hadamard, i);
+				BaseClass::ApplyGate(hadamard, i);
 		}
 
 		void ApplyOracle()
 		{
-			const unsigned int nrBasisStates = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrBasisStates();
+			const unsigned int nrBasisStates = BaseClass::getNrBasisStates();
 			MatrixClass U = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
 			// we have U |y>|x> = |y + f(x)> |x>
@@ -102,7 +104,7 @@ namespace DeutschJozsa {
 			// <x1|<y1| U |y2>|x2> = <x1|x2><y1|y2+f(x2)>
 			// + is modulo 2 addition
 
-			const unsigned int nrQubits = QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits();
+			const unsigned int nrQubits = BaseClass::getNrQubits();
 			const unsigned int mask = nrBasisStates - 1;
 			const unsigned int xmask = mask >> 1;
 			const unsigned int ymask = nrBasisStates >> 1;
@@ -119,7 +121,7 @@ namespace DeutschJozsa {
 			
 			assert(checkUnitary(U));
 
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyOperatorMatrix(U);
+			BaseClass::ApplyOperatorMatrix(U);
 		}
 
 		unsigned int f(unsigned int xstate)

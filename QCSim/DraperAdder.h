@@ -11,15 +11,17 @@ namespace Adders {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DraperAdder : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		DraperAdder(unsigned int N = 3, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(2 * N, addseed), n(N), fourier(2 * N, N)
+			: BaseClass(2 * N, addseed), n(N), fourier(2 * N, N)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			BaseClass::setToBasisState(0);
 		}
 
 		unsigned int Execute() override
 		{
-			fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.QFT(BaseClass::reg, false);
 			
 			// the operations commute with each other, so one can change the ordering
 
@@ -29,14 +31,14 @@ namespace Adders {
 				for (int cbit = static_cast<int>(qbit) - n; cbit >= 0; --cbit)
 				{
 					fourier.cPhaseShift.SetPhaseShift(phase);
-					QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(fourier.cPhaseShift, qbit, cbit);
+					BaseClass::ApplyGate(fourier.cPhaseShift, qbit, cbit);
 					phase *= 0.5;
 				}
 			}
 			
-			fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.IQFT(BaseClass::reg, false);
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return BaseClass::Measure();
 		}
 
 
@@ -48,15 +50,17 @@ namespace Adders {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DraperAdderWithCarry : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+
 		DraperAdderWithCarry(unsigned int N = 3, int addseed = 0)
-			: QC::QuantumAlgorithm<VectorClass, MatrixClass>(2 * N + 1, addseed), n(N), fourier(2 * N + 1, N)
+			: BaseClass(2 * N + 1, addseed), n(N), fourier(2 * N + 1, N)
 		{
-			QC::QuantumAlgorithm<VectorClass, MatrixClass>::setToBasisState(0);
+			BaseClass::setToBasisState(0);
 		}
 
 		unsigned int Execute() override
 		{
-			fourier.QFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.QFT(BaseClass::reg, false);
 
 			// the operations commute with each other, so one can change the ordering
 
@@ -65,7 +69,7 @@ namespace Adders {
 			for (int cbit = n - 1; cbit >= 0; --cbit)
 			{
 				fourier.cPhaseShift.SetPhaseShift(phase);
-				QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(fourier.cPhaseShift,2 * n, cbit);
+				BaseClass::ApplyGate(fourier.cPhaseShift,2 * n, cbit);
 				phase *= 0.5;
 			}
 
@@ -76,14 +80,14 @@ namespace Adders {
 				for (int cbit = static_cast<int>(qbit) - n; cbit >= 0; --cbit)
 				{
 					fourier.cPhaseShift.SetPhaseShift(phase);
-					QC::QuantumAlgorithm<VectorClass, MatrixClass>::ApplyGate(fourier.cPhaseShift, qbit, cbit);
+					BaseClass::ApplyGate(fourier.cPhaseShift, qbit, cbit);
 					phase *= 0.5;
 				}
 			}
 
-			fourier.IQFT(QC::QuantumAlgorithm<VectorClass, MatrixClass>::reg, false);
+			fourier.IQFT(BaseClass::reg, false);
 
-			return QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure();
+			return BaseClass::Measure();
 		}
 
 
