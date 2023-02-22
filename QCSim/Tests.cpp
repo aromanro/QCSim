@@ -68,7 +68,7 @@ bool ShorTests()
 	
 	for (int i = 0; i < 10;)
 	{
-		Shor::ShorAlgorithm shorAlgo;//(21, 14, 9)
+		Shor::ShorAlgorithm<> shorAlgo;//(21, 14, 9)
 		unsigned int p1;
 		unsigned int p2;
 		bool res = shorAlgo.factorize(p1, p2);
@@ -119,9 +119,9 @@ bool GroverTests()
 		std::cout << "Testing for answer: " << ans << std::endl;
 
 		measurements.clear();
-		Grover::GroverAlgorithm galgo(8);
+		Grover::GroverAlgorithm<> galgo(8);
 		galgo.setCorrectQuestionState(ans);
-		for (int i = 0; i < nrMeasurements; ++i)
+		for (int j = 0; j < nrMeasurements; ++j)
 		{
 			const unsigned int state = galgo.Execute();
 			++measurements[state];
@@ -151,7 +151,7 @@ bool TeleportationTests()
 {
 	std::cout << "\nTesting teleportation..." << std::endl;
 
-	Teleportation::QuantumTeleportationRealization qt;
+	Teleportation::QuantumTeleportationRealization<> qt;
 
 	for (int i = 0; i < 30; ++i)
 	{
@@ -208,7 +208,7 @@ bool SuperdenseCodingTests()
 {
 	std::cout << "\nTesting superdense coding..." << std::endl;
 
-	Coding::SuperdenseCoding coding;
+	Coding::SuperdenseCoding<> coding;
 
 	for (int i = 0; i < 30; ++i)
 	{
@@ -234,13 +234,13 @@ bool BellInequalitiesTests()
 
 	static const double expected = 2. * sqrt(2.);
 
-	BellInequalities::CheckCHSHInequality test;
+	BellInequalities::CheckCHSHInequality<> test;
 	bool separateMeasurements = false;
 	for (int i = 0; i < 20; ++i)
 	{
 		if (i >= 10) separateMeasurements = true;
 		test.ResetStatistics();
-		for (int i = 0; i < 100000; ++i)
+		for (int j = 0; j < 100000; ++j)
 			test.Check(separateMeasurements);
 
 		const double val = test.getValue();
@@ -262,7 +262,7 @@ bool BernsteinVaziraniTests()
 	std::cout << "\nTesting Bernstein-Vazirani..." << std::endl;
 
 	std::cout << "Three qubits:" << std::endl;
-	BernsteinVazirani::BernsteinVaziraniAlgorithm bv;
+	BernsteinVazirani::BernsteinVaziraniAlgorithm<> bv;
 
 	unsigned int b0 = 1;
 	unsigned int b1 = 2;
@@ -295,7 +295,7 @@ bool BernsteinVaziraniTests()
 	unsigned int b4 = 16;
 	unsigned int b5 = 32;
 
-	BernsteinVazirani::BernsteinVaziraniAlgorithm bvBig(6);
+	BernsteinVazirani::BernsteinVaziraniAlgorithm<> bvBig(6);
 	for (int i = 0; i < 30; ++i)
 	{
 		const bool bit0 = dist_bool(gen) == 1;
@@ -331,7 +331,7 @@ bool QuantumCryptograpyTests()
 {
 	std::cout << "\nTesting BB84 protocol..." << std::endl;
 
-	QuantumCryptograpy::BB84Protocol bb84;
+	QuantumCryptograpy::BB84Protocol<> bb84;
 
 	for (int i = 0; i < 30; ++i)
 	{
@@ -378,7 +378,7 @@ bool DeutschTests()
 {
 	// first the simplest case, Deutsch's algorithm (N=3)
 	std::cout << "First, Deutsch's algorithm..." << std::endl;
-	DeutschJozsa::DeutschJozsaAlgorithm deutsch;
+	DeutschJozsa::DeutschJozsaAlgorithm<> deutsch;
 	for (int i = 0; i < 15; ++i)
 	{
 		if (i < 5)
@@ -422,7 +422,7 @@ bool DeutschJozsaTests()
 	if (!DeutschTests()) return false;
 
 	std::cout << "Now, general Deutsch-Jozsa..." << std::endl;
-	DeutschJozsa::DeutschJozsaAlgorithm deutschJozsa(9);
+	DeutschJozsa::DeutschJozsaAlgorithm<> deutschJozsa(9);
 	for (int i = 0; i < 30; ++i)
 	{
 		if (i < 10)
@@ -469,9 +469,9 @@ bool SimonTests()
 		std::cout << "Nr of qubits: " << nrQubits << std::endl;
 
 		// also test function generation
-		Simon::Oracle oracle;
+		Simon::Oracle<> oracle;
 
-		Simon::SimonAlgorithm simonAlgorithm(nrQubits);
+		Simon::SimonAlgorithm<> simonAlgorithm(nrQubits);
 
 		const unsigned int lim = (1 << nrQubits) - 1;
 		for (unsigned int functionString = 0; functionString <= lim; ++functionString)
