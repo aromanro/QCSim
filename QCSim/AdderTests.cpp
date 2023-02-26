@@ -173,8 +173,8 @@ bool NQubitsAdderTests()
 {
 	std::cout << "NQubitsAdder, adding 3-qubit values..." << std::endl;
 
-	std::random_device rd;
-	std::mt19937 gen(rd());
+	//std::random_device rd;
+	//std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dist_nr(0, 7);
 
 
@@ -217,8 +217,8 @@ bool SimpleDrapperAdderTests()
 
 	const unsigned int mask = (1 << nQubits) - 1;
 
-	std::random_device rd;
-	std::mt19937 gen(rd());
+	//std::random_device rd;
+	//std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dist_nr1(0, 3);
 	std::uniform_int_distribution<> dist_nr2(0, 4);
 
@@ -297,8 +297,8 @@ bool DrapperAdderWithCarryTests()
 
 	const unsigned int mask = (1 << nQubits) - 1;
 
-	std::random_device rd;
-	std::mt19937 gen(rd());
+	//std::random_device rd;
+	//std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dist_nr(0, 7);
 
 	Adders::DraperAdderWithCarry adder(nQubits);

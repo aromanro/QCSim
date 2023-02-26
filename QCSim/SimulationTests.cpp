@@ -28,8 +28,8 @@ bool PauliSimultationTests()
 {
 	std::cout << "\nTesting Pauli strings hamiltonian simulations..." << std::endl;
 
-	std::random_device rd;
-	std::mt19937 gen(rd());
+	//std::random_device rd;
+	//std::mt19937 gen(rd());
 	std::uniform_int_distribution<> dist_num_terms(1, 5);
 	std::uniform_int_distribution<> dist_op(0, 2);
 	std::uniform_real_distribution<double> dist_coeff(0.1, 10.);
@@ -86,9 +86,9 @@ bool PauliSimultationTests()
 			return false;
 		}
 
-		for (unsigned int i = 0; i < sim.getNrBasisStates(); ++i)
+		for (unsigned int j = 0; j < sim.getNrBasisStates(); ++j)
 		{
-			if (!approxEqual(regVals(i), regValsEx(i), 0.5)) // in some circumstances some values can differ quite a bit but the fidelity is still high
+			if (!approxEqual(regVals(j), regValsEx(j), 0.5)) // in some circumstances some values can differ quite a bit but the fidelity is still high
 			{
 				std::cout << "\nValue from simulation does not match the value from the 'exact' computation!" << std::endl;
 

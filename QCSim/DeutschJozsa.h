@@ -104,7 +104,6 @@ namespace DeutschJozsa {
 			// <x1|<y1| U |y2>|x2> = <x1|x2><y1|y2+f(x2)>
 			// + is modulo 2 addition
 
-			const unsigned int nrQubits = BaseClass::getNrQubits();
 			const unsigned int mask = nrBasisStates - 1;
 			const unsigned int xmask = mask >> 1;
 			const unsigned int ymask = nrBasisStates >> 1;
@@ -116,7 +115,7 @@ namespace DeutschJozsa {
 					const unsigned int yval = (stateBra & ymask) ? 1 : 0;
 
 					// the operator is sumi sumj |i><j|, so line corresponds to ket and column to bra 
-					U(stateKet, stateBra) = ((stateKet & ymask) ? 1 : 0) == (f(xval) + yval) % 2 && xval == (stateKet & xmask);
+					U(stateKet, stateBra) = ((stateKet & ymask) ? 1U : 0U) == (f(xval) + yval) % 2 && xval == (stateKet & xmask);
 				}
 			
 			assert(checkUnitary(U));

@@ -76,7 +76,7 @@ namespace Adders {
 			// the other ones
 			for (unsigned int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
 			{
-				double phase = M_PI;
+				phase = M_PI;
 				for (int cbit = static_cast<int>(qbit) - n; cbit >= 0; --cbit)
 				{
 					fourier.cPhaseShift.SetPhaseShift(phase);

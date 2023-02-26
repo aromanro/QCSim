@@ -69,7 +69,7 @@ namespace BellInequalities {
 			const QC::Gates::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(T) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(S);
 			measurementBasis.switchToOperatorBasis(BaseClass::reg, bobMeasurement.getRawOperatorMatrix(), 1);
 
-			unsigned int res2 = -1;
+			int res2 = -1;
 			if (separateMeasurements)
 			{
 				state |= BaseClass::Measure(1, 1) << 1;

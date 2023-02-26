@@ -137,7 +137,7 @@ namespace QC {
 			typedef SingleQubitGate<MatrixClass> BaseClass;
 			typedef BaseClass::BaseClass OpClass;
 
-			PhaseGate(double theta = 0)
+			PhaseGate()
 			{
 				OpClass::operatorMat(0, 0) = 1;
 				OpClass::operatorMat(1, 1) = std::complex<double>(0, 1);

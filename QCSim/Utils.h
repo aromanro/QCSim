@@ -16,10 +16,7 @@ namespace QC {
 			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
 				return false;
 
-			const unsigned int state1 = 1u << qubit1;
-			const unsigned int state2 = 1u << qubit2;
-
-			reg.setToBasisState((s1 ? state1 : 0) | (s2 ? state2 : 0));
+			reg.setToBasisState((s1 ? (1u << qubit1) : 0) | (s2 ? (1u << qubit2) : 0));
 
 			reg.ApplyGate(hadamard, qubit1);
 			reg.ApplyGate(cnot, qubit2, qubit1);

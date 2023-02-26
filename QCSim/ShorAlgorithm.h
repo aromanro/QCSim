@@ -121,8 +121,9 @@ namespace Shor {
 				return false;
 			}
 
-			std::random_device rd;
-			std::mt19937 gen(rd());
+			// there are already global ones
+			//std::random_device rd;
+			//std::mt19937 gen(rd());
 			std::uniform_int_distribution<> dist(2, Number - 1);
 
 			// well, this probably should be more optimized, but it seems to work
@@ -143,7 +144,6 @@ namespace Shor {
 
 				// period finding
 
-				const unsigned int BasisStatesNo = BaseClass::getNrBasisStates();
 				const unsigned int xmask = (1 << phaseEstimation.getFunctionStartQubit()) - 1;
 
 				// use a single measurement to guess the period (but not zero)

@@ -189,8 +189,6 @@ namespace Simon {
 
 			if (measurements.size() == nrBasisStates) return 0;
 
-			unsigned int res = 0;
-
 			std::unordered_set<unsigned int> potential_results;
 			for (unsigned int i = 1; i <= mask; ++i)
 				potential_results.insert(i);

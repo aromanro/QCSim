@@ -31,7 +31,7 @@ namespace QuantumSimulation {
 
 		unsigned int Execute() override
 		{
-			Init(deltat);
+			Init();
 			
 			// Suzuki-Trotter expansion
 			for (unsigned int step = 0; step < steps; ++step)
@@ -235,7 +235,7 @@ namespace QuantumSimulation {
 
 		void solveWithClassicalFFT()
 		{
-			Init(deltat);
+			Init();
 
 			Fourier::FFT fft;
 
@@ -277,7 +277,7 @@ namespace QuantumSimulation {
 		//*****************************************************************************************************************************************************
 
 	protected:
-		void Init(double deltat)
+		void Init()
 		{
 			// ensure that the starting wavefunction is normalized
 			BaseClass::Normalize();
