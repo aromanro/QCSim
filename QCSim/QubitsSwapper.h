@@ -10,8 +10,8 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitsSwapper : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass> BaseClass;
-		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 		QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
 			: BaseClass(N, startQubit, endQubit)

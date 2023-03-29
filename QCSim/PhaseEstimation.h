@@ -8,7 +8,7 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PhaseEstimation : public QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 		PhaseEstimation(QC::Function<VectorClass, MatrixClass>& f, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
 			: fRegisterStartQubit(L), fourier(N, 0, L - 1), func(f)

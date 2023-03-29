@@ -76,7 +76,7 @@ namespace Shor {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
 			: BaseClass(N, addseed),

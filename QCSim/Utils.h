@@ -9,7 +9,7 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BellState
 	{
 	public:
-		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 		bool setBellState(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1, bool s1 = false, bool s2 = false)
 		{
@@ -53,7 +53,7 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class MeasurementBasis
 	{
 	public:
-		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 		MeasurementBasis()
 		{

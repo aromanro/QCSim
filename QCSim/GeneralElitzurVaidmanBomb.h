@@ -23,7 +23,7 @@ namespace Paradoxes {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		GeneralElitzurVaidmanBomb(unsigned int maxStages, int addseed = 0)
 			: BaseClass(maxStages + 1, addseed), stages(maxStages), theta(M_PI / (maxStages + 1.))

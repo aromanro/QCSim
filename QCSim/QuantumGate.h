@@ -23,7 +23,7 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
 		{
 		public:
-			typedef QuantumGate<MatrixClass> BaseClass;
+			using BaseClass = QuantumGate<MatrixClass>;
 
 			QuantumGateWithOp(const MatrixClass& U)
 				: operatorMat(U)
@@ -55,7 +55,7 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:
-			typedef QuantumGateWithOp<MatrixClass> BaseClass;
+			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
 			SingleQubitGate()
 				: BaseClass(MatrixClass::Zero(2, 2))
@@ -100,8 +100,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class HadamardGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			HadamardGate()
 			{
@@ -118,8 +118,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class HyGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			HyGate()
 			{
@@ -134,8 +134,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class PhaseGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			PhaseGate()
 			{
@@ -147,8 +147,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class PhaseShiftGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			PhaseShiftGate(double theta = 0)
 			{
@@ -165,8 +165,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliXGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			PauliXGate()
 			{
@@ -178,8 +178,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliYGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			PauliYGate()
 			{
@@ -191,8 +191,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliZGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			PauliZGate()
 			{
@@ -204,8 +204,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class NOTSquareRootGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			NOTSquareRootGate()
 			{
@@ -220,8 +220,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class SplitterGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			SplitterGate()
 			{
@@ -238,7 +238,7 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class RotationGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef SingleQubitGate<MatrixClass> BaseClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
 			
 			virtual void SetTheta(double theta) = 0;
 		};
@@ -246,8 +246,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class RxGate : public RotationGate<MatrixClass>
 		{
 		public:
-			typedef RotationGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = RotationGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			RxGate(double theta = 0)
 			{
@@ -268,8 +268,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class RyGate : public RotationGate<MatrixClass>
 		{
 		public:
-			typedef RotationGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = RotationGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			RyGate(double theta = 0)
 			{
@@ -290,8 +290,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class RzGate : public RotationGate<MatrixClass>
 		{
 		public:
-			typedef RotationGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = RotationGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			RzGate(double theta = 0)
 			{
@@ -311,8 +311,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class UGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
-			typedef RotationGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = SingleQubitGate<MatrixClass>::BaseClass;
 
 			UGate(double theta = 0, double phi = 0, double lambda = 0)
 			{
@@ -334,7 +334,7 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:
-			typedef QuantumGateWithOp<MatrixClass> BaseClass;
+			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
 			TwoQubitsGate()
 				: BaseClass (MatrixClass::Identity(4, 4))
@@ -374,8 +374,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class SwapGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsGate<MatrixClass>;
+			using OpClass = TwoQubitsGate<MatrixClass>::BaseClass;
 
 			SwapGate()
 			{
@@ -389,8 +389,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class iSwapGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			iSwapGate()
 			{
@@ -404,8 +404,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class DecrementGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			DecrementGate()
 			{
@@ -425,8 +425,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsControlledGate : public TwoQubitsGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			TwoQubitsControlledGate() {};
 
@@ -442,8 +442,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class CNOTGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			CNOTGate()
 			{
@@ -467,8 +467,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledPhaseGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			ControlledPhaseGate()
 			{
@@ -479,8 +479,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledPhaseShiftGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			ControlledPhaseShiftGate(double theta = 0)
 			{
@@ -496,8 +496,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledZGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
-			typedef TwoQubitsControlledGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			ControlledZGate()
 			{
@@ -508,7 +508,7 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:
-			typedef QuantumGateWithOp<MatrixClass> BaseClass;
+			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
 			ThreeQubitsGate()
 				: BaseClass(MatrixClass::Identity(8, 8))
@@ -549,8 +549,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsControlledGate : public ThreeQubitsGate<MatrixClass>
 		{
 		public:
-			typedef ThreeQubitsGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass OpClass;
+			using BaseClass = ThreeQubitsGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
 
 			ThreeQubitsControlledGate() {};
 
@@ -564,8 +564,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class ToffoliGate : public ThreeQubitsControlledGate<MatrixClass>
 		{
 		public:
-			typedef ThreeQubitsControlledGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = ThreeQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			ToffoliGate()
 			{
@@ -579,8 +579,8 @@ namespace QC {
 		template<class MatrixClass = Eigen::MatrixXcd> class FredkinGate : public ThreeQubitsControlledGate<MatrixClass>
 		{
 		public:
-			typedef ThreeQubitsControlledGate<MatrixClass> BaseClass;
-			typedef BaseClass::BaseClass::BaseClass OpClass;
+			using BaseClass = ThreeQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
 
 			FredkinGate()
 			{

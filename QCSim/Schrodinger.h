@@ -20,7 +20,7 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		SchrodingerSimulation(unsigned int N = 8, double dt = 0.1, double dx = 0.1, unsigned int nrSteps = 50, bool addSeed = false)
 			: BaseClass(N, addSeed), deltat(dt), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)

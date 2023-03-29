@@ -9,7 +9,7 @@ namespace Teleportation
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		QuantumTeleportation(unsigned int N = 3, int addseed = 0)
 			: BaseClass(N, addseed)
@@ -22,8 +22,8 @@ namespace Teleportation
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportationRealization : public QuantumTeleportation<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QuantumTeleportation<VectorClass, MatrixClass> BaseClass;
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> AlgorithmClass;
+		using BaseClass = QuantumTeleportation<VectorClass, MatrixClass>;
+		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		QuantumTeleportationRealization(int addseed = 0)
 			: BaseClass(3, addseed)

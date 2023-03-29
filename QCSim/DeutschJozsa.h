@@ -15,7 +15,7 @@ namespace DeutschJozsa {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		DeutschJozsaAlgorithm(unsigned int N = 3, int addseed = 0)
 			: BaseClass(N, addseed),

@@ -57,7 +57,7 @@ namespace QuantumSimulation {
 		public PauliZStringSimulation<VectorClass, MatrixClass>
 	{
 	public:
-		typedef PauliZStringSimulation<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = PauliZStringSimulation<VectorClass, MatrixClass>;
 
 		PauliStringSimulation(double t = 0, unsigned int N = 3)
 			: BaseClass(t), ops(N, PauliOp::opZ)
@@ -119,7 +119,7 @@ namespace QuantumSimulation {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		PauliDecomposedHamiltonianSimulation(unsigned int N = 3, double t = 0, unsigned int nrSteps = 1, bool addSeed = false)
 			: BaseClass(N, addSeed), simTime(t), steps(nrSteps)

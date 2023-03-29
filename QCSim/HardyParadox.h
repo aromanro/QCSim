@@ -16,7 +16,7 @@ namespace Paradoxes {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		HardyParadox(int addseed = 0)
 			: BaseClass(3, addseed), theta0(0.575 * M_PI), theta1(0.575 * M_PI)

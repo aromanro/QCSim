@@ -9,8 +9,8 @@ namespace ErrorCorrection {
 		public ErrorCorrectionBase<VectorClass, MatrixClass>
 	{
 	public:
-		typedef ErrorCorrectionBase<VectorClass, MatrixClass> BaseClass;
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> AlgorithmClass;
+		using BaseClass = ErrorCorrectionBase<VectorClass, MatrixClass>;
+		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		ErrorCorrection3Qubits(int addseed = 0)
 			: BaseClass(3, addseed)
@@ -36,8 +36,8 @@ namespace ErrorCorrection {
 		public ErrorCorrection3Qubits<VectorClass, MatrixClass>
 	{
 	public:
-		typedef ErrorCorrection3Qubits<VectorClass, MatrixClass> BaseClass;
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> AlgorithmClass;
+		using BaseClass = ErrorCorrection3Qubits<VectorClass, MatrixClass>;
+		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		ErrorCorrection3QubitsFlip(int addseed = 0)
 			: BaseClass(addseed)
@@ -69,8 +69,8 @@ namespace ErrorCorrection {
 		public ErrorCorrection3Qubits<VectorClass, MatrixClass>
 	{
 	public:
-		typedef ErrorCorrection3Qubits<VectorClass, MatrixClass> BaseClass;
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> AlgorithmClass;
+		using BaseClass = ErrorCorrection3Qubits<VectorClass, MatrixClass>;
+		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		ErrorCorrection3QubitsSign(int addseed = 0)
 			: BaseClass(addseed)

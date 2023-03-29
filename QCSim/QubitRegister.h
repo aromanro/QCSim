@@ -20,7 +20,7 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitRegister
 	{
 	public:
-		typedef Gates::QuantumGate<MatrixClass> GateClass;
+		using GateClass = Gates::QuantumGate<MatrixClass>;
 
 		QubitRegister(int N = 3, int addseed = 0)
 			: NrQubits(N), NrBasisStates(1u << NrQubits),

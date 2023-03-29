@@ -10,7 +10,7 @@ namespace BellInequalities {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		CheckCHSHInequality(int addseed = 0)
 			: BaseClass(2, addseed),

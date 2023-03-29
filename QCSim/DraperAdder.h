@@ -11,7 +11,7 @@ namespace Adders {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DraperAdder : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		DraperAdder(unsigned int N = 3, int addseed = 0)
 			: BaseClass(2 * N, addseed), n(N), fourier(2 * N, N)
@@ -50,7 +50,7 @@ namespace Adders {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DraperAdderWithCarry : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		DraperAdderWithCarry(unsigned int N = 3, int addseed = 0)
 			: BaseClass(2 * N + 1, addseed), n(N), fourier(2 * N + 1, N)

@@ -9,7 +9,7 @@ namespace ErrorCorrection {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		ErrorCorrectionBase(unsigned int N, int addseed = 0)
 			: BaseClass(N, addseed), errorQubit(N)

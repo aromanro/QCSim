@@ -16,7 +16,7 @@ namespace Coding
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		SuperdenseCoding(int addseed = 0)
 			: BaseClass(2, addseed), b1(false), b2(false)

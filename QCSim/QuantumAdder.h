@@ -10,8 +10,8 @@ namespace Adders {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class TwoQubitsHalfAdder : public QC::QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumSubAlgorithm<VectorClass, MatrixClass> BaseClass;
-		typedef QC::QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		using BaseClass = QC::QuantumSubAlgorithm<VectorClass, MatrixClass>;
+		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
 
 
 		TwoQubitsHalfAdder(unsigned int qubit1, unsigned int qubit2, unsigned int qubitaux)
@@ -45,8 +45,8 @@ namespace Adders {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class TwoQubitsFullAdder : public TwoQubitsHalfAdder<VectorClass, MatrixClass>
 	{
 	public:
-		typedef TwoQubitsHalfAdder<VectorClass, MatrixClass> BaseClass;
-		typedef QC::QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		using BaseClass = TwoQubitsHalfAdder<VectorClass, MatrixClass>;
+		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
 
 		TwoQubitsFullAdder(unsigned int qubit1, unsigned int qubit2, unsigned int cin, unsigned int qubitaux)
 			: BaseClass(qubit1, qubit2, qubitaux), ci(cin),
@@ -82,7 +82,7 @@ namespace Adders {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class NQubitsAdderAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		NQubitsAdderAlgorithm(unsigned int N = 3, int addseed = 0)
 			: BaseClass(3*N + 1, addseed) // the qubits for the two N inputs, N outputs and one for carry

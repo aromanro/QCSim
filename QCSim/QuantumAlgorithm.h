@@ -7,8 +7,8 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumAlgorithm
 	{
 	public:
-		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
-		typedef Gates::QuantumGate<MatrixClass> GateClass;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+		using GateClass = Gates::QuantumGate<MatrixClass>;
 
 		QuantumAlgorithm(unsigned int N = 3, int addseed = 0)
 			: reg(N, addseed)
@@ -174,7 +174,7 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithm
 	{
 	public:
-		typedef QubitRegister<VectorClass, MatrixClass> RegisterClass;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 		QuantumSubAlgorithm()
 		{

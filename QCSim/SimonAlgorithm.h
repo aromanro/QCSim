@@ -137,7 +137,7 @@ namespace Simon {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		SimonAlgorithm(unsigned int N = 3, int addseed = 0)
 			: BaseClass(2 * N, addseed)

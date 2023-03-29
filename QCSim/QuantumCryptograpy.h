@@ -16,7 +16,7 @@ namespace QuantumCryptograpy {
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		typedef QC::QuantumAlgorithm<VectorClass, MatrixClass> BaseClass;
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		BB84Protocol(int addseed = 0)
 			: BaseClass(1, addseed),
