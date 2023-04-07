@@ -19,12 +19,7 @@ bool checkUnitary(const Eigen::MatrixXcd& m)
 	const Eigen::MatrixXcd r = m.adjoint() * m;
 	for (unsigned int i = 0; i < r.rows(); ++i)
 		for (unsigned int j = 0; j < r.cols(); ++j)
-		{
-			if (i == j) {
-				if (!approxEqual(r(i, i), std::complex(1., 0.))) return false;
-			} 
-			else if (!approxEqual(r(i, j), std::complex(0., 0.))) return false;
-		}
+			if (!approxEqual(r(i, j), std::complex(i == j ? 1. : 0., 0.))) return false;
 
 	return true;
 }
