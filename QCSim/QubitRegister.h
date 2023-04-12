@@ -30,9 +30,8 @@ namespace QC {
 
 			registerStorage = VectorClass::Zero(NrBasisStates);
 
-			uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-			timeSeed += addseed;
-			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
+			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + timeSeed;
+			const std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
 
 			rng.seed(seed);
 		}

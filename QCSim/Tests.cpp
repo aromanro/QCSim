@@ -522,6 +522,8 @@ bool tests()
 {
 	std::cout << "\nTests\n";
 
+	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+
 	bool res = basicTests();
 	if (res) res = quantumAdderTests();
 	if (res) res = DeutschJozsaTests();
@@ -534,6 +536,11 @@ bool tests()
 	if (res) res = QuantumCryptograpyTests();
 	if (res) res = SimulationTests();
 	if (res) res = ParadoxesTests();
+
+	std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+
+	std::cout << "\nTesting took: " << dif / 1000. << " seconds!" << std::endl;
 
 	std::cout << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 
