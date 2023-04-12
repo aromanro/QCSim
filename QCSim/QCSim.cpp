@@ -20,14 +20,14 @@ int main()
 		std::string dummy;
 		getline(std::cin, dummy);
 		if (dummy.empty()) continue;
-		const char c = dummy.size() == 1 ? dummy[0] : 'x';
+		const char c = (dummy.size() == 1) ? dummy[0] : 'x';
 
 		if (c == '0') break;
 		else if (c == '1') tests();
 		else
 			std::cout << "Sorry, unknown command" << std::endl;
 	}
-
+	
 	return 0;
 }
 

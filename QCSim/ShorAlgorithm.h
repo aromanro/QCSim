@@ -121,15 +121,15 @@ namespace Shor {
 				return false;
 			}
 
-			// there are already global ones
-			//std::random_device rd;
-			//std::mt19937 gen(rd());
+
+			std::random_device rdev;
+			std::mt19937 genr(rdev());
 			std::uniform_int_distribution<> dist(2, Number - 1);
 
 			// well, this probably should be more optimized, but it seems to work
 			for (unsigned int t = 0; t < numAttempts; ++t)
 			{
-				const int a = dist(gen);
+				const int a = dist(genr);
 
 				const unsigned int g = gcd(Number, a);
 				if (g > 1)
