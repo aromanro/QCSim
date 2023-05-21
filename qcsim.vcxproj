@@ -287,10 +287,12 @@
     <ClCompile Include="C:\Work\Blog\QCSim\QCSim\MeasurementsTests.cpp" />
     <ClCompile Include="C:\Work\Blog\QCSim\QCSim\ParadoxesTests.cpp" />
     <ClCompile Include="C:\Work\Blog\QCSim\QCSim\SimulationTests.cpp" />
+    <ClCompile Include="QCSim\GamesTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QCSim\BernsteinVazirani.h" />
     <ClInclude Include="QCSim\CheckCHSHInequality.h" />
+    <ClInclude Include="QCSim\CoinFlipping.h" />
     <ClInclude Include="QCSim\DeutschJozsa.h" />
     <ClInclude Include="QCSim\DraperAdder.h" />
     <ClInclude Include="QCSim\ErrorCorrection3Qubits.h" />

@@ -28,6 +28,9 @@
     <ClCompile Include="C:\Work\Blog\QCSim\QCSim\SimulationTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QCSim\GamesTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -126,6 +129,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\Utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\CoinFlipping.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

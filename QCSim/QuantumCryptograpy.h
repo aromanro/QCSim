@@ -20,8 +20,7 @@ namespace QuantumCryptograpy {
 
 		BB84Protocol(int addseed = 0)
 			: BaseClass(1, addseed),
-			eavesdropping(false), randomEavesdropping(false),
-			dist_bool(0, 1)
+			eavesdropping(false), randomEavesdropping(false)
 		{
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
 			const std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
@@ -194,7 +193,7 @@ namespace QuantumCryptograpy {
 
 		bool getRandomBool()
 		{
-			return dist_bool(rng) == 1;
+			return dist_bool(rng);
 		};
 
 		// to be used for measurement basis
@@ -222,6 +221,6 @@ namespace QuantumCryptograpy {
 		bool randomEavesdropping;
 
 		std::mt19937_64 rng;
-		std::uniform_int_distribution<> dist_bool;
+		std::bernoulli_distribution dist_bool;
 	};
 }

@@ -19,7 +19,7 @@
 std::random_device rd;
 std::mt19937 gen(rd());
 
-std::uniform_int_distribution<> dist_bool(0, 1);
+std::bernoulli_distribution dist_bool;
 std::uniform_real_distribution<> dist_ampl(-1., 1.);
 
 bool ShorTests()
@@ -213,8 +213,8 @@ bool SuperdenseCodingTests()
 	for (int i = 0; i < 30; ++i)
 	{
 		// bit1 is on position 0, bit2 is on position 1
-		const bool bit1 = dist_bool(gen) == 1;
-		const bool bit2 = dist_bool(gen) == 1;
+		const bool bit1 = dist_bool(gen);
+		const bool bit2 = dist_bool(gen);
 		coding.SetBits(bit1, bit2);
 		unsigned int classicalBits = coding.Execute();
 
@@ -270,9 +270,9 @@ bool BernsteinVaziraniTests()
 
 	for (int i = 0; i < 10; ++i)
 	{
-		const bool bit0 = dist_bool(gen) == 1;
-		const bool bit1 = dist_bool(gen) == 1;
-		const bool bit2 = dist_bool(gen) == 1;
+		const bool bit0 = dist_bool(gen);
+		const bool bit1 = dist_bool(gen);
+		const bool bit2 = dist_bool(gen);
 
 		unsigned int str = 0;
 		if (bit0) str |= b0;
@@ -298,12 +298,12 @@ bool BernsteinVaziraniTests()
 	BernsteinVazirani::BernsteinVaziraniAlgorithm<> bvBig(6);
 	for (int i = 0; i < 30; ++i)
 	{
-		const bool bit0 = dist_bool(gen) == 1;
-		const bool bit1 = dist_bool(gen) == 1;
-		const bool bit2 = dist_bool(gen) == 1;
-		const bool bit3 = dist_bool(gen) == 1;
-		const bool bit4 = dist_bool(gen) == 1;
-		const bool bit5 = dist_bool(gen) == 1;
+		const bool bit0 = dist_bool(gen);
+		const bool bit1 = dist_bool(gen);
+		const bool bit2 = dist_bool(gen);
+		const bool bit3 = dist_bool(gen);
+		const bool bit4 = dist_bool(gen);
+		const bool bit5 = dist_bool(gen);
 
 		unsigned int str = 0;
 		if (bit0) str |= b0;
@@ -536,6 +536,7 @@ bool tests()
 	if (res) res = QuantumCryptograpyTests();
 	if (res) res = SimulationTests();
 	if (res) res = ParadoxesTests();
+	if (res) res = GamesTests();
 
 	std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();

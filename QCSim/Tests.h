@@ -17,6 +17,8 @@ bool quantumAdderTests();
 
 bool ErrorCorrectionTests();
 
+bool GamesTests();
+
 bool tests();
 
 #ifndef TESTS_CPP_
@@ -24,7 +26,7 @@ bool tests();
 extern std::random_device rd;
 extern std::mt19937 gen;
 
-extern std::uniform_int_distribution<int> dist_bool;
+extern std::bernoulli_distribution dist_bool;
 extern std::uniform_real_distribution<double> dist_ampl;
 
 #endif

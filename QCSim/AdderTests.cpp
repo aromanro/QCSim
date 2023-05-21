@@ -5,7 +5,7 @@
 #include <iostream>
 #include <map>
 
-extern std::uniform_int_distribution<int> dist_bool;
+extern std::bernoulli_distribution dist_bool;
 
 bool quantumHalfAdderTests()
 {

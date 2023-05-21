@@ -16,7 +16,6 @@ namespace BellInequalities {
 			: BaseClass(2, addseed),
 			S((-Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (-Z-X)/sqrt(2)=-H
 			T((Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (Z-X)/sqrt(2)
-			dist_bool(0, 1),
 			QSaccum(0), RSaccum(0), RTaccum(0), QTaccum(0), QScount(0), RScount(0), RTcount(0), QTcount(0)
 		{
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
@@ -50,7 +49,7 @@ namespace BellInequalities {
 
 			// pick which one to measure at random
 			// Alice: 
-			const bool aM = dist_bool(rng) == 1;
+			const bool aM = dist_bool(rng);
 			const QC::Gates::SingleQubitGate<MatrixClass>& aliceMeasurement = aM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(R) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(Q);
 			measurementBasis.switchToOperatorBasis(BaseClass::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
 
@@ -64,7 +63,7 @@ namespace BellInequalities {
 			}
 
 			// Bob:
-			const bool bM = dist_bool(rng) == 1;
+			const bool bM = dist_bool(rng);
 			const QC::Gates::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(T) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(S);
 			measurementBasis.switchToOperatorBasis(BaseClass::reg, bobMeasurement.getRawOperatorMatrix(), 1);
 
@@ -122,7 +121,7 @@ namespace BellInequalities {
 		QC::Gates::SingleQubitGate<MatrixClass> T;
 
 		std::mt19937_64 rng;
-		std::uniform_int_distribution<> dist_bool;
+		std::bernoulli_distribution dist_bool;
 
 		long long int QSaccum;
 		long long int RSaccum;
