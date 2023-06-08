@@ -40,8 +40,13 @@ namespace Teleportation
 			AlgorithmClass::Normalize();
 		}
 
+
+		// A more general discussion is in "GENERALIZED GHZ STATES AND DISTRIBUTED QUANTUM COMPUTING"
+		// https://arxiv.org/abs/quant-ph/0402148
+		// for this see fig 7
+
 		// considers the initial state already set
-		// the qubits to be entangled start as |00> and they are entangled to a EPR state using cnot and hadamard gates 
+		// the qubits to be entangled start as |00> and they are entangled to a EPR state using hadamard and cnot gates (together they make the E/E2 entangling gate)
 		// the first two qubits are on the Alice side, the third belongs to Bob
 		// returns the values of the two measured qubits
 		unsigned int Teleport(bool explicitClassicalTransmission = false)
@@ -49,14 +54,27 @@ namespace Teleportation
 			// make an EPR pair out of the second and third qubit:
 
 			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
+
+			// the two gates make up an 'entangling gate', sometimes noted by E or E2
 			AlgorithmClass::ApplyGate(hadamard, 1);
 			AlgorithmClass::ApplyGate(cnot, 2, 1);
 
+			// here we are in the point A marked in fig 7 in the paper mentioned above
+
 			// interacting the sending qubit (0) with the Alice's side of the entangled pair:
 			AlgorithmClass::ApplyGate(cnot, 1, 0);
+
+			// in the paper mentioned above, here follows the measurement of the second qubit
+			// then based on it the x gate is applied (or not)
+			// then the B mark would follow
+
+			// from here it would follow what's after B
 			AlgorithmClass::ApplyGate(hadamard, 0);
 
 			// measurements can be actually done all at the end, but let's pretend
+			// one could do here only the first qubit measurement, the second one being done earlier
+
+			// anyhow, it's basically the same thing
 			const unsigned int measuredValues = AlgorithmClass::Measure(0, 1);
 
 			// now that they are measured they go to Bob, which uses the values to act on its entangled qubit:

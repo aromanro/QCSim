@@ -39,6 +39,8 @@ namespace Paradoxes {
 			// from one 'photon' it makes out a pair of them, a 'signal' one and an 'idler' one
 			BaseClass::ApplyGate(cnot, 1); //controlling qubit is 0 by default
 
+			// the above two gates (hadamard applied in Init and cnot) are equivalent to the entangling gate (noted E or E2)
+
 			// now the action of the next beam splitter:
 			BaseClass::ApplyGate(hadamard, 0);
 

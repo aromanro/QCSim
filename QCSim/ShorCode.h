@@ -70,6 +70,9 @@ namespace ErrorCorrection {
 
 			for (unsigned int qubit = 0; qubit <= 6; qubit += 3)
 			{
+				// the following make up a generalized entangling gate for 3 qubits
+				// the first two being the two-qubits 'entangling gate'
+				// such a gate would create a GHZ state from |000> (that is 1/sqrt(2) * (|000> + |111>))
 				AlgorithmClass::ApplyGate(hadamard, qubit);
 				AlgorithmClass::ApplyGate(BaseClass::cnot, qubit + 1, qubit);
 				AlgorithmClass::ApplyGate(BaseClass::cnot, qubit + 2, qubit);

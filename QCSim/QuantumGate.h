@@ -561,6 +561,7 @@ namespace QC {
 			}
 		};
 
+		// also known as CCNOT
 		template<class MatrixClass = Eigen::MatrixXcd> class ToffoliGate : public ThreeQubitsControlledGate<MatrixClass>
 		{
 		public:
@@ -576,6 +577,7 @@ namespace QC {
 			}
 		};
 
+		// also known as CSWAP
 		template<class MatrixClass = Eigen::MatrixXcd> class FredkinGate : public ThreeQubitsControlledGate<MatrixClass>
 		{
 		public:

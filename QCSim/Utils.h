@@ -18,6 +18,7 @@ namespace QC {
 
 			reg.setToBasisState((s1 ? (1u << qubit1) : 0) | (s2 ? (1u << qubit2) : 0));
 
+			// the following two gates is equivalent to an entangling gate (noted E or E2):
 			reg.ApplyGate(hadamard, qubit1);
 			reg.ApplyGate(cnot, qubit2, qubit1);
 
@@ -124,6 +125,7 @@ namespace QC {
 			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
 				return false;
 
+			// entangling gate (E or E2)
 			reg.ApplyGate(hadamard, qubit1);
 			reg.ApplyGate(cnot, qubit2, qubit1);
 

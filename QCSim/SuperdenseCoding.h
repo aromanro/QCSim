@@ -57,6 +57,8 @@ namespace Coding
 			// prepare the entangled pair
 			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
 			bellState.setBellState00(BaseClass::reg);
+			
+			// the commented code is equivalent with the above, the two quantum gates making out the entangling gate (noted E or E2)
 			//BaseClass::setToBasisState(0);
 			//BaseClass::ApplyGate(hadamard, 0);
 			//BaseClass::ApplyGate(cnot, 1, 0);
