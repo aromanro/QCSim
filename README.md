@@ -55,3 +55,8 @@ Another source file worth looking into is `Utils.h`, since `BellState` and `Meas
 To see various algorithms in action, look into the `Test` files.
 
 I intend to come from time to time to add more algorithms, but for now I think I have more here than I intended when I started the project, so I'll leave it like this for a while (except maybe some improvements of the existing code and bug fixes if necessary).
+
+### Required libraries
+
+Dealing with matrices is done with the help of [Eigen](https://eigen.tuxfamily.org/).
+The quantum fourier transform is checked against [FFTW](http://fftw.org/) for Schrodinger quantum simulation. I guess using this library could be avoided, I actually provided several methods of solving the equation in the code, maybe I'll switch to some other one in the tests in the future. For now the check is done with FFTW.
