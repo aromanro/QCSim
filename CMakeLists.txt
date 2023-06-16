@@ -12,13 +12,14 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(SOURCES QCSim/QCSim.cpp 
             QCSim/Tests.cpp 
             QCSim/AdderTests.cpp
-			QCSim/ErrorCorrectionTests.cpp
-			QCSim/FFT.cpp
-			QCSim/GatesTests.cpp
-			QCSim/MeasurementsTests.cpp
-			QCSim/ParadoxesTests.cpp
-			QCSim/SimulationTests.cpp
-			QCSim/GamesTests.cpp)
+            QCSim/ErrorCorrectionTests.cpp
+            QCSim/FFT.cpp
+            QCSim/GatesTests.cpp
+            QCSim/MeasurementsTests.cpp
+            QCSim/ParadoxesTests.cpp
+            QCSim/SimulationTests.cpp
+            QCSim/GamesTests.cpp
+            QCSim/DistributedTests.cpp)
  
 SET( EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
 IF( NOT EIGEN3_INCLUDE_DIR )

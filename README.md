@@ -44,7 +44,7 @@ Paradoxes (although some of the above might be considered paradoxes as well):
 Quantum games:
 *   Coin flipping
 
-Distributed quantum computing
+Distributed quantum computing:
 *   Distributed CNOT
 
 The most important code to look into are in `QuantumGate.h` (namespace `QC::Gates`), where the quantum gates are implemented. The code is quite straightforward, a little bit more complex being the implementation of `getOperatorMatrix`, which extends the operator matrix from the matrix that involves only the qubits on which the operator is applied, to all qubits from the register. 
