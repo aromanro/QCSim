@@ -537,6 +537,7 @@ bool tests()
 	if (res) res = SimulationTests();
 	if (res) res = ParadoxesTests();
 	if (res) res = GamesTests();
+	if (res) res = distributedTests();
 
 	std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();

@@ -19,6 +19,8 @@ bool ErrorCorrectionTests();
 
 bool GamesTests();
 
+bool distributedTests();
+
 bool tests();
 
 #ifndef TESTS_CPP_
