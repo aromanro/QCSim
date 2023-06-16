@@ -131,6 +131,7 @@ namespace QC {
 			}
 		};
 
+		// also known as the V gate
 		template<class MatrixClass = Eigen::MatrixXcd> class PhaseGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
@@ -200,6 +201,31 @@ namespace QC {
 				OpClass::operatorMat(1, 1) = -1;
 			}
 		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class SigmaPlusGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
+
+			SigmaPlusGate()
+			{
+				OpClass::operatorMat(0, 1) = 1;
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class SigmaMinusGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
+
+			SigmaMinusGate()
+			{
+				OpClass::operatorMat(1, 0) = 1;
+			}
+		};
+
 
 		template<class MatrixClass = Eigen::MatrixXcd> class NOTSquareRootGate : public SingleQubitGate<MatrixClass>
 		{
@@ -464,6 +490,7 @@ namespace QC {
 			}
 		};
 
+		// controlled-V gate
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledPhaseGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:

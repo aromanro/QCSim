@@ -65,6 +65,7 @@ namespace QC {
 			registerStorage(state) = 1;
 		}
 
+		// measurement should give either all 0 or all 1
 		void setToCatState()
 		{
 			Clear();
@@ -74,6 +75,7 @@ namespace QC {
 			registerStorage(NrBasisStates - 1) = OneOverSqrt2;
 		}
 
+		// all states have equal amplitude, so measurement should give any state with equal probability
 		void setToEqualSuperposition()
 		{
 			registerStorage.setConstant(1. / sqrt(NrBasisStates));

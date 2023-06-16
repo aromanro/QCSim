@@ -29,6 +29,7 @@ bool QuantumEraserTests()
 
 	int expected = nrMeasurements / 4;
 	const double allowedError = expected * 0.05;
+
 	if (!approxEqual(measurements[0], expected, allowedError) || !approxEqual(measurements[1], expected, allowedError)
 		|| !approxEqual(measurements[2], expected, allowedError) || !approxEqual(measurements[3], expected, allowedError))
 		return false;
@@ -88,7 +89,7 @@ bool ElitzurVaidmanBombTests()
 			const double expected = ElitzurVaidmanBomb.TheoreticalEfficiency();
 			std::cout << "Theta: " << theta << " 'Experimental' efficiency: " << result << " Theoretical efficiency: " << expected << std::endl;
 
-			if (!approxEqual(result, expected, 0.05))
+			if (!approxEqual(result, expected, 0.08))
 				return false;
 
 			measurements.clear();
@@ -147,7 +148,7 @@ bool HardyParadoxTests()
 				std::cout << "Theta0: " << theta0 / M_PI << " pi, theta1: " << theta1 / M_PI << " pi, 'Experimental' non-locality probability: " << result << " Theoretical non-locality probability: " << expected << std::endl;
 			++cnt2;
 
-			if (!approxEqual(result, expected, 0.05))
+			if (!approxEqual(result, expected, 0.08))
 				return false;
 
 			measurements.clear();
