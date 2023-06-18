@@ -137,8 +137,16 @@
     <ClInclude Include="QCSim\CoinFlipping.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DistributedCNOT.h" />
     <ClInclude Include="QCSim\DistributedCNOT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\CatDisentangler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\CatEntangler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\GeneralizedEntanglingGate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -29,6 +29,8 @@ namespace Distributed {
 			BaseClass::setToBasisState(0);
 		}
 
+
+		// could be implemented using subalgorithms, see CatEntangler, CatDisentangler and GeneralizedEntanglingGate
 		unsigned int Execute() override
 		{
 			// the two gates make up an 'entangling gate', sometimes noted by E or E2
