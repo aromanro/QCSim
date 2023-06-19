@@ -67,6 +67,8 @@ namespace QC {
 
 		unsigned int Execute(RegisterClass& reg) override
 		{
+			// TODO: check if things are set up all right: size of U, size of reg, etc.
+			
 			// apply hadamard over each qubit from the x-register
 			// reuse the hadamard gate from the fourier transform base class
 			for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
@@ -81,7 +83,7 @@ namespace QC {
 				
 				UGate.Execute(reg);
 
-				// double the controlled gate
+				// power up the controlled gate
 				controlledGate *= controlledGate;
 			}
 
