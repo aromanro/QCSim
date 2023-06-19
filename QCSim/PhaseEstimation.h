@@ -2,15 +2,16 @@
 
 #include "QuantumFourierTransform.h"
 #include "Function.h"
+#include "NQubitsQuantumGate.h"
 
 namespace QC {
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PhaseEstimation : public QuantumSubAlgorithm<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorPhaseEstimation : public QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-		PhaseEstimation(QC::Function<VectorClass, MatrixClass>& f, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
+		ShorPhaseEstimation(QC::Function<VectorClass, MatrixClass>& f, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
 			: fRegisterStartQubit(L), fourier(N, 0, L - 1), func(f)
 		{
 		}

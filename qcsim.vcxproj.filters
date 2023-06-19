@@ -149,5 +149,8 @@
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\NQubitsQuantumGate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
