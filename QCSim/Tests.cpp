@@ -524,21 +524,11 @@ bool tests()
 
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 
-	bool res = basicTests();
-	if (res) res = quantumAdderTests();
-	if (res) res = DeutschJozsaTests();
-	if (res) res = SimonTests();
-	if (res) res = BernsteinVaziraniTests();
-	if (res) res = GroverTests();
-	if (res) res = PhaseEstimationTests();
-	if (res) res = ShorTests();
-	if (res) res = TeleportationTests();
-	if (res) res = SuperdenseCodingTests();
-	if (res) res = QuantumCryptograpyTests();
-	if (res) res = SimulationTests();
-	if (res) res = ParadoxesTests();
-	if (res) res = GamesTests();
-	if (res) res = distributedTests();
+	bool res = basicTests() && quantumAdderTests() && DeutschJozsaTests();
+	if (res) res = SimonTests() && BernsteinVaziraniTests() && GroverTests();
+	if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
+	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
+	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
 
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t1).count();
 
