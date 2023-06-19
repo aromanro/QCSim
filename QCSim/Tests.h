@@ -21,6 +21,8 @@ bool GamesTests();
 
 bool distributedTests();
 
+bool PhaseEstimationTests();
+
 bool tests();
 
 #ifndef TESTS_CPP_

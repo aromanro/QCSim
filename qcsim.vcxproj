@@ -289,6 +289,7 @@
     <ClCompile Include="C:\Work\Blog\QCSim\QCSim\SimulationTests.cpp" />
     <ClCompile Include="QCSim\DistributedTests.cpp" />
     <ClCompile Include="QCSim\GamesTests.cpp" />
+    <ClCompile Include="QCSim\PhaseEstimationTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QCSim\BernsteinVazirani.h" />

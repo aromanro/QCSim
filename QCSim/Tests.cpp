@@ -530,6 +530,7 @@ bool tests()
 	if (res) res = SimonTests();
 	if (res) res = BernsteinVaziraniTests();
 	if (res) res = GroverTests();
+	if (res) res = PhaseEstimationTests();
 	if (res) res = ShorTests();
 	if (res) res = TeleportationTests();
 	if (res) res = SuperdenseCodingTests();

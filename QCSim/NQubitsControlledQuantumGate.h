@@ -5,7 +5,7 @@
 
 namespace QC {
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class NQubitsControlledQuantumGate
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class NQubitsControlledQuantumGate : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 	{
 	public:
 		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
