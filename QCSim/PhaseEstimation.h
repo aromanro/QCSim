@@ -74,7 +74,8 @@ namespace QC {
 
 			
 			MatrixClass controlledGate = U;
-			for (unsigned int ctrlQubit = fRegisterStartQubit - 1; ctrlQubit > 0; --ctrlQubit)
+			const unsigned int lastQubit = fRegisterStartQubit - 1;
+			for (unsigned int ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
 			{
 				NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(nrQubits, controlledGate, fRegisterStartQubit, ctrlQubit);
 				
@@ -85,7 +86,7 @@ namespace QC {
 			}
 
 			{
-				NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(nrQubits, controlledGate, fRegisterStartQubit, 0);
+				NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(nrQubits, controlledGate, fRegisterStartQubit, lastQubit);
 
 				UGate.Execute(reg);
 			}
