@@ -307,6 +307,7 @@
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h" />
     <ClInclude Include="QCSim\GroverAlgorithm.h" />
     <ClInclude Include="QCSim\HardyParadox.h" />
+    <ClInclude Include="QCSim\NQubitsControlledQuantumGate.h" />
     <ClInclude Include="QCSim\NQubitsQuantumGate.h" />
     <ClInclude Include="QCSim\Oracle.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />
