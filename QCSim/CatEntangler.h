@@ -8,6 +8,8 @@ namespace QC {
 	// See "Generalized GHZ States and Distributed Quantum Computing"
 	// https://arxiv.org/abs/quant-ph/0402148v3
 
+	// particular case: two qubits is Bell encoder
+
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class CatEntangler : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 	{
 	public:
