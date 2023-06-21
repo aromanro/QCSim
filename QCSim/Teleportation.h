@@ -18,7 +18,9 @@ namespace Teleportation
 		}
 	};
 
-
+	// teleportation and superdense coding are sort of inverse of each other, see also the `SuperdenseCoding` class
+	// both start with an EPR pair, teleportation sends two classical bits to recover a qubit to be sent at the other end, superdense coding sends a qubit to recover the two classical bits at the other end
+	
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumTeleportationRealization : public QuantumTeleportation<VectorClass, MatrixClass>
 	{
 	public:
@@ -51,6 +53,10 @@ namespace Teleportation
 		// returns the values of the two measured qubits
 		unsigned int Teleport(bool explicitClassicalTransmission = false)
 		{
+			// TODO: Using something like the `BellState` class to create the EPR pair, not only the one currently used, but also the other three
+			// it works with any of them as long as Alice and Bob agree on which one to use
+
+			
 			// make an EPR pair out of the second and third qubit:
 
 			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
@@ -60,6 +66,9 @@ namespace Teleportation
 			AlgorithmClass::ApplyGate(cnot, 2, 1);
 
 			// here we are in the point A marked in fig 7 in the paper mentioned above
+
+
+			// the cnot and hadamard that follow do the inverse of the entangling gate - this way the measurement that follows is a measurement in the Bell basis
 
 			// interacting the sending qubit (0) with the Alice's side of the entangled pair:
 			AlgorithmClass::ApplyGate(cnot, 1, 0);
@@ -77,7 +86,7 @@ namespace Teleportation
 			// anyhow, it's basically the same thing
 			const unsigned int measuredValues = AlgorithmClass::Measure(0, 1);
 
-			// now that they are measured they go to Bob, which uses the values to act on its entangled qubit:
+			// now that they are measured they go to Bob, which uses the values to act on his entangled qubit:
 
 			if (explicitClassicalTransmission)
 			{

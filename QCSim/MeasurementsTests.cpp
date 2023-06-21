@@ -24,6 +24,11 @@ bool checkUnitary(const Eigen::MatrixXcd& m)
 	return true;
 }
 
+bool checkHermitian(const Eigen::MatrixXcd& m)
+{
+	return m.isApprox(m.adjoint());
+}
+
 void setRegister(QC::QubitRegister<>& reg)
 {
 	reg.setToBasisState(0); //overriden below

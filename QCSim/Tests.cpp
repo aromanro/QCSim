@@ -81,8 +81,9 @@ bool ShorTests()
 		if (res) ++i;
 	}
 
-	/*
+	
 	// this is slow, so it stays commented out, it's only for occasional tests
+	/*
 	for (;;) {
 		Shor::ShorAlgorithm shorAlgo(21, 14, 9);
 		unsigned int p1;
