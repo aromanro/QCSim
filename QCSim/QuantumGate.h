@@ -163,6 +163,7 @@ namespace QC {
 			}
 		};
 
+		// also known as the flip gate
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliXGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
