@@ -1,6 +1,8 @@
 #pragma once
 #include "QuantumAlgorithm.h"
 #include "QuantumGate.h"
+#include "CatEntangler.h"
+#include "CatDisentangler.h"
 
 namespace Teleportation
 {
@@ -124,6 +126,51 @@ namespace Teleportation
 		// needed on Bob side, if the classical transmission is explicit (simple one qubit gates that are applied or not depending on the value of the classical bit):
 		QC::Gates::PauliXGate<MatrixClass> x;
 		QC::Gates::PauliZGate<MatrixClass> z;
+	};
+
+}
+
+namespace QC {
+
+	// This implementation follows "GENERALIZED GHZ STATES AND DISTRIBUTED QUANTUM COMPUTING"
+	// https://arxiv.org/abs/quant-ph/0402148
+	// fig 7
+	// using the 'cat entangler' and 'cat disentangler' sub-algorithms
+	// since teleportation is quite important (very important for distributed quantum computing) it's worth having a sub-algorithm for it, to be used in other algorithms
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class Teleport : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
+	{
+	public:
+		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+
+		Teleport(unsigned int N = 3, unsigned int sourceQubit = 0, unsigned int entangledQubit = 1, unsigned int targetQubit = 2)
+			: BaseClass(N, entangledQubit, targetQubit), sQubit(sourceQubit), entangler(N, entangledQubit, targetQubit), disentangler(N, targetQubit, sourceQubit, sourceQubit)
+		{
+		}
+
+		unsigned int Execute(RegisterClass& reg) override
+		{
+			const unsigned int entQubit = BaseClass::getStartQubit();
+			const unsigned int targetQubit = BaseClass::getEndQubit();
+
+			entangler.Execute(reg);
+
+			reg.ApplyGate(cnot, entQubit, sQubit);
+			const unsigned int measurement = reg.Measure(entQubit);
+			if (measurement) reg.ApplyGate(x, targetQubit);
+
+			const unsigned int measurement2 = disentangler.Execute(reg);
+
+			return measurement2 | (measurement << 1);
+		}
+
+	protected:
+		unsigned int sQubit;
+		Gates::CNOTGate<MatrixClass> cnot;
+		Gates::PauliXGate<MatrixClass> x;
+		CatEntangler<VectorClass, MatrixClass> entangler;
+		CatDisentangler<VectorClass, MatrixClass> disentangler;
 	};
 
 }

@@ -17,7 +17,7 @@ namespace QC {
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 		CatDisentangler(unsigned int N, unsigned int restoredQubit = 0, unsigned int startQubit = 1, unsigned int endQubit = INT_MAX)
-			: rQubit(restoredQubit), BaseClass(N, startQubit, endQubit)
+			: BaseClass(N, startQubit, endQubit), rQubit(restoredQubit)
 		{
 		}
 
@@ -27,7 +27,7 @@ namespace QC {
 			const unsigned int endQubit = BaseClass::getEndQubit();
 
 			for (unsigned int q = startQubit; q <= endQubit; ++q)
-				reg.ApplyGate(hadamard, m);
+				reg.ApplyGate(hadamard, q);
 
 			const unsigned int measurement = reg.Measure(startQubit, endQubit);
 
@@ -35,8 +35,7 @@ namespace QC {
 			unsigned int s = 0;
 			while (r)
 			{
-				if (r & 1)
-					++s;
+				s += r & 1;
 				r >>= 1;
 			}
 

@@ -159,7 +159,7 @@ bool TeleportationTests()
 		if (dist_bool(gen))
 		{
 			qt.SetState(0, 1); // set the qubit to teleport to 'up'
-			unsigned int state = qt.Execute();
+			const unsigned int state = qt.Execute();
 
 			std::cout << "Teleported 1, measured: " << state << std::endl;
 
@@ -168,7 +168,7 @@ bool TeleportationTests()
 		else
 		{
 			qt.SetState(1, 0); // set the qubit to teleport to 'down'
-			unsigned int state = qt.Execute();
+			const unsigned int state = qt.Execute();
 
 			std::cout << "Teleported 0, measured: " << state << std::endl;
 
@@ -191,12 +191,70 @@ bool TeleportationTests()
 		qt.SetState(alpha, beta);
 		std::cout << "Teleporting " << alpha << "|0> + " << beta << "|1>";
 
-		unsigned int classicalBits = qt.Teleport(i < 8 ? false : true); // also test sending explicitely the two classical bits for half the tests, although it should not make a difference
+		const unsigned int classicalBits = qt.Teleport(i < 8 ? false : true); // also test sending explicitely the two classical bits for half the tests, although it should not make a difference
 		std::cout << " Measured values for the two qubits: " << classicalBits;
 
 		// how is the whole thing looking before Bob's measurement?
 		std::complex<double> receivedAlpha = qt.getBasisStateAmplitude(classicalBits);
 		std::complex<double> receivedBeta = qt.getBasisStateAmplitude(0x4 | classicalBits);
+		std::cout << "... Teleported state: " << receivedAlpha << "|0> + " << receivedBeta << "|1>" << std::endl;
+
+		if (!approxEqual(alpha, receivedAlpha) || !approxEqual(beta, receivedBeta)) return false;
+	}
+
+	std::cout << "Teleporting with teleport sub-algorithm:" << std::endl;\
+	QC::Teleport<> teleport;
+	QC::QubitRegister<> reg;
+
+	for (int i = 0; i < 30; ++i)
+	{
+		if (dist_bool(gen))
+		{
+			reg.setToBasisState(1); // set the qubit to teleport to 'up'
+			teleport.Execute(reg);
+			const unsigned int state = reg.Measure(2);
+
+			std::cout << "Teleported 1, measured: " << state << std::endl;
+
+			if (state != 1) return false;
+		}
+		else
+		{
+			reg.setToBasisState(0); // set the qubit to teleport to 'down'
+			teleport.Execute(reg);
+			const unsigned int state = reg.Measure(2);
+
+			std::cout << "Teleported 0, measured: " << state << std::endl;
+
+			if (state != 0) return false;
+		}
+	}
+
+	std::cout << "Now testing teleporting a generic state with teleport sub-algorithm:" << std::endl;
+
+	for (int i = 0; i < 16; ++i)
+	{
+		// generate and normalize
+		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
+		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
+
+		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
+		alpha /= norm;
+		beta /= norm;
+
+		reg.Clear();
+		reg.setRawAmplitude(0, alpha);
+		reg.setRawAmplitude(1, beta);
+		reg.Normalize();
+
+		std::cout << "Teleporting " << alpha << "|0> + " << beta << "|1>";
+
+		const unsigned int classicalBits = teleport.Execute(reg);
+		std::cout << " Measured values for the two qubits: " << classicalBits;
+
+		// how is the whole thing looking before Bob's measurement?
+		std::complex<double> receivedAlpha = reg.getBasisStateAmplitude(classicalBits);
+		std::complex<double> receivedBeta = reg.getBasisStateAmplitude(0x4 | classicalBits);
 		std::cout << "... Teleported state: " << receivedAlpha << "|0> + " << receivedBeta << "|1>" << std::endl;
 
 		if (!approxEqual(alpha, receivedAlpha) || !approxEqual(beta, receivedBeta)) return false;
