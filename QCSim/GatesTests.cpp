@@ -51,7 +51,7 @@ bool checkSingleQubitGates()
 		return false;
 	}
 
-	QC::Gates::NOTSquareRootGate notSquareRoot;
+	QC::Gates::SquareRootNOTGate notSquareRoot;
 	if (!checkUnitary(notSquareRoot.getRawOperatorMatrix())) {
 		std::cout << "The Squared Root NOT gate is not unitary!" << std::endl;
 		return false;

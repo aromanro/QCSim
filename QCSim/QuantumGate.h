@@ -163,7 +163,7 @@ namespace QC {
 			}
 		};
 
-		// also known as the flip gate
+		// also known as the flip gate or not gate
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliXGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
@@ -190,6 +190,7 @@ namespace QC {
 			}
 		};
 
+		// also known as the phase flip gate
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliZGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
@@ -228,19 +229,19 @@ namespace QC {
 		};
 
 
-		template<class MatrixClass = Eigen::MatrixXcd> class NOTSquareRootGate : public SingleQubitGate<MatrixClass>
+		template<class MatrixClass = Eigen::MatrixXcd> class SquareRootNOTGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
 			using OpClass = BaseClass::BaseClass;
 
-			NOTSquareRootGate()
+			SquareRootNOTGate()
 			{
-				static const double norm = 1. / sqrt(2.);
-				OpClass::operatorMat(0, 0) = norm;
-				OpClass::operatorMat(0, 1) = -norm;
-				OpClass::operatorMat(1, 0) = norm;
-				OpClass::operatorMat(1, 1) = norm;
+				
+				OpClass::operatorMat(0, 0) = std::complex<double>(0.5, 0.5);
+				OpClass::operatorMat(0, 1) = std::complex<double>(0.5, -0.5);
+				OpClass::operatorMat(1, 0) = OpClass::operatorMat(0, 1);
+				OpClass::operatorMat(1, 1) = OpClass::operatorMat(0, 0);
 			}
 		};
 
@@ -255,7 +256,7 @@ namespace QC {
 				static const double norm = 1. / sqrt(2.);
 				OpClass::operatorMat(0, 0) = norm;
 				OpClass::operatorMat(0, 1) = std::complex<double>(0, norm);
-				OpClass::operatorMat(1, 0) = std::complex<double>(0, norm);
+				OpClass::operatorMat(1, 0) = OpClass::operatorMat(0, 1);
 				OpClass::operatorMat(1, 1) = norm;
 			}
 		};
@@ -287,8 +288,8 @@ namespace QC {
 
 				OpClass::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
 				OpClass::operatorMat(0, 1) = std::complex<double>(0, -sin(t2));
-				OpClass::operatorMat(1, 0) = std::complex<double>(0, -sin(t2));
-				OpClass::operatorMat(1, 1) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(1, 0) = OpClass::operatorMat(0, 1);
+				OpClass::operatorMat(1, 1) = OpClass::operatorMat(0, 0);
 			}
 		};
 
@@ -310,7 +311,7 @@ namespace QC {
 				OpClass::operatorMat(0, 0) = std::complex<double>(cos(t2), 0);
 				OpClass::operatorMat(0, 1) = std::complex<double>(-sin(t2), 0);
 				OpClass::operatorMat(1, 0) = std::complex<double>(sin(t2), 0);
-				OpClass::operatorMat(1, 1) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(1, 1) = OpClass::operatorMat(0, 0);
 			}
 		};
 
