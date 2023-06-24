@@ -37,6 +37,9 @@
     <ClCompile Include="QCSim\PhaseEstimationTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QCSim\TeleportationTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -156,6 +159,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\NQubitsControlledQuantumGate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\EntanglementSwapping.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -20,7 +20,8 @@ set(SOURCES QCSim/QCSim.cpp
             QCSim/SimulationTests.cpp
             QCSim/GamesTests.cpp
             QCSim/DistributedTests.cpp
-            QCSim/PhaseEstimationTests.cpp)
+            QCSim/PhaseEstimationTests.cpp
+            QCSim/TeleportationTests.cpp)
  
 SET( EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
 IF( NOT EIGEN3_INCLUDE_DIR )

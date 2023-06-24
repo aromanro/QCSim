@@ -14,6 +14,7 @@ Implemented algorithms:
 *   Shor's algorithm
 *   Bernstein–Vazirani algorithm
 *   Quantum teleportation
+*   Entanglement swapping
 *   Superdense coding
 *   Quantum cryptography: BB84 protocol
 *   CHSH inequality violation

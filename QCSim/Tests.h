@@ -13,6 +13,7 @@ bool checkGates();
 
 bool registerMeasurementsTests();
 bool SimulationTests();
+bool TeleportationTests();
 
 bool ParadoxesTests();
 bool quantumAdderTests();

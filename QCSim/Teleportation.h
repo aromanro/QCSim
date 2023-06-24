@@ -18,6 +18,87 @@ namespace Teleportation
 		{
 			BaseClass::setToBasisState(0);
 		}
+
+		void Entangle(unsigned int q1 = 1, unsigned int q2 = 2)
+		{
+			// make an EPR pair out of the second and third qubit:
+
+			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
+
+			// the two gates make up an 'entangling gate', sometimes noted by E or E2
+			BaseClass::ApplyGate(hadamard, q1);
+			BaseClass::ApplyGate(cnot, q2, q1);
+		}
+
+		void ApplyTeleportationCircuit(unsigned int sentQubit = 0, unsigned int q2 = 1)
+		{
+			// the cnot and hadamard that follow do the inverse of the entangling gate - this way the measurement that follows is a measurement in the Bell basis
+
+			// interacting the sending qubit (0) with the Alice's side of the entangled pair:
+			BaseClass::ApplyGate(cnot, q2, sentQubit);
+
+			// in the paper mentioned above, here follows the measurement of the second qubit
+			// then based on it the x gate is applied (or not)
+			// then the B mark would follow
+
+			// from here it would follow what's after B
+			BaseClass::ApplyGate(hadamard, sentQubit);
+		}
+
+		void RestoreState(bool firstQubitMeasurement, bool secondQubitMeasurement, unsigned int targetQubit = 2)
+		{
+			if (secondQubitMeasurement) BaseClass::ApplyGate(x, targetQubit);
+			if (firstQubitMeasurement) BaseClass::ApplyGate(z, targetQubit);
+		}
+
+		unsigned int Teleport(unsigned int sentQubit = 0, unsigned int q2 = 1, unsigned int targetQubit = 2, bool explicitClassicalTransmission = false)
+		{
+			// TODO: Using something like the `BellState` class to create the EPR pair, not only the one currently used, but also the other three
+			// it works with any of them as long as Alice and Bob agree on which one to use
+
+			Entangle(q2, targetQubit);
+
+			// here we are in the point A marked in fig 7 in the paper mentioned above
+
+			ApplyTeleportationCircuit(sentQubit, q2);
+
+			// measurements can be actually done all at the end, but let's pretend
+			// one could do here only the first qubit measurement, the second one being done earlier
+
+			// anyhow, it's basically the same thing
+			unsigned int measuredValues = BaseClass::Measure(sentQubit);
+			measuredValues |= BaseClass::Measure(q2) << 1;
+
+			// now that they are measured they go to Bob, which uses the values to act on his entangled qubit:
+
+			if (explicitClassicalTransmission)
+			{
+				const bool firstQubitMeasurement = (measuredValues & 0x1) != 0;
+				const bool secondQubitMeasurement = (measuredValues & 0x2) != 0;
+
+				RestoreState(firstQubitMeasurement, secondQubitMeasurement, targetQubit);
+			}
+			else
+			{
+				BaseClass::ApplyGate(cnot, targetQubit, q2);
+				BaseClass::ApplyGate(cz, targetQubit, sentQubit);
+			}
+
+			return measuredValues;
+		}
+
+	protected:
+		// the initial state to be teleported can be set directly or set up from something simple using some gate (hadamard, phase shift)
+		// needed to create the Bell states
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::CNOTGate<MatrixClass> cnot; // also needed on Alice side
+
+		// needed on Bob side, if the classical transmission is explicit (simple one qubit gates that are applied or not depending on the value of the classical bit):
+		QC::Gates::PauliXGate<MatrixClass> x;
+		QC::Gates::PauliZGate<MatrixClass> z;
+
+		// needed on receiving side (with no explicit measurement):
+		QC::Gates::ControlledZGate<MatrixClass> cz;
 	};
 
 	// teleportation and superdense coding are sort of inverse of each other, see also the `SuperdenseCoding` class
@@ -55,56 +136,7 @@ namespace Teleportation
 		// returns the values of the two measured qubits
 		unsigned int Teleport(bool explicitClassicalTransmission = false)
 		{
-			// TODO: Using something like the `BellState` class to create the EPR pair, not only the one currently used, but also the other three
-			// it works with any of them as long as Alice and Bob agree on which one to use
-
-			
-			// make an EPR pair out of the second and third qubit:
-
-			// starting from |00> (default) gets to (|00> + |11>)/sqrt(2)
-
-			// the two gates make up an 'entangling gate', sometimes noted by E or E2
-			AlgorithmClass::ApplyGate(hadamard, 1);
-			AlgorithmClass::ApplyGate(cnot, 2, 1);
-
-			// here we are in the point A marked in fig 7 in the paper mentioned above
-
-
-			// the cnot and hadamard that follow do the inverse of the entangling gate - this way the measurement that follows is a measurement in the Bell basis
-
-			// interacting the sending qubit (0) with the Alice's side of the entangled pair:
-			AlgorithmClass::ApplyGate(cnot, 1, 0);
-
-			// in the paper mentioned above, here follows the measurement of the second qubit
-			// then based on it the x gate is applied (or not)
-			// then the B mark would follow
-
-			// from here it would follow what's after B
-			AlgorithmClass::ApplyGate(hadamard, 0);
-
-			// measurements can be actually done all at the end, but let's pretend
-			// one could do here only the first qubit measurement, the second one being done earlier
-
-			// anyhow, it's basically the same thing
-			const unsigned int measuredValues = AlgorithmClass::Measure(0, 1);
-
-			// now that they are measured they go to Bob, which uses the values to act on his entangled qubit:
-
-			if (explicitClassicalTransmission)
-			{
-				const bool firstQubitMeasurement = (measuredValues & 0x1) != 0;
-				const bool secondQubitMeasurement = (measuredValues & 0x2) != 0;
-
-				if (secondQubitMeasurement) AlgorithmClass::ApplyGate(x, 2);
-				if (firstQubitMeasurement) AlgorithmClass::ApplyGate(z, 2);
-			}
-			else
-			{
-				AlgorithmClass::ApplyGate(cnot, 2, 1);
-				AlgorithmClass::ApplyGate(cz, 2, 0);
-			}
-
-			return measuredValues;
+			return BaseClass::Teleport(0, 1, 2, explicitClassicalTransmission);
 		}
 
 		// called only if one wants the teleported qubit to be measured, otherwise just check the register contents
@@ -114,18 +146,6 @@ namespace Teleportation
 
 			return AlgorithmClass::Measure(2, 2); // teleported qubit
 		}
-
-	protected:
-		// the initial state to be teleported can be set directly or set up from something simple using some gate (hadamard, phase shift)
-		// needed to create the Bell states
-		QC::Gates::HadamardGate<MatrixClass> hadamard;
-		QC::Gates::CNOTGate<MatrixClass> cnot; // also needed on Alice side
-		// needed on receiving side:
-		QC::Gates::ControlledZGate<MatrixClass> cz;
-
-		// needed on Bob side, if the classical transmission is explicit (simple one qubit gates that are applied or not depending on the value of the classical bit):
-		QC::Gates::PauliXGate<MatrixClass> x;
-		QC::Gates::PauliZGate<MatrixClass> z;
 	};
 
 }
