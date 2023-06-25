@@ -18,6 +18,19 @@ namespace QC {
 			{
 				return 0; // 0 at this point means 'unknown', should be overriden if needed
 			}
+
+			// the following two functions could be used for some optimizatiions
+			// only for reducing a constant... if it matters at one point I'll implement them
+			// see QubitRegister::applyGate for details of the optimizations
+			virtual bool isControlled() const
+			{
+				return false;
+			}
+
+			virtual bool isControlQubit(unsigned int qubit) const
+			{
+				return false;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
@@ -73,6 +86,10 @@ namespace QC {
 			}
 
 			// controllingQubit is ignored, it will be used for two qubit gates
+			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
+			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
+			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
+			// and also could be useful for debugging in the case the optimized version has a problem
 			MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
 			{
 				const unsigned int nrBasisStates = 1u << nrQubits;
@@ -458,6 +475,16 @@ namespace QC {
 
 			TwoQubitsControlledGate() {};
 
+			bool isControlled() const override
+			{
+				return true;
+			}
+
+			bool isControlQubit(unsigned int qubit) const override
+			{
+				return qubit == 0;
+			}
+
 			void SetOperation(const MatrixClass& U)
 			{
 				assert(U.rows() == 2 && U.cols() == 2);
@@ -583,6 +610,16 @@ namespace QC {
 
 			ThreeQubitsControlledGate() {};
 
+			bool isControlled() const override
+			{
+				return true;
+			}
+
+			bool isControlQubit(unsigned int qubit) const override
+			{
+				return qubit == 0;
+			}
+
 			void SetOperation(const MatrixClass& U)
 			{
 				assert(U.rows() == 4 && U.cols() == 4);
@@ -603,6 +640,11 @@ namespace QC {
 				OpClass::operatorMat(7, 7) = 0;
 				OpClass::operatorMat(6, 7) = 1;
 				OpClass::operatorMat(7, 6) = 1;
+			}
+
+			bool isControlQubit(unsigned int qubit) const override
+			{
+				return qubit <= 1;
 			}
 		};
 

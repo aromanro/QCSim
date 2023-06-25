@@ -12,7 +12,7 @@ namespace ErrorCorrection {
 		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		ShorCode(int addseed = 0)
-			: BaseClass(9, addseed), errorType(Flip)
+			: BaseClass(9, addseed), errorType(Flip), iy(std::complex<double>(0., 1.) * y.getRawOperatorMatrix())
 		{
 		}
 
@@ -60,7 +60,7 @@ namespace ErrorCorrection {
 				AlgorithmClass::ApplyGate(z, BaseClass::errorQubit); // another way of the above
 			}
 			else if (errorType == Both)
-				AlgorithmClass::ApplyOperatorMatrix(std::complex<double>(0., 1.) * y.getOperatorMatrix(AlgorithmClass::getNrQubits(), BaseClass::errorQubit));
+				AlgorithmClass::ApplyGate(iy, BaseClass::errorQubit);
 		}
 
 		void Encode()
@@ -98,6 +98,7 @@ namespace ErrorCorrection {
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
 		QC::Gates::PauliZGate<MatrixClass> z;
 		QC::Gates::PauliYGate<MatrixClass> y;
+		QC::Gates::SingleQubitGate<MatrixClass> iy;
 	};
 
 }
