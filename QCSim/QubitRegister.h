@@ -313,7 +313,12 @@ namespace QC {
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)
 		{
-			if (gate.getQubitsNumber() == 1)
+			const unsigned int gateQubits = gate.getQubitsNumber();
+
+			assert(gateQubits > 0 && gateQubits <= 3);
+
+			// TODO: there are ways to optimize further for particular kind of gates, probably I won't bother since it's only a constant factor reduction
+			if (gateQubits == 1)
 			{
 				const unsigned int nrBasisStates = getNrBasisStates();
 				const unsigned int qubitBit = 1u << qubit;
@@ -328,6 +333,8 @@ namespace QC {
 
 				registerStorage.swap(result);
 			}
+			// TODO: optimize for 2 and 3 qubit gates
+			// perhaps also optimize better for controlled gates
 			else registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 		}
 
