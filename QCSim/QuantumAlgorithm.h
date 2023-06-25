@@ -8,7 +8,7 @@ namespace QC {
 	{
 	public:
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
-		using GateClass = Gates::QuantumGate<MatrixClass>;
+		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
 		QuantumAlgorithm(unsigned int N = 3, int addseed = 0)
 			: reg(N, addseed)

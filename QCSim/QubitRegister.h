@@ -20,7 +20,7 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitRegister
 	{
 	public:
-		using GateClass = Gates::QuantumGate<MatrixClass>;
+		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
 		QubitRegister(int N = 3, int addseed = 0)
 			: NrQubits(N), NrBasisStates(1u << NrQubits),
@@ -313,7 +313,22 @@ namespace QC {
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)
 		{
-			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
+			if (gate.getQubitsNumber() == 1)
+			{
+				const unsigned int nrBasisStates = getNrBasisStates();
+				const unsigned int qubitBit = 1u << qubit;
+
+				VectorClass result(nrBasisStates);
+
+				for (unsigned int i = 0; i < nrBasisStates; ++i)
+				{
+					const unsigned int ind1 = i & qubitBit ? 1 : 0;
+					result(i) = gate.getRawOperatorMatrix()(ind1, 0) * registerStorage(i & ~qubitBit) + gate.getRawOperatorMatrix()(ind1, 1) * registerStorage(i | qubitBit);
+				}
+
+				registerStorage.swap(result);
+			}
+			else registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)

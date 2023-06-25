@@ -464,6 +464,17 @@ bool basicTests()
 
 bool tests()
 {
+	/*
+	QC::Gates::HadamardGate g;
+	std::cout << g.getRawOperatorMatrix() << std::endl << std::endl;
+	std::cout << g.getOperatorMatrix(2) << std::endl << std::endl;
+	std::cout << g.getOperatorMatrix(3) << std::endl << std::endl;
+	std::cout << g.getOperatorMatrix(2, 1) << std::endl << std::endl;
+	std::cout << g.getOperatorMatrix(3, 1) << std::endl << std::endl;
+	std::cout << g.getOperatorMatrix(3, 2) << std::endl << std::endl;
+	exit(0);
+	*/
+
 	std::cout << "\nTests\n";
 
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
