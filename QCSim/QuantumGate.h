@@ -253,8 +253,7 @@ namespace QC {
 			using OpClass = BaseClass::BaseClass;
 
 			SquareRootNOTGate()
-			{
-				
+			{	
 				OpClass::operatorMat(0, 0) = std::complex<double>(0.5, 0.5);
 				OpClass::operatorMat(0, 1) = std::complex<double>(0.5, -0.5);
 				OpClass::operatorMat(1, 0) = OpClass::operatorMat(0, 1);
