@@ -85,7 +85,7 @@ namespace QC {
 				return 1;
 			}
 
-			// controllingQubit is ignored, it will be used for two qubit gates
+			// controllingQubit1 and controllingQubit2 are ignored, they will be used for two (only controllingQubit1) and three qubit gates
 			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
 			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
 			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
@@ -390,6 +390,11 @@ namespace QC {
 				return 2;
 			}
 
+			// controllingQubit2 is ignored, it will be used for three qubit gates only
+			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
+			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
+			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
+			// and also could be useful for debugging in the case the optimized version has a problem
 			MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
 			{
 				assert(qubit != controllingQubit1);
@@ -575,6 +580,10 @@ namespace QC {
 				return 3;
 			}
 
+			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
+			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
+			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
+			// and also could be useful for debugging in the case the optimized version has a problem
 			MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
 			{
 				assert(qubit != controllingQubit1 && controllingQubit1 != controllingQubit2);

@@ -313,29 +313,65 @@ namespace QC {
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)
 		{
+#define OPTIMIZED_TENSOR_PRODUCT 1
+#ifdef OPTIMIZED_TENSOR_PRODUCT
 			const unsigned int gateQubits = gate.getQubitsNumber();
 
 			assert(gateQubits > 0 && gateQubits <= 3);
 
+			const unsigned int nrBasisStates = getNrBasisStates();
+			const unsigned int qubitBit = 1u << qubit;
+
+			VectorClass result(nrBasisStates);
+
+			// TODO: perhaps also optimize better for controlled gates
 			// TODO: there are ways to optimize further for particular kind of gates, probably I won't bother since it's only a constant factor reduction
+			
 			if (gateQubits == 1)
 			{
-				const unsigned int nrBasisStates = getNrBasisStates();
-				const unsigned int qubitBit = 1u << qubit;
-
-				VectorClass result(nrBasisStates);
-
-				for (unsigned int i = 0; i < nrBasisStates; ++i)
+				for (long long int i = 0; i < nrBasisStates; ++i)
 				{
 					const unsigned int ind1 = i & qubitBit ? 1 : 0;
 					result(i) = gate.getRawOperatorMatrix()(ind1, 0) * registerStorage(i & ~qubitBit) + gate.getRawOperatorMatrix()(ind1, 1) * registerStorage(i | qubitBit);
 				}
-
-				registerStorage.swap(result);
 			}
-			// TODO: optimize for 2 and 3 qubit gates
-			// perhaps also optimize better for controlled gates
-			else registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
+			else if (gateQubits == 2)
+			{
+				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
+
+				for (long long int i = 0; i < nrBasisStates; ++i)
+				{
+					const unsigned int ind1 = (i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0);
+					const unsigned int m = i & ~qubitBit; // ensure it's not computed twice
+					result(i) = gate.getRawOperatorMatrix()(ind1, 0) * registerStorage(m & ~ctrlQubitBit) +
+								gate.getRawOperatorMatrix()(ind1, 1) * registerStorage(i & ~ctrlQubitBit | qubitBit) +
+								gate.getRawOperatorMatrix()(ind1, 2) * registerStorage(m | ctrlQubitBit) +
+								gate.getRawOperatorMatrix()(ind1, 3) * registerStorage(i | qubitBit | ctrlQubitBit);
+				}
+			}
+			else
+			{
+				const unsigned int qubitBit2 = 1u << controllingQubit1;
+				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
+				
+				for (long long int i = 0; i < nrBasisStates; ++i)
+				{
+					const unsigned int ind1 = (i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0);
+					result(i) = gate.getRawOperatorMatrix()(ind1, 0) * registerStorage(i & ~qubitBit & ~qubitBit2 & ~ctrlQubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 1) * registerStorage(i & ~qubitBit2 & ~ctrlQubitBit | qubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 2) * registerStorage(i & ~qubitBit & ~ctrlQubitBit | qubitBit2) +
+						gate.getRawOperatorMatrix()(ind1, 3) * registerStorage(i & ~ctrlQubitBit | qubitBit | qubitBit2) +
+						gate.getRawOperatorMatrix()(ind1, 4) * registerStorage(i & ~qubitBit & ~qubitBit2 | ctrlQubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 5) * registerStorage(i & ~qubitBit2 | ctrlQubitBit | qubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 6) * registerStorage(i & ~qubitBit | qubitBit2 | ctrlQubitBit) +						
+						gate.getRawOperatorMatrix()(ind1, 7) * registerStorage(i | qubitBit | qubitBit2 | ctrlQubitBit);
+				}
+			}
+
+			registerStorage.swap(result);
+#else			
+			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
+#endif
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)
