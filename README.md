@@ -49,8 +49,8 @@ Quantum games:
 Distributed quantum computing:
 *   Distributed CNOT
 
-The most important code to look into are in `QuantumGate.h` (namespace `QC::Gates`), where the quantum gates are implemented. The code is quite straightforward, a little bit more complex being the implementation of `getOperatorMatrix`, which extends the operator matrix from the matrix that involves only the qubits on which the operator is applied, to all qubits from the register. 
-Another header to look into is `QubitRegister.h`. The code is again straightforward, a little bit more complex being the one that does the measurement on a part of the register only.
+The most important code to look into are in `QuantumGate.h` (namespace `QC::Gates`), where the quantum gates are implemented. The code is quite straightforward, a little bit more complex being the implementation of `getOperatorMatrix` (obsoleted, it's not used anymore for 1, 2 or 3 qubits gates, creation and multiplication with the big operator matrices for those gates is optimized out now), which extends the operator matrix from the matrix that involves only the qubits on which the operator is applied, to all qubits from the register. 
+Another header to look into is `QubitRegister.h`. The code is again straightforward, a little bit more complex being the one that does the measurement on a part of the register only. Also since the usage of the big operator matrices obtained by tensor product for 1, 2, 3 qubits gates is obsoleted, the code from `QubitRegister::ApplyGate` also got more complex so it might not be so easy to grasp.
 One used everywhere is the `QuantumAlgorithm.h` although that one is very simple, mostly a proxy for the qubit register.
 Another source file worth looking into is `Utils.h`, since `BellState` and `MeasurementBasis` are used in several algorithms.
 

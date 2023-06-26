@@ -262,7 +262,7 @@ namespace Shor {
 
 		unsigned int getNBits() const
 		{
-			return  BaseClass::getNrQubits() - phaseEstimation.getFunctionStartQubit();
+			return BaseClass::getNrQubits() - phaseEstimation.getFunctionStartQubit();
 		}
 
 		unsigned int Number;
