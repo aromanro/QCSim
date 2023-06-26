@@ -329,6 +329,7 @@ namespace QC {
 			
 			if (gateQubits == 1)
 			{
+				//#pragma omp parallel for schedule(static, 4096) if (nrBasisStates >= 8192)
 				for (long long int i = 0; i < nrBasisStates; ++i)
 				{
 					const unsigned int ind1 = i & qubitBit ? 1 : 0;
@@ -339,6 +340,7 @@ namespace QC {
 			{
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
+				//#pragma omp parallel for schedule(static, 2048) if (nrBasisStates >= 4096)
 				for (long long int i = 0; i < nrBasisStates; ++i)
 				{
 					const unsigned int ind1 = (i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0);
@@ -354,6 +356,7 @@ namespace QC {
 				const unsigned int qubitBit2 = 1u << controllingQubit1;
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
 				
+				//#pragma omp parallel for schedule(static, 1024) if (nrBasisStates >= 2048)
 				for (long long int i = 0; i < nrBasisStates; ++i)
 				{
 					const unsigned int ind1 = (i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0);

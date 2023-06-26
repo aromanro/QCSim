@@ -81,7 +81,7 @@ bool ShorTests()
 	}
 
 	
-	// this is slow, so it stays commented out, it's only for occasional tests
+	// this is slow (about 2 minutes only now with the optimizations in and even less if open mp is used), so it stays commented out, it's only for occasional tests
 	/*
 	for (;;) {
 		Shor::ShorAlgorithm shorAlgo(21, 14, 9);
