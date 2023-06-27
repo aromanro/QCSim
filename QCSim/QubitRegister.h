@@ -319,18 +319,17 @@ namespace QC {
 
 			assert(gateQubits > 0 && gateQubits <= 3);
 
-			const unsigned int nrBasisStates = getNrBasisStates();
 			const unsigned int qubitBit = 1u << qubit;
 
-			VectorClass result(nrBasisStates);
+			VectorClass result(NrBasisStates);
 
 			// TODO: perhaps also optimize better for controlled gates
 			// TODO: there are ways to optimize further for particular kind of gates, probably I won't bother since it's only a constant factor reduction
 			
 			if (gateQubits == 1)
 			{
-				//#pragma omp parallel for schedule(static, 4096) if (nrBasisStates >= 8192)
-				for (long long int i = 0; i < nrBasisStates; ++i)
+				//#pragma omp parallel for schedule(static, 4096) if (NrBasisStates >= 8192)
+				for (long long int i = 0; i < NrBasisStates; ++i)
 				{
 					const unsigned int ind1 = i & qubitBit ? 1 : 0;
 					result(i) = gate.getRawOperatorMatrix()(ind1, 0) * registerStorage(i & ~qubitBit) + gate.getRawOperatorMatrix()(ind1, 1) * registerStorage(i | qubitBit);
@@ -340,8 +339,8 @@ namespace QC {
 			{
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
-				//#pragma omp parallel for schedule(static, 2048) if (nrBasisStates >= 4096)
-				for (long long int i = 0; i < nrBasisStates; ++i)
+				//#pragma omp parallel for schedule(static, 2048) if (NrBasisStates >= 4096)
+				for (long long int i = 0; i < NrBasisStates; ++i)
 				{
 					const unsigned int ind1 = (i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0);
 					const unsigned int m = i & ~qubitBit; // ensure it's not computed twice
@@ -356,18 +355,22 @@ namespace QC {
 				const unsigned int qubitBit2 = 1u << controllingQubit1;
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
 				
-				//#pragma omp parallel for schedule(static, 1024) if (nrBasisStates >= 2048)
-				for (long long int i = 0; i < nrBasisStates; ++i)
+				//#pragma omp parallel for schedule(static, 1024) if (NrBasisStates >= 2048)
+				for (long long int i = 0; i < NrBasisStates; ++i)
 				{
 					const unsigned int ind1 = (i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0);
-					result(i) = gate.getRawOperatorMatrix()(ind1, 0) * registerStorage(i & ~qubitBit & ~qubitBit2 & ~ctrlQubitBit) +
-						gate.getRawOperatorMatrix()(ind1, 1) * registerStorage(i & ~qubitBit2 & ~ctrlQubitBit | qubitBit) +
-						gate.getRawOperatorMatrix()(ind1, 2) * registerStorage(i & ~qubitBit & ~ctrlQubitBit | qubitBit2) +
+					const unsigned int m = i & ~qubitBit;
+					const unsigned int m2 = i & ~qubitBit;
+					const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
+
+					result(i) = gate.getRawOperatorMatrix()(ind1, 0) * registerStorage(m & ~qubitBit2 & ~ctrlQubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 1) * registerStorage(m2 & ~ctrlQubitBit | qubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 2) * registerStorage(m & ~ctrlQubitBit | qubitBit2) +
 						gate.getRawOperatorMatrix()(ind1, 3) * registerStorage(i & ~ctrlQubitBit | qubitBit | qubitBit2) +
-						gate.getRawOperatorMatrix()(ind1, 4) * registerStorage(i & ~qubitBit & ~qubitBit2 | ctrlQubitBit) +
-						gate.getRawOperatorMatrix()(ind1, 5) * registerStorage(i & ~qubitBit2 | ctrlQubitBit | qubitBit) +
-						gate.getRawOperatorMatrix()(ind1, 6) * registerStorage(i & ~qubitBit | qubitBit2 | ctrlQubitBit) +						
-						gate.getRawOperatorMatrix()(ind1, 7) * registerStorage(i | qubitBit | qubitBit2 | ctrlQubitBit);
+						gate.getRawOperatorMatrix()(ind1, 4) * registerStorage(m & ~qubitBit2 | ctrlQubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 5) * registerStorage(m2 | ctrlQubitBit | qubitBit) +
+						gate.getRawOperatorMatrix()(ind1, 6) * registerStorage(m | ctrlqubits) +
+						gate.getRawOperatorMatrix()(ind1, 7) * registerStorage(i | qubitBit | ctrlqubits);
 				}
 			}
 

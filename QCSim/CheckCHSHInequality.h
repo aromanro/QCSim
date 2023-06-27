@@ -6,6 +6,7 @@
 
 namespace BellInequalities {
 
+	// also named 'CHSH game'
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class CheckCHSHInequality :
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
@@ -64,23 +65,18 @@ namespace BellInequalities {
 
 			// Bob:
 			const bool bM = dist_bool(rng);
-			const QC::Gates::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(T) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(S);
+			const QC::Gates::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? T : S;
 			measurementBasis.switchToOperatorBasis(BaseClass::reg, bobMeasurement.getRawOperatorMatrix(), 1);
 
 			int res2 = -1;
 			if (separateMeasurements)
-			{
 				state |= BaseClass::Measure(1, 1) << 1;
-
-				if (state & 2) res2 = 1;
-				//const int res2 = (state & 1) ? 1 : -1;
-			}
 			else
 			{
 				state = BaseClass::Measure();
 				if (state & 1) res1 = 1;
-				if (state & 2) res2 = 1;
 			}
+			if (state & 2) res2 = 1;
 
 			const int prod = res1 * res2;
 

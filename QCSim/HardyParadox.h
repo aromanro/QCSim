@@ -19,13 +19,18 @@ namespace Paradoxes {
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		HardyParadox(int addseed = 0)
-			: BaseClass(3, addseed), theta0(0.575 * M_PI), theta1(0.575 * M_PI)
+			: BaseClass(3, addseed)
 		{
+			const double theta = 0.575 * M_PI;
+			setTheta0(theta);
+			setTheta1(theta);
 		}
 
 		void setTheta0(double t)
 		{
 			theta0 = t;
+			ryGateTheta0.SetTheta(theta0);
+			ryGatePiMinusTheta0.SetTheta(M_PI - theta0);
 		}
 
 		double getTheta0() const
@@ -36,6 +41,8 @@ namespace Paradoxes {
 		void setTheta1(double t)
 		{
 			theta1 = t;
+			ryGateTheta1.SetTheta(theta1);
+			ryGatePiMinusTheta1.SetTheta(M_PI - theta1);
 		}
 
 		double getTheta1() const
@@ -47,17 +54,13 @@ namespace Paradoxes {
 		{
 			BaseClass::setToBasisState(0);
 
-			ryGate.SetTheta(theta0);
-			BaseClass::ApplyGate(ryGate, 0);
-			ryGate.SetTheta(theta1);
-			BaseClass::ApplyGate(ryGate, 1);
+			BaseClass::ApplyGate(ryGateTheta0, 0);
+			BaseClass::ApplyGate(ryGateTheta1, 1);
 
 			BaseClass::ApplyGate(ccnot, 2, 0, 1);
 
-			ryGate.SetTheta(M_PI - theta0);
-			BaseClass::ApplyGate(ryGate, 0);
-			ryGate.SetTheta(M_PI - theta1);
-			BaseClass::ApplyGate(ryGate, 1);
+			BaseClass::ApplyGate(ryGatePiMinusTheta0, 0);
+			BaseClass::ApplyGate(ryGatePiMinusTheta1, 1);
 
 			return BaseClass::Measure();
 		}
@@ -77,7 +80,10 @@ namespace Paradoxes {
 		double theta0;
 		double theta1;
 
-		QC::Gates::RyGate<MatrixClass> ryGate;
+		QC::Gates::RyGate<MatrixClass> ryGateTheta0;
+		QC::Gates::RyGate<MatrixClass> ryGateTheta1;
+		QC::Gates::RyGate<MatrixClass> ryGatePiMinusTheta0;
+		QC::Gates::RyGate<MatrixClass> ryGatePiMinusTheta1;
 		QC::Gates::ToffoliGate<MatrixClass> ccnot;
 	};
 
