@@ -36,26 +36,24 @@ namespace Distributed {
 			BaseClass::ApplyGate(cnot, 2, 3);
 
 			ApplyTeleportationCircuit(0, 1);
-			ApplyTeleportationCircuit(4, 5);
+			ApplyTeleportationCircuit(5, 4);
 			
 			const int measurements1 = BaseClass::Measure(0, 1);
 			const int measurements2 = BaseClass::Measure(4, 5);
 
-			if (measurements1 & 2) BaseClass::ApplyGate(x, 2); 
+			if (measurements2 & 1)
+			{
+				BaseClass::ApplyGate(x, 2);
+				BaseClass::ApplyGate(x, 3);
+			}
+			if (measurements2 & 2) BaseClass::ApplyGate(z, 3);
+
+			if (measurements1 & 2) BaseClass::ApplyGate(x, 2);
 			if (measurements1 & 1)
 			{
 				BaseClass::ApplyGate(z, 2);
 				BaseClass::ApplyGate(z, 3);
 			}
-			
-
-			if (measurements2 & 1) BaseClass::ApplyGate(z, 3);
-			if (measurements2 & 2)
-			{
-				BaseClass::ApplyGate(x, 2);
-				BaseClass::ApplyGate(x, 3);
-			}
-
 
 			return measurements1 | (measurements2 << 4); // leave a gap for the output qubits, use masks to extract them
 		}
