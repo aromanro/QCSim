@@ -164,5 +164,8 @@
     <ClInclude Include="QCSim\EntanglementSwapping.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\TeleportedCNOT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 #include "Tests.h"
 
 #include "DistributedCNOT.h"
+#include "TeleportedCNOT.h"
 
 #include <iostream>
 #include <map>
@@ -49,7 +50,7 @@ bool distributedCNOTTest()
 						if (state == measurements)
 							continue;
 
-						if (!approxEqual(distStorage((i & 2) << 2 | state | i & 1), 0.0))
+						if (!approxEqual(distStorage(((i & 2) << 2) | state | i & 1), 0.0))
 						{
 							std::cout << "Error: distributed CNOT failed for ctrl = " << ctrlQubit << ", target = " << targetQubit << ", amplitude that should be zero is not" << std::endl;
 							return false;
@@ -63,9 +64,58 @@ bool distributedCNOTTest()
 	return true;
 }
 
+bool teleportedCNOTTest()
+{
+	std::cout << "\nTesting teleported CNOT..." << std::endl;
+
+
+	Distributed::TeleportedCNOT teleportedCnot;
+
+	// for non-distributed CNOT
+	QC::Gates::CNOTGate cnot;
+	QC::QubitRegister reg(2);
+
+	// TODO: maybe instead of using basis states, use random states... but for now this should suffice
+	for (unsigned int ctrlQubit = 0; ctrlQubit <= 1; ++ctrlQubit)
+		for (unsigned int targetQubit = 0; targetQubit <= 1; ++targetQubit)
+		{
+			// teleported CNOT
+			teleportedCnot.setToBasisState(targetQubit | (ctrlQubit << 5));
+			const unsigned int measurements = teleportedCnot.Execute();
+			const Eigen::VectorXcd distStorage = teleportedCnot.getRegisterStorage();
+
+			// now do the same thing but not teleported
+			reg.setToBasisState(targetQubit | (ctrlQubit << 1));
+			reg.ApplyGate(cnot, 0, 1);
+			const Eigen::VectorXcd res = reg.getRegisterStorage();
+
+			// now check them to have the same results
+			for (int i = 0; i < 4; ++i)
+			{
+				if (!approxEqual(distStorage((i << 2) | measurements), res(i)))
+				{
+					std::cout << "Error: teleported CNOT failed for ctrl = " << ctrlQubit << ", target = " << targetQubit << ", results were different than for the local CNOT" << std::endl;
+
+					
+					std::cout << "Measured: " << measurements << std::endl << std::endl;
+					reg.displayRegister();
+					std::cout << std::endl << std::endl;
+					teleportedCnot.displayRegister();
+					
+
+					return false;
+				}
+			}
+		}
+
+	std::cout << "ok" << std::endl;
+
+	return true;
+}
+
 bool distributedTests()
 {
 	std::cout << "\nTesting distributed quantum computing..." << std::endl;
 
-	return distributedCNOTTest();
+	return distributedCNOTTest() && teleportedCNOTTest();
 }
