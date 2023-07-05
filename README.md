@@ -45,6 +45,7 @@ Paradoxes (although some of the above might be considered paradoxes as well):
 
 Quantum games:
 *   Coin flipping
+*   Quantum pseudo-telepathy: The magic square game
 
 Distributed quantum computing:
 *   Distributed CNOT

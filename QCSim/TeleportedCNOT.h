@@ -37,10 +37,10 @@ namespace Distributed {
 
 			ApplyTeleportationCircuit(0, 1);
 			ApplyTeleportationCircuit(5, 4);
-			
+
 			const int measurements1 = BaseClass::Measure(0, 1);
 			const int measurements2 = BaseClass::Measure(4, 5);
-
+			
 			if (measurements2 & 1)
 			{
 				BaseClass::ApplyGate(x, 2);

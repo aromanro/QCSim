@@ -1,5 +1,6 @@
 #include "Tests.h"
 #include "CoinFlipping.h"
+#include "MagicSquare.h"
 
 #include <iostream>
 
@@ -23,7 +24,26 @@ bool CoinFlippingTests()
 	return wins == 0;
 }
 
+bool MagicSquareTests()
+{
+	std::cout << "\nTesting magic square pseudo-telepathy game..." << std::endl;
+
+	Games::MagicSquare<> magicSquare;
+	int wins = magicSquare.Execute();
+
+	if (wins != magicSquare.getNrPlays())
+	{
+		std::cout << "Something went wrong! Alice and Bob won " << wins << " times, but they played " << magicSquare.getNrPlays() << " times!" << std::endl;
+
+		return false;
+	}
+
+	std::cout << "Alice and Bob won each time!" << std::endl;
+
+	return true;
+}
+
 bool GamesTests()
 {
-	return CoinFlippingTests();
+	return CoinFlippingTests() && MagicSquareTests();
 }

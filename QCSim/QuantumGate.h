@@ -61,6 +61,13 @@ namespace QC {
 				return res;
 			};
 
+			void setOperator(const MatrixClass& U)
+			{
+				assert(U.rows() == U.cols());
+
+				operatorMat = U;
+			}
+
 		protected:
 			MatrixClass operatorMat;
 		};
@@ -497,7 +504,7 @@ namespace QC {
 		};
 
 
-
+		// also named controlled X gate
 		template<class MatrixClass = Eigen::MatrixXcd> class CNOTGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
@@ -520,6 +527,50 @@ namespace QC {
 				OpClass::operatorMat(3, 3) = 0;
 				OpClass::operatorMat(2, 3) = 1;
 				OpClass::operatorMat(3, 2) = 1;
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledYGate : public TwoQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledYGate()
+			{
+				OpClass::operatorMat(2, 2) = 0;
+				OpClass::operatorMat(3, 3) = 0;
+				OpClass::operatorMat(2, 3) = std::complex(0., -1.);
+				OpClass::operatorMat(3, 2) = std::complex(0., 1.);
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledZGate : public TwoQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledZGate()
+			{
+				OpClass::operatorMat(3, 3) = -1;
+			}
+		};
+
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledHadamardGate : public TwoQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledHadamardGate()
+			{
+				static const double norm = 1. / sqrt(2.);
+				OpClass::operatorMat(2, 2) = norm;
+				OpClass::operatorMat(2, 3) = norm;
+				OpClass::operatorMat(3, 2) = norm;
+				OpClass::operatorMat(3, 3) = -norm;
 			}
 		};
 
@@ -550,18 +601,6 @@ namespace QC {
 			void SetPhaseShift(double theta)
 			{
 				OpClass::operatorMat(3, 3) = std::polar(1., theta);
-			}
-		};
-
-		template<class MatrixClass = Eigen::MatrixXcd> class ControlledZGate : public TwoQubitsControlledGate<MatrixClass>
-		{
-		public:
-			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = BaseClass::BaseClass::BaseClass;
-
-			ControlledZGate()
-			{
-				OpClass::operatorMat(3, 3) = -1;
 			}
 		};
 

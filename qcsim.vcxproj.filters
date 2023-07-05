@@ -167,5 +167,8 @@
     <ClInclude Include="QCSim\TeleportedCNOT.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\MagicSquare.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

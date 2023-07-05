@@ -10,7 +10,8 @@
 
 namespace Games {
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class CoinFlipping : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class CoinFlipping : 
+		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
