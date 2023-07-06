@@ -166,6 +166,35 @@ namespace QC {
 			reg.displayRegister();
 		}
 
+		void ComputeStart()
+		{
+			reg.ComputeStart();
+		}
+
+		void ComputeEnd()
+		{
+			reg.ComputeEnd();
+		}
+
+		void ComputeClear()
+		{
+			reg.ComputeClear();
+		}
+
+		// applies again the recorded gates
+		// with this the same operations can be repeated several times
+		void Compute()
+		{
+			reg.Compute();
+		}
+
+		// undoes the recorded gates
+		// the operations are unitary, so U^-1 = U^t and (U1 * U2)^t = U2^t * U1^t 
+		void Uncompute()
+		{
+			reg.Uncompute();
+		}
+
 	protected:
 		RegisterClass reg;
 	};

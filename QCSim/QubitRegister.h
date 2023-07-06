@@ -11,6 +11,8 @@
 #include <iomanip>
 #include <fstream>
 
+#include <vector>
+
 #include "QuantumGate.h"
 
 // Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
@@ -22,9 +24,31 @@ namespace QC {
 	public:
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
+		class AppliedGate : public Gates::QuantumGateWithOp<MatrixClass>
+		{
+		public:
+			using BaseClass = Gates::QuantumGateWithOp<MatrixClass>;
+
+			unsigned int q1;
+			unsigned int q2;
+			unsigned int q3;
+
+			AppliedGate(const MatrixClass& op, unsigned int q1 = 0, unsigned int q2 = 0, unsigned int q3 = 0)
+				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
+			{
+			}
+
+		private:
+			// don't use it!
+			MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
+			{
+				return BaseClass::getRawOperatorMatrix();
+			}
+		};
+
 		QubitRegister(int N = 3, int addseed = 0)
 			: NrQubits(N), NrBasisStates(1u << NrQubits),
-			uniformZeroOne(0, 1)
+			uniformZeroOne(0, 1), recordGates(false)
 		{
 			assert(N > 0);
 
@@ -378,11 +402,17 @@ namespace QC {
 #else			
 			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 #endif
+
+			if (recordGates)
+				computeGates.emplace_back(AppliedGate(gate.getRawOperatorMatrix(), qubit, controllingQubit1, controllingQubit2));
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)
 		{
 			registerStorage = m * registerStorage;
+
+			if (recordGates)
+				computeGates.emplace_back(AppliedGate(m));
 		}
 
 		const VectorClass& getRegisterStorage() const
@@ -476,6 +506,62 @@ namespace QC {
 			}
 		}
 
+		void ComputeStart()
+		{
+			recordGates = true;
+			computeGates.clear();
+		}
+
+		void ComputeEnd()
+		{
+			recordGates = false;
+		}
+
+		void ComputeClear()
+		{
+			computeGates.clear();
+		}
+
+		// applies again the recorded gates
+		// with this the same operations can be repeated several times
+		void Compute()
+		{
+			// avoid recording the gates again if somehow the user forgot to call ComputeEnd
+			const bool recordSave = recordGates;
+			recordGates = false;
+
+			for (const AppliedGate& gate : computeGates)
+			{
+				if (gate.getQubitsNumber() > 3)
+					ApplyOperatorMatrix(gate.getRawOperatorMatrix());
+				else
+					ApplyGate(gate, gate.q1, gate.q2, gate.q3);
+			}
+
+			recordGates = recordSave;
+		}
+
+		// undoes the recorded gates
+		// the operations are unitary, so U^-1 = U^t and (U1 * U2)^t = U2^t * U1^t 
+		void Uncompute()
+		{
+			const bool recordSave = recordGates;
+			recordGates = false;
+
+			for (const auto it = computeGates.rbegin(); it != computeGates.rend(); ++it)
+			{
+				if (it->getQubitsNumber() > 3)
+					ApplyOperatorMatrix(it->getRawOperatorMatrix().adjoint());
+				else
+				{
+					Gates::QuantumGateWithOp<MatrixClass> gate(it->getRawOperatorMatrix().adjoint());
+					ApplyGate(gate, it->q1, it->q2, it->q3);
+				}
+			}
+
+			recordGates = recordSave;
+		}
+
 	protected:
 		unsigned int NrQubits;
 		unsigned int NrBasisStates;
@@ -484,6 +570,9 @@ namespace QC {
 
 		std::mt19937_64 rng;
 		std::uniform_real_distribution<double> uniformZeroOne;
+
+		std::vector<AppliedGate> computeGates;
+		bool recordGates;
 	};
 
 }
