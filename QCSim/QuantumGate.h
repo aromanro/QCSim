@@ -72,6 +72,34 @@ namespace QC {
 			MatrixClass operatorMat;
 		};
 
+		// used for recording the applied gates, to be applied again later
+		// also for 'uncompute'
+		template<class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates::QuantumGateWithOp<MatrixClass>
+		{
+		public:
+			using BaseClass = Gates::QuantumGateWithOp<MatrixClass>;
+
+			AppliedGate(const MatrixClass& op, unsigned int q1 = 0, unsigned int q2 = 0, unsigned int q3 = 0)
+				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
+			{
+			}
+
+			unsigned int getQubit1() const { return q1; }
+			unsigned int getQubit2() const { return q2; }
+			unsigned int getQubit3() const { return q3; }
+
+		private:
+			// don't use it!
+			MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
+			{
+				return BaseClass::getRawOperatorMatrix();
+			}
+
+			unsigned int q1;
+			unsigned int q2;
+			unsigned int q3;
+		};
+
 		template<class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public QuantumGateWithOp<MatrixClass>
 		{
 		public:

@@ -24,28 +24,6 @@ namespace QC {
 	public:
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
-		class AppliedGate : public Gates::QuantumGateWithOp<MatrixClass>
-		{
-		public:
-			using BaseClass = Gates::QuantumGateWithOp<MatrixClass>;
-
-			unsigned int q1;
-			unsigned int q2;
-			unsigned int q3;
-
-			AppliedGate(const MatrixClass& op, unsigned int q1 = 0, unsigned int q2 = 0, unsigned int q3 = 0)
-				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
-			{
-			}
-
-		private:
-			// don't use it!
-			MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
-			{
-				return BaseClass::getRawOperatorMatrix();
-			}
-		};
-
 		QubitRegister(int N = 3, int addseed = 0)
 			: NrQubits(N), NrBasisStates(1u << NrQubits),
 			uniformZeroOne(0, 1), recordGates(false)
@@ -404,7 +382,7 @@ namespace QC {
 #endif
 
 			if (recordGates)
-				computeGates.emplace_back(AppliedGate(gate.getRawOperatorMatrix(), qubit, controllingQubit1, controllingQubit2));
+				computeGates.emplace_back(Gates::AppliedGate(gate.getRawOperatorMatrix(), qubit, controllingQubit1, controllingQubit2));
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)
@@ -412,7 +390,7 @@ namespace QC {
 			registerStorage = m * registerStorage;
 
 			if (recordGates)
-				computeGates.emplace_back(AppliedGate(m));
+				computeGates.emplace_back(Gates::AppliedGate(m));
 		}
 
 		const VectorClass& getRegisterStorage() const
@@ -530,12 +508,12 @@ namespace QC {
 			const bool recordSave = recordGates;
 			recordGates = false;
 
-			for (const AppliedGate& gate : computeGates)
+			for (const Gates::AppliedGate& gate : computeGates)
 			{
 				if (gate.getQubitsNumber() > 3)
 					ApplyOperatorMatrix(gate.getRawOperatorMatrix());
 				else
-					ApplyGate(gate, gate.q1, gate.q2, gate.q3);
+					ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
 			}
 
 			recordGates = recordSave;
@@ -548,14 +526,14 @@ namespace QC {
 			const bool recordSave = recordGates;
 			recordGates = false;
 
-			for (const auto it = computeGates.rbegin(); it != computeGates.rend(); ++it)
+			for (const auto it = computeGates.crbegin(); it != computeGates.crend(); ++it)
 			{
 				if (it->getQubitsNumber() > 3)
 					ApplyOperatorMatrix(it->getRawOperatorMatrix().adjoint());
 				else
 				{
 					Gates::QuantumGateWithOp<MatrixClass> gate(it->getRawOperatorMatrix().adjoint());
-					ApplyGate(gate, it->q1, it->q2, it->q3);
+					ApplyGate(gate, it->getQubit1(), it->getQubit2(), it->getQubit3());
 				}
 			}
 
@@ -571,7 +549,7 @@ namespace QC {
 		std::mt19937_64 rng;
 		std::uniform_real_distribution<double> uniformZeroOne;
 
-		std::vector<AppliedGate> computeGates;
+		std::vector<Gates::AppliedGate<MatrixClass>> computeGates;
 		bool recordGates;
 	};
 
