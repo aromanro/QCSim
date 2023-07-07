@@ -88,6 +88,10 @@ namespace QC {
 			unsigned int getQubit2() const { return q2; }
 			unsigned int getQubit3() const { return q3; }
 
+			void setQubit1(unsigned int q) { q1 = q; }
+			void setQubit2(unsigned int q) { q2 = q; }
+			void setQubit3(unsigned int q) { q3 = q; }
+
 		private:
 			// don't use it!
 			MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
