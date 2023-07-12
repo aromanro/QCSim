@@ -41,7 +41,7 @@ namespace BernsteinVazirani {
 			unsigned int accum = 0;
 			while (prod)
 			{
-				accum += (prod & 1);
+				accum += prod & 1;
 				prod >>= 1;
 			}
 

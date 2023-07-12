@@ -125,15 +125,11 @@ namespace Games {
 
 			// check the intersection, Alice and Bob need to have the same value for the common matrix element
 			unsigned int alice = resAlice;
-			b = 3 - b; // how many times to shift right to have in the bit 1 the value in the column given to Bob
-			for(;b > 0;--b)
-				alice >>= 1;
+			alice >>= 3 - b;
 			alice &= 1;
 
 			unsigned int bob = resBob; 
-			a = 3 - a;
-			for (;a > 0; --a)
-				bob >>= 1;
+			bob >>= 3 - a;
 			bob &= 1;
 
 			return alice == bob;

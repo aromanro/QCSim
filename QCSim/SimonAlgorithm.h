@@ -203,7 +203,7 @@ namespace Simon {
 					unsigned int v = ((*pit) & it->first);
 					unsigned int cnt = 0;
 					while (v) {
-						cnt += (v & 1);
+						cnt += v & 1;
 						v >>= 1;
 					}
 					if (cnt % 2) pit = potential_results.erase(pit);
