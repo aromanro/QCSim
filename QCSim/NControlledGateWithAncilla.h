@@ -126,7 +126,6 @@ namespace QC {
 				opMat.block(4, 4, 4, 4) = m;
 				theGate.setOperator(opMat);
 				theGate.setQubit2(gate.getQubit2());
-
 			}
 			theGate.setQubit1(gate.getQubit1());
 		}
