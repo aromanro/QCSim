@@ -385,6 +385,11 @@ namespace QC {
 				computeGates.emplace_back(Gates::AppliedGate(gate.getRawOperatorMatrix(), qubit, controllingQubit1, controllingQubit2));
 		}
 
+		void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate)
+		{
+			ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
+		}
+
 		void ApplyOperatorMatrix(const MatrixClass& m)
 		{
 			registerStorage = m * registerStorage;

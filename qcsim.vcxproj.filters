@@ -170,5 +170,11 @@
     <ClInclude Include="QCSim\MagicSquare.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\NControlledGateWithAncilla.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\NControlledNotWithAncilla.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

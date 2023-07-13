@@ -99,6 +99,11 @@ namespace QC {
 			reg.ApplyGate(gate, qubit, controllingQubit, controllingQubit2);
 		}
 
+		void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate)
+		{
+			reg.ApplyGate(gate);
+		}
+
 		void ApplyOperatorMatrix(const MatrixClass& m)
 		{
 			reg.ApplyOperatorMatrix(m);
