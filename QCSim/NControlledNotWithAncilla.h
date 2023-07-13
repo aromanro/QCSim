@@ -15,7 +15,7 @@ namespace QC {
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 		NControlledNotWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-			: BaseClass(N, startQubit, endQubit), nrQubits(N)
+			: BaseClass(N, startQubit, endQubit), nrQubits(N), targetQubit(0), startAncillaQubits(1), clearAncillaAtTheEnd(true)
 		{
 		}
 
