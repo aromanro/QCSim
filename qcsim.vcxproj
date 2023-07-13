@@ -309,6 +309,7 @@
     <ClInclude Include="QCSim\GeneralElitzurVaidmanBomb.h" />
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h" />
     <ClInclude Include="QCSim\GroverAlgorithm.h" />
+    <ClInclude Include="QCSim\HadamardTransform.h" />
     <ClInclude Include="QCSim\HardyParadox.h" />
     <ClInclude Include="QCSim\MagicSquare.h" />
     <ClInclude Include="QCSim\NControlledGateWithAncilla.h" />
