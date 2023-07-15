@@ -242,7 +242,6 @@ namespace DeutschJozsa {
 			// or like this:
 			//BaseClass::setToBasisState(0);
 			//BaseClass::ApplyGate(x, getAlgoQubits() - 1);
-
 		}
 
 		void ApplyHadamardOnAllQubits()
@@ -319,7 +318,7 @@ namespace DeutschJozsa {
 					}
 
 					// the last 'uncompute' - that is, at the end of the last n controlled not - is not really necessary
-					// uneless the ancilla qubits would be used further, so maybe avoit it like this (don't forget to set it back to true):
+					// unless the ancilla qubits would be used further, so maybe avoit it like this (don't forget to set it back to true):
 #define NOT_CLEAR_ANCILLA_AT_THE_END 1
 #ifdef NOT_CLEAR_ANCILLA_AT_THE_END
 					if (state == fvalues.size() - 1)
