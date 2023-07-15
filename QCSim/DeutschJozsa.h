@@ -147,7 +147,7 @@ namespace DeutschJozsa {
 
 	// the 'function' uses NControlledNotWithAncilla gates to implement the function
 	// There is one ancilla qubit used by the algorithm (the y + f(x) one)
-	// the n controlled not needs max(0, (N - 1) - 1) ancilla qubits (the first -1 is because of the previously mentioned ancilla) 
+	// the n controlled not needs (N - 1) - 1 ancilla qubits (the first -1 is because of the previously mentioned ancilla) 
 	// that's how many additional ancilla qubits are needed to reduce the control qubits down to 2 for a ccnot (or 1 for a cnot)
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DeutschJozsaAlgorithmWithGatesOracle :
@@ -318,7 +318,7 @@ namespace DeutschJozsa {
 					}
 
 					// the last 'uncompute' - that is, at the end of the last n controlled not - is not really necessary
-					// unless the ancilla qubits would be used further, so maybe avoit it like this (don't forget to set it back to true):
+					// unless the ancilla qubits would be used further, so maybe avoid it like this (don't forget to set it back to true):
 #define NOT_CLEAR_ANCILLA_AT_THE_END 1
 #ifdef NOT_CLEAR_ANCILLA_AT_THE_END
 					if (state == fvalues.size() - 1)
