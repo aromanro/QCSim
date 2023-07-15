@@ -56,8 +56,16 @@ namespace QC {
 				unsigned int curAncillaToCCNOT = startAncillaQubits;
 				if (controlQubits.size() % 2)
 				{
-					// TODO: Maybe the case that there is a control qubit left but there is only one ancilla qubit set, just ccnot them into the final target and return
-					// don't forget about ComputeEnd and Uncompute
+					// there is a control qubit left but there is only one ancilla qubit set, just ccnot them into the final target and return
+					if (curFreeAncilla == startAncillaQubits + 1)
+					{
+						if (clearAncillaAtTheEnd) reg.ComputeEnd();
+						reg.ApplyGate(ccnot, targetQubit, controlQubits[controlQubits.size() - 1], curAncillaToCCNOT);
+						if (clearAncillaAtTheEnd) reg.Uncompute();
+
+						return 0;
+					}
+
 					reg.ApplyGate(ccnot, curFreeAncilla, controlQubits[controlQubits.size() - 1], curAncillaToCCNOT);
 					++curFreeAncilla;
 					++curAncillaToCCNOT;

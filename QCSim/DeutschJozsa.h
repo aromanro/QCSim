@@ -159,7 +159,7 @@ namespace DeutschJozsa {
 		DeutschJozsaAlgorithmWithGatesOracle(unsigned int N = 2, int addseed = 0)
 			: BaseClass(2 * N - 2, addseed),
 			functionType(FunctionType::constantZero),
-			nControlledNOT(2 * N - 2)
+			nControlledNOT(INT_MAX)
 		{
 			assert(N >= 2);
 
@@ -227,7 +227,7 @@ namespace DeutschJozsa {
 		{
 			const unsigned int nrQubits = BaseClass::getNrQubits();
 
-			return (nrQubits + 2) / 2;
+			return nrQubits / 2 + 1;
 		}
 
 		unsigned int getAlgoNrBasisStates() const
@@ -317,14 +317,6 @@ namespace DeutschJozsa {
 						v >>= 1;
 					}
 
-					// the last 'uncompute' - that is, at the end of the last n controlled not - is not really necessary
-					// unless the ancilla qubits would be used further, so maybe avoid it like this (don't forget to set it back to true):
-#define NOT_CLEAR_ANCILLA_AT_THE_END 1
-#ifdef NOT_CLEAR_ANCILLA_AT_THE_END
-					if (state == fvalues.size() - 1)
-						nControlledNOT.SetClearAncillaAtTheEnd(false);
-#endif
-
 					nControlledNOT.Execute(BaseClass::reg);
 				}
 
@@ -332,10 +324,6 @@ namespace DeutschJozsa {
 				for (unsigned int q = 0; q < nrQubits; ++q)
 					if (qubits[q])
 						BaseClass::ApplyGate(x, q);
-
-#ifdef NOT_CLEAR_ANCILLA_AT_THE_END
-				nControlledNOT.SetClearAncillaAtTheEnd(true); // don't let it on false, for the next Execute
-#endif
 			}
 		}
 
