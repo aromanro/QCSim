@@ -4,33 +4,37 @@
 
 namespace QC {
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class HadamardTransform : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
-	{
-	public:
-		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
-		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+	namespace SubAlgo {
 
-		HadamardTransform(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-			: BaseClass(N, startQubit, endQubit)
+		template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class HadamardTransform : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 		{
-		}
+		public:
+			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
+			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-		unsigned int Execute(RegisterClass& reg) override
-		{
-			ApplyHadamardOnAllQubits(reg);
+			HadamardTransform(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+				: BaseClass(N, startQubit, endQubit)
+			{
+			}
 
-			return 0;
-		}
+			unsigned int Execute(RegisterClass& reg) override
+			{
+				ApplyHadamardOnAllQubits(reg);
 
-	protected:
-		void ApplyHadamardOnAllQubits(RegisterClass& reg) const
-		{
-			for (unsigned int q = BaseClass::getStartQubit(); q <= BaseClass::getEndQubit(); ++q)
-				reg.ApplyGate(hadamard, i);
-		}
+				return 0;
+			}
 
-		QC::Gates::HadamardGate<MatrixClass> hadamard;
-	};
+		protected:
+			void ApplyHadamardOnAllQubits(RegisterClass& reg) const
+			{
+				for (unsigned int q = BaseClass::getStartQubit(); q <= BaseClass::getEndQubit(); ++q)
+					reg.ApplyGate(hadamard, i);
+			}
+
+			QC::Gates::HadamardGate<MatrixClass> hadamard;
+		};
+
+	}
 
 }
 

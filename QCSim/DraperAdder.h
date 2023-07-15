@@ -44,7 +44,7 @@ namespace Adders {
 
 	protected:
 		unsigned int n;
-		QC::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
+		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DraperAdderWithCarry : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
@@ -93,7 +93,7 @@ namespace Adders {
 
 	protected:
 		unsigned int n;
-		QC::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
+		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};
 
 }

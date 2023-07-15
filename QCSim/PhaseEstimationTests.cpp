@@ -26,7 +26,7 @@ bool PhaseEstimationTests()
 			reg.setToBasisState(0);
 			reg.ApplyGate(x, 3); // flip the last qubit
 
-			QC::PhaseEstimation<> phaseEstimation(phaseShift.getRawOperatorMatrix(), 4, 3);
+			QC::SubAlgo::PhaseEstimation<> phaseEstimation(phaseShift.getRawOperatorMatrix(), 4, 3);
 
 			const unsigned int res = phaseEstimation.Execute(reg);
 			++measurements[res];

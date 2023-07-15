@@ -350,7 +350,7 @@ namespace QuantumSimulation {
 		unsigned int steps;
 		double deltax;
 
-		QC::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
+		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 		std::vector<double> potential;
 
 		MatrixClass kineticOp;

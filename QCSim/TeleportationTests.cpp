@@ -7,7 +7,7 @@
 bool TeleportTests()
 {
 	std::cout << "Teleporting with teleport sub-algorithm:" << std::endl;
-	QC::Teleport<> teleport;
+	QC::SubAlgo::Teleport<> teleport;
 	QC::QubitRegister<> reg;
 
 	for (int i = 0; i < 30; ++i)

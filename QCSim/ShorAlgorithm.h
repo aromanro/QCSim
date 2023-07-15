@@ -269,6 +269,6 @@ namespace Shor {
 		unsigned int A;
 
 		Fx<VectorClass, MatrixClass> fx;
-		QC::ShorPhaseEstimation<VectorClass, MatrixClass> phaseEstimation;
+		QC::SubAlgo::ShorPhaseEstimation<VectorClass, MatrixClass> phaseEstimation;
 	};
 }

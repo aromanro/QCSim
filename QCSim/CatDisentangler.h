@@ -5,52 +5,55 @@
 
 namespace QC {
 
-	// See "Generalized GHZ States and Distributed Quantum Computing"
-	// https://arxiv.org/abs/quant-ph/0402148v3
+	namespace SubAlgo {
 
-	// particular case: two qubits is Bell decoder
+		// See "Generalized GHZ States and Distributed Quantum Computing"
+		// https://arxiv.org/abs/quant-ph/0402148v3
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class CatDisentangler : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
-	{
-	public:
-		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
-		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+		// particular case: two qubits is Bell decoder
 
-		CatDisentangler(unsigned int N, unsigned int restoredQubit = 0, unsigned int startQubit = 1, unsigned int endQubit = INT_MAX)
-			: BaseClass(N, startQubit, endQubit), rQubit(restoredQubit)
+		template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class CatDisentangler : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 		{
-		}
+		public:
+			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
+			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-		unsigned int Execute(RegisterClass& reg) override
-		{
-			const unsigned int startQubit = BaseClass::getStartQubit();
-			const unsigned int endQubit = BaseClass::getEndQubit();
-
-			for (unsigned int q = startQubit; q <= endQubit; ++q)
-				reg.ApplyGate(hadamard, q);
-
-			const unsigned int measurement = reg.Measure(startQubit, endQubit);
-
-			unsigned int r = measurement;
-			unsigned int s = 0;
-			while (r)
+			CatDisentangler(unsigned int N, unsigned int restoredQubit = 0, unsigned int startQubit = 1, unsigned int endQubit = INT_MAX)
+				: BaseClass(N, startQubit, endQubit), rQubit(restoredQubit)
 			{
-				s += r & 1;
-				r >>= 1;
 			}
 
-			if (s % 2)
-				reg.ApplyGate(z, rQubit);
+			unsigned int Execute(RegisterClass& reg) override
+			{
+				const unsigned int startQubit = BaseClass::getStartQubit();
+				const unsigned int endQubit = BaseClass::getEndQubit();
 
-			return measurement;
-		}
+				for (unsigned int q = startQubit; q <= endQubit; ++q)
+					reg.ApplyGate(hadamard, q);
 
-	protected:
-		unsigned int rQubit;
-		QC::Gates::HadamardGate<MatrixClass> hadamard;
-		QC::Gates::PauliZGate<MatrixClass> z;
-	};
+				const unsigned int measurement = reg.Measure(startQubit, endQubit);
 
+				unsigned int r = measurement;
+				unsigned int s = 0;
+				while (r)
+				{
+					s += r & 1;
+					r >>= 1;
+				}
+
+				if (s % 2)
+					reg.ApplyGate(z, rQubit);
+
+				return measurement;
+			}
+
+		protected:
+			unsigned int rQubit;
+			QC::Gates::HadamardGate<MatrixClass> hadamard;
+			QC::Gates::PauliZGate<MatrixClass> z;
+		};
+
+	}
 }
 
 

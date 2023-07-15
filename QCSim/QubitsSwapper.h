@@ -6,41 +6,45 @@
 
 namespace QC {
 
-	// maybe it could be used in some other cases
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitsSwapper : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
-	{
-	public:
-		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
-		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+	namespace SubAlgo {
 
-		QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-			: BaseClass(N, startQubit, endQubit)
+		// maybe it could be used in some other cases
+		template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitsSwapper : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 		{
-		}
+		public:
+			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
+			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-		void Swap(RegisterClass& reg) const
-		{
-			unsigned int startQubit = BaseClass::getStartQubit();
-			unsigned int endQubit = BaseClass::getEndQubit();
-
-			while (startQubit < endQubit)
+			QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+				: BaseClass(N, startQubit, endQubit)
 			{
-				reg.ApplyGate(swapOp, startQubit, endQubit);
-				++startQubit;
-				--endQubit;
 			}
-		}
 
-		unsigned int Execute(RegisterClass& reg) override
-		{
-			Swap(reg);
+			void Swap(RegisterClass& reg) const
+			{
+				unsigned int startQubit = BaseClass::getStartQubit();
+				unsigned int endQubit = BaseClass::getEndQubit();
 
-			return reg.Measure();
-		}
+				while (startQubit < endQubit)
+				{
+					reg.ApplyGate(swapOp, startQubit, endQubit);
+					++startQubit;
+					--endQubit;
+				}
+			}
 
-	protected:
-		Gates::SwapGate<MatrixClass> swapOp;
-	};
+			unsigned int Execute(RegisterClass& reg) override
+			{
+				Swap(reg);
+
+				return reg.Measure();
+			}
+
+		protected:
+			Gates::SwapGate<MatrixClass> swapOp;
+		};
+
+	}
 
 }
 
