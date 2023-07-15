@@ -17,13 +17,12 @@ namespace QC {
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 			NControlledNotWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-				: BaseClass(N, startQubit, endQubit), nrQubits(N), targetQubit(0), startAncillaQubits(1), clearAncillaAtTheEnd(true)
+				: BaseClass(N, startQubit, endQubit), targetQubit(0), startAncillaQubits(1), clearAncillaAtTheEnd(true)
 			{
 			}
 
 			unsigned int Execute(RegisterClass& reg) override
 			{
-				// TODO: Implement it
 				// TODO: Check if there are enough ancilla qubits
 
 				// below is just a sketch of the algorithm, not tested, I have to review it, probably it has issues
@@ -57,6 +56,8 @@ namespace QC {
 				unsigned int curAncillaToCCNOT = startAncillaQubits;
 				if (controlQubits.size() % 2)
 				{
+					// TODO: Maybe the case that there is a control qubit left but there is only one ancilla qubit set, just ccnot them into the final target and return
+					// don't forget about ComputeEnd and Uncompute
 					reg.ApplyGate(ccnot, curFreeAncilla, controlQubits[controlQubits.size() - 1], curAncillaToCCNOT);
 					++curFreeAncilla;
 					++curAncillaToCCNOT;
@@ -126,7 +127,6 @@ namespace QC {
 		protected:
 			Gates::CNOTGate<MatrixClass> cnot;
 			Gates::ToffoliGate<MatrixClass> ccnot;
-			unsigned int nrQubits;
 			std::vector<unsigned int> controlQubits;
 			unsigned int targetQubit;
 			unsigned int startAncillaQubits;

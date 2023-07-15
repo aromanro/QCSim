@@ -19,7 +19,7 @@ namespace QC {
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
 			NControlledNotWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
-				: BaseClass(N, startQubit, endQubit), nrQubits(N), startAncillaQubits(1), clearAncillaAtTheEnd(true)
+				: BaseClass(N, startQubit, endQubit), startAncillaQubits(1), clearAncillaAtTheEnd(true)
 			{
 			}
 
@@ -144,7 +144,6 @@ namespace QC {
 
 		protected:
 			Gates::ToffoliGate<MatrixClass> ccnot;
-			unsigned int nrQubits;
 			std::vector<unsigned int> controlQubits;
 			unsigned int startAncillaQubits;
 

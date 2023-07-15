@@ -355,6 +355,41 @@ bool DeutschTests()
 		}
 	}
 
+	std::cout << "Deutsch's algorithm using gates for oracle..." << std::endl;
+	DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<> deutschWithGates;
+	for (int i = 0; i < 30; ++i)
+	{
+		if (i < 10)
+			deutschWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::constantZero);
+		else if (i < 20)
+			deutschWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::constantOne);
+		else
+			deutschWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::balanced);
+
+		unsigned int state = deutschWithGates.Execute();
+
+		if (i < 20)
+		{
+			// constant
+			if (!deutschWithGates.WasConstantResult(state))
+			{
+				std::cout << "Expected constant result, got balanced" << std::endl;
+				return false;
+			}
+			else std::cout << "Constant " << (i < 10 ? "zero" : "one") << " function set, got constant, ok" << std::endl;
+		}
+		else
+		{
+			// balanced
+			if (deutschWithGates.WasConstantResult(state))
+			{
+				std::cout << "Expected balanced result, got constant" << std::endl;
+				return false;
+			}
+			else std::cout << "Balanced function set, got balanced, ok" << std::endl;
+		}
+	}
+
 	return true;
 }
 
@@ -391,6 +426,41 @@ bool DeutschJozsaTests()
 		{
 			// balanced
 			if (deutschJozsa.WasConstantResult(state))
+			{
+				std::cout << "Expected balanced result, got constant" << std::endl;
+				return false;
+			}
+			else std::cout << "Balanced function set, got balanced, ok" << std::endl;
+		}
+	}
+
+	std::cout << "Now, Deutsch-Jozsa with the oracle made out of gates..." << std::endl;
+	DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<> deutschJozsaWithGates(7);
+	for (int i = 0; i < 30; ++i)
+	{
+		if (i < 10)
+			deutschJozsaWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::constantZero);
+		else if (i < 20)
+			deutschJozsaWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::constantOne);
+		else
+			deutschJozsaWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::balanced);
+
+		unsigned int state = deutschJozsaWithGates.Execute();
+
+		if (i < 20)
+		{
+			// constant
+			if (!deutschJozsaWithGates.WasConstantResult(state))
+			{
+				std::cout << "Expected constant result, got balanced" << std::endl;
+				return false;
+			}
+			else std::cout << "Constant " << (i < 10 ? "zero" : "one") << " function set, got constant, ok" << std::endl;
+		}
+		else
+		{
+			// balanced
+			if (deutschJozsaWithGates.WasConstantResult(state))
 			{
 				std::cout << "Expected balanced result, got constant" << std::endl;
 				return false;

@@ -59,7 +59,7 @@ namespace QC {
 		protected:
 			static unsigned int getOperatorQubitsNumber(const MatrixClass& op)
 			{
-				unsigned int sz = static_cast<unsigned int>(op.rows());
+				unsigned int sz = static_cast<unsigned int>(op.rows() - 1);
 
 				unsigned int res = 0;
 				while (sz) {

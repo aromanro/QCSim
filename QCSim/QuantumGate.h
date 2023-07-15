@@ -50,7 +50,7 @@ namespace QC {
 
 			unsigned int getQubitsNumber() const override
 			{
-				unsigned int sz = static_cast<unsigned int>(operatorMat.rows());
+				unsigned int sz = static_cast<unsigned int>(operatorMat.rows() - 1);
 
 				unsigned int res = 0;
 				while (sz) {

@@ -523,7 +523,7 @@ namespace QC {
 				if (gate.getQubitsNumber() > 3)
 					ApplyOperatorMatrix(gate.getRawOperatorMatrix());
 				else
-					ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
+					ApplyGate(gate);
 			}
 
 			recordGates = recordSave;
@@ -536,14 +536,14 @@ namespace QC {
 			const bool recordSave = recordGates;
 			recordGates = false;
 
-			for (const auto it = computeGates.crbegin(); it != computeGates.crend(); ++it)
+			for (auto it = computeGates.crbegin(); it != computeGates.crend(); ++it)
 			{
 				if (it->getQubitsNumber() > 3)
 					ApplyOperatorMatrix(it->getRawOperatorMatrix().adjoint());
 				else
 				{
-					Gates::QuantumGateWithOp<MatrixClass> gate(it->getRawOperatorMatrix().adjoint());
-					ApplyGate(gate, it->getQubit1(), it->getQubit2(), it->getQubit3());
+					Gates::AppliedGate<MatrixClass> gate(it->getRawOperatorMatrix().adjoint(), it->getQubit1(), it->getQubit2(), it->getQubit3());
+					ApplyGate(gate);
 				}
 			}
 
