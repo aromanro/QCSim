@@ -52,7 +52,6 @@ namespace QC {
 				}
 
 				// 2. One could remain unpaired, ccnot it with the first used ancilla qubit if that's the case, targeting the next unused ancilla
-
 				unsigned int curAncillaToCCNOT = startAncillaQubits;
 				if (controlQubits.size() % 2)
 				{
@@ -72,6 +71,7 @@ namespace QC {
 				}
 
 				// 3. Start pairing ancilla qubits with ccnot, targeting the next free ancilla qubit, until either two or one are left
+				// cannot have the case with 1 anymore, since it's handled at step 2
 				while (curFreeAncilla - curAncillaToCCNOT > 2)
 				{
 					reg.ApplyGate(ccnot, curFreeAncilla, curAncillaToCCNOT, curAncillaToCCNOT + 1);
@@ -85,7 +85,10 @@ namespace QC {
 				if (curFreeAncilla - curAncillaToCCNOT == 2)
 					reg.ApplyGate(ccnot, targetQubit, curAncillaToCCNOT, curAncillaToCCNOT + 1);
 				else
+					// this should never happen with the addition the improvement at step 2
+					// but it stays here just in case
 					reg.ApplyGate(cnot, targetQubit, curAncillaToCCNOT);
+				
 
 				if (clearAncillaAtTheEnd) reg.Uncompute();
 

@@ -147,7 +147,7 @@ namespace DeutschJozsa {
 
 	// the 'function' uses NControlledNotWithAncilla gates to implement the function
 	// There is one ancilla qubit used by the algorithm (the y + f(x) one)
-	// the n controlled not needs (N - 1) - 1 ancilla qubits (the first -1 is because of the previously mentioned ancilla) 
+	// the n controlled not needs max(0, (N - 1) - 2) ancilla qubits (the first -1 is because of the previously mentioned ancilla) 
 	// that's how many additional ancilla qubits are needed to reduce the control qubits down to 2 for a ccnot (or 1 for a cnot)
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DeutschJozsaAlgorithmWithGatesOracle :
@@ -157,7 +157,7 @@ namespace DeutschJozsa {
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		DeutschJozsaAlgorithmWithGatesOracle(unsigned int N = 2, int addseed = 0)
-			: BaseClass(2 * N - 2, addseed),
+			: BaseClass(N == 2 ? 2 : 2 * N - 3, addseed),
 			functionType(FunctionType::constantZero),
 			nControlledNOT(INT_MAX)
 		{
@@ -226,8 +226,9 @@ namespace DeutschJozsa {
 		unsigned int getAlgoQubits() const
 		{
 			const unsigned int nrQubits = BaseClass::getNrQubits();
+			if (nrQubits == 2) return 2;
 
-			return nrQubits / 2 + 1;
+			return (nrQubits + 3) / 2;
 		}
 
 		unsigned int getAlgoNrBasisStates() const
