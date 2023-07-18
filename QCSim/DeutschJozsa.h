@@ -245,6 +245,7 @@ namespace DeutschJozsa {
 			//BaseClass::ApplyGate(x, getAlgoQubits() - 1);
 		}
 
+		// not on the ancilla ones used for the n controlled not, though
 		void ApplyHadamardOnAllQubits()
 		{
 			for (unsigned int q = 0; q < getAlgoQubits(); ++q)
