@@ -26,6 +26,8 @@ bool distributedTests();
 
 bool PhaseEstimationTests();
 
+bool DeutschJozsaTests();
+
 bool tests();
 
 #ifndef TESTS_CPP_
