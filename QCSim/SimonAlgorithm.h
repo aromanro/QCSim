@@ -3,10 +3,12 @@
 #include "QuantumAlgorithm.h"
 #include "QuantumGate.h"
 #include "Utils.h"
+#include "NControlledGateWithAncilla.h"
 
 #include "Tests.h"
 
 #include <unordered_set>
+#include <numeric>
 
 
 namespace Simon {
@@ -83,9 +85,7 @@ namespace Simon {
 					extOperatorMat(stateKet, stateBra) = (stateKet & ymask) == ((f(xval) << N) ^ ypart) && xval == (stateKet & xmask);
 				}
 
-			//std::cout << std::endl << extOperatorMat.adjoint() * extOperatorMat << std::endl;
-			//if (!checkUnitary(extOperatorMat))
-			//	std::cout << "Oracle matrix NOT unitary!" << std::endl;
+			assert(checkUnitary(extOperatorMat));
 
 			return extOperatorMat;
 		}
@@ -119,7 +119,6 @@ namespace Simon {
 			return true;
 		}
 
-	protected:
 		unsigned int f(unsigned int x) const
 		{
 			if (functionTable.empty()) return 0;
@@ -129,6 +128,7 @@ namespace Simon {
 			return functionTable[x & mask];
 		}
 
+	protected:
 		unsigned int stringFunction = 0;
 		std::vector<unsigned int> functionTable;
 	};
@@ -142,6 +142,8 @@ namespace Simon {
 		SimonAlgorithm(unsigned int N = 3, int addseed = 0)
 			: BaseClass(2 * N, addseed)
 		{
+			assert(N >= 2);
+
 			setString(0); // prevent issues if the string is not set before execution
 		}
 
@@ -150,9 +152,8 @@ namespace Simon {
 			const unsigned int nrQubits = BaseClass::getNrQubits();
 			const int unsigned N = nrQubits >> 1;
 
-			Oracle<MatrixClass> o;
-			o.setString(str, N);
-			OracleOp = o.getOperatorMatrix(BaseClass::getNrQubits());
+			oracle.setString(str, N);
+			OracleOp = oracle.getOperatorMatrix(nrQubits);
 		}
 
 		unsigned int Execute() override
@@ -229,10 +230,226 @@ namespace Simon {
 				BaseClass::ApplyGate(hadamard, i);
 		}
 
+		Oracle<MatrixClass> oracle;
 		MatrixClass OracleOp;
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
 	};
 
+
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class SimonAlgorithmWithGatesOracle :
+		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
+	{
+	public:
+		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
+
+		SimonAlgorithmWithGatesOracle(unsigned int N = 3, int addseed = 0)
+			: BaseClass(3 * N - 1, addseed),
+			nControlledNOTs(INT_MAX)
+		{
+			assert(N >= 2);
+
+			setString(0); // prevent issues if the string is not set before execution
+
+			std::vector<unsigned int> controlQubits(N);
+			std::iota(controlQubits.begin(), controlQubits.end(), 0);
+
+			nControlledNOTs.SetControlQubits(controlQubits);
+			nControlledNOTs.SetStartAncillaQubits(2 * N);
+		}
+
+		void setString(unsigned int str)
+		{
+			const unsigned int nrQubits = getAlgoQubits();
+			const int unsigned N = nrQubits >> 1;
+
+			oracle.setString(str, N);
+		}
+
+		unsigned int Execute() override
+		{
+			const unsigned int nrQubits = getAlgoQubits();
+			const int unsigned N = nrQubits >> 1;
+			const unsigned int mask = (1u << N) - 1;
+			const unsigned int nrBasisStates = 1u << N;
+
+			std::unordered_map<unsigned int, unsigned int> measurements;
+			const unsigned int nrMeasurements = 300; // make it highly unlikely to fail
+
+			// not exactly how it should be done, but again, I'm lazy
+
+			for (unsigned int i = 0; i < nrMeasurements; ++i)
+			{
+				Init();
+				
+				ApplyOracle();
+
+				ApplyHadamardOnHalfQubits();
+
+				// the measurement is always a value that has b * s = 0 property, where s is the string function
+				// unless the string function is zero, in which case all of them could be measured, they have equal probability
+				// either measure only the first half of the qubits
+
+				const unsigned int m = BaseClass::Measure(0, N - 1);
+
+				// or all of them but discard the not interesting ones, using a mask:
+				//const unsigned int m = (BaseClass::Measure() & mask);
+
+				++measurements[m];
+
+				if (measurements.size() == nrBasisStates) break;
+			}
+
+			if (measurements.size() == nrBasisStates) return 0;
+
+			std::unordered_set<unsigned int> potential_results;
+			for (unsigned int i = 1; i <= mask; ++i)
+				potential_results.insert(i);
+
+			// Not exactly the most optimal way, but I'm lazy
+			for (auto it = measurements.begin(); it != measurements.end(); ++it)
+			{
+				if (it->first == 0) continue;
+
+				for (auto pit = potential_results.begin(); pit != potential_results.end();)
+				{
+					unsigned int v = ((*pit) & it->first);
+					unsigned int cnt = 0;
+					while (v) {
+						cnt += v & 1;
+						v >>= 1;
+					}
+					if (cnt % 2) pit = potential_results.erase(pit);
+					else ++pit;
+				}
+			}
+
+
+			return (potential_results.empty() || potential_results.size() > 1) ? mask + 1 : *potential_results.begin();
+		}
+
+		unsigned int getAlgoQubits() const
+		{
+			const unsigned int nrQubits = BaseClass::getNrQubits();
+
+			return (nrQubits + 1) / 3 * 2;
+		}
+
+	protected:
+		void Init()
+		{
+			BaseClass::setToBasisState(0);
+			ApplyHadamardOnHalfQubits();
+		}
+
+		void ApplyHadamardOnHalfQubits()
+		{
+			const unsigned int halfQubits = getAlgoQubits() >> 1;
+			for (unsigned int i = 0; i < halfQubits; ++i)
+				BaseClass::ApplyGate(hadamard, i);
+		}
+
+		void ApplyOracle()
+		{
+			const unsigned int nrQubits = getAlgoQubits() >> 1;
+			const unsigned int nrBasisStates = 1u << nrQubits;
+
+			/*
+			for (unsigned int state = 0; state < nrBasisStates; ++state)
+			{
+				unsigned int fval = oracle.f(state);
+				if (!fval) continue;
+
+				nControlledNOTs.ClearGates();
+				unsigned int q = nrQubits;
+				while (fval)
+				{
+					if (fval & 1)
+					{
+						QC::Gates::AppliedGate<MatrixClass> notGate(x.getRawOperatorMatrix(), q);
+						nControlledNOTs.AddGate(notGate);
+					}
+
+					fval >>= 1;
+					++q;
+				}
+
+				unsigned int v = state;
+				for (unsigned int q = 0; q < nrQubits; ++q)
+				{
+					if ((v & 1) == 0)
+						BaseClass::ApplyGate(x, q);
+
+					v >>= 1;
+				}
+
+				nControlledNOTs.Execute(BaseClass::reg);
+
+				// undo the x gates
+				v = state;
+				for (unsigned int q = 0; q < nrQubits; ++q)
+				{
+					if ((v & 1) == 0)
+						BaseClass::ApplyGate(x, q);
+
+					v >>= 1;
+				}
+			}
+			*/
+
+			// the above code is not that good, I'll let it commented in case this one is too hard to understand
+			// this one avoids applying x gates twice on the same qubit, between applying n controlled nots
+
+			// the reason for not applying NControlledNOTWithAncilla is that it computes/uncomputes for each gate
+			// the more general NControlledGatesWithAncilla does a computation for the control ancilla only once, applies all added gates (controlled) then it does the uncomputation
+
+			std::vector<bool> qubits(nrQubits, false);
+
+			for (unsigned int state = 0; state < nrBasisStates; ++state)
+			{
+				unsigned int fval = oracle.f(state);
+				if (!fval) continue;
+
+				nControlledNOTs.ClearGates();
+				unsigned int q = nrQubits;
+				while (fval)
+				{
+					if (fval & 1)
+					{
+						QC::Gates::AppliedGate<MatrixClass> notGate(x.getRawOperatorMatrix(), q);
+						nControlledNOTs.AddGate(notGate);
+					}
+
+					fval >>= 1;
+					++q;
+				}
+
+				unsigned int v = state;
+				for (unsigned int q = 0; q < nrQubits; ++q)
+				{
+					if (qubits[q] != ((v & 1) == 0))
+					{
+						BaseClass::ApplyGate(x, q);
+						qubits[q] = !qubits[q]; // x gate was applied
+					}
+
+					v >>= 1;
+				}
+
+				nControlledNOTs.Execute(BaseClass::reg);
+			}
+
+			// undo the x gates
+			for (unsigned int q = 0; q < nrQubits; ++q)
+				if (qubits[q])
+					BaseClass::ApplyGate(x, q);
+		}
+
+		Oracle<MatrixClass> oracle;
+		QC::Gates::HadamardGate<MatrixClass> hadamard;
+		QC::Gates::PauliXGate<MatrixClass> x;
+		QC::SubAlgo::NControlledGatesWithAncilla<VectorClass, MatrixClass> nControlledNOTs;
+	};
 }
 
 

@@ -79,6 +79,11 @@ namespace QC {
 		public:
 			using BaseClass = Gates::QuantumGateWithOp<MatrixClass>;
 
+			AppliedGate()
+				: Gates::QuantumGateWithOp<MatrixClass>(MatrixClass::Zero(1, 1)), q1(0), q2(0), q3(0)
+			{
+			}
+
 			AppliedGate(const MatrixClass& op, unsigned int q1 = 0, unsigned int q2 = 0, unsigned int q3 = 0)
 				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
 			{

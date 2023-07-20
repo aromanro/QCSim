@@ -389,6 +389,55 @@ bool QuantumCryptograpyTests()
 	return true;
 }
 
+bool SimonWithGatesTests()
+{
+	std::cout << "\nTesting Simon using gates for oracle..." << std::endl;
+
+	for (unsigned int nrQubits = 2; nrQubits <= 4; ++nrQubits)
+	{
+		std::cout << "Nr of qubits: " << nrQubits << std::endl;
+
+		// also test function generation
+		Simon::Oracle<> oracle;
+
+		Simon::SimonAlgorithmWithGatesOracle<> simonAlgorithm(nrQubits);
+
+		const unsigned int lim = (1 << nrQubits) - 1;
+		for (unsigned int functionString = 0; functionString <= lim; ++functionString)
+		{
+			std::cout << "Trying with string: " << functionString << "...";
+
+			// function testing
+
+			oracle.setString(functionString, nrQubits);
+			if (!oracle.checkFunction())
+			{
+				std::cout << "\n Something is wrong with function contruction, check the oracle code" << std::endl;
+
+				return false;
+			}
+
+			// ***************
+
+			simonAlgorithm.setString(functionString);
+
+			const unsigned int res = simonAlgorithm.Execute();
+
+			if (res != functionString)
+			{
+				std::cout << "\n Result different that the set string: " << res << std::endl;
+
+				return false;
+			}
+
+			std::cout << " ok" << std::endl;
+		}
+	}
+
+	return true;
+}
+
+
 bool SimonTests()
 {
 	std::cout << "\nTesting Simon..." << std::endl;
@@ -434,7 +483,7 @@ bool SimonTests()
 		}
 	}
 
-	return true;
+	return SimonWithGatesTests();
 }
 
 bool basicTests()

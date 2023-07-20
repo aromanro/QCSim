@@ -12,30 +12,33 @@ namespace QC {
 
 		// allows only 1 or 2 qubit gates so the controlled gate used by this algorithm is 2 or 3 qubits
 
-		template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class NControlledGateWithAncilla : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
+		template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class NControlledGatesWithAncilla : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
 		{
 		public:
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			NControlledNotWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			NControlledGatesWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit), startAncillaQubits(1), clearAncillaAtTheEnd(true)
 			{
 			}
 
 			unsigned int Execute(RegisterClass& reg) override
 			{
-				if (theGate.GetNrQubits() <= 1 || theGate.GetNrQubits() > 3 || controlQubits.empty())
+				if (controlQubits.empty())
 					return 1;
 
 				// 0. If there is only one control qubit, use directly the gate, no ancilla needed
 				if (controlQubits.size() == 1)
 				{
-					if (theGate.GetNrQubits() == 2)
-						theGate.setQubit2(controlQubits[0]);
-					else
-						theGate.setQubit3(controlQubits[0]);
-					reg.ApplyGate(theGate);
+					for (auto& theGate : gates)
+					{
+						if (theGate.getQubitsNumber() == 2)
+							theGate.setQubit2(controlQubits[0]);
+						else
+							theGate.setQubit3(controlQubits[0]);
+						reg.ApplyGate(theGate);
+					}
 
 					return 0;
 				}
@@ -73,11 +76,16 @@ namespace QC {
 
 				// 4. Apply the gate on the last ancilla qubit and the target qubit
 				--curFreeAncilla;
-				if (theGate.GetNrQubits() == 2)
-					theGate.setQubit2(curFreeAncilla);
-				else
-					theGate.setQubit3(curFreeAncilla);
-				reg.ApplyGate(theGate);
+
+				for (auto& theGate : gates)
+				{
+					if (theGate.getQubitsNumber() == 2)
+						theGate.setQubit2(curFreeAncilla);
+					else
+						theGate.setQubit3(curFreeAncilla);
+
+					reg.ApplyGate(theGate);
+				}
 
 				if (clearAncillaAtTheEnd) reg.Uncompute();
 
@@ -104,18 +112,22 @@ namespace QC {
 				startAncillaQubits = saq;
 			}
 
-			const Gates::AppliedGate<MatrixClass>& GetGate() const
+			const std::vector<Gates::AppliedGate<MatrixClass>>& GetGates() const
 			{
-				return theGate;
+				return gates;
 			}
 
-			void SetGate(const Gates::AppliedGate<MatrixClass>& gate)
+			bool AddGate(const Gates::AppliedGate<MatrixClass>& gate)
 			{
-				// make a controlled gate out of it
-				MatrixClass m = gate.GetRawOperatorMatrix();
-				if (m.rows() != m.cols() || (m.rows() != 2 && m.rows() != 4))
-					return;
+				if (gate.getQubitsNumber() < 1 || gate.getQubitsNumber() > 2)
+					return false;
 
+				// make a controlled gate out of it
+				MatrixClass m = gate.getRawOperatorMatrix();
+				if (m.rows() != m.cols() || (m.rows() != 2 && m.rows() != 4))
+					return false;
+
+				Gates::AppliedGate<MatrixClass> theGate;
 				if (m.rows() == 2)
 				{
 					MatrixClass opMat = MatrixClass::Identity(4, 4);
@@ -130,6 +142,15 @@ namespace QC {
 					theGate.setQubit2(gate.getQubit2());
 				}
 				theGate.setQubit1(gate.getQubit1());
+
+				gates.emplace_back(theGate);
+
+				return true;
+			}
+
+			void ClearGates()
+			{
+				gates.clear();
 			}
 
 			bool ClearAncillaAtTheEnd() const
@@ -146,8 +167,7 @@ namespace QC {
 			Gates::ToffoliGate<MatrixClass> ccnot;
 			std::vector<unsigned int> controlQubits;
 			unsigned int startAncillaQubits;
-
-			Gates::AppliedGate<MatrixClass> theGate;
+			std::vector<Gates::AppliedGate<MatrixClass>> gates;
 			bool clearAncillaAtTheEnd;
 		};
 
