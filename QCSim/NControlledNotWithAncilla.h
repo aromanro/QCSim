@@ -45,7 +45,7 @@ namespace QC {
 
 				// 1. Walk over the control qubits, use ccnot on pairs of them with an ancilla qubit as target (different ancilla for each pair)
 				unsigned int curFreeAncilla = startAncillaQubits;
-				for (int i = 0; i < controlQubits.size() - 1; i += 2)
+				for (unsigned int i = 0; i < controlQubits.size() - 1; i += 2)
 				{
 					reg.ApplyGate(ccnot, curFreeAncilla, controlQubits[i], controlQubits[i + 1]);
 					++curFreeAncilla;

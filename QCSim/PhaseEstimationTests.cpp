@@ -43,7 +43,7 @@ bool PhaseEstimationTests()
 			}
 		}
 
-		const double estimatedPhase = static_cast<double>(mx) / (1 << 3);
+		const double estimatedPhase = static_cast<double>(mx) / (1ULL << 3);
 
 		std::cout << "Real phase: " << realPhase << ", Estimated: " << estimatedPhase << std::endl;
 

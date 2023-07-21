@@ -62,7 +62,7 @@ namespace Shor {
 			A = a;
 		}
 
-		unsigned int mod(unsigned long long int v)
+		unsigned long long int mod(unsigned long long int v)
 		{
 			return v % Number;
 		}
