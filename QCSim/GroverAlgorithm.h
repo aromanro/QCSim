@@ -18,8 +18,9 @@ namespace Grover {
 		GroverAlgorithm(unsigned int N = 3, int addseed = 0)
 			: BaseClass(N, addseed)
 		{
-			J j;
-			JOp = j.getOperatorMatrix(BaseClass::getNrQubits());
+			Oracle<MatrixClass> o00;
+			o00.setCorrectQuestionState(0); // already set to 0 by default, but no harm in setting it explicitly, to show the intention
+			OracleOp00 = o00.getOperatorMatrix(BaseClass::getNrQubits());
 
 			setCorrectQuestionState(0);
 		}
@@ -63,12 +64,12 @@ namespace Grover {
 		void ApplyDiffusionOperator()
 		{
 			ApplyHadamardOnAllQubits();
-			BaseClass::ApplyOperatorMatrix(JOp);
+			BaseClass::ApplyOperatorMatrix(OracleOp00);
 			ApplyHadamardOnAllQubits();
 		}
 
 		MatrixClass OracleOp;
-		MatrixClass JOp;
+		MatrixClass OracleOp00;
 
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
 	};
