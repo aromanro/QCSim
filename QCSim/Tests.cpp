@@ -100,14 +100,13 @@ bool ShorTests()
 	return true;
 }
 
-bool GroverTests()
-{
-	std::cout << "\nTesting Grover..." << std::endl;
 
-	bool res = true;
+bool GroverWithGatesTests()
+{
+	std::cout << "\nTesting Grover with the oracle made out of gates..." << std::endl;
 
 	std::map<int, int> measurements;
-	const int nrMeasurements = 100;
+	const int nrMeasurements = 500;
 
 	std::uniform_int_distribution<> dist(0, 0xf);
 
@@ -118,7 +117,7 @@ bool GroverTests()
 		std::cout << "Testing for answer: " << ans << std::endl;
 
 		measurements.clear();
-		Grover::GroverAlgorithm<> galgo(8);
+		Grover::GroverAlgorithmWithGatesOracle<> galgo(4);
 		galgo.setCorrectQuestionState(ans);
 		for (int j = 0; j < nrMeasurements; ++j)
 		{
@@ -135,14 +134,58 @@ bool GroverTests()
 			{
 				found = true;
 				if (static_cast<double>(m.second) / nrMeasurements < 0.9)
-					res = false;
+					return false;
 			}
 		}
 
-		if (!found) res = false;
+		if (!found) return false;
 	}
 
-	return res;
+	return true;
+}
+
+
+bool GroverTests()
+{
+	std::cout << "\nTesting Grover..." << std::endl;
+
+	std::map<int, int> measurements;
+	const int nrMeasurements = 500;
+
+	std::uniform_int_distribution<> dist(0, 0xf);
+
+	for (int i = 0; i < 5; ++i)
+	{
+		const int ans = dist(gen);
+
+		std::cout << "Testing for answer: " << ans << std::endl;
+
+		measurements.clear();
+		Grover::GroverAlgorithm<> galgo(4);
+		galgo.setCorrectQuestionState(ans);
+		for (int j = 0; j < nrMeasurements; ++j)
+		{
+			const unsigned int state = galgo.Execute();
+			++measurements[state];
+		}
+
+		bool found = false;
+		for (auto m : measurements)
+		{
+			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+			if (m.first == ans)
+			{
+				found = true;
+				if (static_cast<double>(m.second) / nrMeasurements < 0.9)
+					return false;
+			}
+		}
+
+		if (!found) return false;
+	}
+
+	return GroverWithGatesTests();
 }
 
 
