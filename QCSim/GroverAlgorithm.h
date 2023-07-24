@@ -4,6 +4,7 @@
 #include "Oracle.h"
 
 #include "NControlledNotWithAncilla.h"
+#include "HadamardTransform.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
