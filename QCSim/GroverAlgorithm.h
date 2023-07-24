@@ -21,7 +21,7 @@ namespace Grover {
 		GroverAlgorithm(unsigned int N = 3, int addseed = 0)
 			: BaseClass(N, addseed)
 		{
-			assert(N >= 2);
+			assert(N >= 1);
 
 			Oracle<MatrixClass> o00;
 			o00.setCorrectQuestionState(0); // already set to 0 by default, but no harm in setting it explicitly, to show the intention
@@ -95,7 +95,7 @@ namespace Grover {
 		GroverAlgorithmWithGatesOracle(unsigned int N = 3, int addseed = 0)
 			: BaseClass(2 * N - 1, addseed), nControlledNOT(INT_MAX), correctQuestionState(0)
 		{
-			assert(N >= 2);
+			assert(N >= 1);
 
 			std::vector<unsigned int> controlQubits(N);
 			std::iota(controlQubits.begin(), controlQubits.end(), 0);
@@ -171,7 +171,7 @@ namespace Grover {
 			}
 
 			nControlledNOT.Execute(BaseClass::reg);
-
+	
 			v = state;
 			for (unsigned int q = 0; q < nrQubits; ++q)
 			{

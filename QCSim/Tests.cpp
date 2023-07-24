@@ -108,37 +108,43 @@ bool GroverWithGatesTests()
 	std::map<int, int> measurements;
 	const int nrMeasurements = 500;
 
-	std::uniform_int_distribution<> dist(0, 0xf);
-
-	for (int i = 0; i < 5; ++i)
+	for (int nrQubits = 4; nrQubits <= 6; ++nrQubits)
 	{
-		const int ans = dist(gen);
+		std::cout << nrQubits << " qubits" << std::endl;
 
-		std::cout << "Testing for answer: " << ans << std::endl;
+		std::uniform_int_distribution<> dist(0, (1 << nrQubits) - 1);
+		Grover::GroverAlgorithmWithGatesOracle<> galgo(nrQubits);
 
-		measurements.clear();
-		Grover::GroverAlgorithmWithGatesOracle<> galgo(4);
-		galgo.setCorrectQuestionState(ans);
-		for (int j = 0; j < nrMeasurements; ++j)
+		for (int i = 0; i < 5; ++i)
 		{
-			const unsigned int state = galgo.Execute();
-			++measurements[state];
-		}
+			const int ans = dist(gen);
 
-		bool found = false;
-		for (auto m : measurements)
-		{
-			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+			std::cout << "Testing for answer: " << ans << std::endl;
 
-			if (m.first == ans)
+			measurements.clear();
+			
+			galgo.setCorrectQuestionState(ans);
+			for (int j = 0; j < nrMeasurements; ++j)
 			{
-				found = true;
-				if (static_cast<double>(m.second) / nrMeasurements < 0.9)
-					return false;
+				const unsigned int state = galgo.Execute();
+				++measurements[state];
 			}
-		}
 
-		if (!found) return false;
+			bool found = false;
+			for (auto m : measurements)
+			{
+				std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+				if (m.first == ans)
+				{
+					found = true;
+					if (static_cast<double>(m.second) / nrMeasurements < 0.9)
+						return false;
+				}
+			}
+
+			if (!found) return false;
+		}
 	}
 
 	return true;
@@ -152,37 +158,43 @@ bool GroverTests()
 	std::map<int, int> measurements;
 	const int nrMeasurements = 500;
 
-	std::uniform_int_distribution<> dist(0, 0xf);
-
-	for (int i = 0; i < 5; ++i)
+	for (int nrQubits = 4; nrQubits <= 6; ++nrQubits)
 	{
-		const int ans = dist(gen);
+		std::cout << nrQubits << " qubits" << std::endl;
 
-		std::cout << "Testing for answer: " << ans << std::endl;
+		std::uniform_int_distribution<> dist(0, (1 << nrQubits) - 1);
+		Grover::GroverAlgorithm<> galgo(nrQubits);
 
-		measurements.clear();
-		Grover::GroverAlgorithm<> galgo(4);
-		galgo.setCorrectQuestionState(ans);
-		for (int j = 0; j < nrMeasurements; ++j)
+		for (int i = 0; i < 5; ++i)
 		{
-			const unsigned int state = galgo.Execute();
-			++measurements[state];
-		}
+			const int ans = dist(gen);
 
-		bool found = false;
-		for (auto m : measurements)
-		{
-			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+			std::cout << "Testing for answer: " << ans << std::endl;
 
-			if (m.first == ans)
+			measurements.clear();
+			
+			galgo.setCorrectQuestionState(ans);
+			for (int j = 0; j < nrMeasurements; ++j)
 			{
-				found = true;
-				if (static_cast<double>(m.second) / nrMeasurements < 0.9)
-					return false;
+				const unsigned int state = galgo.Execute();
+				++measurements[state];
 			}
-		}
 
-		if (!found) return false;
+			bool found = false;
+			for (auto m : measurements)
+			{
+				std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+				if (m.first == ans)
+				{
+					found = true;
+					if (static_cast<double>(m.second) / nrMeasurements < 0.9)
+						return false;
+				}
+			}
+
+			if (!found) return false;
+		}
 	}
 
 	return GroverWithGatesTests();

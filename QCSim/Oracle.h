@@ -1,6 +1,8 @@
 #pragma once
 #include "QuantumGate.h"
 
+#include "Tests.h"
+
 namespace Grover {
 
 	template<class MatrixClass = Eigen::MatrixXcd> class Oracle :
@@ -20,6 +22,8 @@ namespace Grover {
 			if (correctQuestionState < nrBasisStates)
 				extOperatorMat(correctQuestionState, correctQuestionState) = -1;
 
+			assert(checkUnitary(extOperatorMat));
+			
 			return extOperatorMat;
 		}
 
