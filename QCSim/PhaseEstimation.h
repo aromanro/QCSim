@@ -28,6 +28,43 @@ namespace QC {
 				return nrQubits;
 			}
 
+			double getPhase(unsigned int mostMeasuredState, int secondMostMeasuredState, double estimatedProbability, unsigned int nrSteps = 10000) const
+			{
+				const unsigned int nrStates = 1u << fRegisterStartQubit;
+				if (secondMostMeasuredState == -1)
+					return static_cast<double>(mostMeasuredState) / nrStates;
+
+				double p = 1.;
+				double phi = 0.;
+
+				const double pref = 1. / static_cast<double>(1ull << (2 * fRegisterStartQubit));
+				const std::complex<double> prefe = 2. * M_PI * std::complex(0., 1.);
+
+				for (unsigned int i = 1; i < nrSteps; ++i)
+				{
+					const double curPhi = static_cast<double>(i) / nrSteps;
+					const std::complex<double> e = prefe * curPhi;
+					const std::complex<double> a = (exp(e) - 1.) / (exp(e / static_cast<double>(nrStates)) - 1.);
+					const double curProb = pref * (a * std::conj(a)).real();
+
+					if (abs(estimatedProbability - curProb) < abs(estimatedProbability - p))
+					{
+						p = curProb;
+						phi = curPhi;
+					}
+				}
+
+				if (mostMeasuredState != 0)
+				{
+					if (mostMeasuredState < secondMostMeasuredState && secondMostMeasuredState != nrStates - 1)
+						return (static_cast<double>(mostMeasuredState) + phi) / nrStates;
+					else
+						return (static_cast<double>(mostMeasuredState) - phi) / nrStates;
+				}
+
+				return 1. + (static_cast<double>(mostMeasuredState) - phi) / nrStates;
+			}
+
 		protected:
 			void ApplyHadamardOnXRegister(RegisterClass& reg) const
 			{
@@ -103,6 +140,13 @@ namespace QC {
 			unsigned int Execute(RegisterClass& reg) override
 			{
 				// TODO: check if things are set up all right: size of U, size of reg, etc.
+
+				//QC::Gates::PauliXGate<MatrixClass> x;
+				//reg.setToBasisState(0);
+				//reg.ApplyGate(x, BaseClass::fRegisterStartQubit);
+
+				// either the commented above, or this:
+				reg.setToQubitState(BaseClass::fRegisterStartQubit);
 
 				// apply hadamard over each qubit from the x-register
 				BaseClass::ApplyHadamardOnXRegister(reg);
