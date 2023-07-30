@@ -58,7 +58,7 @@ namespace QC {
 				{
 					if (mostMeasuredState < secondMostMeasuredState && secondMostMeasuredState != nrStates - 1)
 						return (static_cast<double>(mostMeasuredState) + phi) / nrStates;
-					else
+					else if (mostMeasuredState > secondMostMeasuredState)
 						return (static_cast<double>(mostMeasuredState) - phi) / nrStates;
 				}
 
