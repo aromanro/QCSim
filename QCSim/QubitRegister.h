@@ -155,7 +155,7 @@ namespace QC {
 			unsigned int state = NrBasisStates - 1;
 			for (unsigned int i = 0; i < NrBasisStates; ++i)
 			{
-				accum += (std::conj(registerStorage(i)) * registerStorage(i)).real();
+				accum += norm(registerStorage(i));
 				if (prob <= accum)
 				{
 					state = i;
@@ -258,7 +258,7 @@ namespace QC {
 					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 					{
 						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
-						stateProbability += (std::conj(registerStorage[wholeState]) * registerStorage[wholeState]).real();
+						stateProbability += std::norm(registerStorage[wholeState]);
 					}
 				}
 
@@ -423,7 +423,7 @@ namespace QC {
 
 			const std::complex<double> p = (registerStorage.adjoint() * state)(0);
 
-			return (conj(p) * p).real();
+			return norm(p);
 		}
 
 		// allows saving it into a file to look at the data

@@ -45,7 +45,7 @@ namespace QC {
 					const double curPhi = static_cast<double>(i) / nrSteps;
 					const std::complex<double> e = prefe * curPhi;
 					const std::complex<double> a = (exp(e) - 1.) / (exp(e / static_cast<double>(nrStates)) - 1.);
-					const double curProb = pref * (a * std::conj(a)).real();
+					const double curProb = pref * norm(a);
 
 					if (abs(estimatedProbability - curProb) < abs(estimatedProbability - p))
 					{

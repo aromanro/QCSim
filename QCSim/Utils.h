@@ -163,14 +163,14 @@ namespace QC {
 				U(0, 0) = std::conj(ev1 - op(1, 1));
 				U(0, 1) = dc;
 
-				double norm = 1. / sqrt((U(0, 0) * std::conj(U(0, 0)) + U(0, 1) * std::conj(U(0, 1))).real());
+				double norm = 1. / sqrt(std::norm(U(0, 0)) + std::norm(U(0, 1)));
 				U(0, 0) *= norm;
 				U(0, 1) *= norm;
 
 				U(1, 0) = std::conj(ev2 - op(1, 1));
 				U(1, 1) = dc;
 
-				norm = 1. / sqrt((U(1, 0) * std::conj(U(1, 0)) + U(1, 1) * std::conj(U(1, 1))).real());
+				norm = 1. / sqrt(std::norm(U(1, 0)) + std::norm(U(1, 1)));
 				U(1, 0) *= norm;
 				U(1, 1) *= norm;
 			}
@@ -180,14 +180,14 @@ namespace QC {
 				U(0, 0) = bc;
 				U(0, 1) = std::conj(ev1 - op(0, 0));
 
-				double norm = 1. / sqrt((U(0, 0) * std::conj(U(0, 0)) + U(0, 1) * std::conj(U(0, 1))).real());
+				double norm = 1. / sqrt(std::norm(U(0, 0)) + std::norm(U(0, 1)));
 				U(0, 0) *= norm;
 				U(0, 1) *= norm;
 
 				U(1, 0) = bc;
 				U(1, 1) = std::conj(ev2 - op(0, 0));
 
-				norm = 1. / sqrt((U(1, 0) * std::conj(U(1, 0)) + U(1, 1) * std::conj(U(1, 1))).real());
+				norm = 1. / sqrt(std::norm(U(1, 0)) + std::norm(U(1, 1)));
 				U(1, 0) *= norm;
 				U(1, 1) *= norm;
 			}

@@ -42,7 +42,7 @@ bool TeleportTests()
 		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
 		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
 
-		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
+		const double norm = sqrt(std::norm(alpha) + std::norm(beta));
 		alpha /= norm;
 		beta /= norm;
 
@@ -153,7 +153,7 @@ bool TeleportationTests()
 		std::complex<double> alpha(dist_ampl(gen), dist_ampl(gen));
 		std::complex<double> beta(dist_ampl(gen), dist_ampl(gen));
 
-		const double norm = sqrt((alpha * std::conj(alpha) + beta * std::conj(beta)).real());
+		const double norm = sqrt(std::norm(alpha) + std::norm(beta));
 		alpha /= norm;
 		beta /= norm;
 

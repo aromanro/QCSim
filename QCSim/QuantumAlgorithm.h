@@ -154,7 +154,7 @@ namespace QC {
 			{
 				regVals[i] /= v;
 
-				accum += regVals[i] * std::conj(regVals[i]);
+				accum += norm(regVals[i]);
 			}
 			const double norm = 1. / sqrt(accum.real());
 			for (unsigned int i = 0; i < nrBasisStates; ++i)
