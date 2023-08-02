@@ -168,57 +168,6 @@ namespace QC {
 			return state;
 		}
 
-
-		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int nrTimes = 1000)
-		{
-			std::map<unsigned int, unsigned int> measurements;
-
-			const VectorClass initReg = getRegisterStorage();
-
-			for (unsigned int i = 0; i < nrTimes; ++i)
-			{
-				const unsigned int res = Measure();
-				++measurements[res];
-				setRegisterStorage(initReg);
-			}
-
-			return measurements;
-		}
-
-		std::pair<unsigned int, unsigned int> RepeatedMeasure(unsigned int qubit, unsigned int nrTimes = 1000)
-		{
-			unsigned int val1 = 0;
-			unsigned int val2 = 0;
-
-			const VectorClass initReg = getRegisterStorage();
-
-			for (unsigned int i = 0; i < nrTimes; ++i)
-			{
-				const unsigned int res = Measure(qubit);
-				if (res) ++val2;
-				else val1;
-				setRegisterStorage(initReg);
-			}
-
-			return std::make_pair(val1, val2);
-		}
-
-		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int firstQubit, unsigned int secondQubit, unsigned int nrTimes = 1000)
-		{
-			std::map<unsigned int, unsigned int> measurements;
-
-			const VectorClass initReg = getRegisterStorage();
-
-			for (unsigned int i = 0; i < nrTimes; ++i)
-			{
-				const unsigned int res = Measure(firstQubit, secondQubit);
-				++measurements[res];
-				setRegisterStorage(initReg);
-			}
-
-			return measurements;
-		}
-
 		// shortcut for measuring a single qubit
 		unsigned int Measure(unsigned int qubit)
 		{
@@ -311,6 +260,48 @@ namespace QC {
 
 			return measuredState;
 		}
+
+
+		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int nrTimes = 1000)
+		{
+			std::map<unsigned int, unsigned int> measurements;
+
+			const VectorClass initReg = getRegisterStorage();
+
+			for (unsigned int i = 0; i < nrTimes; ++i)
+			{
+				const unsigned int res = Measure();
+				++measurements[res];
+				setRegisterStorage(initReg);
+			}
+
+			return measurements;
+		}
+
+		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int qubit, unsigned int nrTimes = 1000)
+		{
+			return RepeatedMeasure(qubit, qubit, nrTimes);
+		}
+
+		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int firstQubit, unsigned int secondQubit, unsigned int nrTimes = 1000)
+		{
+			std::map<unsigned int, unsigned int> measurements;
+
+			const VectorClass initReg = getRegisterStorage();
+
+			for (unsigned int i = 0; i < nrTimes; ++i)
+			{
+				const unsigned int res = Measure(firstQubit, secondQubit);
+				++measurements[res];
+				setRegisterStorage(initReg);
+			}
+
+			return measurements;
+		}
+
+		
+
+		
 
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)

@@ -48,10 +48,10 @@ namespace QuantumCounting {
 			unsigned int firstAncillaQubit = PrecisionQubits + GroverQubits;
 
 			for (unsigned int q = 0; q < precisionQubits + groverQubits; ++q)
-				BaseClass::Apply(hadamard, q);
+				BaseClass::ApplyGate(hadamard, q);
 
-			BaseClass::Apply(x, firstAncillaQubit);
-			BaseClass::Apply(hadamard, firstAncillaQubit);
+			BaseClass::ApplyGate(x, firstAncillaQubit);
+			BaseClass::ApplyGate(hadamard, firstAncillaQubit);
 
 
 			for (unsigned int q = 0; q < precisionQubits; ++q)
@@ -62,8 +62,8 @@ namespace QuantumCounting {
 			}
 
 
-			BaseClass::Apply(hadamard, firstAncillaQubit);
-			BaseClass::Apply(x, firstAncillaQubit);
+			BaseClass::ApplyGate(hadamard, firstAncillaQubit);
+			BaseClass::ApplyGate(x, firstAncillaQubit);
 
 			fourier.IQFT(BaseClass::reg);
 
@@ -126,14 +126,14 @@ namespace QuantumCounting {
 		void ControlledDiffusion(unsigned int ctrlQubit)
 		{
 			for (unsigned int q = 0; q < qroverQubits; ++q)
-				BaseClass::Apply(chadamard, precisionQubits + q, ctrlQubit);
+				BaseClass::ApplyGate(chadamard, precisionQubits + q, ctrlQubit);
 
 			unsigned int nrGroverStates = 1 << groverQubits;
 			for (unsigned int state = 0; state < nrGroverStates; ++state)
 				ControlledOracle(ctrlQubit, state);
 
 			for (unsigned int q = 0; q < qroverQubits; ++q)
-				BaseClass::Apply(chadamard, precisionQubits + q, ctrlQubit);
+				BaseClass::ApplyGate(chadamard, precisionQubits + q, ctrlQubit);
 		}
 
 
