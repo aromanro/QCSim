@@ -182,5 +182,8 @@
     <ClInclude Include="QCSim\HadamardTransform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\QuantumCountingAlgorithm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

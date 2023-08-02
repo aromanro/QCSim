@@ -322,6 +322,7 @@
     <ClInclude Include="QCSim\PhaseEstimation.h" />
     <ClInclude Include="QCSim\QuantumAdder.h" />
     <ClInclude Include="QCSim\QuantumAlgorithm.h" />
+    <ClInclude Include="QCSim\QuantumCountingAlgorithm.h" />
     <ClInclude Include="QCSim\QuantumCryptograpy.h" />
     <ClInclude Include="QCSim\QuantumEraser.h" />
     <ClInclude Include="QCSim\QuantumFourierTransform.h" />
