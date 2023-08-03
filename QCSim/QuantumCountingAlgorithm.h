@@ -45,6 +45,34 @@ namespace QuantumCounting {
 
 		unsigned int Execute() override
 		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::Measure(0, precisionQubits - 1);
+		}
+
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements) override
+		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::RepeatedMeasure(0, precisionQubits - 1, nrMeasurements);
+		}
+
+		void ClearMarkedStates()
+		{
+			markedStates.clear();
+		}
+
+		// start from zero, don't go over the maximum that is allowed by the GroverQubits
+		void AddMarkedState(unsigned int state)
+		{
+			if (state >= (1 << groverQubits)) return;
+
+			markedStates.insert(state);
+		}
+
+	protected:
+		void ExecuteWithoutMeasurement()
+		{
 			unsigned int firstAncillaQubit = PrecisionQubits + GroverQubits;
 
 			for (unsigned int q = 0; q < precisionQubits + groverQubits; ++q)
@@ -66,24 +94,8 @@ namespace QuantumCounting {
 			BaseClass::ApplyGate(x, firstAncillaQubit);
 
 			fourier.IQFT(BaseClass::reg);
-
-			return BaseClass::Measure(0, precisionQubits - 1);
 		}
 
-		void ClearMarkedStates()
-		{
-			markedStates.clear();
-		}
-
-		// start from zero, don't go over the maximum that is allowed by the GroverQubits
-		void AddMarkedState(unsigned int state)
-		{
-			if (state >= (1 << groverQubits)) return;
-
-			markedStates.insert(state);
-		}
-
-	protected:
 		void ControlledGrover(unsigned int ctrlQubit)
 		{
 			for (unsigned int state : markedStates)
