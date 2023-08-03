@@ -711,7 +711,7 @@ namespace QC {
 			}
 		};
 
-		// also known as CCNOT
+		// also known as CCNOT or CCX
 		template<class MatrixClass = Eigen::MatrixXcd> class ToffoliGate : public ThreeQubitsControlledGate<MatrixClass>
 		{
 		public:

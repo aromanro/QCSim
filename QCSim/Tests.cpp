@@ -11,6 +11,7 @@
 #include "QuantumCryptograpy.h"
 #include "DeutschJozsa.h"
 #include "SimonAlgorithm.h"
+#include "QuantumCountingAlgorithm.h"
 
 #define TESTS_CPP_ 1
 #include "Tests.h"
@@ -541,6 +542,53 @@ bool SimonTests()
 	return SimonWithGatesTests();
 }
 
+bool CountingTests()
+{
+	std::cout << "\nTesting Quantum Counting..." << std::endl;
+
+	unsigned int nrGroverQubits = 4;
+	unsigned int nrPrecisionQubits = 6;
+	unsigned int nrMeasurements = 10000;
+
+	unsigned int nrGroverStates = 1 << nrGroverQubits;
+	unsigned int nrPrecisionStates = 1 << nrPrecisionQubits;
+	for (int nrMarked = 0; nrMarked <= nrGroverStates; ++nrMarked)
+	{
+		// pick 'nrMarked' states at random:
+		std::vector<unsigned int> states(nrGroverStates);
+		std::iota(states.begin(), states.end(), 0);
+		std::shuffle(states.begin(), states.end(), std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count()));
+		states.resize(nrMarked);
+
+		QuantumCounting::QuantumCountingAlgorithm<> quantumCountingAlgorithm(nrPrecisionQubits, nrGroverQubits);
+		quantumCountingAlgorithm.SetMarkedStates(states);
+
+		const std::map<unsigned int, unsigned int> res = quantumCountingAlgorithm.ExecuteWithMultipleMeasurements(nrMeasurements);
+
+		// get the result with the most measurements:
+		unsigned int nrMeasured = 0;
+		unsigned int state = 0;
+		for (const auto& v : res)
+		{
+			if (v.second > nrMeasured)
+			{
+				nrMeasured = v.second;
+				state = v.first;
+			}
+		}
+
+		std::cout << "Measured " << res.size() << " states, most probable state: " << state << " probability: " << static_cast<double>(nrMeasured)/nrMeasurements << std::endl;
+
+		unsigned int approxCnt = quantumCountingAlgorithm.GetCountForState(state);
+
+		std::cout << "Nr of marked states: " << nrMarked << ", approx count: " << approxCnt << ", real theta: " << quantumCountingAlgorithm.GetCorrectThetaForMarkedStates() << ", approx theta: " << quantumCountingAlgorithm.GetThetaForState(state) << std::endl;
+
+		if (approxCnt != nrMarked) return false;
+	}
+
+	return true;
+}
+
 bool basicTests()
 {
 	bool res = registerMeasurementsTests();
@@ -562,6 +610,7 @@ bool tests()
 	if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
 	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
 	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
+	//if (res) res = CountingTests();
 
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t1).count();
 

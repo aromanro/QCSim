@@ -102,7 +102,7 @@ bool ElitzurVaidmanBombTests()
 
 bool HardyParadoxTests()
 {
-	std::cout << "\nTesting the Hardy's Paradox..." << std::endl;
+	std::cout << "\nTesting Hardy's Paradox..." << std::endl;
 
 	std::map<int, int> measurements;
 	const int nrMeasurements = 100000;

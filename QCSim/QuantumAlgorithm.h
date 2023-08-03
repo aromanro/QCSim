@@ -114,11 +114,6 @@ namespace QC {
 			return reg.RepeatedMeasure(nrTimes);
 		}
 
-		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int qubit, unsigned int nrTimes = 1000)
-		{
-			return reg.RepeatedMeasure(qubit, nrTimes);
-		}
-
 		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int firstQubit, unsigned int secondQubit, unsigned int nrTimes = 1000)
 		{
 			return reg.RepeatedMeasure(firstQubit, secondQubit, nrTimes);
