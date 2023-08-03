@@ -439,6 +439,22 @@ namespace QC {
 			return false;
 		}
 
+
+		void displayState(unsigned int state) const
+		{
+			const unsigned int nQubits = getNrQubits();
+			std::cout << "|";
+
+			unsigned int mask = 1 << (nQubits - 1);
+			for (unsigned int qubit = 0; qubit < nQubits; ++qubit)
+			{
+				std::cout << ((state & mask) ? "1" : "0");
+				mask >>= 1;
+			}
+
+			std::cout << ">    ";
+		}
+
 		void displayRegister() const
 		{
 			const unsigned int nQubits = getNrQubits();
@@ -467,16 +483,7 @@ namespace QC {
 					std::cout << abs(imag(val)) << "i ";
 				}
 
-				std::cout << "|";
-
-				unsigned int mask = 1 << (nQubits - 1);
-				for (unsigned int qubit = 0; qubit < nQubits; ++qubit)
-				{
-					std::cout << ((state & mask) ? "1" : "0");
-					mask >>= 1;
-				}
-
-				std::cout << ">    ";
+				displayState(nQubits);
 			}
 		}
 

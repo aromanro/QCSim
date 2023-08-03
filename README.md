@@ -6,13 +6,14 @@ Quantum computation simulator
 
 Implemented algorithms:
 
-*   Grover's algorithm
-*   Deutsch-Jozsa algorithm
-*   Simon's algorithm
+*   Grover
+*   Deutsch-Jozsa
+*   Simon
 *   Quantum Fourier Transform
 *   Phase estimation
-*   Shor's algorithm
-*   Bernstein–Vazirani algorithm
+*   Shor
+*   Bernstein–Vazirani
+*   Quantum counting
 *   Quantum teleportation
 *   Entanglement swapping
 *   Superdense coding

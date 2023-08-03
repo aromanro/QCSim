@@ -62,6 +62,7 @@ namespace QC {
 						reg.ApplyGate(ccnot, targetQubit, controlQubits[controlQubits.size() - 1], curAncillaToCCNOT);
 						if (clearAncillaAtTheEnd) reg.Uncompute();
 
+
 						return 0;
 					}
 
@@ -89,7 +90,6 @@ namespace QC {
 					// but it stays here just in case
 					reg.ApplyGate(cnot, targetQubit, curAncillaToCCNOT);
 				
-
 				if (clearAncillaAtTheEnd) reg.Uncompute();
 
 				return 0; // no measurement, so the return should be ignored

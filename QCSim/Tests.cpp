@@ -554,7 +554,7 @@ bool CountingTests()
 	unsigned int nrPrecisionStates = 1 << nrPrecisionQubits;
 	for (int nrMarked = 0; nrMarked <= nrGroverStates; ++nrMarked)
 	{
-		// pick 'nrMarked' states at random:
+		// pick 'nrMarked' states at random:		
 		std::vector<unsigned int> states(nrGroverStates);
 		std::iota(states.begin(), states.end(), 0);
 		std::shuffle(states.begin(), states.end(), std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count()));
@@ -577,7 +577,7 @@ bool CountingTests()
 			}
 		}
 
-		std::cout << "Measured " << res.size() << " states, most probable state: " << state << " probability: " << static_cast<double>(nrMeasured)/nrMeasurements << std::endl;
+		//std::cout << "Measured " << res.size() << " states, most probable state: " << state << " probability: " << static_cast<double>(nrMeasured)/nrMeasurements << std::endl;
 
 		unsigned int approxCnt = quantumCountingAlgorithm.GetCountForState(state);
 
@@ -610,7 +610,7 @@ bool tests()
 	if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
 	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
 	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
-	//if (res) res = CountingTests();
+	if (res) res = CountingTests();
 
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t1).count();
 

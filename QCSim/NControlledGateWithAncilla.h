@@ -88,7 +88,7 @@ namespace QC {
 				}
 
 				if (clearAncillaAtTheEnd) reg.Uncompute();
-
+	
 				return 0; // no measurement, so the return should be ignored
 			}
 

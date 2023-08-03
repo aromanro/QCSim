@@ -23,10 +23,6 @@
 
 namespace QuantumCounting {
 
-
-	// WARNING: this is just a sketch, I'll have to review it and test it!!!!!!!!!!!!!!
-	// I implemented it quite fast and without proper care, so it's probably full of mistakes
-
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumCountingAlgorithm :
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
@@ -34,7 +30,7 @@ namespace QuantumCounting {
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		QuantumCountingAlgorithm(unsigned int PrecisionQubits = 6, unsigned int GroverQubits = 4, int addseed = 0)
-			: BaseClass(PrecisionQubits + 2 * GroverQubits, addseed), precisionQubits(PrecisionQubits), groverQubits(GroverQubits), fourier(PrecisionQubits + 2 * GroverQubits, 0, PrecisionQubits - 1)
+			: BaseClass(PrecisionQubits + 2 * GroverQubits, addseed), precisionQubits(PrecisionQubits), groverQubits(GroverQubits), fourier(PrecisionQubits, 0, PrecisionQubits - 1)
 		{
 			assert(PrecisionQubits >= 3);
 			assert(GroverQubits >= 1);
@@ -112,7 +108,7 @@ namespace QuantumCounting {
 
 			BaseClass::setToBasisState(0);
 
-			for (unsigned int q = 0; q < precisionQubits + groverQubits; ++q)
+			for (unsigned int q = 0; q < firstAncillaQubit; ++q)
 				BaseClass::ApplyGate(hadamard, q);
 
 			BaseClass::ApplyGate(x, firstAncillaQubit);
@@ -125,11 +121,11 @@ namespace QuantumCounting {
 				for (unsigned int i = 0; i < nrOps; ++i)
 					ControlledGrover(ctrlQubit);
 			}
-
+			
 			BaseClass::ApplyGate(hadamard, firstAncillaQubit);
 			BaseClass::ApplyGate(x, firstAncillaQubit);
-
-			fourier.IQFT(BaseClass::reg);
+			
+			fourier.IQFT(BaseClass::reg, false);
 		}
 
 		void ControlledGrover(unsigned int ctrlQubit)
@@ -151,14 +147,15 @@ namespace QuantumCounting {
 
 				v >>= 1;
 			}
-
+			
+			
 			std::vector<unsigned int> controlQubits(groverQubits + 1);
-			controlQubits[0] = ctrlQubit;
-			std::iota(controlQubits.begin() + 1, controlQubits.end(), precisionQubits);
+			std::iota(controlQubits.begin(), controlQubits.end(), precisionQubits);
+			controlQubits.back() = ctrlQubit;
 			
 			nControlledNOT.SetControlQubits(controlQubits);
 			nControlledNOT.Execute(BaseClass::reg);
-
+			
 			v = state;
 			for (unsigned int q = 0; q < groverQubits; ++q)
 			{
