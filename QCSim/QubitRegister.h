@@ -266,13 +266,10 @@ namespace QC {
 		{
 			std::map<unsigned int, unsigned int> measurements;
 
-			const VectorClass initReg = getRegisterStorage();
-
 			for (unsigned int i = 0; i < nrTimes; ++i)
 			{
-				const unsigned int res = Measure();
+				const unsigned int res = MeasureNoCollapse();
 				++measurements[res];
-				setRegisterStorage(initReg);
 			}
 
 			return measurements;
@@ -282,13 +279,10 @@ namespace QC {
 		{
 			std::map<unsigned int, unsigned int> measurements;
 
-			const VectorClass initReg = getRegisterStorage();
-
 			for (unsigned int i = 0; i < nrTimes; ++i)
 			{
-				const unsigned int res = Measure(firstQubit, secondQubit);
+				const unsigned int res = MeasureNoCollapse(firstQubit, secondQubit);
 				++measurements[res];
-				setRegisterStorage(initReg);
 			}
 
 			return measurements;
@@ -544,6 +538,77 @@ namespace QC {
 		}
 
 	protected:
+		// the following ones should be used for 'repeated measurements' that avoid reexecuting the circuit each time
+		unsigned int MeasureNoCollapse()
+		{
+			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
+			double accum = 0;
+			unsigned int state = NrBasisStates - 1;
+			for (unsigned int i = 0; i < NrBasisStates; ++i)
+			{
+				accum += norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					state = i;
+					break;
+				}
+			}
+
+			return state;
+		}
+
+		// shortcut for measuring a single qubit
+		unsigned int MeasureNoCollapse(unsigned int qubit)
+		{
+			return MeasureNoCollapse(qubit, qubit);
+		}
+
+		// measure a 'subregister' as a separate register
+		// can measure a single qubit, if firstQubit == secondQubit
+		// will return a 'state' as if the measured sequence is in a separate register (that is, the 'firstQubit' is on position 0 and so on)
+		// so 0 means that all measured qubits are zero, 1 means that firstQubit is 1 and all other measured ones are zero, 2 means that the next one 1 one and all others are zero and so on
+
+		unsigned int MeasureNoCollapse(unsigned int firstQubit, unsigned int secondQubit)
+		{
+			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
+			double accum = 0;
+
+			const unsigned int secondQubitp1 = secondQubit + 1;
+
+			const unsigned int firstPartMask = (1u << firstQubit) - 1;
+			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+
+			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
+			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+
+			unsigned int measuredState = maxMeasuredState;
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+				double stateProbability = 0;
+
+				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				{
+					const unsigned int secondPart = secondPartBits << secondQubitp1;
+					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+					{
+						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
+						stateProbability += std::norm(registerStorage[wholeState]);
+					}
+				}
+
+				accum += stateProbability;
+				if (prob <= accum)
+				{
+					measuredState = state;
+					break;
+				}
+			}
+
+			return measuredState;
+		}
+
 		unsigned int NrQubits;
 		unsigned int NrBasisStates;
 
