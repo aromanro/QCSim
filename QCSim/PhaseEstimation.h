@@ -74,9 +74,9 @@ namespace QC {
 					reg.ApplyGate(fourier.hadamard, i);
 			}
 
-			void IQFT(RegisterClass& reg)
+			void IQFT(RegisterClass& reg, bool swap = true)
 			{
-				fourier.IQFT(reg);
+				fourier.IQFT(reg, swap);
 			}
 
 			unsigned int fRegisterStartQubit;
@@ -139,6 +139,30 @@ namespace QC {
 
 			unsigned int Execute(RegisterClass& reg) override
 			{
+				ExecuteWithoutMeasurement(reg);
+
+				// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
+				// the f should be measured separately to find out its content
+
+				//return reg.Measure();
+				return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
+			}
+
+			std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(RegisterClass& reg, unsigned int nrMeasurements = 10000)
+			{
+				ExecuteWithoutMeasurement(reg);
+
+				return reg.RepeatedMeasure(0, BaseClass::getFunctionStartQubit() - 1, nrMeasurements);
+			}
+
+			const MatrixClass& getU() const
+			{
+				return U;
+			}
+
+		protected:
+			void ExecuteWithoutMeasurement(RegisterClass& reg)
+			{
 				// TODO: check if things are set up all right: size of U, size of reg, etc.
 
 				//QC::Gates::PauliXGate<MatrixClass> x;
@@ -153,7 +177,14 @@ namespace QC {
 
 				MatrixClass controlledGate = U;
 				const unsigned int lastQubit = BaseClass::getFunctionStartQubit() - 1;
-				for (unsigned int ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
+
+				// There is another way which I'll let commented out here
+				// the current one is more efficient due of avoiding the swap gates when doing the IQFT
+				// with the IQFT with the swap, just uncomment the following for loop and comment the one after it
+				// do a similar thing for the last U gate application
+
+				//for (unsigned int ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
+				for (unsigned int ctrlQubit = lastQubit; ctrlQubit > 0; --ctrlQubit)
 				{
 					NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(BaseClass::getNrQubits(), controlledGate, BaseClass::getFunctionStartQubit(), ctrlQubit);
 
@@ -164,7 +195,8 @@ namespace QC {
 				}
 
 				{
-					NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(BaseClass::getNrQubits(), controlledGate, BaseClass::getFunctionStartQubit(), lastQubit);
+					//NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(BaseClass::getNrQubits(), controlledGate, BaseClass::getFunctionStartQubit(), lastQubit);
+					NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(BaseClass::getNrQubits(), controlledGate, BaseClass::getFunctionStartQubit(), 0);
 
 					UGate.Execute(reg);
 				}
@@ -174,21 +206,9 @@ namespace QC {
 				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(BaseClass::getFunctionStartQubit(), QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
 
 				// then perform an inverse fourier transform
-				BaseClass::IQFT(reg);
-
-				// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
-				// the f should be measured separately to find out its content
-
-				//return reg.Measure();
-				return reg.Measure(0, lastQubit);
+				BaseClass::IQFT(reg, false);
 			}
 
-			const MatrixClass& getU() const
-			{
-				return U;
-			}
-
-		protected:
 			MatrixClass U;
 		};
 

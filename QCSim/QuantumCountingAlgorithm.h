@@ -118,6 +118,8 @@ namespace QuantumCounting {
 			{
 				unsigned int nrOps = 1 << q;
 				unsigned int ctrlQubit = precisionQubits - q - 1;
+				// or this, if you want to use the IQFT with swapping, but obviously that's slower due of the additional swap gates
+				//unsigned int ctrlQubit = q;
 				for (unsigned int i = 0; i < nrOps; ++i)
 					ControlledGrover(ctrlQubit);
 			}

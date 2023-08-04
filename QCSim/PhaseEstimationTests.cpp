@@ -17,45 +17,40 @@ bool PhaseEstimationTests()
 
 	for (int p = 0; p < phases.size(); ++p)
 	{
-		std::vector<int> measurements(8, 0);
 		const double realPhase = phases[p];
 		QC::Gates::PhaseShiftGate phaseShift(realPhase * 2 * M_PI);
 
 		QC::SubAlgo::PhaseEstimation<> phaseEstimation(phaseShift.getRawOperatorMatrix(), 4, 3);
 
-		for (int i = 0; i < nrMeasurements; ++i)
-		{
-			QC::QubitRegister reg(4);
-			
-			//QC::Gates::PauliXGate x;
-			//reg.setToBasisState(0);
-			//reg.ApplyGate(x, 3); // flip the last qubit
+		QC::QubitRegister reg(4);
 
-			// either the commented above, or this:
-			reg.setToQubitState(3);
+		//QC::Gates::PauliXGate x;
+		//reg.setToBasisState(0);
+		//reg.ApplyGate(x, 3); // flip the last qubit
 
-			const unsigned int res = phaseEstimation.Execute(reg);
-			++measurements[res];
-		}
+		// either the commented above, or this:
+		reg.setToQubitState(3);
+
+		auto measurements = phaseEstimation.ExecuteWithMultipleMeasurements(reg, nrMeasurements);
 
 		int mx = -1;
 		int prevMx = -1;
 		int cnt = 0;
 		int prevCnt = 0;
-		for (int i = 0; i < 8; ++i)
+		for (auto m : measurements)
 		{
-			if (measurements[i] > cnt)
+			if (m.second > cnt)
 			{
 				prevMx = mx;
 				prevCnt = cnt;
 
-				mx = i;
-				cnt = measurements[i];
+				mx = m.first;
+				cnt = m.second;
 			}
-			else if (measurements[i] > prevCnt)
+			else if (m.second > prevCnt)
 			{
-				prevMx = i;
-				prevCnt = measurements[i];
+				prevMx = m.first;
+				prevCnt = m.second;
 			}
 		}
 
