@@ -32,6 +32,28 @@ namespace Paradoxes {
 
 		unsigned int Execute() override
 		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::Measure();
+		}
+
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::RepeatedMeasure(nrMeasurements);
+		}
+
+	protected:
+		void Init()
+		{
+			BaseClass::setToBasisState(0);
+			// the following has the role of the first beam splitter:
+			BaseClass::ApplyGate(hadamard, 0);
+		}
+
+		void ExecuteWithoutMeasurement()
+		{
 			Init();
 			// now we're in the state given by the first beam splitter
 
@@ -46,16 +68,6 @@ namespace Paradoxes {
 
 			// the choice of using or not the eraser could be 'delayed' 
 			if (eraser) BaseClass::ApplyGate(hadamard, 1);
-
-			return BaseClass::Measure();
-		}
-
-	protected:
-		void Init()
-		{
-			BaseClass::setToBasisState(0);
-			// the following has the role of the first beam splitter:
-			BaseClass::ApplyGate(hadamard, 0);
 		}
 
 		bool eraser;

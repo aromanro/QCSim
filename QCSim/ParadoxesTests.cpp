@@ -15,15 +15,9 @@ bool QuantumEraserTests()
 
 	Paradoxes::QuantumEraser quantumEraser;
 
-	std::map<int, int> measurements;
 	const int nrMeasurements = 100000;
 
-	for (int i = 0; i < nrMeasurements; ++i)
-	{
-		const unsigned int state = quantumEraser.Execute();
-		++measurements[state];
-	}
-
+	auto measurements = quantumEraser.ExecuteWithMultipleMeasurements(nrMeasurements);
 	for (auto m : measurements)
 		std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
@@ -34,18 +28,11 @@ bool QuantumEraserTests()
 		|| !approxEqual(measurements[2], expected, allowedError) || !approxEqual(measurements[3], expected, allowedError))
 		return false;
 
-	measurements.clear();
-	
 	std::cout << "\nWith erasing:" << std::endl;
 
 	quantumEraser.setEraser();
 
-	for (int i = 0; i < nrMeasurements; ++i)
-	{
-		const unsigned int state = quantumEraser.Execute();
-		++measurements[state];
-	}
-
+	measurements = quantumEraser.ExecuteWithMultipleMeasurements(nrMeasurements);
 	for (auto m : measurements)
 		std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
@@ -64,7 +51,6 @@ bool ElitzurVaidmanBombTests()
 	const unsigned int maxStages = 4;
 	Paradoxes::GeneralElitzurVaidmanBomb ElitzurVaidmanBomb(maxStages); // 4 stages max, 5 qubits
 
-	std::map<int, int> measurements;
 	const int nrMeasurements = 10000;
 
 	const double incr = 0.05 * M_PI;
@@ -78,13 +64,8 @@ bool ElitzurVaidmanBombTests()
 		{
 			ElitzurVaidmanBomb.setTheta(theta);
 
-			for (int i = 0; i < nrMeasurements; ++i)
-			{
-				const unsigned int state = ElitzurVaidmanBomb.Execute();
-
-				++measurements[state];
-			}
-
+			auto measurements = ElitzurVaidmanBomb.ExecuteWithMultipleMeasurements(nrMeasurements);
+			
 			const double result = static_cast<double>(measurements[0]) / (nrMeasurements - static_cast<double>(measurements[1]));
 			const double expected = ElitzurVaidmanBomb.TheoreticalEfficiency();
 			std::cout << "Theta: " << theta << " 'Experimental' efficiency: " << result << " Theoretical efficiency: " << expected << std::endl;

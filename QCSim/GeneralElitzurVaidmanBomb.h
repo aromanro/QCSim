@@ -62,20 +62,16 @@ namespace Paradoxes {
 
 		unsigned int Execute() override
 		{
-			Init();
-			// now we're in the state given by the first beam splitter
-
-			for (unsigned int stage = 1; stage < stages; ++stage)
-			{
-				BaseClass::ApplyGate(cnot, stage);
-				BaseClass::ApplyGate(ryGate, 0);
-			}
-
-			ryGate.SetTheta(theta);
-			BaseClass::ApplyGate(cnot, stages);
-			BaseClass::ApplyGate(ryGate, 0);
+			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure();
+		}
+
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::RepeatedMeasure(nrMeasurements);
 		}
 
 		double TheoreticalEfficiency() const
@@ -103,6 +99,22 @@ namespace Paradoxes {
 			BaseClass::setToBasisState(0);
 			// the following has the role of the first beam splitter:
 			ryGate.SetTheta(getThetai());
+			BaseClass::ApplyGate(ryGate, 0);
+		}
+
+		void ExecuteWithoutMeasurement()
+		{
+			Init();
+			// now we're in the state given by the first beam splitter
+
+			for (unsigned int stage = 1; stage < stages; ++stage)
+			{
+				BaseClass::ApplyGate(cnot, stage);
+				BaseClass::ApplyGate(ryGate, 0);
+			}
+
+			ryGate.SetTheta(theta);
+			BaseClass::ApplyGate(cnot, stages);
 			BaseClass::ApplyGate(ryGate, 0);
 		}
 
