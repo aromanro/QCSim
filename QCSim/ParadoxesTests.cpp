@@ -104,7 +104,6 @@ bool HardyParadoxTests()
 {
 	std::cout << "\nTesting Hardy's Paradox..." << std::endl;
 
-	std::map<int, int> measurements;
 	const int nrMeasurements = 100000;
 
 	double gammamax = 0;
@@ -123,12 +122,7 @@ bool HardyParadoxTests()
 		for (double theta1 = incr; theta1 < M_PI - incr; theta1 += incr)
 		{
 			HardysParadox.setTheta1(theta1);
-			for (int i = 0; i < nrMeasurements; ++i)
-			{
-				const unsigned int state = HardysParadox.Execute();
-
-				++measurements[state];
-			}
+			auto measurements = HardysParadox.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 			const double p0 = static_cast<double>(measurements[0]) / nrMeasurements;
 			const double p1 = static_cast<double>(measurements[1]) / nrMeasurements;

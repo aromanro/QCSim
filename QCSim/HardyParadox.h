@@ -52,17 +52,16 @@ namespace Paradoxes {
 
 		unsigned int Execute() override
 		{
-			BaseClass::setToBasisState(0);
-
-			BaseClass::ApplyGate(ryGateTheta0, 0);
-			BaseClass::ApplyGate(ryGateTheta1, 1);
-
-			BaseClass::ApplyGate(ccnot, 2, 0, 1);
-
-			BaseClass::ApplyGate(ryGatePiMinusTheta0, 0);
-			BaseClass::ApplyGate(ryGatePiMinusTheta1, 1);
-
+			ExecuteWithoutMeasurement();
+			
 			return BaseClass::Measure();
+		}
+
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::RepeatedMeasure(nrMeasurements);
 		}
 
 		double TheoreticalGamma() const
@@ -77,6 +76,19 @@ namespace Paradoxes {
 		}
 
 	protected:
+		void ExecuteWithoutMeasurement()
+		{
+			BaseClass::setToBasisState(0);
+
+			BaseClass::ApplyGate(ryGateTheta0, 0);
+			BaseClass::ApplyGate(ryGateTheta1, 1);
+
+			BaseClass::ApplyGate(ccnot, 2, 0, 1);
+
+			BaseClass::ApplyGate(ryGatePiMinusTheta0, 0);
+			BaseClass::ApplyGate(ryGatePiMinusTheta1, 1);
+		}
+
 		double theta0;
 		double theta1;
 
