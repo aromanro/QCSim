@@ -40,6 +40,28 @@ namespace Grover {
 
 		unsigned int Execute() override
 		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::Measure();
+		}
+
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::RepeatedMeasure(nrMeasurements);
+		}
+
+	protected:
+		void Init()
+		{
+			//BaseClass::reg.setToBasisState(0);
+			//ApplyHadamardOnAllQubits();
+			BaseClass::setToEqualSuperposition(); // the same thing as commented above
+		}
+
+		void ExecuteWithoutMeasurement()
+		{
 			Init();
 
 			const unsigned int repeatNo = static_cast<unsigned int>(round(M_PI / 4. * sqrt(BaseClass::getNrBasisStates())));
@@ -49,16 +71,6 @@ namespace Grover {
 				BaseClass::ApplyOperatorMatrix(OracleOp);
 				ApplyDiffusionOperator();
 			}
-
-			return BaseClass::Measure();
-		}
-
-	protected:
-		void Init()
-		{
-			//BaseClass::reg.setToBasisState(0);
-			//ApplyHadamardOnAllQubits();
-			BaseClass::setToEqualSuperposition(); // the same thing as commented above
 		}
 
 		void ApplyHadamardOnAllQubits()
@@ -113,19 +125,16 @@ namespace Grover {
 
 		unsigned int Execute() override
 		{
-			Init();
+			ExecuteWithoutMeasurement();
 
-			const unsigned int nrQubits = getAlgoQubits();
-			const unsigned int nrBasisStates = 1u << nrQubits;
-			const unsigned int repeatNo = static_cast<unsigned int>(round(M_PI / 4. * sqrt(nrBasisStates)));
+			return BaseClass::Measure(0, getAlgoQubits() - 1);
+		}
 
-			for (unsigned int i = 0; i < repeatNo; ++i)
-			{
-				ApplyOracle(correctQuestionState);
-				ApplyDiffusionOperator();
-			}
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		{
+			ExecuteWithoutMeasurement();
 
-			return BaseClass::Measure(0, nrQubits - 1);
+			return BaseClass::RepeatedMeasure(0, getAlgoQubits() - 1, nrMeasurements);
 		}
 
 		unsigned int getAlgoQubits() const
@@ -141,6 +150,21 @@ namespace Grover {
 			BaseClass::reg.setToBasisState(0);
 			ApplyHadamardOnAllQubits();
 			BaseClass::ApplyGate(x, getAlgoQubits());
+		}
+
+		void ExecuteWithoutMeasurement()
+		{
+			Init();
+
+			const unsigned int nrQubits = getAlgoQubits();
+			const unsigned int nrBasisStates = 1u << nrQubits;
+			const unsigned int repeatNo = static_cast<unsigned int>(round(M_PI / 4. * sqrt(nrBasisStates)));
+
+			for (unsigned int i = 0; i < repeatNo; ++i)
+			{
+				ApplyOracle(correctQuestionState);
+				ApplyDiffusionOperator();
+			}
 		}
 
 		void ApplyHadamardOnAllQubits()

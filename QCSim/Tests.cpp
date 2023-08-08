@@ -106,7 +106,6 @@ bool GroverWithGatesTests()
 {
 	std::cout << "\nTesting Grover with the oracle made out of gates..." << std::endl;
 
-	std::map<int, int> measurements;
 	const int nrMeasurements = 500;
 
 	for (int nrQubits = 4; nrQubits <= 6; ++nrQubits)
@@ -121,15 +120,9 @@ bool GroverWithGatesTests()
 			const int ans = dist(gen);
 
 			std::cout << "Testing for answer: " << ans << std::endl;
-
-			measurements.clear();
 			
 			galgo.setCorrectQuestionState(ans);
-			for (int j = 0; j < nrMeasurements; ++j)
-			{
-				const unsigned int state = galgo.Execute();
-				++measurements[state];
-			}
+			auto measurements = galgo.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 			bool found = false;
 			for (auto m : measurements)
@@ -156,7 +149,6 @@ bool GroverTests()
 {
 	std::cout << "\nTesting Grover..." << std::endl;
 
-	std::map<int, int> measurements;
 	const int nrMeasurements = 500;
 
 	for (int nrQubits = 4; nrQubits <= 6; ++nrQubits)
@@ -172,14 +164,8 @@ bool GroverTests()
 
 			std::cout << "Testing for answer: " << ans << std::endl;
 
-			measurements.clear();
-			
 			galgo.setCorrectQuestionState(ans);
-			for (int j = 0; j < nrMeasurements; ++j)
-			{
-				const unsigned int state = galgo.Execute();
-				++measurements[state];
-			}
+			auto measurements = galgo.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 			bool found = false;
 			for (auto m : measurements)

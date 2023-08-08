@@ -21,8 +21,24 @@ namespace Adders {
 
 		unsigned int Execute() override
 		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::Measure();
+		}
+
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::RepeatedMeasure(nrMeasurements);
+		}
+
+
+	protected:
+		void ExecuteWithoutMeasurement()
+		{
 			fourier.QFT(BaseClass::reg, false);
-			
+
 			// the operations commute with each other, so one can change the ordering
 
 			for (unsigned int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
@@ -35,14 +51,10 @@ namespace Adders {
 					phase *= 0.5;
 				}
 			}
-			
-			fourier.IQFT(BaseClass::reg, false);
 
-			return BaseClass::Measure();
+			fourier.IQFT(BaseClass::reg, false);
 		}
 
-
-	protected:
 		unsigned int n;
 		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};
@@ -60,6 +72,21 @@ namespace Adders {
 
 		unsigned int Execute() override
 		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::Measure();
+		}
+
+		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		{
+			ExecuteWithoutMeasurement();
+
+			return BaseClass::RepeatedMeasure(nrMeasurements);
+		}
+
+	protected:
+		void ExecuteWithoutMeasurement()
+		{
 			fourier.QFT(BaseClass::reg, false);
 
 			// the operations commute with each other, so one can change the ordering
@@ -69,7 +96,7 @@ namespace Adders {
 			for (int cbit = n - 1; cbit >= 0; --cbit)
 			{
 				fourier.cPhaseShift.SetPhaseShift(phase);
-				BaseClass::ApplyGate(fourier.cPhaseShift,2 * n, cbit);
+				BaseClass::ApplyGate(fourier.cPhaseShift, 2 * n, cbit);
 				phase *= 0.5;
 			}
 
@@ -86,12 +113,8 @@ namespace Adders {
 			}
 
 			fourier.IQFT(BaseClass::reg, false);
-
-			return BaseClass::Measure();
 		}
 
-
-	protected:
 		unsigned int n;
 		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};

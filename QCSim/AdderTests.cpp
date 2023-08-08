@@ -212,10 +212,9 @@ bool NQubitsAdderTests()
 bool SimpleDrapperAdderTests()
 {
 	const unsigned int nQubits = 3;
+	const unsigned int mask = (1 << nQubits) - 1;
 
 	std::cout << "Draper adder, adding " << nQubits << "-qubit values..." << std::endl;
-
-	const unsigned int mask = (1 << nQubits) - 1;
 
 	//std::random_device rd;
 	//std::mt19937 gen(rd());
@@ -237,13 +236,18 @@ bool SimpleDrapperAdderTests()
 		n2 <<= nQubits;
 		n2 |= n1;
 
-		std::map<unsigned int, unsigned int> measurements;
 		int failures = 0;
 
-		for (int t = 0; t < 100; ++t)
+		adder.setToBasisState(n2);
+
+		auto measurements = adder.ExecuteWithMultipleMeasurements(100);
+
+		unsigned int mostFreqRes = measurements.begin()->first;
+		mostFreqRes >>= nQubits;
+		unsigned int freqMax = measurements.begin()->second;
+		for (auto& v : measurements)
 		{
-			adder.setToBasisState(n2);
-			unsigned int res = adder.Execute();
+			unsigned int res = v.first;
 
 			if ((res & mask) != n1)
 			{
@@ -255,14 +259,6 @@ bool SimpleDrapperAdderTests()
 			if (res != expected)
 				++failures;
 
-			++measurements[res];
-		}
-
-		unsigned int mostFreqRes = measurements.begin()->first;
-		unsigned int freqMax = measurements.begin()->second;
-		for (auto& v : measurements)
-		{
-			unsigned int res = v.first;
 			unsigned int freq = v.second;
 			if (freq > freqMax)
 			{
@@ -292,10 +288,9 @@ bool SimpleDrapperAdderTests()
 bool DrapperAdderWithCarryTests()
 {
 	const unsigned int nQubits = 3;
+	const unsigned int mask = (1 << nQubits) - 1;
 
 	std::cout << "Draper adder with carry, adding " << nQubits << "-qubit values..." << std::endl;
-
-	const unsigned int mask = (1 << nQubits) - 1;
 
 	//std::random_device rd;
 	//std::mt19937 gen(rd());
@@ -315,13 +310,16 @@ bool DrapperAdderWithCarryTests()
 		n2 <<= nQubits;
 		n2 |= n1;
 
-		std::map<unsigned int, unsigned int> measurements;
 		int failures = 0;
+		adder.setToBasisState(n2);
+		auto measurements = adder.ExecuteWithMultipleMeasurements(100);
 
-		for (int t = 0; t < 100; ++t)
+		unsigned int mostFreqRes = measurements.begin()->first;
+		mostFreqRes >>= nQubits;
+		unsigned int freqMax = measurements.begin()->second;
+		for (auto& v : measurements)
 		{
-			adder.setToBasisState(n2);
-			unsigned int res = adder.Execute();
+			unsigned int res = v.first;
 
 			if ((res & mask) != n1)
 			{
@@ -333,14 +331,6 @@ bool DrapperAdderWithCarryTests()
 			if (res != expected)
 				++failures;
 
-			++measurements[res];
-		}
-
-		unsigned int mostFreqRes = measurements.begin()->first;
-		unsigned int freqMax = measurements.begin()->second;
-		for (auto& v : measurements)
-		{
-			unsigned int res = v.first;
 			unsigned int freq = v.second;
 			if (freq > freqMax)
 			{
