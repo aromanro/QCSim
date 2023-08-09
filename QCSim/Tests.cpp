@@ -122,10 +122,10 @@ bool GroverWithGatesTests()
 			std::cout << "Testing for answer: " << ans << std::endl;
 			
 			galgo.setCorrectQuestionState(ans);
-			auto measurements = galgo.ExecuteWithMultipleMeasurements(nrMeasurements);
+			const auto measurements = galgo.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 			bool found = false;
-			for (auto m : measurements)
+			for (const auto& m : measurements)
 			{
 				std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
@@ -165,10 +165,10 @@ bool GroverTests()
 			std::cout << "Testing for answer: " << ans << std::endl;
 
 			galgo.setCorrectQuestionState(ans);
-			auto measurements = galgo.ExecuteWithMultipleMeasurements(nrMeasurements);
+			const auto measurements = galgo.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 			bool found = false;
-			for (auto m : measurements)
+			for (const auto& m : measurements)
 			{
 				std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
@@ -549,7 +549,7 @@ bool CountingTests()
 		QuantumCounting::QuantumCountingAlgorithm<> quantumCountingAlgorithm(nrPrecisionQubits, nrGroverQubits);
 		quantumCountingAlgorithm.SetMarkedStates(states);
 
-		const std::map<unsigned int, unsigned int> res = quantumCountingAlgorithm.ExecuteWithMultipleMeasurements(nrMeasurements);
+		const auto res = quantumCountingAlgorithm.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 		// get the result with the most measurements:
 		unsigned int nrMeasured = 0;

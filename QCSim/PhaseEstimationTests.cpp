@@ -31,13 +31,13 @@ bool PhaseEstimationTests()
 		// either the commented above, or this:
 		reg.setToQubitState(3);
 
-		auto measurements = phaseEstimation.ExecuteWithMultipleMeasurements(reg, nrMeasurements);
+		const auto measurements = phaseEstimation.ExecuteWithMultipleMeasurements(reg, nrMeasurements);
 
 		int mx = -1;
 		int prevMx = -1;
 		int cnt = 0;
 		int prevCnt = 0;
-		for (auto m : measurements)
+		for (const auto& m : measurements)
 		{
 			if (m.second > cnt)
 			{

@@ -240,12 +240,12 @@ bool SimpleDrapperAdderTests()
 
 		adder.setToBasisState(n2);
 
-		auto measurements = adder.ExecuteWithMultipleMeasurements(100);
+		const auto measurements = adder.ExecuteWithMultipleMeasurements(100);
 
 		unsigned int mostFreqRes = measurements.begin()->first;
 		mostFreqRes >>= nQubits;
 		unsigned int freqMax = measurements.begin()->second;
-		for (auto& v : measurements)
+		for (const auto& v : measurements)
 		{
 			unsigned int res = v.first;
 
@@ -312,12 +312,12 @@ bool DrapperAdderWithCarryTests()
 
 		int failures = 0;
 		adder.setToBasisState(n2);
-		auto measurements = adder.ExecuteWithMultipleMeasurements(100);
+		const auto measurements = adder.ExecuteWithMultipleMeasurements(100);
 
 		unsigned int mostFreqRes = measurements.begin()->first;
 		mostFreqRes >>= nQubits;
 		unsigned int freqMax = measurements.begin()->second;
-		for (auto& v : measurements)
+		for (const auto& v : measurements)
 		{
 			unsigned int res = v.first;
 

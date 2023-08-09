@@ -33,7 +33,7 @@ bool QuantumEraserTests()
 	quantumEraser.setEraser();
 
 	measurements = quantumEraser.ExecuteWithMultipleMeasurements(nrMeasurements);
-	for (auto m : measurements)
+	for (const auto& m : measurements)
 		std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
 	expected = nrMeasurements / 2;
@@ -72,8 +72,6 @@ bool ElitzurVaidmanBombTests()
 
 			if (!approxEqual(result, expected, 0.08))
 				return false;
-
-			measurements.clear();
 		}
 	}
 
@@ -125,8 +123,6 @@ bool HardyParadoxTests()
 
 			if (!approxEqual(result, expected, 0.08))
 				return false;
-
-			measurements.clear();
 		}
 		++cnt1;
 	}
