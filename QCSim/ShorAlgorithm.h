@@ -49,6 +49,8 @@ namespace Shor {
 						gateOperator(k, k) = 1;
 				}
 
+				assert(checkUnitary(gateOperator));
+
 				// apply it
 				reg.ApplyOperatorMatrix(gateOperator);
 
@@ -62,6 +64,11 @@ namespace Shor {
 			A = a;
 		}
 
+		unsigned int getParam() const
+		{
+			return A;
+		}
+
 		unsigned long long int mod(unsigned long long int v)
 		{
 			return v % Number;
@@ -73,28 +80,25 @@ namespace Shor {
 		unsigned int A;
 	};
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd, class ShorFunction = Fx<VectorClass, MatrixClass>> class ShorAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
 			: BaseClass(N, addseed),
-			Number(C), A(2), fx(L, C), phaseEstimation(fx, N, L)
+			Number(C), fx(L, C), phaseEstimation(fx, N, L)
 		{
 		}
 
 		unsigned int Execute() override
 		{
-			Init();
-
 			return phaseEstimation.Execute(BaseClass::reg);
 		}
 
 		void setA(unsigned int a)
 		{
-			A = a;
-			fx.setParam(A);
+			fx.setParam(a);
 		}
 
 		// returns false is Shor algorithm was not used, otherwise true 
@@ -165,9 +169,9 @@ namespace Shor {
 					if (p % 2) p *= 2;
 					while (p < Number)
 					{
-						if (fx.mod(static_cast<unsigned int>(pow(A, p))) == 1)
+						if (fx.mod(static_cast<unsigned int>(pow(fx.getParam(), p))) == 1)
 						{
-							const unsigned int v = static_cast<unsigned int>(pow(A, p / 2));
+							const unsigned int v = static_cast<unsigned int>(pow(fx.getParam(), p / 2));
 							const unsigned int m = fx.mod(v);
 							if (m != 1 && m != Number - 1)
 							{
@@ -199,12 +203,6 @@ namespace Shor {
 		}
 
 	protected:
-		void Init()
-		{
-			const unsigned int state = 1 << phaseEstimation.getFunctionStartQubit();
-			BaseClass::setToBasisState(state);
-		}
-
 		static int gcd(int a, int b)
 		{
 			while (b)
@@ -266,9 +264,8 @@ namespace Shor {
 		}
 
 		unsigned int Number;
-		unsigned int A;
 
-		Fx<VectorClass, MatrixClass> fx;
+		ShorFunction fx;
 		QC::SubAlgo::ShorPhaseEstimation<VectorClass, MatrixClass> phaseEstimation;
 	};
 }

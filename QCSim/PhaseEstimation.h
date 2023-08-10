@@ -66,6 +66,19 @@ namespace QC {
 			}
 
 		protected:
+			void Init(RegisterClass& reg)
+			{
+				//QC::Gates::PauliXGate<MatrixClass> x;
+				//reg.setToBasisState(0);
+				//reg.ApplyGate(x, fRegisterStartQubit);
+
+				// either the commented above, or this:
+				reg.setToQubitState(fRegisterStartQubit);
+
+				// apply hadamard over each qubit from the x-register
+				ApplyHadamardOnXRegister(reg);
+			}
+
 			void ApplyHadamardOnXRegister(RegisterClass& reg) const
 			{
 				// apply hadamard over each qubit from the x-register
@@ -99,9 +112,8 @@ namespace QC {
 
 			unsigned int Execute(RegisterClass& reg) override
 			{
-				// apply hadamard over each qubit from the x-register
-				BaseClass::ApplyHadamardOnXRegister(reg);
-
+				BaseClass::Init(reg);
+				
 				// now the f(x)
 				func.Apply(reg);
 
@@ -165,15 +177,7 @@ namespace QC {
 			{
 				// TODO: check if things are set up all right: size of U, size of reg, etc.
 
-				//QC::Gates::PauliXGate<MatrixClass> x;
-				//reg.setToBasisState(0);
-				//reg.ApplyGate(x, BaseClass::fRegisterStartQubit);
-
-				// either the commented above, or this:
-				reg.setToQubitState(BaseClass::fRegisterStartQubit);
-
-				// apply hadamard over each qubit from the x-register
-				BaseClass::ApplyHadamardOnXRegister(reg);
+				BaseClass::Init(reg);
 
 				MatrixClass controlledGate = U;
 				const unsigned int lastQubit = BaseClass::getFunctionStartQubit() - 1;
