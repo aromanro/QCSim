@@ -13,6 +13,32 @@
 
 namespace Grover {
 
+	template<class MatrixClass = Eigen::MatrixXcd> class Oracle :
+		public QC::Gates::QuantumGate<MatrixClass>
+	{
+	public:
+		void setCorrectQuestionState(unsigned int state)
+		{
+			correctQuestionState = state;
+		}
+
+		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
+		{
+			const unsigned int nrBasisStates = 1u << nrQubits;
+			MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
+
+			if (correctQuestionState < nrBasisStates)
+				extOperatorMat(correctQuestionState, correctQuestionState) = -1;
+
+			assert(checkUnitary(extOperatorMat));
+
+			return extOperatorMat;
+		}
+
+	protected:
+		unsigned int correctQuestionState = 0;
+	};
+
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class GroverAlgorithm :
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{

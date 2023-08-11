@@ -2,14 +2,13 @@
 
 #include "QuantumAlgorithm.h"
 #include "QuantumGate.h"
-#include "NControlledNotWithAncilla.h"
+#include "Oracle.h"
 
 #include "Tests.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#include <numeric>
 
 namespace DeutschJozsa {
 
@@ -157,18 +156,10 @@ namespace DeutschJozsa {
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		DeutschJozsaAlgorithmWithGatesOracle(unsigned int N = 2, int addseed = 0)
-			: BaseClass(N == 2 ? 2 : 2 * N - 3, addseed),
-			functionType(FunctionType::constantZero),
-			nControlledNOT(INT_MAX)
+			: BaseClass(N == 2 ? 2 : 2 * N - 3, addseed), oracle(N == 2 ? 2 : 2 * N - 3, 0, N - 2, N - 1, N)
+			
 		{
 			assert(N >= 2);
-
-			std::vector<unsigned int> controlQubits(N - 1);
-			std::iota(controlQubits.begin(), controlQubits.end(), 0);
-
-			nControlledNOT.SetControlQubits(controlQubits);
-			nControlledNOT.SetTargetQubit(N - 1);
-			nControlledNOT.SetStartAncillaQubits(N);
 		}
 
 		unsigned int Execute() override
@@ -196,31 +187,53 @@ namespace DeutschJozsa {
 			balanced
 		};
 
+		
+		class DeutschJozsaFunction
+		{
+		public:
+			DeutschJozsaFunction() : functionType(FunctionType::constantZero) {}
+
+			bool operator()(unsigned int state) const
+			{
+				if (functionType != FunctionType::balanced) return false;
+				
+				return fvalues[state];
+			}
+
+			void setFunction(FunctionType ft, unsigned int funcSize)
+			{
+				functionType = ft;
+
+				if (functionType == FunctionType::balanced)
+				{
+					fvalues.resize(funcSize);
+					const unsigned int nrOnes = funcSize >> 1;
+					for (unsigned int i = 0; i < nrOnes; ++i)
+						fvalues[i] = true;
+					for (unsigned int i = nrOnes; i < funcSize; ++i)
+						fvalues[i] = false;
+
+					const unsigned long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
+					auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
+					std::shuffle(fvalues.begin(), fvalues.end(), rng);
+				}
+				else fvalues.clear();
+			}
+
+			FunctionType getFunction() const
+			{
+				return functionType;
+			}
+
+		protected:
+			FunctionType functionType;
+			std::vector<bool> fvalues; // for balanced only
+		};
+
 		void setFunction(FunctionType ft)
 		{
-			functionType = ft;
-
-			if (functionType == FunctionType::balanced)
-			{
-				const unsigned int funcSize = getAlgoNrBasisStates() >> 1;
-
-				fvalues.resize(funcSize);
-				const unsigned int nrOnes = funcSize >> 1;
-				for (unsigned int i = 0; i < nrOnes; ++i)
-					fvalues[i] = true;
-				for (unsigned int i = nrOnes; i < funcSize; ++i)
-					fvalues[i] = false;
-
-				const unsigned long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
-				auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
-				std::shuffle(fvalues.begin(), fvalues.end(), rng);
-			}
-			else fvalues.clear();
-		}
-
-		FunctionType getFunction() const
-		{
-			return functionType;
+			func.setFunction(ft, getAlgoNrBasisStates() >> 1);
+			oracle.setFunction(func);
 		}
 
 		unsigned int getAlgoQubits() const
@@ -262,77 +275,18 @@ namespace DeutschJozsa {
 		void ApplyOracle()
 		{
 			// for constant functions the result is easy, so we can skip all those gates for the function
-			if (functionType == FunctionType::constantZero) return;
-			else if (functionType == FunctionType::constantOne)
+			if (func.getFunction() == FunctionType::constantZero) return;
+			else if (func.getFunction() == FunctionType::constantOne)
 				BaseClass::ApplyGate(x, getAlgoQubits() - 1);
 			else
 			{
-				const unsigned int nrQubits = getAlgoQubits() - 1;
-
-				/*
-				for (unsigned int state = 0; state < fvalues.size(); ++state)
-				{
-					if (!fvalues[state]) continue;
-
-					unsigned int v = state;
-
-					for (unsigned int q = 0; q < nrQubits; ++q)
-					{
-						if ((v & 1) == 0)
-							BaseClass::ApplyGate(x, q);
-
-						v >>= 1;
-					}
-
-					nControlledNOT.Execute(BaseClass::reg);
-
-					// undo the x gates
-					v = state;
-					for (unsigned int q = 0; q < nrQubits; ++q)
-					{
-						if ((v & 1) == 0)
-							BaseClass::ApplyGate(x, q);
-
-						v >>= 1;
-					}
-				}
-				*/
-				
-				// the above code is not that good, I'll let it commented in case this one is too hard to understand
-				// this one avoids applying x gates twice on the same qubit, between applying n controlled nots
-				
-				std::vector<bool> qubits(nrQubits, false);
-
-				for (unsigned int state = 0; state < fvalues.size(); ++state)
-				{
-					if (!fvalues[state]) continue;
-
-					unsigned int v = state;
-					for (unsigned int q = 0; q < nrQubits; ++q)
-					{
-						if (qubits[q] != ((v & 1) == 0))
-						{
-							BaseClass::ApplyGate(x, q);
-							qubits[q] = !qubits[q]; // x gate was applied
-						}
-
-						v >>= 1;
-					}
-
-					nControlledNOT.Execute(BaseClass::reg);
-				}
-
-				// undo the x gates
-				for (unsigned int q = 0; q < nrQubits; ++q)
-					if (qubits[q])
-						BaseClass::ApplyGate(x, q);
+				oracle.Execute(BaseClass::reg);
 			}
 		}
 
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
-		FunctionType functionType;
-		std::vector<bool> fvalues; // for balanced only
-		QC::SubAlgo::NControlledNotWithAncilla<VectorClass, MatrixClass> nControlledNOT;
+		DeutschJozsaFunction func;
+		QC::Oracles::OracleWithGatesSimpleFunction<DeutschJozsaFunction, VectorClass, MatrixClass> oracle;
 		QC::Gates::PauliXGate<MatrixClass> x;
 	};
 

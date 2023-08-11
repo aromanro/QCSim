@@ -3,14 +3,13 @@
 #include "QuantumAlgorithm.h"
 #include "QuantumGate.h"
 #include "Utils.h"
-#include "NControlledNotWithAncilla.h"
+#include "Oracle.h"
 
 #include "Tests.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#include <numeric>
 
 namespace BernsteinVazirani {
 
@@ -116,6 +115,33 @@ namespace BernsteinVazirani {
 
 	// the algorithm is similar with Deutsch-Jozsa, but the oracle is different
 
+	class BernsteinVaziraniFunction
+	{
+	public:
+		BernsteinVaziraniFunction(unsigned int str = 0)
+			: stringFunction(str)
+		{
+		}
+
+		bool operator()(unsigned int state) const
+		{
+			unsigned int prod = state & stringFunction;
+			unsigned int accum = 0;
+			while (prod)
+			{
+				accum += prod & 1;
+				prod >>= 1;
+			}
+			if (accum % 2 == 0)
+				return false;
+
+			return true;
+		}
+
+	protected:
+		unsigned int stringFunction;
+	};
+
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BernsteinVaziraniAlgorithmWithGatesOracle :
 		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
@@ -125,22 +151,15 @@ namespace BernsteinVazirani {
 
 		BernsteinVaziraniAlgorithmWithGatesOracle(unsigned int N = 3, int addseed = 0)
 			: BaseClass(2 * N - 1, addseed),
-			nControlledNOT(INT_MAX),
-			stringFunction(0)
+			oracle(2 * N - 1, 0, N - 1, N, N + 1)
 		{
 			assert(N >= 1);
-
-			std::vector<unsigned int> controlQubits(N);
-			std::iota(controlQubits.begin(), controlQubits.end(), 0);
-
-			nControlledNOT.SetControlQubits(controlQubits);
-			nControlledNOT.SetTargetQubit(N);
-			nControlledNOT.SetStartAncillaQubits(N + 1);
 		}
 
 		void setString(unsigned int str)
 		{
-			stringFunction = str;
+			BernsteinVaziraniFunction func(str);
+			oracle.setFunction(func);
 		}
 
 		unsigned int Execute() override
@@ -181,84 +200,10 @@ namespace BernsteinVazirani {
 
 		void ApplyOracle()
 		{
-			const unsigned int nrQubits = getAlgoQubits();
-			const unsigned int nrBasisStates = 1u << nrQubits;
-
-			/*
-			for (unsigned int state = 0; state < nrBasisStates; ++state)
-			{
-				unsigned int prod = state & stringFunction;
-				unsigned int accum = 0;
-				while (prod)
-				{
-					accum += prod & 1;
-					prod >>= 1;
-				}
-				if (accum % 2 == 0) continue;
-
-				unsigned int v = state;
-				for (unsigned int q = 0; q < nrQubits; ++q)
-				{
-					if ((v & 1) == 0)
-						BaseClass::ApplyGate(x, q);
-
-					v >>= 1;
-				}
-
-				nControlledNOT.Execute(BaseClass::reg);
-
-				// undo the x gates
-				v = state;
-				for (unsigned int q = 0; q < nrQubits; ++q)
-				{
-					if ((v & 1) == 0)
-						BaseClass::ApplyGate(x, q);
-
-					v >>= 1;
-				}
-			}
-			*/
-
-			// the above code is not that good, I'll let it commented in case this one is too hard to understand
-			// this one avoids applying x gates twice on the same qubit, between applying n controlled nots
-			
-			std::vector<bool> qubits(nrQubits, false);
-
-			for (unsigned int state = 0; state < nrBasisStates; ++state)
-			{
-				unsigned int prod = state & stringFunction;
-				unsigned int accum = 0;
-				while (prod)
-				{
-					accum += prod & 1;
-					prod >>= 1;
-				}
-				if (accum % 2 == 0) continue;
-			
-				unsigned int v = state;
-				for (unsigned int q = 0; q < nrQubits; ++q)
-				{
-					if (qubits[q] != ((v & 1) == 0))
-					{
-						BaseClass::ApplyGate(x, q);
-						qubits[q] = !qubits[q]; // x gate was applied
-					}
-
-					v >>= 1;
-				}
-
-				nControlledNOT.Execute(BaseClass::reg);
-			}
-
-			// undo the x gates
-			for (unsigned int q = 0; q < nrQubits; ++q)
-				if (qubits[q])
-					BaseClass::ApplyGate(x, q);					
+			oracle.Execute(BaseClass::reg);
 		}
 
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
-		QC::SubAlgo::NControlledNotWithAncilla<VectorClass, MatrixClass> nControlledNOT;
-		QC::Gates::PauliXGate<MatrixClass> x;
-		unsigned int stringFunction;
+		QC::Oracles::OracleWithGatesSimpleFunction<BernsteinVaziraniFunction, VectorClass, MatrixClass> oracle;
 	};
 }

@@ -3,20 +3,27 @@
 #include "QuantumAlgorithm.h"
 #include "QuantumGate.h"
 #include "Utils.h"
-#include "NControlledGateWithAncilla.h"
+#include "Oracle.h"
 
 #include "Tests.h"
 
 #include <unordered_set>
-#include <numeric>
 
 
 namespace Simon {
 
-	template<class MatrixClass = Eigen::MatrixXcd> class Oracle :
-		public QC::Gates::QuantumGate<MatrixClass>
+	class SimonFunction
 	{
 	public:
+		unsigned int operator()(unsigned int x) const
+		{
+			if (functionTable.empty()) return 0;
+
+			const unsigned int mask = static_cast<unsigned int>(functionTable.size() - 1);
+
+			return functionTable[x & mask];
+		}
+
 		void setString(unsigned int str, unsigned int N)
 		{
 			stringFunction = str;
@@ -39,7 +46,7 @@ namespace Simon {
 			for (unsigned int i = 0; i < nrBasisStates; ++i)
 				indicesTable[i] = i;
 			std::shuffle(indicesTable.begin(), indicesTable.end(), rng);
-		
+
 			for (unsigned int x = 0; x < nrBasisStates; ++x)
 				for (unsigned int i = 0; i < nrBasisStates; ++i)
 				{
@@ -47,7 +54,7 @@ namespace Simon {
 					if (y == UINT_MAX || x == y) continue;
 					// note that is the string function is zero, then the function will be one-to-one
 					// because there is always at least a bit that is different between to different values,
-				    // so the assignment below never takes place
+					// so the assignment below never takes place
 					// if the string is not zero, the function is two-to-one
 					if ((x ^ y) == stringFunction)
 					{
@@ -58,6 +65,44 @@ namespace Simon {
 				}
 		}
 
+		bool checkFunction() const
+		{
+			if (stringFunction == 0)
+			{
+				std::unordered_set<unsigned int> s(functionTable.begin(), functionTable.end());
+				if (s.size() != functionTable.size()) return false;
+			}
+			else
+			{
+				std::unordered_map<unsigned int, std::unordered_set<unsigned int>> m;
+				for (unsigned int i = 0; i < functionTable.size(); ++i)
+					m[operator()(i)].insert(i);
+
+				if (m.size() != functionTable.size() / 2) return false;
+
+				for (const auto& s : m)
+				{
+					if (s.second.size() != 2) return false;
+
+					const unsigned int a = *s.second.begin();
+					const unsigned int b = *(++s.second.begin());
+					const unsigned int ab = a ^ b;
+					if (ab != 0 && ab != stringFunction) return false;
+				}
+			}
+
+			return true;
+		}
+
+	protected:
+		unsigned int stringFunction = 0;
+		std::vector<unsigned int> functionTable;
+	};
+
+	template<class MatrixClass = Eigen::MatrixXcd> class Oracle :
+		public QC::Gates::QuantumGate<MatrixClass>
+	{
+	public:
 		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
 		{
 			const unsigned int nrBasisStates = 1u << nrQubits;
@@ -90,47 +135,13 @@ namespace Simon {
 			return extOperatorMat;
 		}
 
-		bool checkFunction() const
+		void setString(unsigned int str, unsigned int N)
 		{
-			if (stringFunction == 0)
-			{
-				std::unordered_set<unsigned int> s(functionTable.begin(), functionTable.end());
-				if (s.size() != functionTable.size()) return false;
-			}
-			else
-			{
-				std::unordered_map<unsigned int, std::unordered_set<unsigned int>> m;
-				for (unsigned int i = 0; i < functionTable.size(); ++i)
-					m[f(i)].insert(i);
-
-				if (m.size() != functionTable.size() / 2) return false;
-
-				for (const auto& s : m)
-				{
-					if (s.second.size() != 2) return false;
-
-					const unsigned int a = *s.second.begin();
-					const unsigned int b = *(++s.second.begin());
-					const unsigned int ab = a ^ b;
-					if (ab != 0 && ab != stringFunction) return false;
-				}
-			}
-
-			return true;
-		}
-
-		unsigned int f(unsigned int x) const
-		{
-			if (functionTable.empty()) return 0;
-
-			const unsigned int mask = static_cast<unsigned int>(functionTable.size() - 1);
-
-			return functionTable[x & mask];
+			f.setString(str, N);
 		}
 
 	protected:
-		unsigned int stringFunction = 0;
-		std::vector<unsigned int> functionTable;
+		SimonFunction f;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class SimonAlgorithm :
@@ -245,17 +256,11 @@ namespace Simon {
 
 		SimonAlgorithmWithGatesOracle(unsigned int N = 3, int addseed = 0)
 			: BaseClass(3 * N - 1, addseed), // 2 * N qubits for the algorithm, N - 1 for the oracle
-			nControlledNOTs(INT_MAX)
+			oracle(3 * N - 1, 0, N - 1, N, 2 * N)
 		{
 			assert(N >= 2);
 
 			setString(0); // prevent issues if the string is not set before execution
-
-			std::vector<unsigned int> controlQubits(N);
-			std::iota(controlQubits.begin(), controlQubits.end(), 0);
-
-			nControlledNOTs.SetControlQubits(controlQubits);
-			nControlledNOTs.SetStartAncillaQubits(2 * N);
 		}
 
 		void setString(unsigned int str)
@@ -263,7 +268,8 @@ namespace Simon {
 			const unsigned int nrQubits = getAlgoQubits();
 			const int unsigned N = nrQubits >> 1;
 
-			oracle.setString(str, N);
+			func.setString(str, N);
+			oracle.setFunction(func);
 		}
 
 		unsigned int Execute() override
@@ -351,104 +357,12 @@ namespace Simon {
 
 		void ApplyOracle()
 		{
-			const unsigned int nrQubits = getAlgoQubits() >> 1;
-			const unsigned int nrBasisStates = 1u << nrQubits;
-
-			/*
-			for (unsigned int state = 0; state < nrBasisStates; ++state)
-			{
-				unsigned int fval = oracle.f(state);
-				if (!fval) continue;
-
-				nControlledNOTs.ClearGates();
-				unsigned int q = nrQubits;
-				while (fval)
-				{
-					if (fval & 1)
-					{
-						QC::Gates::AppliedGate<MatrixClass> notGate(x.getRawOperatorMatrix(), q);
-						nControlledNOTs.AddGate(notGate);
-					}
-
-					fval >>= 1;
-					++q;
-				}
-
-				unsigned int v = state;
-				for (unsigned int q = 0; q < nrQubits; ++q)
-				{
-					if ((v & 1) == 0)
-						BaseClass::ApplyGate(x, q);
-
-					v >>= 1;
-				}
-
-				nControlledNOTs.Execute(BaseClass::reg);
-
-				// undo the x gates
-				v = state;
-				for (unsigned int q = 0; q < nrQubits; ++q)
-				{
-					if ((v & 1) == 0)
-						BaseClass::ApplyGate(x, q);
-
-					v >>= 1;
-				}
-			}
-			*/
-
-			// the above code is not that good, I'll let it commented in case this one is too hard to understand
-			// this one avoids applying x gates twice on the same qubit, between applying n controlled nots
-
-			// the reason for not applying NControlledNOTWithAncilla is that it computes/uncomputes for each gate
-			// the more general NControlledGatesWithAncilla does a computation for the control ancilla only once, applies all added gates (controlled) then it does the uncomputation
-
-			std::vector<bool> qubits(nrQubits, false);
-
-			for (unsigned int state = 0; state < nrBasisStates; ++state)
-			{
-				unsigned int fval = oracle.f(state);
-				if (!fval) continue;
-
-				nControlledNOTs.ClearGates();
-				unsigned int q = nrQubits;
-				while (fval)
-				{
-					if (fval & 1)
-					{
-						QC::Gates::AppliedGate<MatrixClass> notGate(x.getRawOperatorMatrix(), q);
-						nControlledNOTs.AddGate(notGate);
-					}
-
-					fval >>= 1;
-					++q;
-				}
-
-				unsigned int v = state;
-				for (unsigned int q = 0; q < nrQubits; ++q)
-				{
-					if (qubits[q] != ((v & 1) == 0))
-					{
-						BaseClass::ApplyGate(x, q);
-						qubits[q] = !qubits[q]; // x gate was applied
-					}
-
-					v >>= 1;
-				}
-
-				nControlledNOTs.Execute(BaseClass::reg);
-			}
-
-			// undo the x gates
-			for (unsigned int q = 0; q < nrQubits; ++q)
-				if (qubits[q])
-					BaseClass::ApplyGate(x, q);
+			oracle.Execute(BaseClass::reg);
 		}
 
-		Oracle<MatrixClass> oracle;
+		SimonFunction func;
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
-		QC::Gates::PauliXGate<MatrixClass> x;
-		QC::SubAlgo::NControlledGatesWithAncilla<VectorClass, MatrixClass> nControlledNOTs;
+		QC::Oracles::OracleWithGates<SimonFunction, VectorClass, MatrixClass> oracle;
 	};
 }
 

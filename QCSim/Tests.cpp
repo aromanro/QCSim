@@ -440,7 +440,7 @@ bool SimonWithGatesTests()
 		std::cout << "Nr of qubits: " << nrQubits << std::endl;
 
 		// also test function generation
-		Simon::Oracle<> oracle;
+		Simon::SimonFunction func;
 
 		Simon::SimonAlgorithmWithGatesOracle<> simonAlgorithm(nrQubits);
 
@@ -451,10 +451,10 @@ bool SimonWithGatesTests()
 
 			// function testing
 
-			oracle.setString(functionString, nrQubits);
-			if (!oracle.checkFunction())
+			func.setString(functionString, nrQubits);
+			if (!func.checkFunction())
 			{
-				std::cout << "\n Something is wrong with function contruction, check the oracle code" << std::endl;
+				std::cout << "\n Something is wrong with function construction, check the function code" << std::endl;
 
 				return false;
 			}
@@ -489,7 +489,7 @@ bool SimonTests()
 		std::cout << "Nr of qubits: " << nrQubits << std::endl;
 
 		// also test function generation
-		Simon::Oracle<> oracle;
+		Simon::SimonFunction func;
 
 		Simon::SimonAlgorithm<> simonAlgorithm(nrQubits);
 
@@ -500,10 +500,10 @@ bool SimonTests()
 
 			// function testing
 
-			oracle.setString(functionString, nrQubits);
-			if (!oracle.checkFunction())
+			func.setString(functionString, nrQubits);
+			if (!func.checkFunction())
 			{
-				std::cout << "\n Something is wrong with function contruction, check the oracle code" << std::endl;
+				std::cout << "\n Something is wrong with function construction, check the function code" << std::endl;
 
 				return false;
 			}

@@ -217,6 +217,9 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithmOnSubregister : public QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		using BaseClass = QuantumSubAlgorithm<VectorClass, MatrixClass>;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+
 		QuantumSubAlgorithmOnSubregister(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
 			: sQubit(startQubit), eQubit(std::max(startQubit, std::min(N - 1, endQubit)))
 		{
@@ -230,4 +233,20 @@ namespace QC {
 		unsigned int eQubit;
 	};
 
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithmOnSubregisterWithAncilla : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
+	{
+	public:
+		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
+		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+
+		QuantumSubAlgorithmOnSubregisterWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX, unsigned int startAncila = INT_MAX)
+			: BaseClass(N, startQubit, endQubit), sAncilla(startAncila)
+		{
+		}
+
+		unsigned int getStartAncilla() const { return sAncilla; };
+
+	protected:
+		unsigned int sAncilla;
+	};
 }
