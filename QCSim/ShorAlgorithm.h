@@ -291,6 +291,11 @@ namespace Shor {
 	};
 
 
+	// this is not the best implementation, for a better one see "Circuit for Shor's algorithm using 2n+3 qubits" https://arxiv.org/abs/quant-ph/0205095
+	// I could also have this implemented using the oracle class, but I'm lazy... I would still have to provide a function implementation, so I put all of it here
+	// maybe I'll change it later, might need some changes in the oracle class for it
+
+	// there is quite a bit of common code with the implementation using the tensor product, I might more it in base classes later
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class FxWithoutTensorProduct : public QC::Function<VectorClass, MatrixClass>
 	{
