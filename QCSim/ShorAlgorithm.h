@@ -5,6 +5,13 @@
 
 namespace Shor {
 
+	// this for now follows the implementation described in "Undergraduate computational physics projects on quantum computing" by D. Candela
+	// https://pubs.aip.org/aapt/ajp/article-abstract/83/8/688/235341/Undergraduate-computational-physics-projects-on
+	// there is a way to make it better, allowing using fewer qubits for a given number, see the description in Lesson 8 from 
+	// "Fundamentals In Quantum Algorithms: A Tutorial Series Using Qiskit Continued" by Daniel Koch, Saahil Patel, Laura Wessing, Paul M. Alsing
+	// https://arxiv.org/abs/2008.10647
+
+
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class Fx : public QC::Function<VectorClass, MatrixClass>
 	{
 	public:
@@ -80,126 +87,16 @@ namespace Shor {
 		unsigned int A;
 	};
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd, class ShorFunction = Fx<VectorClass, MatrixClass>> class ShorAlgorithm : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class ShorAlgorithmBase : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
+		ShorAlgorithmBase(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, unsigned int M = 4, int addseed = 0)
 			: BaseClass(N, addseed),
-			Number(C), fx(L, C), phaseEstimation(fx, N, L)
+			Number(C)
 		{
-		}
-
-		unsigned int Execute() override
-		{
-			return phaseEstimation.Execute(BaseClass::reg);
-		}
-
-		void setA(unsigned int a)
-		{
-			fx.setParam(a);
-		}
-
-		// returns false is Shor algorithm was not used, otherwise true 
-		bool factorize(unsigned int& p1, unsigned int& p2, unsigned int numAttempts = 10)
-		{
-			if (Number > 22)
-			{
-				// don't allow too large numbers
-				p1 = p2 = 0;
-				return false;
-			}
-
-			if (Number % 2 == 0)
-			{
-				p1 = 2;
-				p2 = Number / 2;
-				return false;
-			}
-
-			const unsigned int sq = static_cast<unsigned int>(round(sqrt(Number)));
-			if (sq * sq == Number)
-			{
-				p1 = p2 = sq;
-				return false;
-			}
-
-
-			std::random_device rdev;
-			std::mt19937 genr(rdev());
-			std::uniform_int_distribution<> dist(2, Number - 1);
-
-			// well, this probably should be more optimized, but it seems to work
-			for (unsigned int t = 0; t < numAttempts; ++t)
-			{
-				const int a = dist(genr);
-
-				const unsigned int g = gcd(Number, a);
-				if (g > 1)
-				{
-					//continue;
-					p1 = g;
-					p2 = Number / g;
-					return false;
-				}
-
-				setA(a);
-
-				// period finding
-
-				const unsigned int xmask = (1 << phaseEstimation.getFunctionStartQubit()) - 1;
-
-				// use a single measurement to guess the period (but not zero)
-
-				unsigned int state = Execute() & xmask;
-				while (!state) state = Execute() & xmask;
-
-				const int d = static_cast<int>(pow(2, phaseEstimation.getFunctionStartQubit()));
-				const double val = static_cast<double>(state) / d;
-
-				// p is guessed from here using continued fractions
-				std::vector<int> nums;
-				std::vector<int> divs;
-				getFractions(continuedFraction(val, phaseEstimation.getFunctionStartQubit()), nums, divs);
-
-				for (size_t i = 1; i < divs.size(); ++i) // skip first as it's for the integer part
-				{
-					unsigned int p = divs[i];
-					if (p % 2) p *= 2;
-					while (p < Number)
-					{
-						if (fx.mod(static_cast<unsigned int>(pow(fx.getParam(), p))) == 1)
-						{
-							const unsigned int v = static_cast<unsigned int>(pow(fx.getParam(), p / 2));
-							const unsigned int m = fx.mod(v);
-							if (m != 1 && m != Number - 1)
-							{
-								p1 = gcd(m - 1, Number);
-								p2 = gcd(m + 1, Number);
-
-								// either both or at least one are factors
-								const unsigned int t1 = Number / p1;
-								const unsigned int t2 = Number / p2;
-								if (p1 * t1 == Number)
-									p2 = t1;
-								else
-									p1 = t2;
-
-								//if (!((p1 == 1 && p2 == Number) || (p1 == Number && p2 == 1)))
-								return true;
-							}
-						}
-
-						p *= 2;
-					}
-				}
-			}
-
-			p1 = 1;
-			p2 = Number;
-
-			return false;
 		}
 
 	protected:
@@ -258,12 +155,136 @@ namespace Shor {
 			}
 		}
 
+		unsigned int Number;
+	};
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd, class ShorFunction = Fx<VectorClass, MatrixClass>> class ShorAlgorithm : public ShorAlgorithmBase<VectorClass, MatrixClass>
+	{
+	public:
+		using BaseClass = ShorAlgorithmBase<VectorClass, MatrixClass>;
+
+		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
+			: BaseClass(C, N, L, N - L, addseed),
+			fx(L, C), phaseEstimation(fx, N, L)
+		{
+		}
+
+		unsigned int Execute() override
+		{
+			return phaseEstimation.Execute(BaseClass::reg);
+		}
+
+		void setA(unsigned int a)
+		{
+			fx.setParam(a);
+		}
+
+		// returns false is Shor algorithm was not used, otherwise true 
+		bool factorize(unsigned int& p1, unsigned int& p2, unsigned int numAttempts = 10)
+		{
+			if (BaseClass::Number > 22)
+			{
+				// don't allow too large numbers
+				p1 = p2 = 0;
+				return false;
+			}
+
+			if (BaseClass::Number % 2 == 0)
+			{
+				p1 = 2;
+				p2 = BaseClass::Number / 2;
+				return false;
+			}
+
+			const unsigned int sq = static_cast<unsigned int>(round(sqrt(BaseClass::Number)));
+			if (sq * sq == BaseClass::Number)
+			{
+				p1 = p2 = sq;
+				return false;
+			}
+
+
+			std::random_device rdev;
+			std::mt19937 genr(rdev());
+			std::uniform_int_distribution<> dist(2, BaseClass::Number - 1);
+
+			// well, this probably should be more optimized, but it seems to work
+			for (unsigned int t = 0; t < numAttempts; ++t)
+			{
+				const int a = dist(genr);
+
+				const unsigned int g = BaseClass::gcd(BaseClass::Number, a);
+				if (g > 1)
+				{
+					//continue;
+					p1 = g;
+					p2 = BaseClass::Number / g;
+					return false;
+				}
+
+				setA(a);
+
+				// period finding
+
+				const unsigned int xmask = (1 << phaseEstimation.getFunctionStartQubit()) - 1;
+
+				// use a single measurement to guess the period (but not zero)
+
+				unsigned int state = Execute() & xmask;
+				while (!state) state = Execute() & xmask;
+
+				const int d = static_cast<int>(pow(2, phaseEstimation.getFunctionStartQubit()));
+				const double val = static_cast<double>(state) / d;
+
+				// p is guessed from here using continued fractions
+				std::vector<int> nums;
+				std::vector<int> divs;
+				BaseClass::getFractions(BaseClass::continuedFraction(val, phaseEstimation.getFunctionStartQubit()), nums, divs);
+
+				for (size_t i = 1; i < divs.size(); ++i) // skip first as it's for the integer part
+				{
+					unsigned int p = divs[i];
+					if (p % 2) p *= 2;
+					while (p < BaseClass::Number)
+					{
+						if (fx.mod(static_cast<unsigned int>(pow(fx.getParam(), p))) == 1)
+						{
+							const unsigned int v = static_cast<unsigned int>(pow(fx.getParam(), p / 2));
+							const unsigned int m = fx.mod(v);
+							if (m != 1 && m != BaseClass::Number - 1)
+							{
+								p1 = BaseClass::gcd(m - 1, BaseClass::Number);
+								p2 = BaseClass::gcd(m + 1, BaseClass::Number);
+
+								// either both or at least one are factors
+								const unsigned int t1 = BaseClass::Number / p1;
+								const unsigned int t2 = BaseClass::Number / p2;
+								if (p1 * t1 == BaseClass::Number)
+									p2 = t1;
+								else
+									p1 = t2;
+
+								//if (!((p1 == 1 && p2 == BaseClass::Number) || (p1 == BaseClass::Number && p2 == 1)))
+								return true;
+							}
+						}
+
+						p *= 2;
+					}
+				}
+			}
+
+			p1 = 1;
+			p2 = BaseClass::Number;
+
+			return false;
+		}
+
+	protected:
 		unsigned int getNBits() const
 		{
 			return BaseClass::getNrQubits() - phaseEstimation.getFunctionStartQubit();
 		}
-
-		unsigned int Number;
 
 		ShorFunction fx;
 		QC::SubAlgo::ShorPhaseEstimation<VectorClass, MatrixClass> phaseEstimation;

@@ -119,8 +119,8 @@ namespace QC {
 			using BaseClass = QC::QuantumSubAlgorithmOnSubregisterWithAncilla<VectorClass, MatrixClass>;
 			using RegisterClass = typename BaseClass::RegisterClass;
 
-			OracleWithGates(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX, unsigned int targetQubit = 0, unsigned int startAncilla = INT_MAX)
-				: BaseClass(N, startQubit, endQubit), nControlledNOTs(INT_MAX), target(targetQubit)
+			OracleWithGates(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX, unsigned int startTargetQubits = 0, unsigned int startAncilla = INT_MAX)
+				: BaseClass(N, startQubit, endQubit), nControlledNOTs(INT_MAX), target(startTargetQubits)
 			{
 				std::vector<unsigned int> controlQubits(endQubit - startQubit + 1);
 				std::iota(controlQubits.begin(), controlQubits.end(), startQubit);
