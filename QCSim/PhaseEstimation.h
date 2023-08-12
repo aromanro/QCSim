@@ -137,7 +137,7 @@ namespace QC {
 
 
 
-
+		// this one uses a big matrix made by tensor product, using the NQubitsControlledQuantumGate implementation
 		template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PhaseEstimation : public PhaseEstimationBase<VectorClass, MatrixClass>
 		{
 		public:
@@ -147,6 +147,7 @@ namespace QC {
 			PhaseEstimation(const MatrixClass& op, unsigned int N = 7, unsigned int L = 3)
 				: BaseClass(N, L), U(op)
 			{
+				assert(U.rows() == U.cols());
 			}
 
 			unsigned int Execute(RegisterClass& reg) override
@@ -216,6 +217,93 @@ namespace QC {
 			MatrixClass U;
 		};
 
+
+		template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PhaseEstimationWithoutTensorProduct : public PhaseEstimationBase<VectorClass, MatrixClass>
+		{
+		public:
+			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+			using BaseClass = PhaseEstimationBase<VectorClass, MatrixClass>;
+
+			PhaseEstimationWithoutTensorProduct(const MatrixClass& op, unsigned int N = 7, unsigned int L = 3)
+				: BaseClass(N, L), U(op)
+			{
+				assert(U.rows() == 2);
+			}
+
+			unsigned int Execute(RegisterClass& reg) override
+			{
+				ExecuteWithoutMeasurement(reg);
+
+				// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
+				// the f should be measured separately to find out its content
+
+				//return reg.Measure();
+				return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
+			}
+
+			std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(RegisterClass& reg, unsigned int nrMeasurements = 10000)
+			{
+				ExecuteWithoutMeasurement(reg);
+
+				return reg.RepeatedMeasure(0, BaseClass::getFunctionStartQubit() - 1, nrMeasurements);
+			}
+
+			const MatrixClass& getU() const
+			{
+				return U;
+			}
+
+		protected:
+			void ExecuteWithoutMeasurement(RegisterClass& reg)
+			{
+				// TODO: check if things are set up all right: size of U, size of reg, etc.
+
+				BaseClass::Init(reg);
+
+				MatrixClass gateOp = U;
+				const unsigned int lastQubit = BaseClass::getFunctionStartQubit() - 1;
+
+				// There is another way which I'll let commented out here
+				// the current one is more efficient due of avoiding the swap gates when doing the IQFT
+				// with the IQFT with the swap, just uncomment the following for loop and comment the one after it
+				// do a similar thing for the last U gate application
+
+				//for (unsigned int ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
+				for (unsigned int ctrlQubit = lastQubit; ctrlQubit > 0; --ctrlQubit)
+				{
+					MatrixClass opMat = MatrixClass::Identity(4, 4);
+					opMat.block(2, 2, 2, 2) = gateOp;
+					ControlledGate.setOperator(opMat);
+					ControlledGate.setQubit1(BaseClass::getFunctionStartQubit());
+					ControlledGate.setQubit2(ctrlQubit);
+
+					reg.ApplyGate(ControlledGate);
+
+					// power up the controlled gate
+					gateOp *= gateOp;
+				}
+
+				{
+					MatrixClass opMat = MatrixClass::Identity(4, 4);
+					opMat.block(2, 2, 2, 2) = gateOp;
+					ControlledGate.setOperator(opMat);
+					ControlledGate.setQubit1(BaseClass::getFunctionStartQubit());
+					ControlledGate.setQubit2(0);
+
+					reg.ApplyGate(ControlledGate);
+				}
+
+				// it doesn't really matter if you measure the qubits from f and when you do after the above
+				// or if you measure them several times in a row
+				//QC::QuantumAlgorithm<VectorClass, MatrixClass>::Measure(BaseClass::getFunctionStartQubit(), QC::QuantumAlgorithm<VectorClass, MatrixClass>::getNrQubits() - 1);
+
+				// then perform an inverse fourier transform
+				BaseClass::IQFT(reg, false);
+			}
+
+			MatrixClass U;
+			Gates::AppliedGate<MatrixClass> ControlledGate;
+		};
 	}
 
 }

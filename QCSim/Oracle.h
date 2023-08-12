@@ -93,6 +93,8 @@ namespace QC {
 				for (unsigned int q = 0; q < nrQubits; ++q)
 					if (qubits[q])
 						reg.ApplyGate(x, sQubit + q);
+
+				return 0;
 			}
 
 			void setFunction(const Function& f)
@@ -225,6 +227,8 @@ namespace QC {
 				for (unsigned int q = 0; q < nrQubits; ++q)
 					if (qubits[q])
 						reg.ApplyGate(x, sQubit + q);
+
+				return 0;
 			}
 
 			void setFunction(const Function& f)
