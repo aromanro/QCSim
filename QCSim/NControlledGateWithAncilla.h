@@ -18,7 +18,7 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			NControlledGatesWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			NControlledGatesWithAncilla(unsigned int N = INT_MAX, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit), startAncillaQubits(1), clearAncillaAtTheEnd(true)
 			{
 			}

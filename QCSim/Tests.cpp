@@ -22,9 +22,10 @@ std::mt19937 gen(rd());
 std::bernoulli_distribution dist_bool;
 std::uniform_real_distribution<> dist_ampl(-1., 1.);
 
-bool ShorTests()
+
+bool ShorTestsWithoutTensorProduct()
 {
-	std::cout << "\nTesting Shor..." << std::endl;
+	std::cout << "\nTesting Shor without a tensor product..." << std::endl;
 
 	/*
 	{
@@ -32,7 +33,7 @@ bool ShorTests()
 		std::map<int, int> measurements;
 		const int nrMeasurements = 100;
 
-		Shor::ShorAlgorithm shorAlgo;
+		Shor::ShorAlgorithmWithoutTensorProduct shorAlgo;
 
 		// with 2 (default) f should be 1, 2, 4, 8 for performing period finding
 		//shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13
@@ -56,15 +57,97 @@ bool ShorTests()
 			//++fmeasurements[state];
 		}
 
-		std::cout << "f register (with 4 should be 1, 4)" << std::endl;
+		std::cout << "f register (with 4 should be 1, 4, with 7 should be 1, 7, 4, 13)" << std::endl;
 		for (auto m : fmeasurements)
 			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
-		std::cout << "x register" << std::endl;
+		std::cout << "x register (with 7 should be 4, 0, 2, 6)" << std::endl;
 		for (auto m : measurements)
 			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 	}
 	*/
+
+	for (int i = 0; i < 10;)
+	{
+		Shor::ShorAlgorithmWithoutTensorProduct<> shorAlgo;
+		unsigned int p1;
+		unsigned int p2;
+		bool res = shorAlgo.factorize(p1, p2);
+		if (p2 > p1) std::swap(p1, p2);
+
+		std::cout << (res ? "Quantum algo: " : "Classical algo: ") << p1 << " " << p2 << std::endl;
+
+		if (p1 != 5 && p2 != 3) return false;
+
+		if (res) ++i;
+	}
+
+
+	// this is slow, so it stays commented out, it's only for occasional tests
+	// WARNING: needs 22 qubits, I did not test it yet
+	/*
+	for (;;) {
+		Shor::ShorAlgorithmWithoutTensorProduct shorAlgo(21, 9, 5);
+		unsigned int p1;
+		unsigned int p2;
+		bool res = shorAlgo.factorize(p1, p2);
+		if (p2 > p1) std::swap(p1, p2);
+
+		std::cout << (res ? "Quantum algo: " : "Classical algo: ") << p1 << " " << p2 << std::endl;
+
+		if (p1 != 7 && p2 != 3) return false;
+
+		if (res) break; // managed to factorize using the quantum algo
+	}
+	*/
+
+	return true;
+}
+
+bool ShorTests()
+{
+	std::cout << "\nTesting Shor (with tensor product)..." << std::endl;
+
+	/*
+	{
+		// check f
+		std::map<int, int> measurements;
+		const int nrMeasurements = 100;
+
+		Shor::ShorAlgorithm shorAlgo;
+
+		// with 2 (default) f should be 1, 2, 4, 8 for performing period finding
+		shorAlgo.setA(7); // with 7 should be 1, 7, 4, 13
+		//shorAlgo.setA(4); // should be 1, 4
+		//shorAlgo.setA(8); // 1, 8, 4, 2
+		//shorAlgo.setA(11); // 1, 11
+		//shorAlgo.setA(13); // 1, 13, 4, 7
+		//shorAlgo.setA(14); // 1, 14
+
+		std::map<int, int> fmeasurements;
+
+		for (int i = 0; i < nrMeasurements; ++i)
+		{
+			unsigned int state = shorAlgo.Execute();
+			++measurements[state & 0x7]; //only the l bits matter
+
+			// this should work only if Execute calls full register measurement, otherwise use the commented part below
+			++fmeasurements[state >> 3]; //save the f register measurements for debugging
+
+			//state = shorAlgo.reg.Measure(3, 6);
+			//++fmeasurements[state];
+		}
+
+		std::cout << "f register (with 4 should be 1, 4, with 7 should be 1, 7, 4, 13)" << std::endl;
+		for (auto m : fmeasurements)
+			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+
+		std::cout << "x register (with 7 should be 4, 0, 2, 6)" << std::endl;
+		for (auto m : measurements)
+			std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
+	}
+	*/
+	
 	
 	for (int i = 0; i < 10;)
 	{
@@ -98,7 +181,7 @@ bool ShorTests()
 	}
 	*/
 
-	return true;
+	return ShorTestsWithoutTensorProduct();
 }
 
 
