@@ -200,7 +200,7 @@ bool GroverWithGatesTests()
 
 		for (int i = 0; i < 5; ++i)
 		{
-			const int ans = dist(gen);
+			const unsigned int ans = dist(gen);
 
 			std::cout << "Testing for answer: " << ans << std::endl;
 			
@@ -243,7 +243,7 @@ bool GroverTests()
 
 		for (int i = 0; i < 5; ++i)
 		{
-			const int ans = dist(gen);
+			const unsigned int ans = dist(gen);
 
 			std::cout << "Testing for answer: " << ans << std::endl;
 
@@ -620,13 +620,12 @@ bool CountingTests()
 	unsigned int nrMeasurements = 10000;
 
 	unsigned int nrGroverStates = 1 << nrGroverQubits;
-	unsigned int nrPrecisionStates = 1 << nrPrecisionQubits;
-	for (int nrMarked = 0; nrMarked <= nrGroverStates; ++nrMarked)
+	for (unsigned int nrMarked = 0; nrMarked <= nrGroverStates; ++nrMarked)
 	{
 		// pick 'nrMarked' states at random:		
 		std::vector<unsigned int> states(nrGroverStates);
 		std::iota(states.begin(), states.end(), 0);
-		std::shuffle(states.begin(), states.end(), std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count()));
+		std::shuffle(states.begin(), states.end(), std::default_random_engine(static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count())));
 		states.resize(nrMarked);
 
 		QuantumCounting::QuantumCountingAlgorithm<> quantumCountingAlgorithm(nrPrecisionQubits, nrGroverQubits);

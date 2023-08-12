@@ -193,8 +193,8 @@ namespace QC {
 					if (!fval) continue;
 
 					nControlledNOTs.ClearGates();
-					unsigned int q = target;
-					while (fval)
+					
+					for (unsigned int q = target; fval; ++q)
 					{
 						if (fval & 1)
 						{
@@ -203,7 +203,6 @@ namespace QC {
 						}
 
 						fval >>= 1;
-						++q;
 					}
 
 					unsigned int realState = state << sQubit;

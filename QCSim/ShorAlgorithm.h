@@ -76,7 +76,7 @@ namespace Shor {
 			return A;
 		}
 
-		unsigned long long int mod(unsigned long long int v)
+		unsigned int mod(unsigned long long int v)
 		{
 			return v % Number;
 		}
@@ -98,7 +98,7 @@ namespace Shor {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ShorAlgorithmBase(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
+		ShorAlgorithmBase(unsigned int C = 15, unsigned int N = 7, int addseed = 0)
 			: BaseClass(N, addseed),
 			Number(C)
 		{
@@ -169,7 +169,7 @@ namespace Shor {
 		using BaseClass = ShorAlgorithmBase<VectorClass, MatrixClass>;
 
 		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
-			: BaseClass(C, N, L, addseed),
+			: BaseClass(C, N, addseed),
 			fx(L, C), phaseEstimation(fx, N, L)
 		{
 		}
@@ -292,6 +292,10 @@ namespace Shor {
 
 
 	// this is not the best implementation, for a better one see "Circuit for Shor's algorithm using 2n+3 qubits" https://arxiv.org/abs/quant-ph/0205095
+	// it's implemented using the same method as described in 
+	// "Fundamentals In Quantum Algorithms: A Tutorial Series Using Qiskit Continued" by Daniel Koch, Saahil Patel, Laura Wessing, Paul M. Alsing
+	// https://arxiv.org/abs/2008.10647
+	
 	// I could also have this implemented using the oracle class, but I'm lazy... I would still have to provide a function implementation, so I put all of it here
 	// maybe I'll change it later, might need some changes in the oracle class for it
 
@@ -317,7 +321,7 @@ namespace Shor {
 
 			std::vector<bool> qubits(fRegisterStartQubit, false);
 
-			unsigned long long int An = mod(A);
+			unsigned int An = mod(A);
 
 			for (unsigned int state = 0; state < nrStates; ++state)
 			{
@@ -370,7 +374,7 @@ namespace Shor {
 			return A;
 		}
 
-		unsigned long long int mod(unsigned long long int v)
+		unsigned int mod(unsigned long long int v)
 		{
 			return v % Number;
 		}
@@ -402,7 +406,7 @@ namespace Shor {
 		using BaseClass = ShorAlgorithmBase<VectorClass, MatrixClass>;
 
 		ShorAlgorithmWithoutTensorProduct(unsigned int C = 15, unsigned int L = 3, int M = 4, int addseed = 0)
-			: BaseClass(C, 2 * L + M - 1, L, addseed),
+			: BaseClass(C, 2 * L + M - 1, addseed),
 			fx(L, M, C), 
 			fourier(2 * L + M - 1, 0, L - 1)
 		{
@@ -414,7 +418,7 @@ namespace Shor {
 
 			fx.Apply(BaseClass::reg);
 
-			IQFT();
+			IQFT(false);
 
 			// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 			// the f should be measured separately to find out its content

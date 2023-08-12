@@ -62,7 +62,7 @@ namespace QuantumCounting {
 		// start from zero, don't go over the maximum that is allowed by the GroverQubits
 		void AddMarkedState(unsigned int state)
 		{
-			if (state >= (1 << groverQubits)) return;
+			if (state >= (1u << groverQubits)) return;
 
 			markedStates.insert(state);
 		}
@@ -76,7 +76,7 @@ namespace QuantumCounting {
 
 		unsigned int GetNumberOfMarkedStates() const
 		{
-			return markedStates.size();
+			return static_cast<unsigned int>(markedStates.size());
 		}
 
 		double GetCorrectThetaForMarkedStates() const
