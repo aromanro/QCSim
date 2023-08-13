@@ -112,8 +112,27 @@ namespace QC {
 
 			unsigned int Execute(RegisterClass& reg) override
 			{
+				ExecuteWithoutMeasurement(reg);
+
+				// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
+				// the f should be measured separately to find out its content
+
+				//return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
+				return reg.Measure();
+			}
+
+			std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(RegisterClass& reg, unsigned int nrMeasurements = 10000)
+			{
+				ExecuteWithoutMeasurement(reg);
+
+				return reg.RepeatedMeasure(nrMeasurements);
+			}
+
+		protected:
+			void ExecuteWithoutMeasurement(RegisterClass& reg)
+			{
 				BaseClass::Init(reg);
-				
+
 				// now the f(x)
 				func.Apply(reg);
 
@@ -123,15 +142,8 @@ namespace QC {
 
 				// then perform an inverse fourier transform
 				BaseClass::IQFT(reg);
-
-				// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
-				// the f should be measured separately to find out its content
-
-				//return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
-				return reg.Measure();
 			}
 
-		protected:
 			QC::Function<VectorClass, MatrixClass>& func;
 		};
 
