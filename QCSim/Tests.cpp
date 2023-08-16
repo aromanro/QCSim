@@ -84,7 +84,7 @@ bool ShorTestsWithoutTensorProduct()
 
 
 	// this is slow, so it stays commented out, it's only for occasional tests
-	// WARNING: needs 22 qubits, I did not test it yet
+	// WARNING: needs 22 qubits
 	/*
 	for (;;) {
 		Shor::ShorAlgorithmWithoutTensorProduct shorAlgo(21, 9, 5);
