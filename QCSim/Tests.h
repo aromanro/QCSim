@@ -28,6 +28,8 @@ bool PhaseEstimationTests();
 
 bool DeutschJozsaTests();
 
+bool QMLTests();
+
 bool tests();
 
 #ifndef TESTS_CPP_

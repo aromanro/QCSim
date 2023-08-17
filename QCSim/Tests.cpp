@@ -678,7 +678,7 @@ bool tests()
 	if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
 	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
 	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
-	if (res) res = CountingTests();
+	if (res) res = CountingTests() && QMLTests();
 
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t1).count();
 

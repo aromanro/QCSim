@@ -291,6 +291,7 @@
     <ClCompile Include="QCSim\DistributedTests.cpp" />
     <ClCompile Include="QCSim\GamesTests.cpp" />
     <ClCompile Include="QCSim\PhaseEstimationTests.cpp" />
+    <ClCompile Include="QCSim\QMLTests.cpp" />
     <ClCompile Include="QCSim\TeleportationTests.cpp" />
   </ItemGroup>
   <ItemGroup>
