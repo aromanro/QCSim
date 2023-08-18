@@ -345,7 +345,7 @@ namespace QC {
 				{
 					const unsigned int ind1 = (i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0);
 					const unsigned int m = i & ~qubitBit;
-					const unsigned int m2 = i & ~qubitBit;
+					const unsigned int m2 = i & ~qubitBit2;
 					const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
 
 					result(i) = gateMatrix(ind1, 0) * registerStorage(m & ~qubitBit2 & ~ctrlQubitBit) +

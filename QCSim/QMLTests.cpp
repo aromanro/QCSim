@@ -8,7 +8,7 @@ int clusterForPoint(const MachineLearning::QMeansClustering2D<>::DataPoint& p, c
 {
 	int res = -1;
 
-	int dist = std::numeric_limits<int>::max();
+	double dist = std::numeric_limits<double>::max();
 
 	for (int i = 0; i < centroids.size(); ++i)
 	{
@@ -32,7 +32,7 @@ bool QMeansClustering2DTests()
 
 	const unsigned int nrMeasurements = 10000;
 
-	unsigned int k = 2;
+	unsigned int k = 3;
 	unsigned int pointsPerCluster = 15;
 
 	std::vector<MachineLearning::QMeansClustering2D<>::DataPoint> origCentroids(k);
@@ -42,8 +42,8 @@ bool QMeansClustering2DTests()
 	origCentroids[1].x = 3;
 	origCentroids[1].y = 3;
 
-	//origCentroids[2].x = 1.5;
-	//origCentroids[2].y = 2.;
+	origCentroids[2].x = 1.5;
+	origCentroids[2].y = 2.;
 
 	std::vector<MachineLearning::QMeansClustering2D<>::DataPoint> data;
 	data.reserve(k * pointsPerCluster);
@@ -82,8 +82,7 @@ bool QMeansClustering2DTests()
 	for (int c = 0; c < centroids.size(); ++c)
 		std::cout << "Cluster " << c << " centroid: x: " << centroids[c].x << ", y: " << centroids[c].y << " Points count: " << clusterCounts[c] << std::endl;
 
-	// TODO: This often fails (for more than two clusters), improve (and fix possible bugs)!
-	// not surprisingly it fails for the euclidian metric (since it's not the same as the one used for clustering)
+	// not surprisingly it fails sometimes (especially for k > 2) for the euclidian metric (since it's not the same as the one used for clustering)
 	// but also for the 'overlap' one, due of the probabilistic nature
 	// increasing the number of measurements can make it slow in some cases, so for now I'll leave it like this
 	for (int i = 0; i < dataPoints.size(); ++i)

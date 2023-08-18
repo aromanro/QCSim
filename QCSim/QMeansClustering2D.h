@@ -140,9 +140,9 @@ namespace MachineLearning {
 
 			unsigned int index = 0;
 			bool retry = false;
-			for (int c = 0; c < k; ++c)
+			for (unsigned int c = 0; c < k; ++c)
 			{
-				std::uniform_int_distribution<> dist_nr(c, m_data.size() - 1);
+				std::uniform_int_distribution<> dist_nr(c, static_cast<unsigned int>(m_data.size()) - 1);
 				
 				do {
 					index = dist_nr(rng);
@@ -243,7 +243,7 @@ namespace MachineLearning {
 		{
 			bool terminate = false;
 
-			for (int i = 0; i < maxSteps && !terminate; ++i)
+			for (unsigned int i = 0; i < maxSteps && !terminate; ++i)
 				terminate = UpdateStep(nrMeasurements);
 
 			return terminate;
