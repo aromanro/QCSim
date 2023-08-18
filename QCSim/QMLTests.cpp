@@ -30,6 +30,8 @@ bool QMeansClustering2DTests()
 {
 	std::cout << "\nTesting Q-Means clustering..." << std::endl;
 
+	const unsigned int nrMeasurements = 10000;
+
 	unsigned int k = 2;
 	unsigned int pointsPerCluster = 15;
 
@@ -66,7 +68,7 @@ bool QMeansClustering2DTests()
 
 	MachineLearning::QMeansClustering2D<> qMeansClustering;
 	qMeansClustering.setData(data);
-	if (!qMeansClustering.Cluster(k, 10000)) std::cout << "Did not terminate" << std::endl;
+	if (!qMeansClustering.Cluster(k, nrMeasurements)) std::cout << "Did not terminate" << std::endl;
 
 	std::cout << "Checking results..." << std::endl;
 
@@ -81,11 +83,18 @@ bool QMeansClustering2DTests()
 		std::cout << "Cluster " << c << " centroid: x: " << centroids[c].x << ", y: " << centroids[c].y << " Points count: " << clusterCounts[c] << std::endl;
 
 	// TODO: This often fails (for more than two clusters), improve (and fix possible bugs)!
+	// not surprisingly it fails for the euclidian metric (since it's not the same as the one used for clustering)
+	// but also for the 'overlap' one, due of the probabilistic nature
+	// increasing the number of measurements can make it slow in some cases, so for now I'll leave it like this
 	for (int i = 0; i < dataPoints.size(); ++i)
 	{
 		const double dx = dataPoints[i].x - centroids[dataPoints[i].cluster].x;
 		const double dy = dataPoints[i].y - centroids[dataPoints[i].cluster].y;
 		const double d2 = dx * dx + dy * dy;
+
+		qMeansClustering.SetDataPoint1(dataPoints[i]);
+		qMeansClustering.SetDataPoint2(centroids[dataPoints[i].cluster]);
+		auto res = qMeansClustering.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 		for (int c = 0; c < centroids.size(); ++c)
 		{
@@ -98,7 +107,15 @@ bool QMeansClustering2DTests()
 			if (d2o < d2 && d2 - d2o > 0.1)
 			{
 				std::cout << "Point " << i << " (" << dataPoints[i].x << ", " << dataPoints[i].y << ") is closer to centroid " << c << " (" << centroids[c].x << ", " << centroids[c].y << ") than to centroid " << dataPoints[i].cluster << " (" << centroids[dataPoints[i].cluster].x << ", " << centroids[dataPoints[i].cluster].y << ")" << std::endl;
-				std::cout << "d2 for marked centroid: " << d2 << ", d2 for closer centroid: " << d2o << std::endl;
+				std::cout << "Euclidian: d2 for marked centroid: " << d2 << ", d2 for closer centroid: " << d2o << std::endl;
+			}
+
+			qMeansClustering.SetDataPoint2(centroids[c]);
+			auto res2 = qMeansClustering.ExecuteWithMultipleMeasurements(nrMeasurements);
+			if (res2[0] > res[0])
+			{
+				std::cout << "Point " << i << " (" << dataPoints[i].x << ", " << dataPoints[i].y << ") is closer to centroid " << c << " (" << centroids[c].x << ", " << centroids[c].y << ") than to centroid " << dataPoints[i].cluster << " (" << centroids[dataPoints[i].cluster].x << ", " << centroids[dataPoints[i].cluster].y << ") even with the quantum distance!" << std::endl;
+				std::cout << "Measured count for marked centroid: " << res[0] << ", measured count for closer centroid: " << res2[0] << std::endl;
 				return false;
 			}
 		}

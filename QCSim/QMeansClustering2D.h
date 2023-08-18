@@ -96,6 +96,16 @@ namespace MachineLearning {
 			return Update(nrMeasurements, maxSteps);
 		}
 
+		void SetDataPoint1(const ClusterDataPoint& dataPoint)
+		{
+			SetBlochStateParams(ugate1, dataPoint);
+		}
+
+		void SetDataPoint2(const ClusterDataPoint& dataPoint)
+		{
+			SetBlochStateParams(ugate2, dataPoint);
+		}
+
 	protected:
 		void SetBlochStateParams(QC::Gates::UGate<MatrixClass>& ugate, const ClusterDataPoint& dataPoint)
 		{
@@ -103,7 +113,7 @@ namespace MachineLearning {
 			const double y = (dataPoint.y - ymin) / yspan;
 
 			const double theta = M_PI_2 * (x + y);
-			const double phi = M_PI_2 * (1. + x - y);
+			const double phi = M_PI_2 * (x + 1. - y);
 
 			ugate.SetParams(theta, phi);
 		}
@@ -203,12 +213,12 @@ namespace MachineLearning {
 				unsigned int overlap = 0;
 				int cluster = 0;
 
-				SetBlochStateParams(ugate1, m_data[i]);
+				SetDataPoint1(m_data[i]);
 
 				for (int c = 0; c < centroids.size(); ++c)
 				{
-					SetBlochStateParams(ugate2, centroids[c]);
-
+					SetDataPoint2(centroids[c]);
+				
 					auto res = ExecuteWithMultipleMeasurements(nrMeasurements);
 					assert(res.size() == 1 || res.size() == 2);
 
