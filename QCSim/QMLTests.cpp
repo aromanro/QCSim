@@ -30,7 +30,7 @@ bool QMeansClustering2DTests()
 {
 	std::cout << "\nTesting Q-Means clustering..." << std::endl;
 
-	const unsigned int nrMeasurements = 10000;
+	const unsigned int nrMeasurements = 100000;
 
 	unsigned int k = 3;
 	unsigned int pointsPerCluster = 15;
@@ -82,9 +82,9 @@ bool QMeansClustering2DTests()
 	for (int c = 0; c < centroids.size(); ++c)
 		std::cout << "Cluster " << c << " centroid: x: " << centroids[c].x << ", y: " << centroids[c].y << " Points count: " << clusterCounts[c] << std::endl;
 
-	// not surprisingly it fails sometimes (especially for k > 2) for the euclidian metric (since it's not the same as the one used for clustering)
-	// but also for the 'overlap' one, due of the probabilistic nature
-	// increasing the number of measurements can make it slow in some cases, so for now I'll leave it like this
+	// not surprisingly it fails sometimes (especially for k > 2) for the euclidian metric test (since it's not the same metric as the one used for clustering)
+	// but also sometimes (not so often as for the euclidian metric check, though) for the 'overlap' one, due of the probabilistic nature
+	
 	for (int i = 0; i < dataPoints.size(); ++i)
 	{
 		const double dx = dataPoints[i].x - centroids[dataPoints[i].cluster].x;

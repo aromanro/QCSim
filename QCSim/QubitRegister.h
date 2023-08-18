@@ -317,7 +317,8 @@ namespace QC {
 				for (long long int i = 0; i < NrBasisStates; ++i)
 				{
 					const unsigned int ind1 = i & qubitBit ? 1 : 0;
-					result(i) = gateMatrix(ind1, 0) * registerStorage(i & ~qubitBit) + gateMatrix(ind1, 1) * registerStorage(i | qubitBit);
+					result(i) = gateMatrix(ind1, 0) * registerStorage(i & ~qubitBit) + 
+						        gateMatrix(ind1, 1) * registerStorage(i | qubitBit);
 				}
 			}
 			else if (gateQubits == 2)
