@@ -314,11 +314,12 @@ namespace QC {
 			if (gateQubits == 1)
 			{
 				//#pragma omp parallel for schedule(static, 4096) if (NrBasisStates >= 8192)
-				for (long long int i = 0; i < NrBasisStates; ++i)
+				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int ind1 = i & qubitBit ? 1 : 0;
-					result(i) = gateMatrix(ind1, 0) * registerStorage(i & ~qubitBit) + 
-						        gateMatrix(ind1, 1) * registerStorage(i | qubitBit);
+					const unsigned int row = state & qubitBit ? 1 : 0;
+
+					result(state) = gateMatrix(row, 0) * registerStorage(state & ~qubitBit) +
+						            gateMatrix(row, 1) * registerStorage(state | qubitBit);
 				}
 			}
 			else if (gateQubits == 2)
@@ -326,14 +327,15 @@ namespace QC {
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
 				//#pragma omp parallel for schedule(static, 2048) if (NrBasisStates >= 4096)
-				for (long long int i = 0; i < NrBasisStates; ++i)
+				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int ind1 = (i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0);
-					const unsigned int m = i & ~qubitBit; // ensure it's not computed twice
-					result(i) = gateMatrix(ind1, 0) * registerStorage(m & ~ctrlQubitBit) +
-								gateMatrix(ind1, 1) * registerStorage(i & ~ctrlQubitBit | qubitBit) +
-								gateMatrix(ind1, 2) * registerStorage(m | ctrlQubitBit) +
-								gateMatrix(ind1, 3) * registerStorage(i | qubitBit | ctrlQubitBit);
+					const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const unsigned int m = state & ~qubitBit; // ensure it's not computed twice
+
+					result(state) = gateMatrix(row, 0) * registerStorage(m & ~ctrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+								    gateMatrix(row, 1) * registerStorage(state & ~ctrlQubitBit | qubitBit) +   // state & ~ctrlQubitBit |  qubitBit      : 01
+								    gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                   // state & ~qubitBit     |  ctrlQubitBit  : 10
+								    gateMatrix(row, 3) * registerStorage(state | qubitBit | ctrlQubitBit);     // state |  ctrlQubitBit |  qubitBit      : 11
 				}
 			}
 			else
@@ -342,21 +344,22 @@ namespace QC {
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
 				
 				//#pragma omp parallel for schedule(static, 1024) if (NrBasisStates >= 2048)
-				for (long long int i = 0; i < NrBasisStates; ++i)
+				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int ind1 = (i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0);
-					const unsigned int m = i & ~qubitBit;
-					const unsigned int m2 = i & ~qubitBit2;
+					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const unsigned int m = state & ~qubitBit;
+					const unsigned int m2 = state & ~qubitBit2;
 					const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
-
-					result(i) = gateMatrix(ind1, 0) * registerStorage(m & ~qubitBit2 & ~ctrlQubitBit) +
-								gateMatrix(ind1, 1) * registerStorage(m2 & ~ctrlQubitBit | qubitBit) +
-								gateMatrix(ind1, 2) * registerStorage(m & ~ctrlQubitBit | qubitBit2) +
-								gateMatrix(ind1, 3) * registerStorage(i & ~ctrlQubitBit | qubitBit | qubitBit2) +
-								gateMatrix(ind1, 4) * registerStorage(m & ~qubitBit2 | ctrlQubitBit) +
-								gateMatrix(ind1, 5) * registerStorage(m2 | ctrlQubitBit | qubitBit) +
-								gateMatrix(ind1, 6) * registerStorage(m | ctrlqubits) +
-								gateMatrix(ind1, 7) * registerStorage(i | qubitBit | ctrlqubits);
+					const unsigned int mnctrlQubitBit = m & ~ctrlQubitBit;
+					
+					result(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & ~qubitBit2) +                    // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+								    gateMatrix(row, 1) * registerStorage(m2 & ~ctrlQubitBit | qubitBit) +				   // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+								    gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					   // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+								    gateMatrix(row, 3) * registerStorage(state & ~ctrlQubitBit | qubitBit | qubitBit2) +   // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+								    gateMatrix(row, 4) * registerStorage(m & ~qubitBit2 | ctrlQubitBit) +				   // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+								    gateMatrix(row, 5) * registerStorage(m2 | ctrlQubitBit | qubitBit) +				   // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+								    gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								   // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+								    gateMatrix(row, 7) * registerStorage(state | qubitBit | ctrlqubits);                   // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
 				}
 			}
 

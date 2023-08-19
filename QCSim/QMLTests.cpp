@@ -84,6 +84,7 @@ bool QMeansClustering2DTests()
 
 	// not surprisingly it fails sometimes (especially for k > 2) for the euclidian metric test (since it's not the same metric as the one used for clustering)
 	// but also sometimes (not so often as for the euclidian metric check, though) for the 'overlap' one, due of the probabilistic nature
+	// increasing the number of measurements helps, of course, but obviously it slows down the execution
 	
 	for (int i = 0; i < dataPoints.size(); ++i)
 	{
