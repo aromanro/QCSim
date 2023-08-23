@@ -16,13 +16,14 @@ namespace Distributed {
 	// for a detailed description (along with more general cases, like a distributed controlled-U) see "Generalized GHZ States and Distributed Quantum Computing"
 	// https://arxiv.org/abs/quant-ph/0402148v3
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DistributedCNOT : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd, class ControlledUClass = QC::Gates::CNOTGate<MatrixClass>> class DistributedCU : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DistributedCNOT(int addseed = 0)
-			: BaseClass(4, addseed)
+		DistributedCU(unsigned int nrQubits = 4, unsigned int ctrlq = 0, unsigned int targetq = 3, unsigned int entq1 = 1, unsigned int entq2 = 2, int addseed = 0)
+			: BaseClass(nrQubits, addseed), ctrlQubit(ctrlq), targetQubit(targetq), entQubit1(entq1), entQubit2(entq2)
 		{
 			BaseClass::setToBasisState(0);
 		}
@@ -32,33 +33,53 @@ namespace Distributed {
 		unsigned int Execute() override
 		{
 			// the two gates make up an 'entangling gate', sometimes noted by E or E2
-			BaseClass::ApplyGate(hadamard, 1);
-			BaseClass::ApplyGate(cnot, 2, 1);
+			BaseClass::ApplyGate(hadamard, entQubit1);
+			BaseClass::ApplyGate(cnot, entQubit2, entQubit1);
 
-			BaseClass::ApplyGate(cnot, 1, 0);
+			// teleport the control qubit
 
-			const unsigned int qubit1measurement = BaseClass::Measure(1); // measured and sent to the other
+			BaseClass::ApplyGate(cnot, entQubit1, ctrlQubit);
+
+			const unsigned int qubit1measurement = BaseClass::Measure(entQubit1); // measured and sent to the other
 			if (qubit1measurement) // the other applies x conditionally on the received measurement
-				BaseClass::ApplyGate(x, 2);
+				BaseClass::ApplyGate(x, entQubit2);
 
-			BaseClass::ApplyGate(cnot, 3, 2);
+			// use teleported qubit to control the controlled-U
+			BaseClass::ApplyGate(cU, targetQubit, entQubit2);
 
 			// cat-disentangler follows
-			BaseClass::ApplyGate(hadamard, 2);
+			BaseClass::ApplyGate(hadamard, entQubit2);
 
-			const unsigned int qubit2measurement = BaseClass::Measure(2); // measured and sent to the other
+			const unsigned int qubit2measurement = BaseClass::Measure(entQubit2); // measured and sent to the other
 			if (qubit2measurement) // the other applies z conditionally on the received measurement
-				BaseClass::ApplyGate(z, 0);
+				BaseClass::ApplyGate(z, ctrlQubit);
 
 			// return the result of the measurements
 			return (qubit2measurement << 1) | qubit1measurement;
 		}
 
 	protected:
+		unsigned int ctrlQubit;
+		unsigned int targetQubit;
+		unsigned int entQubit1;
+		unsigned int entQubit2;
 		QC::Gates::CNOTGate<MatrixClass> cnot;
+		ControlledUClass cU;
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
 		QC::Gates::PauliXGate<MatrixClass> x;
 		QC::Gates::PauliZGate<MatrixClass> z;
+	};
+
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DistributedCNOT : public DistributedCU<VectorClass, MatrixClass>
+	{
+	public:
+		using BaseClass = DistributedCU<VectorClass, MatrixClass>;
+
+		DistributedCNOT(int addseed = 0)
+			: BaseClass(4, 0, 3, 1, 2, addseed)
+		{
+		}
 	};
 
 
