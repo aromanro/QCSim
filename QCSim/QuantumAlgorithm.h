@@ -28,6 +28,11 @@ namespace QC {
 			return reg.getBasisStateAmplitude(State);
 		}
 
+		double getBasisStateProbability(unsigned int State) const
+		{
+			return reg.getBasisStateProbability(State);
+		}
+
 		void setToBasisState(unsigned int State)
 		{
 			reg.setToBasisState(State);
@@ -102,6 +107,11 @@ namespace QC {
 		void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate)
 		{
 			reg.ApplyGate(gate);
+		}
+
+		void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates)
+		{
+			reg.ApplyGates(gates);
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)

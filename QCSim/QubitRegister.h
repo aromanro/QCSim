@@ -49,6 +49,12 @@ namespace QC {
 			return registerStorage(State);
 		}
 
+		double getBasisStateProbability(unsigned int State) const {
+			if (State >= NrBasisStates) return 0;
+
+			return std::norm(registerStorage(State));
+		}
+
 		void setToBasisState(unsigned int State)
 		{
 			if (State >= NrBasisStates) return;
@@ -377,6 +383,12 @@ namespace QC {
 		void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate)
 		{
 			ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
+		}
+
+		void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates)
+		{
+			for (const auto& gate : gates)
+				ApplyGate(gate);
 		}
 
 		void ApplyOperatorMatrix(const MatrixClass& m)
