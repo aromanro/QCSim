@@ -313,6 +313,7 @@
     <ClInclude Include="QCSim\GroverAlgorithm.h" />
     <ClInclude Include="QCSim\HadamardTransform.h" />
     <ClInclude Include="QCSim\HardyParadox.h" />
+    <ClInclude Include="QCSim\IsingModel.h" />
     <ClInclude Include="QCSim\MagicSquare.h" />
     <ClInclude Include="QCSim\NControlledGateWithAncilla.h" />
     <ClInclude Include="QCSim\NControlledNotWithAncilla.h" />
