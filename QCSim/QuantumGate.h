@@ -289,7 +289,7 @@ namespace QC {
 			}
 		};
 
-
+		// sx gate, also known as the square root of x gate
 		template<class MatrixClass = Eigen::MatrixXcd> class SquareRootNOTGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
@@ -402,19 +402,19 @@ namespace QC {
 			using BaseClass = SingleQubitGate<MatrixClass>;
 			using OpClass = SingleQubitGate<MatrixClass>::BaseClass;
 
-			UGate(double theta = 0, double phi = 0, double lambda = 0)
+			UGate(double theta = 0, double phi = 0, double lambda = 0, double gamma = 0)
 			{
-				SetParams(theta, phi, lambda);
+				SetParams(theta, phi, lambda, gamma);
 			}
 
-			virtual void SetParams(double theta = 0, double phi = 0, double lambda = 0)
+			virtual void SetParams(double theta = 0, double phi = 0, double lambda = 0, double gamma = 0)
 			{
 				const double t2 = theta * 0.5;
 
-				OpClass::operatorMat(0, 0) = std::complex<double>(cos(t2), 0.);
-				OpClass::operatorMat(0, 1) = -std::polar(1., lambda) * sin(t2);
-				OpClass::operatorMat(1, 0) = std::polar(1., phi) * sin(t2);
-				OpClass::operatorMat(1, 1) = std::polar(1., phi + lambda) * cos(t2);
+				OpClass::operatorMat(0, 0) = std::polar(1., gamma) * std::complex<double>(cos(t2), 0.);
+				OpClass::operatorMat(0, 1) = -std::polar(1., gamma + lambda) * sin(t2);
+				OpClass::operatorMat(1, 0) = std::polar(1., gamma + phi) * sin(t2);
+				OpClass::operatorMat(1, 1) = std::polar(1., gamma + phi + lambda) * cos(t2);
 			}
 		};
 
@@ -638,6 +638,102 @@ namespace QC {
 			void SetPhaseShift(double theta)
 			{
 				OpClass::operatorMat(3, 3) = std::polar(1., theta);
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledUGate : public TwoQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledUGate(double theta = 0, double phi = 0, double lambda = 0, double gamma = 0)
+			{
+				SetParams(theta, phi, lambda, gamma);
+			}
+
+			virtual void SetParams(double theta = 0, double phi = 0, double lambda = 0, double gamma = 0)
+			{
+				const double t2 = theta * 0.5;
+
+				OpClass::operatorMat(2, 2) = std::polar(1., gamma) * std::complex<double>(cos(t2), 0.);
+				OpClass::operatorMat(2, 3) = -std::polar(1., gamma + lambda) * sin(t2);
+				OpClass::operatorMat(3, 2) = std::polar(1., gamma + phi) * sin(t2);
+				OpClass::operatorMat(3, 3) = std::polar(1., gamma + phi + lambda) * cos(t2);
+			}
+		};
+
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledRotationGate : public TwoQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			virtual void SetTheta(double theta) = 0;
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledRxGate : public ControlledRotationGate<MatrixClass>
+		{
+		public:
+			using BaseClass = ControlledRotationGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledRxGate(double theta = 0)
+			{
+				SetTheta(theta);
+			}
+
+			void SetTheta(double theta) override
+			{
+				const double t2 = theta * 0.5;
+
+				OpClass::operatorMat(2, 2) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(2, 3) = std::complex<double>(0, -sin(t2));
+				OpClass::operatorMat(3, 2) = OpClass::operatorMat(2, 3);
+				OpClass::operatorMat(3, 3) = OpClass::operatorMat(2, 2);
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledRyGate : public ControlledRotationGate<MatrixClass>
+		{
+		public:
+			using BaseClass = ControlledRotationGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledRyGate(double theta = 0)
+			{
+				SetTheta(theta);
+			}
+
+			void SetTheta(double theta) override
+			{
+				const double t2 = theta * 0.5;
+
+				OpClass::operatorMat(2, 2) = std::complex<double>(cos(t2), 0);
+				OpClass::operatorMat(2, 3) = std::complex<double>(-sin(t2), 0);
+				OpClass::operatorMat(3, 2) = std::complex<double>(sin(t2), 0);
+				OpClass::operatorMat(3, 3) = OpClass::operatorMat(2, 2);
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledRzGate : public ControlledRotationGate<MatrixClass>
+		{
+		public:
+			using BaseClass = ControlledRotationGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledRzGate(double theta = 0)
+			{
+				SetTheta(theta);
+			}
+
+			void SetTheta(double theta) override
+			{
+				const double t2 = theta * 0.5;
+
+				OpClass::operatorMat(2, 2) = std::polar(1., -t2);
+				OpClass::operatorMat(3, 3) = std::polar(1., t2);
 			}
 		};
 

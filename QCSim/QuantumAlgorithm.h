@@ -59,11 +59,6 @@ namespace QC {
 			reg.setRawAmplitude(State, val);
 		}
 
-		std::complex<double> getRawAmplitude(unsigned int State) const
-		{
-			return reg.getRawAmplitude(State);
-		}
-
 		void Clear()
 		{
 			reg.Clear();

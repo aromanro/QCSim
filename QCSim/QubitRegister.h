@@ -24,7 +24,7 @@ namespace QC {
 	public:
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
-		QubitRegister(int N = 3, int addseed = 0)
+		QubitRegister(unsigned int N = 3, int addseed = 0)
 			: NrQubits(N), NrBasisStates(1u << NrQubits),
 			uniformZeroOne(0, 1), recordGates(false)
 		{
@@ -36,6 +36,8 @@ namespace QC {
 			const std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
 
 			rng.seed(seed);
+
+			registerStorage(0) = 1;
 		}
 
 		virtual ~QubitRegister() {}
@@ -95,13 +97,6 @@ namespace QC {
 			if (State >= NrBasisStates) return;
 
 			registerStorage(State) = val;
-		}
-
-		std::complex<double> getRawAmplitude(unsigned int State) const
-		{
-			if (State >= NrBasisStates) return 0.;
-
-			return registerStorage(State);
 		}
 
 		void Clear()
