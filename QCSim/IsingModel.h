@@ -163,9 +163,76 @@ namespace Models {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class IsingSubalgorithm : public QC::QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
+		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
+
+		void ApplyIsingOperator(RegisterClass& reg, double gamma)
+		{
+			// interactions
+			const auto& neighbors = model.GetNeighbours();
+			const auto& interactions = model.GetInteractions();
+
+			for (const auto& site : neighbors)
+				for (const auto& n : site.second)
+				{
+					const unsigned int q1 = site.first;
+					const unsigned int q2 = n;
+					const auto& J = interactions.find({ q1, q2 });
+					if (J != interactions.end())
+					{
+						const double Jval = J->second;
+
+						rz.SetTheta(2 * gamma * Jval);
+					}
+					else
+						rz.SetTheta(2 * gamma);
+
+					reg.Apply(cnot, q1, q2);
+					reg.Apply(rz, q2);
+					reg.Apply(cnot, q1, q2);
+				}
+
+			// on site
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+			{
+				const double hval = model.GetH(q);
+
+				rz.SetTheta(2 * gamma * hval);
+				reg.Apply(rz, q);
+			}
+		}
+
+		void ApplyMixingOperator(RegisterClass& reg, double beta, int nrTimes = 1)
+		{
+			const double twobeta = 2 * beta;
+			rx.SetTheta(twobeta);
+			ry.SetTheta(twobeta);
+
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				reg.Apply(rx, q);
+
+			for (unsigned int i = 0; i < nrTimes; ++i)
+			{
+				unsigned int lastQubit = reg.getNrQubits() - 1;
+				for (size_t q = 0; q < lastQubit; ++q)
+					reg.Apply(cnot, q + 1, q);
+
+				reg.Apply(cnot, 0, lastQubit);
+			}
+
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				reg.Apply(ry, q);
+		}
+
 	protected:
+		void ApplyHadamardOnAll(RegisterClass& reg)
+		{
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				reg.Apply(h, q);
+		}
+
 		IsingModel model;
 
+		QC::Gates::HadamardGate<MatrixClass> h;
 		QC::Gates::CNOTGate<MatrixClass> cnot;
 		QC::Gates::RxGate<MatrixClass> rx;
 		QC::Gates::RyGate<MatrixClass> ry;
