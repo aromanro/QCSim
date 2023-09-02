@@ -163,7 +163,6 @@ namespace Models {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class IsingSubalgorithm : public QC::QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-
 	protected:
 		IsingModel model;
 

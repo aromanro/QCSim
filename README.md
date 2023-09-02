@@ -55,7 +55,7 @@ Distributed quantum computing:
 Quantum Machine Learning
 *   2D Q-Means Clustering
 
-First, a bried description about usage, if somebody wants to use it in a separate project. The minimal thing to do is to add to include directories the Eigen directory and this project directory (the one that contains the source files). That's about it. Here is some minimal code that can be extended to execute a quantum algorithm:
+First, a brief description about usage, if somebody wants to use it in a separate project. The minimal thing to do is to add to include directories the Eigen directory and this project directory (the one that contains the source files). That's about it. Here is some minimal code that can be extended to execute a quantum algorithm:
 
 ```
 #include <iostream>
@@ -76,7 +76,7 @@ int main()
 ```
 
 Of course, if one wants to use some other stuff in there, more headers might need to be included.
-The 'test' cpp files are intended for both tests and examples.
+The 'test' cpp files are intended for both tests and examples, not necesarily for usage in some other app, including the headers should usually be enough.
 
 The most important code to look into are in `QuantumGate.h` (namespace `QC::Gates`), where the quantum gates are implemented. The code is quite straightforward, a little bit more complex being the implementation of `getOperatorMatrix` (obsoleted now, it's not used anymore for 1, 2 or 3 qubits gates, creation and multiplication with the big operator matrices for those gates is optimized out now), which extends the operator matrix from the matrix that involves only the qubits on which the operator is applied, to all qubits from the register. 
 Another header to look into is `QubitRegister.h`. The code is again straightforward, a little bit more complex being the one that does the measurement on a part of the register only. Also since the usage of the big operator matrices obtained by tensor product for 1, 2, 3 qubits gates is obsoleted, the code from `QubitRegister::ApplyGate` also got more complex so it might not be so easy to grasp.
