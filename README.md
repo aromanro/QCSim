@@ -83,7 +83,7 @@ Another header to look into is `QubitRegister.h`. The code is again straightforw
 One used everywhere is the `QuantumAlgorithm.h` although that one is very simple, mostly a proxy for the qubit register.
 Another source file worth looking into is `Utils.h`, since `BellState` and `MeasurementBasis` are used in several algorithms.
 
-For general operators/gates applied on the register, see the `NQubitsQuantumGate` and `NQubitsControlledQuantumGate` "subalgorithm" classes.
+For general operators/gates applied on the register, see the `NQubitsQuantumGate` and `NQubitsControlledQuantumGate` "subalgorithm" classes (for implementations with a big matrix) or `NControlledGateWithAncilla.h` and `NControlledNotWithAncilla.h` (for implementations with simple gates and ancilla qubits).
 
 To see various algorithms in action, look into the `Test` files.
 
