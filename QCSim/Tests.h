@@ -30,6 +30,8 @@ bool DeutschJozsaTests();
 
 bool QMLTests();
 
+bool IsingTests();
+
 bool tests();
 
 #ifndef TESTS_CPP_

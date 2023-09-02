@@ -5,6 +5,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "QuantumGate.h"
+#include "QuantumAlgorithm.h"
+
 namespace Models {
 
 	template <typename type1 = size_t, typename type2 = size_t> class PairHash {
@@ -124,6 +127,26 @@ namespace Models {
 			return Energy();
 		}
 
+		const std::vector<bool>& GetSpins() const
+		{
+			return spins;
+		}
+
+		const std::vector<double>& GetH() const
+		{
+			return h;
+		}
+
+		const std::unordered_map<size_t, std::unordered_set<size_t>>& GetNeighbours() const
+		{
+			return neighbours;
+		}
+
+		const std::unordered_map<std::pair<size_t, size_t>, double, PairHash<>>& GetInteractions() const
+		{
+			return interactions;
+		}
+
 	protected:
 		static int GetTrueSpin(bool s)
 		{
@@ -134,6 +157,20 @@ namespace Models {
 		std::vector<double> h;
 		std::unordered_map<size_t, std::unordered_set<size_t>> neighbours;
 		std::unordered_map<std::pair<size_t, size_t>, double, PairHash<>> interactions;
+	};
+
+
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class IsingSubalgorithm : public QC::QuantumSubAlgorithm<VectorClass, MatrixClass>
+	{
+	public:
+
+	protected:
+		IsingModel model;
+
+		QC::Gates::CNOTGate<MatrixClass> cnot;
+		QC::Gates::RxGate<MatrixClass> rx;
+		QC::Gates::RyGate<MatrixClass> ry;
+		QC::Gates::RzGate<MatrixClass> rz;
 	};
 
 } // namespace Models
