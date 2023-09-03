@@ -680,6 +680,15 @@ bool tests()
 	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
 	if (res) res = CountingTests() && QMLTests() && IsingTests();
 
+	/*
+	if (res)
+		for (int i = 0; i < 100; ++i)
+		{
+			res = IsingTests();
+			if (!res) break;
+		}
+	*/
+
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t1).count();
 
 	std::cout << "\nTesting took: " << dif / 1000. << " seconds!" << std::endl << "\nTests " << (res ? "succeeded" : "failed") << std::endl;

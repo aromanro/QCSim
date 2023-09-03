@@ -8,6 +8,12 @@
 #include "QuantumGate.h"
 #include "QuantumAlgorithm.h"
 
+// roughly based on Lesson 10 from
+// "Fundamentals In Quantum Algorithms: A Tutorial Series Using Qiskit Continued" by Daniel Koch, Saahil Patel, Laura Wessing, Paul M. Alsing
+// https://arxiv.org/abs/2008.10647
+
+// but the code there seem to be wrong (they forgot to take into account the magnetic field values), so a good part of the chapter is based on wrong results
+
 namespace Models {
 
 	template <typename type1 = size_t, typename type2 = size_t> class PairHash {
@@ -126,6 +132,26 @@ namespace Models {
 			return Energy();
 		}
 
+		unsigned int GetMinEnergyState()
+		{
+			unsigned int maxStates = 1 << spins.size();
+
+			double minEnergy = std::numeric_limits<double>::max();
+			unsigned int minState = 0;
+
+			for (unsigned int state = 0; state < maxStates; ++state)
+			{
+				const double stateEnergy = Energy(state);
+				if (minEnergy > stateEnergy)
+				{
+					minEnergy = stateEnergy;
+					minState = state;
+				}
+			}
+			
+			return minState;
+		}
+
 		const std::vector<bool>& GetSpins() const
 		{
 			return spins;
@@ -207,39 +233,38 @@ namespace Models {
 			}
 		}
 
-		void ApplyMixingOperator(RegisterClass& reg, double beta, int nrTimes = 1)
+		void ApplyMixingOperator(RegisterClass& reg, double beta)
 		{
 			const double twobeta = 2 * beta;
 			rx.SetTheta(twobeta);
 			ry.SetTheta(twobeta);
 
-			for (unsigned int i = 0; i < nrTimes; ++i)
-			{
-				for (size_t q = 0; q < reg.getNrQubits(); ++q)
-					reg.ApplyGate(rx, q);
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				reg.ApplyGate(rx, q);
 
+			unsigned int lastQubit = reg.getNrQubits() - 1;
+			for (size_t q = 0; q < lastQubit; ++q)
+				reg.ApplyGate(cnot, q + 1, q);
+			reg.ApplyGate(cnot, 0, lastQubit);
 
-				unsigned int lastQubit = reg.getNrQubits() - 1;
-				for (size_t q = 0; q < lastQubit; ++q)
-					reg.ApplyGate(cnot, q + 1, q);
-
-				reg.ApplyGate(cnot, 0, lastQubit);
-
-				for (size_t q = 0; q < reg.getNrQubits(); ++q)
-					reg.ApplyGate(ry, q);
-			}
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				reg.ApplyGate(ry, q);
 		}
 
 
-		void Exec(RegisterClass& reg, double gamma, double beta, unsigned int nrTimes = 1)
+		void Exec(RegisterClass& reg, double gamma, double beta, unsigned int p = 1)
 		{
 			reg.setToBasisState(0);
 			ApplyHadamardOnAll(reg);
-			ApplyIsingOperator(reg, gamma);
-			ApplyMixingOperator(reg, beta, nrTimes);
+
+			for (unsigned int i = 0; i < p; ++i)
+			{
+				ApplyIsingOperator(reg, gamma);
+				ApplyMixingOperator(reg, beta);
+			}
 		}
 
-		double EnergyExpectationValue(RegisterClass& reg, unsigned int nrShots = 1000)
+		double EnergyExpectationValue(RegisterClass& reg, unsigned int nrShots = 100000)
 		{
 			double energy = 0;
 
@@ -251,21 +276,21 @@ namespace Models {
 		}
 
 
-		std::pair<double, double> GradientDescentStep(RegisterClass& reg, double gamma, double beta, unsigned int nrTimes = 2, double eps = 0.001, double step = 0.01, unsigned int nrShots = 10000)
+		std::pair<double, double> GradientDescentStep(RegisterClass& reg, double gamma, double beta, unsigned int p = 1, double eps = 0.0002, double step = 0.0001, unsigned int nrShots = 100000)
 		{
 			const double twoEps = 2. * eps;
 
-			Exec(reg, gamma - eps, beta, nrTimes);
+			Exec(reg, gamma - eps, beta, p);
 			const double E1 = EnergyExpectationValue(reg, nrShots);
 
-			Exec(reg, gamma + eps, beta, nrTimes);
+			Exec(reg, gamma + eps, beta, p);
 			const double E2 = EnergyExpectationValue(reg, nrShots);
 
 
-			Exec(reg, gamma, beta - eps, nrTimes);
+			Exec(reg, gamma, beta - eps, p);
 			const double E3 = EnergyExpectationValue(reg, nrShots);
 
-			Exec(reg, gamma, beta + eps, nrTimes);
+			Exec(reg, gamma, beta + eps, p);
 			const double E4 = EnergyExpectationValue(reg, nrShots);
 
 			return { gamma - step * (E2 - E1) / twoEps, beta - step * (E4 - E3) / twoEps };
@@ -325,6 +350,11 @@ namespace Models {
 		double Energy(unsigned int state)
 		{
 			return model.Energy(state);
+		}
+
+		unsigned int GetMinEnergyState()
+		{
+			return model.GetMinEnergyState();
 		}
 
 		const std::vector<bool>& GetSpins() const
