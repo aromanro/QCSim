@@ -28,15 +28,16 @@ bool IsingTests()
 	double optGamma = gamma;
 	double optBeta = beta;
 
-	bool first = true;
-	int i = 0;
-
 	int p = 1;
-	do {
+	for (int i = 0; abs(E - Eold) > deltaE && i < 100000; ++i) 
+	{
 		Eold = E;
 
-		if (first) first = false;
-		else std::tie(gamma, beta) = ising.GradientDescentStep(reg, gamma, beta, p);
+		// this is more like stochastic gradient descent, so it would benefit from
+		// the methods used in the machine learning project (momentum/nesterov/adagrad/rmsprop/adam/whatever) 
+		// I won't bother, for the curious the methods are implemented there (also in the python repo, the dft notebook)
+
+		std::tie(gamma, beta) = ising.GradientDescentStep(reg, gamma, beta, p);
 
 		ising.Exec(reg, gamma, beta, p);
 		E = ising.EnergyExpectationValue(reg);
@@ -52,7 +53,7 @@ bool IsingTests()
 			std::cout << "E: " << E << " gamma: " << gamma << " beta: " << beta << std::endl;
 
 		++i;
-	} while (abs(E-Eold) > deltaE);
+	}
 
 	ising.Exec(reg, gamma, beta, p);
 	auto res = reg.RepeatedMeasure(100000);
@@ -73,6 +74,7 @@ bool IsingTests()
 	if (state != realMinState)
 	{
 		std::cout << "Error: Min energy state found: " << state << " is not the same as the real one: " << realMinState << std::endl;
+		std::cout << "Due of the stochastic nature, this is expected to fail sometimes!" << std::endl;
 		return false;
 	}
 

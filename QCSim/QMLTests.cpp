@@ -116,6 +116,7 @@ bool QMeansClustering2DTests()
 			{
 				std::cout << "Point " << i << " (" << dataPoints[i].x << ", " << dataPoints[i].y << ") is closer to centroid " << c << " (" << centroids[c].x << ", " << centroids[c].y << ") than to centroid " << dataPoints[i].cluster << " (" << centroids[dataPoints[i].cluster].x << ", " << centroids[dataPoints[i].cluster].y << ") even with the quantum distance!" << std::endl;
 				std::cout << "Measured count for marked centroid: " << res[0] << ", measured count for closer centroid: " << res2[0] << std::endl;
+				std::cout << "Due of the stochastic nature, this is expected to fail sometimes!" << std::endl;
 				return false;
 			}
 		}

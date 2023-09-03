@@ -228,6 +228,12 @@ namespace Models {
 			{
 				const double hval = model.GetH(q);
 
+				// no need to apply the gate if hval == 0
+				// it's identity
+				// as a note, hval can be 0 for all spins in some examples
+				// for example for max/min cut problems
+				if (hval == 0.) continue;
+
 				rz.SetTheta(gamma * hval);
 				reg.ApplyGate(rz, q);
 			}
