@@ -42,11 +42,11 @@ namespace Models {
 
 			if (j >= spins.size()) return;
 
-			interactions[std::make_pair(i, j)] = J;
 			neighbours[i].insert(j);
+			interactions[std::make_pair(i, j)] = J;
 		}
 
-		void Set(const std::vector<bool> s, const std::vector<Interaction>& ints = {}, const std::vector<double>& hvals = {})
+		void Set(const std::vector<bool>& s, const std::vector<Interaction>& ints = {}, const std::vector<double>& hvals = {})
 		{
 			Clear();
 			spins = s;
@@ -111,12 +111,11 @@ namespace Models {
 			return -energy;
 		}
 
-		double SetState(unsigned int state)
+		void SetState(unsigned int state)
 		{
-			size_t pos = 0;
-			while (state && pos < spins.size())
+			for (size_t pos = 0; state && pos < spins.size(); ++pos)
 			{
-				spins[pos] = state & 1 ? true : false;
+				spins[pos] = (state & 1) ? true : false;
 				state >>= 1;
 			}
 		}
@@ -150,7 +149,7 @@ namespace Models {
 	protected:
 		static int GetTrueSpin(bool s)
 		{
-			return s ? 1 : -1;
+			return s ? -1 : 1;
 		}
 
 		std::vector<bool> spins;
@@ -164,6 +163,13 @@ namespace Models {
 	{
 	public:
 		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
+
+		unsigned int Execute(RegisterClass& reg) override
+		{
+			// TODO: implement it
+
+			return 0;
+		}
 
 		void ApplyIsingOperator(RegisterClass& reg, double gamma)
 		{
@@ -186,9 +192,9 @@ namespace Models {
 					else
 						rz.SetTheta(2 * gamma);
 
-					reg.Apply(cnot, q1, q2);
-					reg.Apply(rz, q2);
-					reg.Apply(cnot, q1, q2);
+					reg.ApplyGate(cnot, q1, q2);
+					reg.ApplyGate(rz, q1);
+					reg.ApplyGate(cnot, q1, q2);
 				}
 
 			// on site
@@ -196,8 +202,8 @@ namespace Models {
 			{
 				const double hval = model.GetH(q);
 
-				rz.SetTheta(2 * gamma * hval);
-				reg.Apply(rz, q);
+				rz.SetTheta(gamma * hval);
+				reg.ApplyGate(rz, q);
 			}
 		}
 
@@ -207,27 +213,145 @@ namespace Models {
 			rx.SetTheta(twobeta);
 			ry.SetTheta(twobeta);
 
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
-				reg.Apply(rx, q);
-
 			for (unsigned int i = 0; i < nrTimes; ++i)
 			{
+				for (size_t q = 0; q < reg.getNrQubits(); ++q)
+					reg.ApplyGate(rx, q);
+
+
 				unsigned int lastQubit = reg.getNrQubits() - 1;
 				for (size_t q = 0; q < lastQubit; ++q)
-					reg.Apply(cnot, q + 1, q);
+					reg.ApplyGate(cnot, q + 1, q);
 
-				reg.Apply(cnot, 0, lastQubit);
+				reg.ApplyGate(cnot, 0, lastQubit);
+
+				for (size_t q = 0; q < reg.getNrQubits(); ++q)
+					reg.ApplyGate(ry, q);
 			}
+		}
 
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
-				reg.Apply(ry, q);
+
+		void Exec(RegisterClass& reg, double gamma, double beta, unsigned int nrTimes = 1)
+		{
+			reg.setToBasisState(0);
+			ApplyHadamardOnAll(reg);
+			ApplyIsingOperator(reg, gamma);
+			ApplyMixingOperator(reg, beta, nrTimes);
+		}
+
+		double EnergyExpectationValue(RegisterClass& reg, unsigned int nrShots = 1000)
+		{
+			double energy = 0;
+
+			auto res = reg.RepeatedMeasure(nrShots);
+			for (const auto& r : res)
+				energy += Energy(r.first) * static_cast<double>(r.second) / nrShots;
+
+			return energy;
+		}
+
+
+		std::pair<double, double> GradientDescentStep(RegisterClass& reg, double gamma, double beta, unsigned int nrTimes = 2, double eps = 0.001, double step = 0.01, unsigned int nrShots = 10000)
+		{
+			const double twoEps = 2. * eps;
+
+			Exec(reg, gamma - eps, beta, nrTimes);
+			const double E1 = EnergyExpectationValue(reg, nrShots);
+
+			Exec(reg, gamma + eps, beta, nrTimes);
+			const double E2 = EnergyExpectationValue(reg, nrShots);
+
+
+			Exec(reg, gamma, beta - eps, nrTimes);
+			const double E3 = EnergyExpectationValue(reg, nrShots);
+
+			Exec(reg, gamma, beta + eps, nrTimes);
+			const double E4 = EnergyExpectationValue(reg, nrShots);
+
+			return { gamma - step * (E2 - E1) / twoEps, beta - step * (E4 - E3) / twoEps };
+		}
+
+
+		void Clear()
+		{
+			model.Clear();
+		}
+
+		void AddInteraction(size_t i, size_t j, double J)
+		{
+			model.AddInteraction(i, j, J);
+		}
+
+		void Set(const std::vector<bool>& s, const std::vector<IsingModel::Interaction>& ints = {}, const std::vector<double>& hvals = {})
+		{
+			model.Set(s, ints, hvals);
+		}
+
+		void Set(const std::vector<IsingModel::Interaction>& ints = {}, const std::vector<double>& hvals = {})
+		{
+			model.Set(ints, hvals);
+		}
+
+		void SetH(size_t i, double hval)
+		{
+			model.SetH(i, hval);
+		}
+
+		double GetH(size_t i) const
+		{
+			return model.GetH(i);
+		}
+
+		void SetSpin(size_t i, bool s)
+		{
+			model.SetSpin(i, s);
+		}
+
+		bool GetSpin(size_t i) const
+		{
+			return model.GetSpin(i);
+		}
+
+		double Energy()
+		{
+			return model.Energy();
+		}
+
+		void SetState(unsigned int state)
+		{
+			model.SetState(state);
+		}
+
+		double Energy(unsigned int state)
+		{
+			return model.Energy(state);
+		}
+
+		const std::vector<bool>& GetSpins() const
+		{
+			return model.GetSpins();
+		}
+
+		const std::vector<double>& GetH() const
+		{
+			return model.GetH();
+		}
+
+		const std::unordered_map<size_t, std::unordered_set<size_t>>& GetNeighbours() const
+		{
+			return model.GetNeighbours();
+		}
+
+		const std::unordered_map<std::pair<size_t, size_t>, double, PairHash<>>& GetInteractions() const
+		{
+			return model.GetInteractions();
 		}
 
 	protected:
 		void ApplyHadamardOnAll(RegisterClass& reg)
 		{
 			for (size_t q = 0; q < reg.getNrQubits(); ++q)
-				reg.Apply(h, q);
+				reg.ApplyGate(h, q);
 		}
 
 		IsingModel model;
