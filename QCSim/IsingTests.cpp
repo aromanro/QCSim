@@ -17,58 +17,7 @@ bool IsingTests()
 		std::cout << "State: " << state << " Energy: " << ising.Energy(state) << std::endl;
 	std::cout << std::endl;
 
-	double Eold = std::numeric_limits<double>::max();
-	double Emin = Eold;
-	double E = 0; // whatever
-	double deltaE = 0.001;
-
-	double gamma = 1;
-	double beta = 1;
-
-	double optGamma = gamma;
-	double optBeta = beta;
-
-	int p = 1;
-	for (int i = 0; abs(E - Eold) > deltaE && i < 100000; ++i) 
-	{
-		Eold = E;
-
-		// this is more like stochastic gradient descent, so it would benefit from
-		// the methods used in the machine learning project (momentum/nesterov/adagrad/rmsprop/adam/whatever) 
-		// I won't bother, for the curious the methods are implemented there (also in the python repo, the dft notebook)
-
-		std::tie(gamma, beta) = ising.GradientDescentStep(reg, gamma, beta, p);
-
-		ising.Exec(reg, gamma, beta, p);
-		E = ising.EnergyExpectationValue(reg);
-		
-		if (E < Emin)
-		{
-			Emin = E;
-			optGamma = gamma;
-			optBeta = beta;
-		}
-
-		if (i % 10 == 0)
-			std::cout << "E: " << E << " gamma: " << gamma << " beta: " << beta << std::endl;
-
-		++i;
-	}
-
-	ising.Exec(reg, gamma, beta, p);
-	auto res = reg.RepeatedMeasure(100000);
-
-	Emin = std::numeric_limits<double>::max();
-	unsigned int state = 0;
-	for (const auto& r : res)
-	{
-		E = ising.Energy(r.first) * static_cast<double>(r.second) / 100000.;
-		if (E < Emin)
-		{
-			Emin = E;
-			state = r.first;
-		}
-	}
+	unsigned int state = ising.Execute(reg);
 
 	unsigned int realMinState = ising.GetMinEnergyState();
 	if (state != realMinState)

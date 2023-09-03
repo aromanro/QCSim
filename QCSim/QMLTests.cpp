@@ -30,7 +30,7 @@ bool QMeansClustering2DTests()
 {
 	std::cout << "\nTesting Q-Means clustering..." << std::endl;
 
-	const unsigned int nrMeasurements = 100000;
+	const unsigned int nrMeasurements = 500000;
 
 	unsigned int k = 3;
 	unsigned int pointsPerCluster = 15;

@@ -192,116 +192,57 @@ namespace Models {
 
 		unsigned int Execute(RegisterClass& reg) override
 		{
-			// TODO: implement it
+			double Eold = std::numeric_limits<double>::max();
+			double Emin = Eold;
+			double E = 0; // whatever
+			
+			double gamma = gammaStart;
+			double beta = betaStart;
 
-			return 0;
-		}
+			double optGamma = gamma;
+			double optBeta = beta;
 
-		void ApplyIsingOperator(RegisterClass& reg, double gamma)
-		{
-			// interactions
-			const auto& neighbors = model.GetNeighbours();
-			const auto& interactions = model.GetInteractions();
+			for (int i = 0; abs(E - Eold) > deltaE && i < 100000; ++i)
+			{
+				Eold = E;
 
-			for (const auto& site : neighbors)
-				for (const auto& n : site.second)
+				// this is more like stochastic gradient descent, so it would benefit from
+				// the methods used in the machine learning project (momentum/nesterov/adagrad/rmsprop/adam/whatever) 
+				// I won't bother, for the curious the methods are implemented there (also in the python repo, the dft notebook)
+
+				std::tie(gamma, beta) = GradientDescentStep(reg, gamma, beta, pVal, epsilon, stepSize, nrMeasurements);
+
+				Exec(reg, gamma, beta, pVal);
+				E = EnergyExpectationValue(reg);
+
+				if (E < Emin)
 				{
-					const unsigned int q1 = site.first;
-					const unsigned int q2 = n;
-					const auto& J = interactions.find({ q1, q2 });
-					if (J != interactions.end())
-					{
-						const double Jval = J->second;
-
-						rz.SetTheta(2 * gamma * Jval);
-					}
-					else
-						rz.SetTheta(2 * gamma);
-
-					reg.ApplyGate(cnot, q1, q2);
-					reg.ApplyGate(rz, q1);
-					reg.ApplyGate(cnot, q1, q2);
+					Emin = E;
+					optGamma = gamma;
+					optBeta = beta;
 				}
 
-			// on site
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
-			{
-				const double hval = model.GetH(q);
-
-				// no need to apply the gate if hval == 0
-				// it's identity
-				// as a note, hval can be 0 for all spins in some examples
-				// for example for max/min cut problems
-				if (hval == 0.) continue;
-
-				rz.SetTheta(gamma * hval);
-				reg.ApplyGate(rz, q);
+				//if (i % 10 == 0)
+					std::cout << "E: " << E << " gamma: " << gamma << " beta: " << beta << std::endl;
 			}
-		}
 
-		void ApplyMixingOperator(RegisterClass& reg, double beta)
-		{
-			const double twobeta = 2 * beta;
-			rx.SetTheta(twobeta);
-			ry.SetTheta(twobeta);
+			Exec(reg, optGamma, optBeta, pVal);
+			auto res = reg.RepeatedMeasure(nrMeasurements);
 
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
-				reg.ApplyGate(rx, q);
-
-			unsigned int lastQubit = reg.getNrQubits() - 1;
-			for (size_t q = 0; q < lastQubit; ++q)
-				reg.ApplyGate(cnot, q + 1, q);
-			reg.ApplyGate(cnot, 0, lastQubit);
-
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
-				reg.ApplyGate(ry, q);
-		}
-
-
-		void Exec(RegisterClass& reg, double gamma, double beta, unsigned int p = 1)
-		{
-			reg.setToBasisState(0);
-			ApplyHadamardOnAll(reg);
-
-			for (unsigned int i = 0; i < p; ++i)
-			{
-				ApplyIsingOperator(reg, gamma);
-				ApplyMixingOperator(reg, beta);
-			}
-		}
-
-		double EnergyExpectationValue(RegisterClass& reg, unsigned int nrShots = 100000)
-		{
-			double energy = 0;
-
-			auto res = reg.RepeatedMeasure(nrShots);
+			Emin = std::numeric_limits<double>::max();
+			unsigned int state = 0;
 			for (const auto& r : res)
-				energy += Energy(r.first) * static_cast<double>(r.second) / nrShots;
+			{
+				E = Energy(r.first) * static_cast<double>(r.second) / nrMeasurements;
+				if (E < Emin)
+				{
+					Emin = E;
+					state = r.first;
+				}
+			}
 
-			return energy;
+			return state;
 		}
-
-
-		std::pair<double, double> GradientDescentStep(RegisterClass& reg, double gamma, double beta, unsigned int p = 1, double eps = 0.0002, double step = 0.0001, unsigned int nrShots = 100000)
-		{
-			const double twoEps = 2. * eps;
-
-			Exec(reg, gamma - eps, beta, p);
-			const double E1 = EnergyExpectationValue(reg, nrShots);
-
-			Exec(reg, gamma + eps, beta, p);
-			const double E2 = EnergyExpectationValue(reg, nrShots);
-
-
-			Exec(reg, gamma, beta - eps, p);
-			const double E3 = EnergyExpectationValue(reg, nrShots);
-
-			Exec(reg, gamma, beta + eps, p);
-			const double E4 = EnergyExpectationValue(reg, nrShots);
-
-			return { gamma - step * (E2 - E1) / twoEps, beta - step * (E4 - E3) / twoEps };
-		}
-
 
 		void Clear()
 		{
@@ -390,6 +331,110 @@ namespace Models {
 				reg.ApplyGate(h, q);
 		}
 
+		void ApplyIsingOperator(RegisterClass& reg, double gamma)
+		{
+			// interactions
+			const auto& neighbors = model.GetNeighbours();
+			const auto& interactions = model.GetInteractions();
+
+			for (const auto& site : neighbors)
+				for (const auto& n : site.second)
+				{
+					const unsigned int q1 = site.first;
+					const unsigned int q2 = n;
+					const auto& J = interactions.find({ q1, q2 });
+					if (J != interactions.end())
+					{
+						const double Jval = J->second;
+
+						rz.SetTheta(2 * gamma * Jval);
+					}
+					else
+						rz.SetTheta(2 * gamma);
+
+					reg.ApplyGate(cnot, q1, q2);
+					reg.ApplyGate(rz, q1);
+					reg.ApplyGate(cnot, q1, q2);
+				}
+
+			// on site
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+			{
+				const double hval = model.GetH(q);
+
+				// no need to apply the gate if hval == 0
+				// it's identity
+				// as a note, hval can be 0 for all spins in some examples
+				// for example for max/min cut problems
+				if (hval == 0.) continue;
+
+				rz.SetTheta(gamma * hval);
+				reg.ApplyGate(rz, q);
+			}
+		}
+
+		void ApplyMixingOperator(RegisterClass& reg, double beta)
+		{
+			const double twobeta = 2 * beta;
+			rx.SetTheta(twobeta);
+			ry.SetTheta(twobeta);
+
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				reg.ApplyGate(rx, q);
+
+			unsigned int lastQubit = reg.getNrQubits() - 1;
+			for (size_t q = 0; q < lastQubit; ++q)
+				reg.ApplyGate(cnot, q + 1, q);
+			reg.ApplyGate(cnot, 0, lastQubit);
+
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				reg.ApplyGate(ry, q);
+		}
+
+
+		void Exec(RegisterClass& reg, double gamma, double beta, unsigned int p = 1)
+		{
+			reg.setToBasisState(0);
+			ApplyHadamardOnAll(reg);
+
+			for (unsigned int i = 0; i < p; ++i)
+			{
+				ApplyIsingOperator(reg, gamma);
+				ApplyMixingOperator(reg, beta);
+			}
+		}
+
+		double EnergyExpectationValue(RegisterClass& reg, unsigned int nrShots = 100000)
+		{
+			double energy = 0;
+
+			auto res = reg.RepeatedMeasure(nrShots);
+			for (const auto& r : res)
+				energy += Energy(r.first) * static_cast<double>(r.second) / nrShots;
+
+			return energy;
+		}
+
+		std::pair<double, double> GradientDescentStep(RegisterClass& reg, double gamma, double beta, unsigned int p = 1, double eps = 0.0002, double step = 0.0001, unsigned int nrShots = 100000)
+		{
+			const double twoEps = 2. * eps;
+
+			Exec(reg, gamma - eps, beta, p);
+			const double E1 = EnergyExpectationValue(reg, nrShots);
+
+			Exec(reg, gamma + eps, beta, p);
+			const double E2 = EnergyExpectationValue(reg, nrShots);
+
+
+			Exec(reg, gamma, beta - eps, p);
+			const double E3 = EnergyExpectationValue(reg, nrShots);
+
+			Exec(reg, gamma, beta + eps, p);
+			const double E4 = EnergyExpectationValue(reg, nrShots);
+
+			return { gamma - step * (E2 - E1) / twoEps, beta - step * (E4 - E3) / twoEps };
+		}
+
 		IsingModel model;
 
 		QC::Gates::HadamardGate<MatrixClass> h;
@@ -397,6 +442,15 @@ namespace Models {
 		QC::Gates::RxGate<MatrixClass> rx;
 		QC::Gates::RyGate<MatrixClass> ry;
 		QC::Gates::RzGate<MatrixClass> rz;
+
+		// TODO: make configurable
+		double deltaE = 0.001;
+		double gammaStart = 1;
+		double betaStart = 1;
+		unsigned int pVal = 1;
+		double epsilon = 0.0002;
+		double stepSize = 0.0001;
+		unsigned int nrMeasurements = 500000;
 	};
 
 } // namespace Models
