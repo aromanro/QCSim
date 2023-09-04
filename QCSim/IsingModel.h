@@ -4,6 +4,7 @@
 #include <utility>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 
 #include "QuantumGate.h"
 #include "QuantumAlgorithm.h"
@@ -119,7 +120,7 @@ namespace Models {
 
 		void SetState(unsigned int state)
 		{
-			for (size_t pos = 0; state && pos < spins.size(); ++pos)
+			for (size_t pos = 0; pos < spins.size(); ++pos)
 			{
 				spins[pos] = (state & 1) ? true : false;
 				state >>= 1;
@@ -150,6 +151,32 @@ namespace Models {
 			}
 			
 			return minState;
+		}
+
+		std::set<unsigned int> GetMinEnergyStates()
+		{
+			std::set<unsigned int> res;
+			unsigned int maxStates = 1 << spins.size();
+
+			double minEnergy = std::numeric_limits<double>::max();
+			unsigned int minState = 0;
+
+			for (unsigned int state = 0; state < maxStates; ++state)
+			{
+				const double stateEnergy = Energy(state);
+
+				if (minEnergy > stateEnergy && abs(minEnergy - stateEnergy) > 1E-9)
+				{
+					minEnergy = stateEnergy;
+					minState = state;
+					res.clear();
+					res.insert(minState);
+				}
+				else if (abs(minEnergy - stateEnergy) <= 1E-9)
+					res.insert(state);
+			}
+
+			return res;
 		}
 
 		const std::vector<bool>& GetSpins() const
@@ -302,6 +329,11 @@ namespace Models {
 		unsigned int GetMinEnergyState()
 		{
 			return model.GetMinEnergyState();
+		}
+
+		std::set<unsigned int> GetMinEnergyStates()
+		{
+			return model.GetMinEnergyStates();
 		}
 
 		const std::vector<bool>& GetSpins() const
@@ -485,6 +517,7 @@ namespace Models {
 			return energy;
 		}
 
+		// TODO: Implement higher order gradient descent for p = 2
 		std::pair<double, double> GradientDescentStep(RegisterClass& reg, double gamma, double beta, unsigned int p = 1, double eps = 0.0002, double step = 0.0001, unsigned int nrShots = 100000)
 		{
 			const double twoEps = 2. * eps;

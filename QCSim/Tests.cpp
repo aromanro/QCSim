@@ -672,21 +672,21 @@ bool tests()
 	std::cout << "\nTests\n";
 
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-
+	
 	bool res = basicTests() && quantumAdderTests() && DeutschJozsaTests();
 	if (res) res = SimonTests() && BernsteinVaziraniTests() && GroverTests();
 	if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
 	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
 	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
 	if (res) res = CountingTests() && QMLTests() && IsingTests();
-
+	
 	/*
-	if (res)
-		for (int i = 0; i < 100; ++i)
-		{
-			res = IsingTests();
-			if (!res) break;
-		}
+	bool res = true;
+	for (int i = 0; i < 100; ++i)
+	{
+		res = IsingTests();
+		if (!res) break;
+	}
 	*/
 
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t1).count();
