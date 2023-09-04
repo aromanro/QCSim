@@ -70,6 +70,8 @@ bool MaxCutTest()
 		return false;
 	}
 
+	std::cout << "Min energy state: " << state << " Energy: " << maxcut.Energy(state) << std::endl;
+
 	return true;
 }
 
