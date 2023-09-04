@@ -8,7 +8,7 @@ bool IsingTests()
 	std::cout << "\nTesting QAOA on the Ising Model" << std::endl;
 
 	QC::QubitRegister reg(3);
-	Models::IsingSubalgorithm ising;
+	Models::QAOAIsingSubalgorithm ising;
 
 
 	ising.Set({ {0, 1, 1.5}, { 1, 2, 2 }, { 0, 2, -3} }, { 1.25, 3.25, -2.5 });

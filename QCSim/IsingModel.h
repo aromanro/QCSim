@@ -185,7 +185,7 @@ namespace Models {
 	};
 
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class IsingSubalgorithm : public QC::QuantumSubAlgorithm<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QAOAIsingSubalgorithm : public QC::QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
 		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
@@ -322,6 +322,76 @@ namespace Models {
 		const std::unordered_map<std::pair<size_t, size_t>, double, PairHash<>>& GetInteractions() const
 		{
 			return model.GetInteractions();
+		}
+
+		double GetDeltaE() const
+		{
+			return deltaE;
+		}
+
+		void SetDeltaE(double dE)
+		{
+			deltaE = dE;
+		}
+
+		double GetGammaStart() const
+		{
+			return gammaStart;
+		}
+
+		void SetGammaStart(double gamma)
+		{
+			gammaStart = gamma;
+		}
+
+		double GetBetaStart() const
+		{
+			return betaStart;
+		}
+
+		void SetBetaStart(double beta)
+		{
+			betaStart = beta;
+		}
+
+		unsigned int GetP() const
+		{
+			return pVal;
+		}
+
+		void SetP(unsigned int p)
+		{
+			pVal = p;
+		}
+
+		double GetEpsilon() const
+		{
+			return epsilon;
+		}
+
+		void SetEpsilon(double eps)
+		{
+			epsilon = eps;
+		}
+
+		double GetStepSize() const
+		{
+			return stepSize;
+		}
+
+		void SetStepSize(double step)
+		{
+			stepSize = step;
+		}
+
+		double GetNrMeasurements() const
+		{
+			return nrMeasurements;
+		}
+
+		void SetNrMeasurements(double nr)
+		{
+			nrMeasurements = nr;
 		}
 
 	protected:
