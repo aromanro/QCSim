@@ -17,6 +17,15 @@ bool IsingModelTest()
 		std::cout << "State: " << state << " Energy: " << ising.Energy(state) << std::endl;
 	std::cout << std::endl;
 
+	// set a fixed start instead of picking a random one
+	ising.SetGamma1Start(4);
+	ising.SetBeta1Start(3);
+	ising.SetGamma2Start(0.3);
+	ising.SetBeta2Start(1);
+
+	ising.SetP(2);
+	ising.SetMixing(true);
+
 	unsigned int state = ising.Execute(reg);
 
 	unsigned int realMinState = ising.GetMinEnergyState();
@@ -32,7 +41,6 @@ bool IsingModelTest()
 	return true;
 }
 
-// TODO: Implement higher order gradient descent for p = 2
 bool MaxCutTest()
 {
 	std::cout << "\nTesting QAOA on the max cut problem (for min cut just change sign)" << std::endl;
@@ -56,9 +64,16 @@ bool MaxCutTest()
 		std::cout << state << " Energy: " << maxcut.Energy(state) << std::endl;
 	*/
 
-	maxcut.SetGammaStart(3.5);
-	maxcut.SetBetaStart(4);
+	// set a fixed start instead of picking a random one
+	maxcut.SetGamma1Start(6);
+	maxcut.SetBeta1Start(0.7);
+	maxcut.SetGamma2Start(4.2);
+	maxcut.SetBeta2Start(0.5);
+
+	maxcut.SetDeltaE(0.0005);
+
 	maxcut.SetP(2);
+	//maxcut.SetMixing(true);
 
 	unsigned int state = maxcut.Execute(reg);
 
