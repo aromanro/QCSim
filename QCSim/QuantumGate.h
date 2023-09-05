@@ -305,6 +305,21 @@ namespace QC {
 			}
 		};
 
+		template<class MatrixClass = Eigen::MatrixXcd> class SquareRootNOTDagGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass;
+
+			SquareRootNOTDagGate()
+			{
+				OpClass::operatorMat(0, 0) = std::complex<double>(0.5, -0.5);
+				OpClass::operatorMat(0, 1) = std::complex<double>(0.5, 0.5);
+				OpClass::operatorMat(1, 0) = OpClass::operatorMat(0, 1);
+				OpClass::operatorMat(1, 1) = OpClass::operatorMat(0, 0);
+			}
+		};
+
 		template<class MatrixClass = Eigen::MatrixXcd> class SplitterGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
@@ -594,7 +609,6 @@ namespace QC {
 			}
 		};
 
-
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledHadamardGate : public TwoQubitsControlledGate<MatrixClass>
 		{
 		public:
@@ -608,6 +622,36 @@ namespace QC {
 				OpClass::operatorMat(2, 3) = norm;
 				OpClass::operatorMat(3, 2) = norm;
 				OpClass::operatorMat(3, 3) = -norm;
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledSquareRootNOTGate : public TwoQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledSquareRootNOTGate()
+			{
+				OpClass::operatorMat(2, 2) = std::complex<double>(0.5, 0.5);
+				OpClass::operatorMat(2, 3) = std::complex<double>(0.5, -0.5);
+				OpClass::operatorMat(3, 2) = OpClass::operatorMat(2, 3);
+				OpClass::operatorMat(3, 3) = OpClass::operatorMat(2, 2);
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ControlledSquareRootNOTDagGate : public TwoQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
+			using OpClass = BaseClass::BaseClass::BaseClass;
+
+			ControlledSquareRootNOTDagGate()
+			{
+				OpClass::operatorMat(2, 2) = std::complex<double>(0.5, -0.5);
+				OpClass::operatorMat(2, 3) = std::complex<double>(0.5, 0.5);
+				OpClass::operatorMat(3, 2) = OpClass::operatorMat(2, 3);
+				OpClass::operatorMat(3, 3) = OpClass::operatorMat(2, 2);
 			}
 		};
 
