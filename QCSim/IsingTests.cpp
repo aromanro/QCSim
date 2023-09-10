@@ -18,12 +18,12 @@ bool IsingModelTest()
 	std::cout << std::endl;
 
 	// set a fixed start instead of picking a random one
-	ising.SetGamma1Start(4);
-	ising.SetBeta1Start(3);
-	ising.SetGamma2Start(0.3);
-	ising.SetBeta2Start(1);
-
 	ising.SetP(2);
+	ising.SetGammaStart(4);
+	ising.SetBetaStart(3);
+	ising.SetGammaStart(0.3, 1);
+	ising.SetBetaStart(1, 1);
+
 	ising.SetMixing(true);
 
 	unsigned int state = ising.Execute(reg);
@@ -65,14 +65,14 @@ bool MaxCutTest()
 	*/
 
 	// set a fixed start instead of picking a random one
-	maxcut.SetGamma1Start(6);
-	maxcut.SetBeta1Start(0.7);
-	maxcut.SetGamma2Start(4.2);
-	maxcut.SetBeta2Start(0.5);
+	maxcut.SetP(2);
+	maxcut.SetGammaStart(6);
+	maxcut.SetBetaStart(0.7);
+	maxcut.SetGammaStart(4.2, 1);
+	maxcut.SetBetaStart(0.5, 1);
 
 	maxcut.SetDeltaE(0.0005);
 
-	maxcut.SetP(2);
 	//maxcut.SetMixing(true);
 
 	unsigned int state = maxcut.Execute(reg);

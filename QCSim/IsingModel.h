@@ -223,15 +223,9 @@ namespace Models {
 			double Emin = Eold;
 			double E = 0; // whatever
 			
-			double gamma1 = gamma1Start;
-			double beta1 = beta1Start;
-			double gamma2 = gamma2Start;
-			double beta2 = beta2Start;
+			std::pair<std::vector<double>, std::vector<double>> gammaBeta = { gammaStart, betaStart };
+			std::pair<std::vector<double>, std::vector<double>> optGammaBeta = gammaBeta;
 
-			double optGamma1 = gamma1;
-			double optBeta1 = beta1;
-			double optGamma2 = gamma2;
-			double optBeta2 = beta2;
 
 			for (int i = 0; abs(E - Eold) > deltaE && i < 100000; ++i)
 			{
@@ -241,25 +235,22 @@ namespace Models {
 				// the methods used in the machine learning project (momentum/nesterov/adagrad/rmsprop/adam/whatever) 
 				// I won't bother, for the curious the methods are implemented there (also in the python repo, the dft notebook)
 
-				std::tie(gamma1, beta1, gamma2, beta2) = GradientDescentStep(reg, gamma1, beta1, gamma2, beta2, pVal, epsilon, stepSize, nrMeasurements);
+				gammaBeta = GradientDescentStep(reg, gammaBeta.first, gammaBeta.second, epsilon, stepSize, nrMeasurements);
 
-				Exec(reg, gamma1, beta1, gamma2, beta2, pVal);
+				Exec(reg, gammaBeta.first, gammaBeta.second);
 				E = EnergyExpectationValue(reg);
 
 				if (E < Emin)
 				{
 					Emin = E;
-					optGamma1 = gamma1;
-					optBeta1 = beta1;
-					optGamma2 = gamma2;
-					optBeta2 = beta2;
+					optGammaBeta = gammaBeta;
 				}
 
 				//if (i % 10 == 0)
-					std::cout << "E: " << E << " gamma1: " << gamma1 << " beta1: " << beta1 << " gamma2: " << gamma2 << " beta2: " << beta2 << std::endl;
+					std::cout << "E: " << E << std::endl;
 			}
 
-			Exec(reg, optGamma1, optBeta1, optGamma2, optBeta2, pVal);
+			Exec(reg, optGammaBeta.first, optGammaBeta.second);
 			auto res = reg.RepeatedMeasure(nrMeasurements);
 
 			Emin = std::numeric_limits<double>::max();
@@ -372,56 +363,41 @@ namespace Models {
 			deltaE = dE;
 		}
 
-		double GetGamma1Start() const
+		const std::vector<double>& GetGammaStart() const
 		{
-			return gamma1Start;
+			return gammaStart;
 		}
 
-		void SetGamma1Start(double gamma)
+		void SetGammaStart(double gamma, size_t index = 0)
 		{
-			gamma1Start = gamma;
+			if (index >= gammaStart.size()) return;
+
+			gammaStart[index] = gamma;
 		}
 
-		double GetBeta1Start() const
+		const std::vector<double>& GetBetaStart() const
 		{
-			return beta1Start;
+			return betaStart;
 		}
 
-		void SetBeta1Start(double beta)
+		void SetBetaStart(double beta, size_t index = 0)
 		{
-			beta1Start = beta;
-		}
+			if (index >= betaStart.size()) return;
 
-		double GetGamma2Start() const
-		{
-			return gamma2Start;
-		}
-
-		void SetGamma2Start(double gamma)
-		{
-			gamma2Start = gamma;
-		}
-
-		double GetBeta2Start() const
-		{
-			return beta2Start;
-		}
-
-		void SetBeta2Start(double beta)
-		{
-			beta2Start = beta;
+			betaStart[index] = beta;
 		}
 
 		unsigned int GetP() const
 		{
-			return pVal;
+			return gammaStart.size();
 		}
 
 		void SetP(unsigned int p)
 		{
-			if (p != 1 && p != 2) return;
+			if (p < 1) return;
 
-			pVal = p;
+			gammaStart.resize(p, 1.);
+			betaStart.resize(p, 1.);
 		}
 
 		double GetEpsilon() const
@@ -537,15 +513,15 @@ namespace Models {
 		}
 
 
-		void Exec(RegisterClass& reg, double gamma1, double beta1, double gamma2, double beta2, unsigned int p = 1)
+		void Exec(RegisterClass& reg, const std::vector<double>& gamma, const std::vector<double>& beta)
 		{
 			reg.setToBasisState(0);
 			ApplyHadamardOnAll(reg);
 
-			for (unsigned int i = 0; i < p; ++i)
+			for (unsigned int i = 0; i < gamma.size(); ++i)
 			{
-				ApplyIsingOperator(reg, i ? gamma2 : gamma1);
-				ApplyMixingOperator(reg, i ? beta2 : beta1, betterMixing);
+				ApplyIsingOperator(reg, gamma[i]);
+				ApplyMixingOperator(reg, beta[i], betterMixing);
 			}
 		}
 
@@ -560,45 +536,40 @@ namespace Models {
 			return energy;
 		}
 
-		std::tuple<double, double, double, double> GradientDescentStep(RegisterClass& reg, double gamma1, double beta1, double gamma2, double beta2, unsigned int p = 1, double eps = 0.0002, double step = 0.0001, unsigned int nrShots = 100000)
+		std::pair<std::vector<double>, std::vector<double>> GradientDescentStep(RegisterClass& reg, std::vector<double>& gamma, std::vector<double>& beta, double eps = 0.0002, double step = 0.0001, unsigned int nrShots = 100000)
 		{
 			const double twoEps = 2. * eps;
 
-			Exec(reg, gamma1 - eps, beta1, gamma2, beta2, p);
-			const double E1 = EnergyExpectationValue(reg, nrShots);
+			std::pair<std::vector<double>, std::vector<double>> res;
+			res.first.resize(gamma.size());
+			res.second.resize(beta.size());
 
-			Exec(reg, gamma1 + eps, beta1, gamma2, beta2, p);
-			const double E2 = EnergyExpectationValue(reg, nrShots);
-
-
-			Exec(reg, gamma1, beta1 - eps, gamma2, beta2, p);
-			const double E3 = EnergyExpectationValue(reg, nrShots);
-
-			Exec(reg, gamma1, beta1 + eps, gamma2, beta2, p);
-			const double E4 = EnergyExpectationValue(reg, nrShots);
-
-			double newGamma1 = gamma1 - step * (E2 - E1) / twoEps;
-			double newBeta1 = beta1 - step * (E4 - E3) / twoEps;
-
-			if (pVal == 2)
+			for (size_t i = 0; i < gamma.size(); ++i)
 			{
-				Exec(reg, gamma1, beta1, gamma2 - eps, beta2, p);
-				const double E5 = EnergyExpectationValue(reg, nrShots);
+				double gammaVal = gamma[i];
+				double betaVal = beta[i];
 
-				Exec(reg, gamma1, beta1, gamma2 + eps, beta2, p);
-				const double E6 = EnergyExpectationValue(reg, nrShots);
+				gamma[i] = gammaVal - eps;
+				Exec(reg, gamma, beta);
+				const double E1 = EnergyExpectationValue(reg, nrShots);
+				gamma[i] = gammaVal + eps;
+				Exec(reg, gamma, beta);
+				const double E2 = EnergyExpectationValue(reg, nrShots);
+				gamma[i] = gammaVal;
 
-				Exec(reg, gamma1, beta1, gamma2, beta2 - eps, p);
-				const double E7 = EnergyExpectationValue(reg, nrShots);
+				beta[i] = betaVal - eps;
+				Exec(reg, gamma, beta);
+				const double E3 = EnergyExpectationValue(reg, nrShots);
+				beta[i] = betaVal + eps;
+				Exec(reg, gamma, beta);
+				const double E4 = EnergyExpectationValue(reg, nrShots);
+				beta[i] = betaVal;
 
-				Exec(reg, gamma1, beta1, gamma2, beta2 + eps, p);
-				const double E8 = EnergyExpectationValue(reg, nrShots);
-
-				return { newGamma1, newBeta1,
-					 gamma2 - step * (E6 - E5) / twoEps, beta2 - step * (E8 - E7) / twoEps };
+				res.first[i] = gammaVal - step * (E2 - E1) / twoEps;
+				res.second[i] = betaVal - step * (E4 - E3) / twoEps;
 			}
 
-			return { newGamma1, newBeta1, newGamma1, newBeta1 };
+			return res;
 		}
 
 		IsingModel model;
@@ -611,11 +582,10 @@ namespace Models {
 
 		// TODO: make configurable
 		double deltaE = 0.001;
-		double gamma1Start = 1;
-		double beta1Start = 1;
-		double gamma2Start = 1;
-		double beta2Start = 1;
-		unsigned int pVal = 1;
+
+		std::vector<double> gammaStart = { 1. };
+		std::vector<double> betaStart = { 1. };
+
 		double epsilon = 0.0002;
 		double stepSize = 0.0001;
 		unsigned int nrMeasurements = 500000;
