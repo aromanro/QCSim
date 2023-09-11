@@ -31,6 +31,7 @@ namespace QC {
 			assert(N > 0);
 
 			registerStorage = VectorClass::Zero(NrBasisStates);
+			resultsStorage = VectorClass::Zero(NrBasisStates);
 
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
 			const std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
@@ -289,8 +290,104 @@ namespace QC {
 			return measurements;
 		}
 
-		
+	private:
+		inline void ApplyOneQubitGate(const MatrixClass& gateMatrix, const unsigned int qubitBit)
+		{
+			for (long long int state = 0; state < NrBasisStates; ++state)
+			{
+				const unsigned int row = state & qubitBit ? 1 : 0;
 
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & ~qubitBit) +
+					gateMatrix(row, 1) * registerStorage(state | qubitBit);
+			}
+		}
+
+		inline void ApplyOneQubitGateOmp(const MatrixClass& gateMatrix, const unsigned int qubitBit)
+		{
+			#pragma omp parallel for schedule(static, 4096)
+			for (long long int state = 0; state < NrBasisStates; ++state)
+			{
+				const unsigned int row = state & qubitBit ? 1 : 0;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & ~qubitBit) +
+					gateMatrix(row, 1) * registerStorage(state | qubitBit);
+			}
+		}
+
+		inline void ApplyTwoQubitsGate(const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int ctrlQubitBit)
+		{
+			for (long long int state = 0; state < NrBasisStates; ++state)
+			{
+				const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				const unsigned int m = state & ~qubitBit; // ensure it's not computed twice
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & ~ctrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage(state & ~ctrlQubitBit | qubitBit) +                       // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                       // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(state | qubitBit | ctrlQubitBit);                         // state |  ctrlQubitBit |  qubitBit      : 11
+			}
+		}
+
+		inline void ApplyTwoQubitsGateOmp(const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int ctrlQubitBit)
+		{
+			#pragma omp parallel for schedule(static, 2048)
+			for (long long int state = 0; state < NrBasisStates; ++state)
+			{
+				const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				const unsigned int m = state & ~qubitBit; // ensure it's not computed twice
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & ~ctrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage(state & ~ctrlQubitBit | qubitBit) +                       // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                       // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(state | qubitBit | ctrlQubitBit);                         // state |  ctrlQubitBit |  qubitBit      : 11
+			}
+		}
+
+
+		inline void ApplyThreeQubitsGate(const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int qubitBit2, const unsigned int ctrlQubitBit)
+		{
+			for (long long int state = 0; state < NrBasisStates; ++state)
+			{
+				const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				const unsigned int m = state & ~qubitBit;
+				const unsigned int m2 = state & ~qubitBit2;
+				const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
+				const unsigned int mnctrlQubitBit = m & ~ctrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & ~qubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage(m2 & ~ctrlQubitBit | qubitBit) +				            // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					            // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage(state & ~ctrlQubitBit | qubitBit | qubitBit2) +            // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage(m & ~qubitBit2 | ctrlQubitBit) +				            // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlQubitBit | qubitBit) +				            // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								            // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | qubitBit | ctrlqubits);                            // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+			}
+		}
+
+		inline void ApplyThreeQubitsGateOmp(const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int qubitBit2, const unsigned int ctrlQubitBit)
+		{
+			#pragma omp parallel for schedule(static, 1024)
+			for (long long int state = 0; state < NrBasisStates; ++state)
+			{
+				const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				const unsigned int m = state & ~qubitBit;
+				const unsigned int m2 = state & ~qubitBit2;
+				const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
+				const unsigned int mnctrlQubitBit = m & ~ctrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & ~qubitBit2) +          // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage(m2 & ~ctrlQubitBit | qubitBit) +				             // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					             // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage(state & ~ctrlQubitBit | qubitBit | qubitBit2) +             // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage(m & ~qubitBit2 | ctrlQubitBit) +				             // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlQubitBit | qubitBit) +				             // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								             // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | qubitBit | ctrlqubits);                             // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+			}
+		}
+
+	public:
 		
 
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
@@ -305,8 +402,6 @@ namespace QC {
 
 			const unsigned int qubitBit = 1u << qubit;
 
-			VectorClass result(NrBasisStates);
-
 			const MatrixClass& gateMatrix = gate.getRawOperatorMatrix();
 
 			// TODO: perhaps also optimize better for controlled gates
@@ -314,59 +409,32 @@ namespace QC {
 			
 			if (gateQubits == 1)
 			{
-				//#pragma omp parallel for schedule(static, 4096) if (NrBasisStates >= 8192)
-				for (long long int state = 0; state < NrBasisStates; ++state)
-				{
-					const unsigned int row = state & qubitBit ? 1 : 0;
-
-					result(state) = gateMatrix(row, 0) * registerStorage(state & ~qubitBit) +
-						            gateMatrix(row, 1) * registerStorage(state | qubitBit);
-				}
+				//if (NrBasisStates < 8192)
+					ApplyOneQubitGate(gateMatrix, qubitBit);
+				//else
+				//	ApplyOneQubitGateOmp(gateMatrix, qubitBit);
 			}
 			else if (gateQubits == 2)
 			{
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
-				//#pragma omp parallel for schedule(static, 2048) if (NrBasisStates >= 4096)
-				for (long long int state = 0; state < NrBasisStates; ++state)
-				{
-					const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & ~qubitBit; // ensure it's not computed twice
-
-					result(state) = gateMatrix(row, 0) * registerStorage(m & ~ctrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
-								    gateMatrix(row, 1) * registerStorage(state & ~ctrlQubitBit | qubitBit) +   // state & ~ctrlQubitBit |  qubitBit      : 01
-								    gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                   // state & ~qubitBit     |  ctrlQubitBit  : 10
-								    gateMatrix(row, 3) * registerStorage(state | qubitBit | ctrlQubitBit);     // state |  ctrlQubitBit |  qubitBit      : 11
-				}
+				//if (NrBasisStates < 4096)
+					ApplyTwoQubitsGate(gateMatrix, qubitBit, ctrlQubitBit);
+				//else
+				//	ApplyTwoQubitsGateOmp(gateMatrix, qubitBit, ctrlQubitBit);
 			}
 			else
 			{
 				const unsigned int qubitBit2 = 1u << controllingQubit1;
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
-				
-				//#pragma omp parallel for schedule(static, 1024) if (NrBasisStates >= 2048)
-				for (long long int state = 0; state < NrBasisStates; ++state)
-				{
-					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & ~qubitBit;
-					const unsigned int m2 = state & ~qubitBit2;
-					const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
-					const unsigned int mnctrlQubitBit = m & ~ctrlQubitBit;
-					
-					result(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & ~qubitBit2) +                    // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
-								    gateMatrix(row, 1) * registerStorage(m2 & ~ctrlQubitBit | qubitBit) +				   // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
-								    gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					   // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
-								    gateMatrix(row, 3) * registerStorage(state & ~ctrlQubitBit | qubitBit | qubitBit2) +   // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
-								    gateMatrix(row, 4) * registerStorage(m & ~qubitBit2 | ctrlQubitBit) +				   // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
-								    gateMatrix(row, 5) * registerStorage(m2 | ctrlQubitBit | qubitBit) +				   // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
-								    gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								   // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
-								    gateMatrix(row, 7) * registerStorage(state | qubitBit | ctrlqubits);                   // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
-				}
+
+				//if (NrBasisStates < 2048)
+					ApplyThreeQubitsGate(gateMatrix, qubitBit, qubitBit2, ctrlQubitBit);
+				//else
+				//	ApplyThreeQubitsGateOmp(gateMatrix, qubitBit, qubitBit2, ctrlQubitBit);				
 			}
 
-			registerStorage.swap(result);
-
-
+			registerStorage.swap(resultsStorage);
 #else			
 			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 #endif
@@ -624,6 +692,7 @@ namespace QC {
 		unsigned int NrBasisStates;
 
 		VectorClass registerStorage;
+		VectorClass resultsStorage;
 
 		std::mt19937_64 rng;
 		std::uniform_real_distribution<double> uniformZeroOne;
