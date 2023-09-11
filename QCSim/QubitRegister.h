@@ -25,8 +25,7 @@ namespace QC {
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
 		QubitRegister(unsigned int N = 3, int addseed = 0)
-			: NrQubits(N), NrBasisStates(1u << NrQubits),
-			uniformZeroOne(0, 1), recordGates(false)
+			: NrQubits(N), NrBasisStates(1u << NrQubits), uniformZeroOne(0, 1), recordGates(false)
 		{
 			assert(N > 0);
 
@@ -70,10 +69,8 @@ namespace QC {
 		{
 			if (q >= NrQubits) return;
 
-			unsigned int state = 1u << q;
-
 			Clear();
-			registerStorage(state) = 1;
+			registerStorage(1u << q) = 1;
 		}
 
 		// measurement should give either all 0 or all 1
@@ -126,7 +123,7 @@ namespace QC {
 			}
 			else
 			{
-				v0 = registerStorage[NrBasisStates/2];
+				v0 = registerStorage[NrBasisStates >> 1];
 				av0 = abs(v0);
 
 				if (av0 >= 1E-5)
@@ -205,12 +202,9 @@ namespace QC {
 
 				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 				{
-					const unsigned int secondPart = secondPartBits << secondQubitp1;
+					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
 					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-					{
-						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
-						stateProbability += std::norm(registerStorage[wholeState]);
-					}
+						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
 				}
 
 				accum += stateProbability;
@@ -232,12 +226,10 @@ namespace QC {
 				{
 					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 					{
-						const unsigned int secondPart = secondPartBits << secondQubitp1;
+						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
 						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 						{
-							const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
-
-							registerStorage[wholeState] *= norm;
+							registerStorage[secondPart | firstPartBits] *= norm;
 							//++cnt;
 						}
 					}
@@ -246,12 +238,10 @@ namespace QC {
 				{
 					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 					{
-						const unsigned int secondPart = secondPartBits << secondQubitp1;
+						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
 						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 						{
-							const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
-
-							registerStorage[wholeState] = 0;
+							registerStorage[secondPart | firstPartBits] = 0;
 							//++cnt;
 						}
 					}
@@ -666,12 +656,9 @@ namespace QC {
 
 				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 				{
-					const unsigned int secondPart = secondPartBits << secondQubitp1;
+					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
 					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-					{
-						const unsigned int wholeState = secondPart | stateRegBits | firstPartBits;
-						stateProbability += std::norm(registerStorage[wholeState]);
-					}
+						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
 				}
 
 				accum += stateProbability;
