@@ -1,19 +1,5 @@
 #pragma once
 
-#include <math.h>
-#include <Eigen/eigen>
-
-#include <random>
-#include <complex>
-#include <chrono>
-
-#include <iostream>
-#include <iomanip>
-#include <fstream>
-
-#include <vector>
-
-#include "QuantumGate.h"
 #include "QubitRegisterCalculator.h"
 
 // Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
@@ -301,29 +287,29 @@ namespace QC {
 			
 			if (gateQubits == 1)
 			{
-				if (NrBasisStates < /*8192*/4096 + 2048)
-					BaseClass::ApplyOneQubitGate(registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
+				if (NrBasisStates < 8192 + 4096)
+					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
 				else
-					BaseClass::ApplyOneQubitGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
+					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
 			}
 			else if (gateQubits == 2)
 			{
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
-				if (NrBasisStates < /*4096*/2048 + 1024)
-					BaseClass::ApplyTwoQubitsGate(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
+				if (NrBasisStates < 4096 + 2048)
+					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 				else
-					BaseClass::ApplyTwoQubitsGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
+					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 			}
 			else
 			{
 				const unsigned int qubitBit2 = 1u << controllingQubit1;
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
 
-				if (NrBasisStates < /*2048*/1024 + 512)
-					BaseClass::ApplyThreeQubitsGate(registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
+				if (NrBasisStates < 2048 + 1024)
+					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 				else
-					BaseClass::ApplyThreeQubitsGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
+					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 			}
 
 			registerStorage.swap(resultsStorage);

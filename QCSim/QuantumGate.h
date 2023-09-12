@@ -31,6 +31,16 @@ namespace QC {
 			{
 				return false;
 			}
+
+			virtual bool isDiagonal() const
+			{
+				return false;
+			}
+
+			virtual bool isAntidiagonal() const
+			{
+				return false;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
@@ -204,6 +214,11 @@ namespace QC {
 				OpClass::operatorMat(0, 0) = 1;
 				OpClass::operatorMat(1, 1) = std::complex<double>(0, 1);
 			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class PhaseShiftGate : public SingleQubitGate<MatrixClass>
@@ -222,6 +237,11 @@ namespace QC {
 			{
 				OpClass::operatorMat(1, 1) = std::polar(1., theta);
 			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		// also known as the flip gate or not gate
@@ -236,6 +256,11 @@ namespace QC {
 				OpClass::operatorMat(0, 1) = 1;
 				OpClass::operatorMat(1, 0) = 1;
 			}
+
+			bool isAntidiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class PauliYGate : public SingleQubitGate<MatrixClass>
@@ -248,6 +273,11 @@ namespace QC {
 			{
 				OpClass::operatorMat(0, 1) = std::complex<double>(0, -1);
 				OpClass::operatorMat(1, 0) = std::complex<double>(0, 1);
+			}
+
+			bool isAntidiagonal() const override
+			{
+				return true;
 			}
 		};
 
@@ -262,6 +292,11 @@ namespace QC {
 			{
 				OpClass::operatorMat(0, 0) = 1;
 				OpClass::operatorMat(1, 1) = -1;
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
 			}
 		};
 
@@ -407,6 +442,11 @@ namespace QC {
 
 				OpClass::operatorMat(0, 0) = std::polar(1., -t2);
 				OpClass::operatorMat(1, 1) = std::polar(1., t2);
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
 			}
 		};
 
