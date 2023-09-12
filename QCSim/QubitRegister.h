@@ -301,7 +301,7 @@ namespace QC {
 			
 			if (gateQubits == 1)
 			{
-				if (NrBasisStates < /*8192*/4096)
+				if (NrBasisStates < /*8192*/4096 + 2048)
 					BaseClass::ApplyOneQubitGate(registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyOneQubitGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
@@ -310,7 +310,7 @@ namespace QC {
 			{
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
-				if (NrBasisStates < /*4096*/2048)
+				if (NrBasisStates < /*4096*/2048 + 1024)
 					BaseClass::ApplyTwoQubitsGate(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyTwoQubitsGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
@@ -320,7 +320,7 @@ namespace QC {
 				const unsigned int qubitBit2 = 1u << controllingQubit1;
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
 
-				if (NrBasisStates < /*2048*/1024)
+				if (NrBasisStates < /*2048*/1024 + 512)
 					BaseClass::ApplyThreeQubitsGate(registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyThreeQubitsGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);

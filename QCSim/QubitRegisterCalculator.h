@@ -20,7 +20,7 @@ namespace QC {
 
 		inline void ApplyOneQubitGateOmp(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int NrBasisStates)
 		{
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static, 4096)
 			for (long long int state = 0; state < NrBasisStates; ++state)
 			{
 				const unsigned int row = state & qubitBit ? 1 : 0;
@@ -46,7 +46,7 @@ namespace QC {
 
 		inline void ApplyTwoQubitsGateOmp(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int ctrlQubitBit, const unsigned int NrBasisStates)
 		{
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static, 2048)
 			for (long long int state = 0; state < NrBasisStates; ++state)
 			{
 				const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -82,7 +82,7 @@ namespace QC {
 
 		inline void ApplyThreeQubitsGateOmp(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int qubitBit2, const unsigned int ctrlQubitBit, const unsigned int NrBasisStates)
 		{
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static, 1024)
 			for (long long int state = 0; state < NrBasisStates; ++state)
 			{
 				const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
