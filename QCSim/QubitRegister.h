@@ -138,6 +138,7 @@ namespace QC {
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 			double accum = 0;
 			unsigned int state = NrBasisStates - 1;
+
 			for (unsigned int i = 0; i < NrBasisStates; ++i)
 			{
 				accum += norm(registerStorage(i));
@@ -167,76 +168,10 @@ namespace QC {
 		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-			double accum = 0;
+			if (NrBasisStates < 16384 + 8192) 
+				return BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 
-			const unsigned int secondQubitp1 = secondQubit + 1;
-
-			const unsigned int firstPartMask = (1u << firstQubit) - 1;
-			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
-			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
-
-			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
-			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
-
-			unsigned int measuredState = maxMeasuredState;
-
-			double norm = 1;
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
-			{
-				const unsigned int stateRegBits = state << firstQubit;
-				double stateProbability = 0;
-
-				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-				{
-					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
-				}
-
-				accum += stateProbability;
-				if (prob <= accum)
-				{
-					measuredState = state;
-					norm = 1. / sqrt(stateProbability);
-					break;
-				}
-			}
-
-			//int cnt = 0;
-			// collapse
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
-			{
-				const unsigned int stateRegBits = state << firstQubit;
-
-				if (state == measuredState)
-				{
-					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-					{
-						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						{
-							registerStorage[secondPart | firstPartBits] *= norm;
-							//++cnt;
-						}
-					}
-				}
-				else
-				{
-					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-					{
-						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						{
-							registerStorage[secondPart | firstPartBits] = 0;
-							//++cnt;
-						}
-					}
-				}
-			}
-
-			//assert(cnt == NrBasisStates);
-
-			return measuredState;
+			return BaseClass::MeasureOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}
 
 
@@ -287,7 +222,7 @@ namespace QC {
 			
 			if (gateQubits == 1)
 			{
-				if (NrBasisStates < 8192 /* + 4096*/)
+				if (NrBasisStates < 8192 + 4096)
 					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
@@ -296,7 +231,7 @@ namespace QC {
 			{
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
-				if (NrBasisStates < 4096 /* + 2048*/)
+				if (NrBasisStates < 4096 + 2048)
 					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
@@ -306,7 +241,7 @@ namespace QC {
 				const unsigned int qubitBit2 = 1u << controllingQubit1;
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
 
-				if (NrBasisStates < 2048 /* + 1024*/)
+				if (NrBasisStates < 2048 + 1024)
 					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
@@ -528,39 +463,11 @@ namespace QC {
 		unsigned int MeasureNoCollapse(unsigned int firstQubit, unsigned int secondQubit)
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-			double accum = 0;
+			
+			if (NrBasisStates < 16384 + 8192)
+				return BaseClass::MeasureNoCollapse(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 
-			const unsigned int secondQubitp1 = secondQubit + 1;
-
-			const unsigned int firstPartMask = (1u << firstQubit) - 1;
-			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
-			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
-
-			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
-			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
-
-			unsigned int measuredState = maxMeasuredState;
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
-			{
-				const unsigned int stateRegBits = state << firstQubit;
-				double stateProbability = 0;
-
-				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-				{
-					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
-				}
-
-				accum += stateProbability;
-				if (prob <= accum)
-				{
-					measuredState = state;
-					break;
-				}
-			}
-
-			return measuredState;
+			return BaseClass::MeasureNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}
 
 		unsigned int NrQubits;

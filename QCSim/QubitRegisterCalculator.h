@@ -64,7 +64,7 @@ namespace QC {
 			}
 			else if (gate.isAntidiagonal())
 			{
-#pragma omp parallel for
+#pragma omp parallel for 
 				//schedule(static, 8192)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 0) * registerStorage(state & notQubitBit) : gateMatrix(0, 1) * registerStorage(state | qubitBit);
@@ -72,7 +72,7 @@ namespace QC {
 			else
 			{
 #pragma omp parallel for 
-			//schedule(static, 8192)
+				//schedule(static, 8192)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
 					const unsigned int row = state & qubitBit ? 1 : 0;
@@ -128,11 +128,12 @@ namespace QC {
 			
 			if (gate.isControlled())
 			{
-#pragma omp parallel for 
+#pragma omp parallel for
+				//schedule(static, 4096)
 				for (long long int state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for 
+#pragma omp parallel for
 				//schedule(static, 4096)
 				for (long long int state = ctrlQubitBit; state < NrBasisStates; ++state)
 				{
@@ -147,8 +148,8 @@ namespace QC {
 			}
 			else
 			{
-#pragma omp parallel for 
-				//schedule(static, 4096)
+#pragma omp parallel for
+				//schedule(static, 4096) 
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
 					const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -231,10 +232,11 @@ namespace QC {
 
 			if (gate.isControlled())
 			{
-#pragma omp parallel for 
+#pragma omp parallel for
+				//schedule(static, 2048)
 				for (long long int state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
-#pragma omp parallel for 
+#pragma omp parallel for
 				//schedule(static, 2048)
 				for (long long int state = ctrlQubitBit; state < NrBasisStates; ++state)
 				{
@@ -255,7 +257,7 @@ namespace QC {
 			}
 			else
 			{
-#pragma omp parallel for 
+#pragma omp parallel for
 				//schedule(static, 2048)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
@@ -274,6 +276,239 @@ namespace QC {
 						gateMatrix(row, 7) * registerStorage(state | orallqubits);                            // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
 				}
 			}
+		}
+
+//*****************************************************************************************************************************************************************************************
+// 
+//  Measurements
+// 
+//*****************************************************************************************************************************************************************************************
+		static inline unsigned int Measure(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int secondQubitp1 = secondQubit + 1;
+
+			const unsigned int firstPartMask = (1u << firstQubit) - 1;
+			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+
+			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
+			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+
+			unsigned int measuredState = maxMeasuredState;
+
+			double norm = 1;
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+				double stateProbability = 0;
+
+				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				{
+					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
+				}
+
+				accum += stateProbability;
+				if (prob <= accum)
+				{
+					measuredState = state;
+					norm = 1. / sqrt(stateProbability);
+					break;
+				}
+			}
+
+			//int cnt = 0;
+			// collapse
+
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+
+				if (state == measuredState)
+				{
+					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+					{
+						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						{
+							registerStorage[secondPart | firstPartBits] *= norm;
+							//++cnt;
+						}
+					}
+				}
+				else
+				{
+					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+					{
+						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						{
+							registerStorage[secondPart | firstPartBits] = 0;
+							//++cnt;
+						}
+					}
+				}
+			}
+
+			//assert(cnt == NrBasisStates);
+
+			return measuredState;
+		}
+
+		static inline unsigned int MeasureOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int secondQubitp1 = secondQubit + 1;
+
+			const unsigned int firstPartMask = (1u << firstQubit) - 1;
+			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+
+			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
+			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+
+			unsigned int measuredState = maxMeasuredState;
+
+			double norm = 1;
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+				double stateProbability = 0;
+#pragma omp parallel for reduction(+:stateProbability) 
+				//schedule(static, 8192)
+				for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				{
+					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
+				}
+
+				accum += stateProbability;
+				if (prob <= accum)
+				{
+					measuredState = state;
+					norm = 1. / sqrt(stateProbability);
+					break;
+				}
+			}
+
+			//int cnt = 0;
+			// collapse
+//#pragma omp parallel for 
+			//schedule(static, 8192)
+			for (long long state = 0; state <= maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+
+				if (state == measuredState)
+				{
+					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+					{
+						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						{
+							registerStorage[secondPart | firstPartBits] *= norm;
+							//++cnt;
+						}
+					}
+				}
+				else
+				{
+					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+					{
+						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						{
+							registerStorage[secondPart | firstPartBits] = 0;
+							//++cnt;
+						}
+					}
+				}
+			}
+
+			//assert(cnt == NrBasisStates);
+
+			return measuredState;
+		}
+
+		static inline unsigned int MeasureNoCollapse(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int secondQubitp1 = secondQubit + 1;
+
+			const unsigned int firstPartMask = (1u << firstQubit) - 1;
+			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+
+			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
+			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+
+			unsigned int measuredState = maxMeasuredState;
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+				double stateProbability = 0;
+
+				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				{
+					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
+				}
+
+				accum += stateProbability;
+				if (prob <= accum)
+				{
+					measuredState = state;
+					break;
+				}
+			}
+
+			return measuredState;
+		}
+
+		static inline unsigned int MeasureNoCollapseOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int secondQubitp1 = secondQubit + 1;
+
+			const unsigned int firstPartMask = (1u << firstQubit) - 1;
+			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+
+			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
+			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+
+			unsigned int measuredState = maxMeasuredState;
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			{
+				const unsigned int stateRegBits = state << firstQubit;
+				double stateProbability = 0;
+
+#pragma omp parallel for reduction(+:stateProbability) 
+				//schedule(static, 8192)
+				for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				{
+					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
+				}
+
+				accum += stateProbability;
+				if (prob <= accum)
+				{
+					measuredState = state;
+					break;
+				}
+			}
+
+			return measuredState;
 		}
 	};
 
