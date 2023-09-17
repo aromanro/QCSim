@@ -141,7 +141,7 @@ namespace QC {
 
 			for (unsigned int i = 0; i < NrBasisStates; ++i)
 			{
-				accum += norm(registerStorage(i));
+				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
 					state = i;
@@ -168,10 +168,10 @@ namespace QC {
 		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-			if (NrBasisStates < 16384 + 8192) 
-				return BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
+			if (NrBasisStates < 16384 + 8192)
+				return firstQubit == secondQubit ? BaseClass::MeasureQubit(NrBasisStates, registerStorage, firstQubit, prob)  : BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 
-			return BaseClass::MeasureOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
+			return firstQubit == secondQubit ? BaseClass::MeasureQubitOmp(NrBasisStates, registerStorage, firstQubit, prob) : BaseClass::MeasureOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}
 
 
@@ -222,7 +222,7 @@ namespace QC {
 			
 			if (gateQubits == 1)
 			{
-				if (NrBasisStates < 8192 + 4096)
+				if (NrBasisStates < 16384 + 8192)
 					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
@@ -231,7 +231,7 @@ namespace QC {
 			{
 				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
 
-				if (NrBasisStates < 4096 + 2048)
+				if (NrBasisStates < 8192 + 4096)
 					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
@@ -241,7 +241,7 @@ namespace QC {
 				const unsigned int qubitBit2 = 1u << controllingQubit1;
 				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
 
-				if (NrBasisStates < 2048 + 1024)
+				if (NrBasisStates < 4096 + 2048)
 					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
@@ -463,8 +463,10 @@ namespace QC {
 		unsigned int MeasureNoCollapse(unsigned int firstQubit, unsigned int secondQubit)
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-			
-			if (NrBasisStates < 16384 + 8192)
+
+			if (firstQubit == secondQubit)
+				return BaseClass::MeasureQubitNoCollapse(NrBasisStates, registerStorage, firstQubit, prob);
+			else if (NrBasisStates < 16384 + 8192)
 				return BaseClass::MeasureNoCollapse(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 
 			return BaseClass::MeasureNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);

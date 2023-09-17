@@ -283,6 +283,110 @@ namespace QC {
 //  Measurements
 // 
 //*****************************************************************************************************************************************************************************************
+
+		static inline unsigned int MeasureQubit(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int measuredQubitMask = 1u << qubit;
+			
+			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			{	
+				if (state & measuredQubitMask)
+					accum += std::norm(registerStorage[state]);
+			}
+
+			unsigned int measuredState = 0;
+			if (prob <= accum)
+				measuredState = 1;
+
+			// find the norm
+			accum = 0;
+			const unsigned int measuredStateMask = measuredState << qubit;
+			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			{
+				if ((state & measuredQubitMask) == measuredStateMask)
+					accum += std::norm(registerStorage[state]);
+			}
+			const double norm = 1. / sqrt(accum);
+
+			// collapse
+			
+			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			{
+				if ((state & measuredQubitMask) == measuredStateMask)
+					registerStorage[state] *= norm;
+				else
+					registerStorage[state] = 0;
+			}
+
+			return measuredState;
+		}
+
+		static inline unsigned int MeasureQubitOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int measuredQubitMask = 1u << qubit;
+
+#pragma omp parallel for reduction(+:accum) 
+			for (long long state = 0; state < NrBasisStates; ++state)
+			{
+				if (state & measuredQubitMask)
+					accum += std::norm(registerStorage[state]);
+			}
+
+			unsigned int measuredState = 0;
+			if (prob <= accum)
+				measuredState = 1;
+
+			// find the norm
+			accum = 0;
+
+			const unsigned int measuredStateMask = measuredState << qubit;
+#pragma omp parallel for reduction(+:accum) 			
+			for (long long state = 0; state < NrBasisStates; ++state)
+			{
+				if ((state & measuredQubitMask) == measuredStateMask)
+					accum += std::norm(registerStorage[state]);
+			}
+			const double norm = 1. / sqrt(accum);
+
+			// collapse
+#pragma omp parallel for
+			for (long long state = 0; state < NrBasisStates; ++state)
+			{
+				if ((state & measuredQubitMask) == measuredStateMask)
+					registerStorage[state] *= norm;
+				else
+					registerStorage[state] = 0;
+			}
+
+			return measuredState;
+		}
+
+		static inline unsigned int MeasureQubitNoCollapse(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int measuredQubitMask = 1u << qubit;
+
+			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			{
+				if (state & measuredQubitMask)
+					accum += std::norm(registerStorage[state]);
+			}
+
+			unsigned int measuredState = 0;
+			if (prob <= accum)
+				measuredState = 1;
+
+			return measuredState;
+		}
+
+
+		// TODO: the following are awful, there might be a better way to optimize this based on cache locality
+		// see the above that implement a single qubit measurement
 		static inline unsigned int Measure(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
 		{
 			double accum = 0;
