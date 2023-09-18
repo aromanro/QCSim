@@ -177,10 +177,14 @@ namespace QC {
 
 			if (gate.isControlled())
 			{
-				for (unsigned int state = 0; state < ctrlQubitBit; ++state)
+				unsigned int limit = ctrlQubitBit;
+				if (gate.isControlQubit(1))
+					limit = std::max(limit, qubitBit2);
+
+				for (unsigned int state = 0; state < limit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
-				for (unsigned int state = ctrlQubitBit; state < NrBasisStates; ++state)
+				for (unsigned int state = limit; state < NrBasisStates; ++state)
 				{
 					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
 					const unsigned int m = state & notQubitBit;
@@ -232,13 +236,17 @@ namespace QC {
 
 			if (gate.isControlled())
 			{
+				long long limit = ctrlQubitBit;
+				if (gate.isControlQubit(1))
+					limit = std::max(limit, static_cast<long long>(qubitBit2));
+
 #pragma omp parallel for
 				//schedule(static, 2048)
-				for (long long int state = 0; state < ctrlQubitBit; ++state)
+				for (long long int state = 0; state < limit; ++state)
 					resultsStorage(state) = registerStorage(state);
 #pragma omp parallel for
 				//schedule(static, 2048)
-				for (long long int state = ctrlQubitBit; state < NrBasisStates; ++state)
+				for (long long int state = limit; state < NrBasisStates; ++state)
 				{
 					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
 					const unsigned int m = state & notQubitBit;
