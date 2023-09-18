@@ -348,6 +348,7 @@ namespace QC {
 			accum = 0;
 
 			const unsigned int measuredStateMask = measuredState << qubit;
+
 #pragma omp parallel for reduction(+:accum) 			
 			for (long long state = 0; state < NrBasisStates; ++state)
 			{
@@ -376,6 +377,26 @@ namespace QC {
 			const unsigned int measuredQubitMask = 1u << qubit;
 
 			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			{
+				if (state & measuredQubitMask)
+					accum += std::norm(registerStorage[state]);
+			}
+
+			unsigned int measuredState = 0;
+			if (prob <= accum)
+				measuredState = 1;
+
+			return measuredState;
+		}
+
+		static inline unsigned int MeasureQubitNoCollapseOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		{
+			double accum = 0;
+
+			const unsigned int measuredQubitMask = 1u << qubit;
+
+#pragma omp parallel for reduction(+:accum) 
+			for (long long state = 0; state < NrBasisStates; ++state)
 			{
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
@@ -508,15 +529,17 @@ namespace QC {
 			// collapse
 //#pragma omp parallel for 
 			//schedule(static, 8192)
-			for (long long state = 0; state <= maxMeasuredState; ++state)
+			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
 			{
 				const unsigned int stateRegBits = state << firstQubit;
 
 				if (state == measuredState)
 				{
-					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+#pragma omp parallel for 
+					for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 					{
 						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+//#pragma omp parallel for 
 						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 						{
 							registerStorage[secondPart | firstPartBits] *= norm;
@@ -526,9 +549,11 @@ namespace QC {
 				}
 				else
 				{
-					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+#pragma omp parallel for 
+					for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 					{
 						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+//#pragma omp parallel for 
 						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 						{
 							registerStorage[secondPart | firstPartBits] = 0;

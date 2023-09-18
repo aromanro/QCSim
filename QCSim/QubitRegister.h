@@ -465,7 +465,12 @@ namespace QC {
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 
 			if (firstQubit == secondQubit)
-				return BaseClass::MeasureQubitNoCollapse(NrBasisStates, registerStorage, firstQubit, prob);
+			{
+				if (NrBasisStates < 16384 + 8192)
+					return BaseClass::MeasureQubitNoCollapse(NrBasisStates, registerStorage, firstQubit, prob);
+
+				return BaseClass::MeasureQubitNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, prob);
+			}
 			else if (NrBasisStates < 16384 + 8192)
 				return BaseClass::MeasureNoCollapse(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 
