@@ -49,7 +49,7 @@ Quantum games:
 *   Quantum pseudo-telepathy: The magic square game
 
 Distributed quantum computing:
-*   Distributed CNOT
+*   Distributed CNOT (derived from a class that allows distribution of any 2-qubits controlled gate)
 *   Quantum CNOT gate teleportation
 
 Quantum Machine Learning

@@ -173,8 +173,6 @@ namespace QC {
 			const unsigned int orallqubits = qubitBit | ctrlqubits;
 			const unsigned int ctrlorqubit2 = ctrlQubitBit | qubitBit;
 
-			// TODO: This can be optimized further by taking advantage of the other control qubit (if it's a cc gate)
-
 			if (gate.isControlled())
 			{
 				unsigned int limit = ctrlQubitBit;
@@ -231,8 +229,6 @@ namespace QC {
 			const unsigned int orqubits = qubitBit | qubitBit2;
 			const unsigned int orallqubits = qubitBit | ctrlqubits;
 			const unsigned int ctrlorqubit2 = ctrlQubitBit | qubitBit;
-
-			// TODO: This can be optimized further by taking advantage of the other control qubit (if it's a cc gate)
 
 			if (gate.isControlled())
 			{
