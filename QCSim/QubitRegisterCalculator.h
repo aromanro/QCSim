@@ -12,6 +12,7 @@
 #include <fstream>
 
 #include <vector>
+#include <thread>
 
 #include "QuantumGate.h"
 
@@ -54,24 +55,25 @@ namespace QC {
 		static inline void ApplyOneQubitGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int NrBasisStates)
 		{
 			const unsigned int notQubitBit = ~qubitBit;
+			const auto processor_count = std::thread::hardware_concurrency();
 
 			if (gate.isDiagonal())
 			{
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 8192)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 1) * registerStorage(state | qubitBit) : gateMatrix(0, 0) * registerStorage(state & notQubitBit);
 			}
 			else if (gate.isAntidiagonal())
 			{
-#pragma omp parallel for 
+#pragma omp parallel for num_threads(processor_count) 
 				//schedule(static, 8192)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 0) * registerStorage(state & notQubitBit) : gateMatrix(0, 1) * registerStorage(state | qubitBit);
 			}
 			else
 			{
-#pragma omp parallel for 
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 8192)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
@@ -125,15 +127,16 @@ namespace QC {
 			const unsigned int notQubitBit = ~qubitBit;
 			const unsigned int notCtrlQubitBit = ~ctrlQubitBit;
 			const unsigned int orqubits = qubitBit | ctrlQubitBit;
+			const auto processor_count = std::thread::hardware_concurrency();
 			
 			if (gate.isControlled())
 			{
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 4096)
 				for (long long int state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 4096)
 				for (long long int state = ctrlQubitBit; state < NrBasisStates; ++state)
 				{
@@ -148,7 +151,7 @@ namespace QC {
 			}
 			else
 			{
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 4096) 
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
@@ -229,6 +232,7 @@ namespace QC {
 			const unsigned int orqubits = qubitBit | qubitBit2;
 			const unsigned int orallqubits = qubitBit | ctrlqubits;
 			const unsigned int ctrlorqubit2 = ctrlQubitBit | qubitBit;
+			const auto processor_count = std::thread::hardware_concurrency();
 
 			if (gate.isControlled())
 			{
@@ -236,11 +240,11 @@ namespace QC {
 				if (gate.isControlQubit(1))
 					limit = std::max(limit, static_cast<long long>(qubitBit2));
 
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 2048)
 				for (long long int state = 0; state < limit; ++state)
 					resultsStorage(state) = registerStorage(state);
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 2048)
 				for (long long int state = limit; state < NrBasisStates; ++state)
 				{
@@ -261,7 +265,7 @@ namespace QC {
 			}
 			else
 			{
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 2048)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
@@ -325,10 +329,11 @@ namespace QC {
 		static inline unsigned int MeasureQubitOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
 		{
 			double accum = 0;
+			const auto processor_count = std::thread::hardware_concurrency();
 
 			const unsigned int measuredQubitMask = 1u << qubit;
 
-#pragma omp parallel for reduction(+:accum) 
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
 			for (long long state = 0; state < NrBasisStates; ++state)
 			{
 				if (state & measuredQubitMask)
@@ -344,7 +349,7 @@ namespace QC {
 
 			const unsigned int measuredStateMask = measuredState << qubit;
 
-#pragma omp parallel for reduction(+:accum) 			
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) 			
 			for (long long state = 0; state < NrBasisStates; ++state)
 			{
 				if ((state & measuredQubitMask) == measuredStateMask)
@@ -353,7 +358,7 @@ namespace QC {
 			const double norm = 1. / sqrt(accum);
 
 			// collapse
-#pragma omp parallel for
+#pragma omp parallel for num_threads(processor_count)
 			for (long long state = 0; state < NrBasisStates; ++state)
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
 
@@ -382,10 +387,11 @@ namespace QC {
 		static inline unsigned int MeasureQubitNoCollapseOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
 		{
 			double accum = 0;
+			const auto processor_count = std::thread::hardware_concurrency();
 
 			const unsigned int measuredQubitMask = 1u << qubit;
 
-#pragma omp parallel for reduction(+:accum) 
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
 			for (long long state = 0; state < NrBasisStates; ++state)
 			{
 				if (state & measuredQubitMask)
@@ -468,75 +474,6 @@ namespace QC {
 			return measuredState;
 		}
 
-		static inline unsigned int MeasureOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
-		{
-			double accum = 0;
-
-			const unsigned int secondQubitp1 = secondQubit + 1;
-
-			const unsigned int firstPartMask = (1u << firstQubit) - 1;
-			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
-			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
-
-			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
-			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
-
-			unsigned int measuredState = maxMeasuredState;
-
-			double norm = 1;
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
-			{
-				const unsigned int stateRegBits = state << firstQubit;
-				double stateProbability = 0;
-#pragma omp parallel for reduction(+:stateProbability) 
-				//schedule(static, 8192)
-				for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-				{
-					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
-				}
-
-				accum += stateProbability;
-				if (prob <= accum)
-				{
-					measuredState = state;
-					norm = 1. / sqrt(stateProbability);
-					break;
-				}
-			}
-
-
-			// collapse
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
-			{
-				const unsigned int stateRegBits = state << firstQubit;
-
-				if (state == measuredState)
-				{
-#pragma omp parallel for 
-					for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-					{
-						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-							registerStorage[secondPart | firstPartBits] *= norm;
-					}
-				}
-				else
-				{
-#pragma omp parallel for 
-					for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-					{
-						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-							registerStorage[secondPart | firstPartBits] = 0;
-					}
-				}
-			}
-
-			return measuredState;
-		}
-
 		static inline unsigned int MeasureNoCollapse(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
 		{
 			double accum = 0;
@@ -557,45 +494,6 @@ namespace QC {
 				double stateProbability = 0;
 
 				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-				{
-					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
-				}
-
-				accum += stateProbability;
-				if (prob <= accum)
-				{
-					measuredState = state;
-					break;
-				}
-			}
-
-			return measuredState;
-		}
-
-		static inline unsigned int MeasureNoCollapseOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
-		{
-			double accum = 0;
-
-			const unsigned int secondQubitp1 = secondQubit + 1;
-
-			const unsigned int firstPartMask = (1u << firstQubit) - 1;
-			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
-			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
-
-			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
-			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
-
-			unsigned int measuredState = maxMeasuredState;
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
-			{
-				const unsigned int stateRegBits = state << firstQubit;
-				double stateProbability = 0;
-
-#pragma omp parallel for reduction(+:stateProbability) 
-				//schedule(static, 8192)
-				for (long long secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 				{
 					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
 					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)

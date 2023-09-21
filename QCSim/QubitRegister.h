@@ -168,10 +168,16 @@ namespace QC {
 		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-			if (NrBasisStates < 16384 + 8192)
-				return firstQubit == secondQubit ? BaseClass::MeasureQubit(NrBasisStates, registerStorage, firstQubit, prob)  : BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 
-			return firstQubit == secondQubit ? BaseClass::MeasureQubitOmp(NrBasisStates, registerStorage, firstQubit, prob) : BaseClass::MeasureOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
+			if (firstQubit == secondQubit)
+			{
+				if (NrBasisStates < 16384 + 8192)
+					return BaseClass::MeasureQubit(NrBasisStates, registerStorage, firstQubit, prob);
+
+				return BaseClass::MeasureQubitOmp(NrBasisStates, registerStorage, firstQubit, prob);
+			}
+
+			return  BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}
 
 
@@ -471,10 +477,8 @@ namespace QC {
 
 				return BaseClass::MeasureQubitNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, prob);
 			}
-			else if (NrBasisStates < 16384 + 8192)
-				return BaseClass::MeasureNoCollapse(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
-
-			return BaseClass::MeasureNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
+			
+			return BaseClass::MeasureNoCollapse(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}
 
 		unsigned int NrQubits;
