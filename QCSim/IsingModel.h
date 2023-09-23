@@ -226,6 +226,14 @@ namespace Models {
 			std::pair<std::vector<double>, std::vector<double>> gammaBeta = { gammaStart, betaStart };
 			std::pair<std::vector<double>, std::vector<double>> optGammaBeta = gammaBeta;
 
+			
+			sGamma.resize(gammaStart.size(), 0.);
+			mGamma.resize(gammaStart.size(), 0.);
+
+
+			sBeta.resize(betaStart.size(), 0.);
+			mBeta.resize(betaStart.size(), 0.);
+			stepNr = 0;
 
 			for (int i = 0; abs(E - Eold) > deltaE && i < 100000; ++i)
 			{
@@ -264,6 +272,12 @@ namespace Models {
 					state = r.first;
 				}
 			}
+
+			sGamma.clear();
+			mGamma.clear();
+
+			sBeta.clear();
+			mBeta.clear();
 
 			return state;
 		}
@@ -420,6 +434,36 @@ namespace Models {
 			stepSize = step;
 		}
 
+		void SetBeta1(double b1)
+		{
+			beta1 = b1;
+		}
+
+		double GetBeta1() const
+		{
+			return beta1;
+		}
+
+		void SetBeta2(double b2)
+		{
+			beta2 = b2;
+		}
+
+		double GetBeta2() const
+		{
+			return beta2;
+		}
+
+		void SetLambda(double l)
+		{
+			lambda = l;
+		}
+
+		double GetLambda() const
+		{
+			return lambda;
+		}
+
 		double GetNrMeasurements() const
 		{
 			return nrMeasurements;
@@ -536,7 +580,7 @@ namespace Models {
 			return energy;
 		}
 
-		std::pair<std::vector<double>, std::vector<double>> GradientDescentStep(RegisterClass& reg, std::vector<double>& gamma, std::vector<double>& beta, double eps = 0.0002, double step = 0.0001, unsigned int nrShots = 100000)
+		std::pair<std::vector<double>, std::vector<double>> GradientDescentStep(RegisterClass& reg, std::vector<double>& gamma, std::vector<double>& beta, double eps = 0.0002, double alpha = 0.0001, unsigned int nrShots = 100000)
 		{
 			const double twoEps = 2. * eps;
 
@@ -544,10 +588,14 @@ namespace Models {
 			res.first.resize(gamma.size());
 			res.second.resize(beta.size());
 
+			++stepNr;
+			const double div1 = 1. / (1. - pow(beta1, stepNr));
+			const double div2 = 1. / (1. - pow(beta2, stepNr));
+
 			for (size_t i = 0; i < gamma.size(); ++i)
 			{
-				double gammaVal = gamma[i];
-				double betaVal = beta[i];
+				const double gammaVal = gamma[i];
+				const double betaVal = beta[i];
 
 				gamma[i] = gammaVal - eps;
 				Exec(reg, gamma, beta);
@@ -565,8 +613,24 @@ namespace Models {
 				const double E4 = EnergyExpectationValue(reg, nrShots);
 				beta[i] = betaVal;
 
-				res.first[i] = gammaVal - step * (E2 - E1) / twoEps;
-				res.second[i] = betaVal - step * (E4 - E3) / twoEps;
+				// ADAMW
+				double grad = (E2 - E1) / twoEps;
+
+				mGamma[i] = beta1 * mGamma[i] - (1. - beta1) * grad;
+				mGamma[i] *= div1;
+				sGamma[i] = beta2 * sGamma[i] + (1. - beta2) * grad * grad;
+				sGamma[i] *= div2;
+
+				res.first[i] = gammaVal + alpha * (mGamma[i] / sqrt(sGamma[i] + 1E-8) - lambda * gammaVal);
+
+				grad = (E4 - E3) / twoEps;
+
+				mBeta[i] = beta1 * mBeta[i] - (1. - beta1) * grad;
+				mBeta[i] *= div1;
+				sBeta[i] = beta2 * sBeta[i] + (1. - beta2) * grad * grad;
+				sBeta[i] *= div2;
+
+				res.second[i] = betaVal + alpha * (mBeta[i] / sqrt(sBeta[i] + 1E-8) - lambda * betaVal);
 			}
 
 			return res;
@@ -580,15 +644,26 @@ namespace Models {
 		QC::Gates::RyGate<MatrixClass> ry;
 		QC::Gates::RzGate<MatrixClass> rz;
 
-		// TODO: make configurable
-		double deltaE = 0.001;
+		double deltaE = 0.0005;
 
 		std::vector<double> gammaStart = { 1. };
 		std::vector<double> betaStart = { 1. };
 
-		double epsilon = 0.0002;
+		std::vector<double> sGamma;
+		std::vector<double> mGamma;
+
+		std::vector<double> sBeta;
+		std::vector<double> mBeta;
+
+		double beta1 = 0.9;
+		double beta2 = 0.995;
+		double lambda = 0.001; // with lambda 0 is the same as Adam
+		int stepNr = 0;
+
+
+		double epsilon = 0.0001;
 		double stepSize = 0.0001;
-		unsigned int nrMeasurements = 500000;
+		unsigned int nrMeasurements = 10000;
 		bool betterMixing = false;
 	};
 

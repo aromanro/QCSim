@@ -67,11 +67,12 @@ bool MaxCutTest()
 	// set a fixed start instead of picking a random one
 	maxcut.SetP(2);
 	maxcut.SetGammaStart(6);
+	//maxcut.SetGammaStart(4);
 	maxcut.SetBetaStart(0.7);
 	maxcut.SetGammaStart(4.2, 1);
 	maxcut.SetBetaStart(0.5, 1);
 
-	maxcut.SetDeltaE(0.0005);
+	//maxcut.SetDeltaE(0.0005);
 
 	//maxcut.SetMixing(true);
 
