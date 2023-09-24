@@ -18,8 +18,9 @@ bool IsingModelTest()
 	std::cout << std::endl;
 
 	// set a fixed start instead of picking a random one
-	ising.SetP(2);
-	ising.SetGammaStart(4);
+	ising.SetP(3);
+	//ising.SetGammaStart(4);
+	ising.SetGammaStart(1);
 	ising.SetBetaStart(3);
 	ising.SetGammaStart(0.3, 1);
 	ising.SetBetaStart(1, 1);

@@ -656,14 +656,14 @@ namespace Models {
 		std::vector<double> mBeta;
 
 		double beta1 = 0.9;
-		double beta2 = 0.995;
+		double beta2 = 0.999;
 		double lambda = 0.001; // with lambda 0 is the same as Adam
 		int stepNr = 0;
 
 
 		double epsilon = 0.0001;
 		double stepSize = 0.0001;
-		unsigned int nrMeasurements = 10000;
+		unsigned int nrMeasurements = 100000;
 		bool betterMixing = false;
 	};
 
