@@ -1,5 +1,12 @@
 #pragma once
 
+
+#ifdef _WIN32
+#include <windows.h>
+#undef min
+#undef max
+#endif // _WIN32
+
 #include <math.h>
 #include <Eigen/eigen>
 
@@ -55,7 +62,7 @@ namespace QC {
 		static inline void ApplyOneQubitGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int NrBasisStates)
 		{
 			const unsigned int notQubitBit = ~qubitBit;
-			const auto processor_count = std::thread::hardware_concurrency();
+			const auto processor_count = GetNumberOfThreads();
 
 			if (gate.isDiagonal())
 			{
@@ -127,7 +134,7 @@ namespace QC {
 			const unsigned int notQubitBit = ~qubitBit;
 			const unsigned int notCtrlQubitBit = ~ctrlQubitBit;
 			const unsigned int orqubits = qubitBit | ctrlQubitBit;
-			const auto processor_count = std::thread::hardware_concurrency();
+			const auto processor_count = GetNumberOfThreads();
 			
 			if (gate.isControlled())
 			{
@@ -232,7 +239,7 @@ namespace QC {
 			const unsigned int orqubits = qubitBit | qubitBit2;
 			const unsigned int orallqubits = qubitBit | ctrlqubits;
 			const unsigned int ctrlorqubit2 = ctrlQubitBit | qubitBit;
-			const auto processor_count = std::thread::hardware_concurrency();
+			const auto processor_count = GetNumberOfThreads();
 
 			if (gate.isControlled())
 			{
@@ -329,7 +336,7 @@ namespace QC {
 		static inline unsigned int MeasureQubitOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
 		{
 			double accum = 0;
-			const auto processor_count = std::thread::hardware_concurrency();
+			const auto processor_count = GetNumberOfThreads();
 
 			const unsigned int measuredQubitMask = 1u << qubit;
 
@@ -387,7 +394,7 @@ namespace QC {
 		static inline unsigned int MeasureQubitNoCollapseOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
 		{
 			double accum = 0;
-			const auto processor_count = std::thread::hardware_concurrency();
+			const auto processor_count = GetNumberOfThreads();
 
 			const unsigned int measuredQubitMask = 1u << qubit;
 
@@ -509,6 +516,28 @@ namespace QC {
 			}
 
 			return measuredState;
+		}
+
+	private:
+		static size_t GetCpuInfoNrThreads()
+		{
+#ifdef _WIN32
+			SYSTEM_INFO sysinfo;
+			GetSystemInfo(&sysinfo);
+			return sysinfo.dwNumberOfProcessors;
+#else
+			std::ifstream cpuinfo("/proc/cpuinfo");
+
+			return std::count(std::istream_iterator<std::string>(cpuinfo),
+					std::istream_iterator<std::string>(),
+					std::string("processor"));
+#endif
+		}
+
+		static size_t GetNumberOfThreads()
+		{
+			size_t threads = std::thread::hardware_concurrency();
+			return threads ? threads : GetCpuInfoNrThreads();
 		}
 	};
 
