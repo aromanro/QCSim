@@ -528,15 +528,13 @@ namespace QC {
 #else
 			std::ifstream cpuinfo("/proc/cpuinfo");
 
-			return std::count(std::istream_iterator<std::string>(cpuinfo),
-					std::istream_iterator<std::string>(),
-					std::string("processor"));
+			return std::count(std::istream_iterator<std::string>(cpuinfo), std::istream_iterator<std::string>(), std::string("processor"));
 #endif
 		}
 
 		static size_t GetNumberOfThreads()
 		{
-			size_t threads = std::thread::hardware_concurrency();
+			const size_t threads = std::thread::hardware_concurrency();
 			return threads ? threads : GetCpuInfoNrThreads();
 		}
 	};
