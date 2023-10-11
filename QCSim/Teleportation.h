@@ -45,42 +45,42 @@ namespace Teleportation
 			BaseClass::ApplyGate(hadamard, sentQubit);
 		}
 
-		void RestoreState(bool firstQubitMeasurement, bool secondQubitMeasurement, unsigned int targetQubit = 2)
+		void RestoreState(bool sentQubitMeasurement, bool firstEntangledQubitMeasurement, unsigned int targetQubit = 2)
 		{
-			if (secondQubitMeasurement) BaseClass::ApplyGate(x, targetQubit);
-			if (firstQubitMeasurement) BaseClass::ApplyGate(z, targetQubit);
+			if (firstEntangledQubitMeasurement) BaseClass::ApplyGate(x, targetQubit);
+			if (sentQubitMeasurement) BaseClass::ApplyGate(z, targetQubit);
 		}
 
-		unsigned int Teleport(unsigned int sentQubit = 0, unsigned int q2 = 1, unsigned int targetQubit = 2, bool explicitClassicalTransmission = false)
+		unsigned int Teleport(unsigned int sentQubit = 0, unsigned int firstEntangledQubit = 1, unsigned int targetQubit = 2, bool explicitClassicalTransmission = false)
 		{
 			// TODO: Using something like the `BellState` class to create the EPR pair, not only the one currently used, but also the other three
 			// it works with any of them as long as Alice and Bob agree on which one to use
 
-			Entangle(q2, targetQubit);
+			Entangle(firstEntangledQubit, targetQubit);
 
 			// here we are in the point A marked in fig 7 in the paper mentioned above
 
-			ApplyTeleportationCircuit(sentQubit, q2);
+			ApplyTeleportationCircuit(sentQubit, firstEntangledQubit);
 
 			// measurements can be actually done all at the end, but let's pretend
 			// one could do here only the first qubit measurement, the second one being done earlier
 
 			// anyhow, it's basically the same thing
 			unsigned int measuredValues = BaseClass::Measure(sentQubit);
-			measuredValues |= BaseClass::Measure(q2) << 1;
+			measuredValues |= BaseClass::Measure(firstEntangledQubit) << 1;
 
 			// now that they are measured they go to Bob, which uses the values to act on his entangled qubit:
 
 			if (explicitClassicalTransmission)
 			{
-				const bool firstQubitMeasurement = (measuredValues & 0x1) != 0;
-				const bool secondQubitMeasurement = (measuredValues & 0x2) != 0;
+				const bool sentQubitMeasurement = (measuredValues & 0x1) != 0;
+				const bool firstEntangledQubitMeasurement = (measuredValues & 0x2) != 0;
 
-				RestoreState(firstQubitMeasurement, secondQubitMeasurement, targetQubit);
+				RestoreState(sentQubitMeasurement, firstEntangledQubitMeasurement, targetQubit);
 			}
 			else
 			{
-				BaseClass::ApplyGate(cnot, targetQubit, q2);
+				BaseClass::ApplyGate(cnot, targetQubit, firstEntangledQubit);
 				BaseClass::ApplyGate(cz, targetQubit, sentQubit);
 			}
 
