@@ -176,6 +176,7 @@ namespace QC {
 
 			HadamardGate()
 			{
+				// 1./sqrt(2) * (X + Z)
 				static const double norm = 1. / sqrt(2.);
 				OpClass::operatorMat(0, 0) = norm;
 				OpClass::operatorMat(0, 1) = norm;
@@ -186,6 +187,7 @@ namespace QC {
 
 		// hadamard can be used to switch back and forth to X basis
 		// this gate is for switching to Y basis and back
+		// also known as K gate
 		template<class MatrixClass = Eigen::MatrixXcd> class HyGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
@@ -194,6 +196,7 @@ namespace QC {
 
 			HyGate()
 			{
+				// 1./sqrt(2) * (Y + Z)
 				static const double norm = 1. / sqrt(2.);
 				OpClass::operatorMat(0, 0) = norm;
 				OpClass::operatorMat(0, 1) = std::complex<double>(0, -norm);
