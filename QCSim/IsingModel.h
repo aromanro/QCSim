@@ -656,7 +656,7 @@ namespace Models {
 		std::vector<double> mBeta;
 
 		double beta1 = 0.9;
-		double beta2 = 0.999;
+		double beta2 = 0.98;
 		double lambda = 0.001; // with lambda 0 is the same as Adam
 		int stepNr = 0;
 
