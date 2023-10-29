@@ -321,6 +321,7 @@
     <ClInclude Include="QCSim\NQubitsControlledQuantumGate.h" />
     <ClInclude Include="QCSim\NQubitsQuantumGate.h" />
     <ClInclude Include="QCSim\Oracle.h" />
+    <ClInclude Include="QCSim\PauliString.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />
     <ClInclude Include="QCSim\PhaseEstimation.h" />
     <ClInclude Include="QCSim\QMeansClustering2D.h" />

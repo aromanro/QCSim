@@ -54,7 +54,7 @@ bool PauliSimultationTests()
 		{
 			for (int q = 0; q < 3; ++q)
 			{
-				const QuantumSimulation::PauliStringSimulation<>::PauliOp trm = (QuantumSimulation::PauliStringSimulation<>::PauliOp)dist_op(gen);
+				const PauliString::PauliString::PauliOp trm = (PauliString::PauliString::PauliOp)dist_op(gen);
 				term.setOperatorForQubit(q, trm);
 			}
 

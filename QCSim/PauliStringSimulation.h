@@ -7,6 +7,7 @@
 #include "QuantumGate.h"
 #include "QubitRegister.h"
 #include "Utils.h"
+#include "PauliString.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -60,29 +61,18 @@ namespace QuantumSimulation {
 		using BaseClass = PauliZStringSimulation<VectorClass, MatrixClass>;
 
 		PauliStringSimulation(double t = 0, unsigned int N = 3)
-			: BaseClass(t), ops(N, PauliOp::opZ)
+			: BaseClass(t), pauliString(N)
 		{
 		}
 
-		enum class PauliOp : unsigned char
+		void setOperatorForQubit(unsigned int qubit, PauliString::PauliString::PauliOp op)
 		{
-			opZ = 0,
-			opX = 1,
-			opY = 2
-		};
-
-		void setOperatorForQubit(unsigned int qubit, PauliOp op)
-		{
-			if (qubit >= ops.size()) return;
-
-			ops[qubit] = op;
+			pauliString.setOperatorForQubit(qubit, op);
 		}
 
-		PauliOp getOperatorForQubit(unsigned int qubit) const
+		PauliString::PauliString::PauliOp getOperatorForQubit(unsigned int qubit) const
 		{
-			if (qubit >= ops.size()) return PauliOp::opZ;
-
-			return ops[qubit];
+			return pauliString.getOperatorForQubit(qubit);
 		}
 
 		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
@@ -91,9 +81,9 @@ namespace QuantumSimulation {
 
 			// switch to proper basis
 			for (unsigned int qubit = 0; qubit < nrQubits; ++qubit)
-				if (ops[qubit] == PauliOp::opX)
+				if (getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opX)
 					measurementBasis.switchToXBasis(reg, qubit);
-				else if (ops[qubit] == PauliOp::opY)
+				else if (getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opY)
 					measurementBasis.switchToYBasis(reg, qubit);
 				// for Z we don't have to do anything, that one is the computational basis
 
@@ -101,18 +91,29 @@ namespace QuantumSimulation {
 
 			// switch back to computational basis
 			for (unsigned int qubit = 0; qubit < nrQubits; ++qubit)
-				if (ops[qubit] == PauliOp::opX)
+				if (getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opX)
 					measurementBasis.switchToComputationalFromXBasis(reg, qubit);
-				else if (ops[qubit] == PauliOp::opY)
+				else if (getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opY)
 					measurementBasis.switchToComputationalFromYBasis(reg, qubit);
 				// for Z we don't have to do anything, that one is the computational basis
 
 			return 0; // not used here, measurements need to be done explicitely
 		}
 
+		double getCoefficient() const
+		{
+			return pauliString.getCoefficient();
+		}
+
+		void setCoefficient(double c)
+		{
+			pauliString.setCoefficient(c);
+		}
+
 	protected:
 		QC::MeasurementBasis<VectorClass, MatrixClass> measurementBasis;
-		std::vector<PauliOp> ops;
+
+		PauliString::PauliString pauliString;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PauliDecomposedHamiltonianSimulation :
@@ -128,13 +129,12 @@ namespace QuantumSimulation {
 
 		void AddTerm(double coeff, const PauliStringSimulation<VectorClass, MatrixClass>& term)
 		{
-			coeffs.push_back(coeff);
 			terms.push_back(term);
+			terms.back().setCoefficient(coeff);
 		}
 
 		void Clear()
 		{
-			coeffs.clear();
 			terms.clear();
 		}
 
@@ -143,7 +143,7 @@ namespace QuantumSimulation {
 			const double deltat = simTime / steps;
 
 			for (unsigned int i = 0; i < terms.size(); ++i)
-				terms[i].setTimeInterval(deltat * coeffs[i]);
+				terms[i].setTimeInterval(deltat * terms[i].getCoefficient());
 
 			// Suzuki-Trotter expansion
 			for (unsigned int step = 0; step < steps; ++step)
@@ -189,26 +189,25 @@ namespace QuantumSimulation {
 			for (unsigned int i = 0; i < terms.size(); ++i)
 			{
 				MatrixClass tm;
-				for (unsigned int qubit = 0; qubit < BaseClass::getNrQubits(); ++qubit)
+
+				if (terms[i].getOperatorForQubit(0) == PauliString::PauliString::PauliOp::opX)
+					tm = X.getRawOperatorMatrix();
+				else if (terms[i].getOperatorForQubit(0) == PauliString::PauliString::PauliOp::opY)
+					tm = Y.getRawOperatorMatrix();
+				else
+					tm = Z.getRawOperatorMatrix();
+
+				for (unsigned int qubit = 1; qubit < BaseClass::getNrQubits(); ++qubit)
 				{
-					if (terms[i].getOperatorForQubit(qubit) == PauliStringSimulation<>::PauliOp::opX)
-					{
-						if (qubit == 0) tm = X.getRawOperatorMatrix();
-						else tm = Eigen::kroneckerProduct(X.getRawOperatorMatrix(), tm).eval();
-					}
-					else if (terms[i].getOperatorForQubit(qubit) == PauliStringSimulation<>::PauliOp::opY)
-					{
-						if (qubit == 0) tm = Y.getRawOperatorMatrix();
-						else tm = Eigen::kroneckerProduct(Y.getRawOperatorMatrix(), tm).eval();
-					}
+					if (terms[i].getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opX)
+						tm = Eigen::kroneckerProduct(X.getRawOperatorMatrix(), tm).eval();
+					else if (terms[i].getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opY)
+						tm = Eigen::kroneckerProduct(Y.getRawOperatorMatrix(), tm).eval();
 					else
-					{
-						if (qubit == 0) tm = Z.getRawOperatorMatrix();
-						else tm = Eigen::kroneckerProduct(Z.getRawOperatorMatrix(), tm).eval();
-					}
+						tm = Eigen::kroneckerProduct(Z.getRawOperatorMatrix(), tm).eval();
 				}
 
-				H += coeffs[i] * tm;
+				H += terms[i].getCoefficient() * tm;
 			}
 
 			return (std::complex<double>(0, -1) * t * H).exp();
@@ -218,7 +217,6 @@ namespace QuantumSimulation {
 		double simTime;
 		unsigned int steps;
 
-		std::vector<double> coeffs;
 		std::vector<PauliStringSimulation<VectorClass, MatrixClass>> terms;
 	};
 }
