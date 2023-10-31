@@ -344,6 +344,7 @@
     <ClInclude Include="QCSim\TeleportedCNOT.h" />
     <ClInclude Include="QCSim\Tests.h" />
     <ClInclude Include="QCSim\Utils.h" />
+    <ClInclude Include="QCSim\VQE.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
