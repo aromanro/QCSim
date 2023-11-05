@@ -32,6 +32,8 @@ bool QMLTests();
 
 bool IsingTests();
 
+bool VQETests();
+
 bool tests();
 
 #ifndef TESTS_CPP_

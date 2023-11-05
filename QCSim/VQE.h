@@ -12,6 +12,10 @@
 
 #include "PauliString.h"
 
+// roughly based on Lesson 11 from
+// "Fundamentals In Quantum Algorithms: A Tutorial Series Using Qiskit Continued" by Daniel Koch, Saahil Patel, Laura Wessing, Paul M. Alsing
+// https://arxiv.org/abs/2008.10647
+
 namespace VQE {
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class PauliStringVQE :
@@ -118,7 +122,7 @@ namespace VQE {
 
 			double energy = 0.0;
 
-			const auto measurements = res.RepeatedMeasure(nrMeasurements);
+			const auto measurements = reg.RepeatedMeasure(nrMeasurements);
 
 			for (const auto& m : measurements)
 			{
@@ -135,7 +139,7 @@ namespace VQE {
 			}
 
 
-			return GetCoefficient() * energy / nrMeasurements;
+			return getCoefficient() * energy / nrMeasurements;
 		}
 
 	protected:
@@ -214,6 +218,56 @@ namespace VQE {
 			}
 
 			return rp;
+		}
+
+		double EstimateEnergy(const std::vector<double>& params, size_t nrMeasurements = 10000)
+		{
+			double energy = 0.0;
+
+			for (const auto& term : terms)
+				energy += term.EstimateEnergy(BaseClass::reg, params, nrMeasurements);
+
+			return energy;
+		}
+
+
+		void NelderMeadStep(std::vector<std::vector<double>>& points)
+		{
+			if (points.empty()) return;
+
+			double maxEnergy = EstimateEnergy(BaseClass::reg, points[0], nrMeasurements);
+			int maxIndex = 0;
+
+			double maxEnergy2 = maxEnergy;
+			int maxIndex2 = maxIndex;
+
+			double minEnergy = maxEnergy;
+			int minIndex = maxIndex;
+
+			for (int i = 1; i < points.size(); ++i)
+			{
+				const double e = EstimateEnergy(BaseClass::reg, points[i], nrMeasurements);
+				if (e > maxEnergy)
+				{
+					maxEnergy2 = maxEnergy;
+					maxIndex2 = maxIndex;
+					maxEnergy = e;
+					maxIndex = i;
+				}
+				else if (e < minEnergy)
+				{
+					minEnergy = e;
+					minIndex = i;
+				}
+			}
+
+			const auto centroid = Centroid(points, minIndex);
+			const auto reflectedPoint = ReflectionPoint(centroid, points[minIndex], 2.0);
+
+			const double reflectedEnergy = EstimateEnergy(BaseClass::reg, reflectedPoint, nrMeasurements);
+
+			// TODO: now using information from the 'reflected' point, decide what point should be chosen to replace the worst point
+			// options are: reflect / expand / contract / shrink
 		}
 
 		void SetNrMeasurements(size_t n)

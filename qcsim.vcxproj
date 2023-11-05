@@ -294,6 +294,7 @@
     <ClCompile Include="QCSim\PhaseEstimationTests.cpp" />
     <ClCompile Include="QCSim\QMLTests.cpp" />
     <ClCompile Include="QCSim\TeleportationTests.cpp" />
+    <ClCompile Include="QCSim\VQETests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QCSim\BernsteinVazirani.h" />
