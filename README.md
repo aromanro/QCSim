@@ -78,6 +78,7 @@ int main()
 }
 ```
 
+You should compile it with c++ 17 (at least).
 Of course, if one wants to use some other stuff in there, more headers might need to be included.
 The 'test' cpp files are intended for both tests and examples, not necesarily for usage in some other app, including the headers should usually be enough.
 
