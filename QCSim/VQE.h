@@ -262,12 +262,59 @@ namespace VQE {
 			}
 
 			const auto centroid = Centroid(points, minIndex);
-			const auto reflectedPoint = ReflectionPoint(centroid, points[minIndex], 2.0);
+			auto newPoint = ReflectionPoint(centroid, points[minIndex], 2.0);
 
-			const double reflectedEnergy = EstimateEnergy(BaseClass::reg, reflectedPoint, nrMeasurements);
+			const double reflectedEnergy = EstimateEnergy(BaseClass::reg, newPoint, nrMeasurements);
 
 			// TODO: now using information from the 'reflected' point, decide what point should be chosen to replace the worst point
 			// options are: reflect / expand / contract / shrink
+			bool shrink = false;
+			if (reflectedEnergy < minEnergy)
+			{
+				// we're on the right track, try to expand further
+				const auto expandPoint = ReflectionPoint(centroid, newPoint, 2.0);
+				const double expandEnergy = EstimateEnergy(BaseClass::reg, expandPoint, nrMeasurements);
+				if (expandEnergy < reflectedEnergy)
+					newPoint = expandPoint;
+				points[maxIndex] = newPoint;
+			} 
+			else if (reflectedEnergy >= maxEnergy2)
+			{
+				if (reflectedEnergy < maxEnergy)
+				{
+					// with the reflected point we're worse than any other point
+					const auto contractPoint = ReflectionPoint(centroid, newPoint, 0.5);
+					const double contractEnergy = EstimateEnergy(BaseClass::reg, contractPoint, nrMeasurements);
+					if (contractEnergy < reflectedEnergy)
+						points[maxIndex] = contractPoint;
+					else
+						// shrink
+						shrink = true;
+				}
+				else
+				{
+					// with the reflected point we're worse than all the points we were starting with
+					const auto contractPoint = ReflectionPoint(centroid, points[maxIndex], 0.5);
+					const double contractEnergy = EstimateEnergy(BaseClass::reg, contractPoint, nrMeasurements);
+					if (contractEnergy < minEnergy)
+						points[maxIndex] = contractPoint;
+					else
+						// shrink
+						shrink = true;
+				}
+			}
+			else points[maxIndex] = newPoint;
+
+			if (shrink)
+			{
+				// shrink all points (except the min one)
+				// by reflecting them about the min point, with alpha = 0.5
+				for (int i = 0; i < points.size(); ++i)
+				{
+					if (i == minIndex) continue;
+					points[i] = ReflectionPoint(points[minIndex], points[i], 0.5);
+				}
+			}
 		}
 
 		void SetNrMeasurements(size_t n)
