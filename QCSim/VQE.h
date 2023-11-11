@@ -282,18 +282,25 @@ namespace VQE {
 			{
 				if (reflectedEnergy < maxEnergy)
 				{
-					// with the reflected point we're worse than any other point
+					// with the reflected point we're worse than any other point (except the one that was the worst and was reflected)
+					// try a point between the centroid and the reflected point, maybe it's better
+					// if not, the reflected one is still better than the original one
 					const auto contractPoint = ReflectionPoint(centroid, newPoint, 0.5);
 					const double contractEnergy = EstimateEnergy(BaseClass::reg, contractPoint, nrMeasurements);
 					if (contractEnergy < reflectedEnergy)
 						points[maxIndex] = contractPoint;
 					else
-						// shrink
+					{
+						points[maxIndex] = newPoint;
+						// also shrink
 						shrink = true;
+					}
 				}
 				else
 				{
 					// with the reflected point we're worse than all the points we were starting with
+					// including the one that was reflected
+					// try a point between the origianl point and the centroid, maybe it's better
 					const auto contractPoint = ReflectionPoint(centroid, points[maxIndex], 0.5);
 					const double contractEnergy = EstimateEnergy(BaseClass::reg, contractPoint, nrMeasurements);
 					if (contractEnergy < minEnergy)
