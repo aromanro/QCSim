@@ -403,7 +403,7 @@ namespace QC {
 			const bool recordSave = recordGates;
 			recordGates = false;
 
-			for (const Gates::AppliedGate& gate : computeGates)
+			for (const Gates::AppliedGate<MatrixClass>& gate : computeGates)
 			{
 				if (gate.getQubitsNumber() > 3)
 					ApplyOperatorMatrix(gate.getRawOperatorMatrix());

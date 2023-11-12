@@ -172,7 +172,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			HadamardGate()
 			{
@@ -192,7 +192,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			HyGate()
 			{
@@ -210,7 +210,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			PhaseGate()
 			{
@@ -228,7 +228,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			PhaseShiftGate(double theta = 0)
 			{
@@ -252,7 +252,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			PauliXGate()
 			{
@@ -270,7 +270,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			PauliYGate()
 			{
@@ -289,7 +289,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			PauliZGate()
 			{
@@ -307,7 +307,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			SigmaPlusGate()
 			{
@@ -319,7 +319,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			SigmaMinusGate()
 			{
@@ -332,7 +332,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			SquareRootNOTGate()
 			{	
@@ -347,7 +347,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			SquareRootNOTDagGate()
 			{
@@ -362,7 +362,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			SplitterGate()
 			{
@@ -388,7 +388,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = RotationGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			RxGate(double theta = 0)
 			{
@@ -410,7 +410,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = RotationGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			RyGate(double theta = 0)
 			{
@@ -432,7 +432,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = RotationGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			RzGate(double theta = 0)
 			{
@@ -458,7 +458,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = SingleQubitGate<MatrixClass>::BaseClass;
+			using OpClass = typename SingleQubitGate<MatrixClass>::BaseClass;
 
 			UGate(double theta = 0, double phi = 0, double lambda = 0, double gamma = 0)
 			{
@@ -526,7 +526,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsGate<MatrixClass>;
-			using OpClass = TwoQubitsGate<MatrixClass>::BaseClass;
+			using OpClass = typename TwoQubitsGate<MatrixClass>::BaseClass;
 
 			SwapGate()
 			{
@@ -541,7 +541,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			iSwapGate()
 			{
@@ -556,7 +556,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			DecrementGate()
 			{
@@ -577,7 +577,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			TwoQubitsControlledGate() {};
 
@@ -604,7 +604,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			CNOTGate()
 			{
@@ -629,7 +629,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledYGate()
 			{
@@ -644,7 +644,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledZGate()
 			{
@@ -656,7 +656,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledHadamardGate()
 			{
@@ -672,7 +672,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledSquareRootNOTGate()
 			{
@@ -687,7 +687,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledSquareRootNOTDagGate()
 			{
@@ -703,7 +703,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledPhaseGate()
 			{
@@ -715,7 +715,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledPhaseShiftGate(double theta = 0)
 			{
@@ -732,7 +732,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledUGate(double theta = 0, double phi = 0, double lambda = 0, double gamma = 0)
 			{
@@ -755,7 +755,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = TwoQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			virtual void SetTheta(double theta) = 0;
 		};
@@ -764,7 +764,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = ControlledRotationGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledRxGate(double theta = 0)
 			{
@@ -786,7 +786,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = ControlledRotationGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledRyGate(double theta = 0)
 			{
@@ -808,7 +808,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = ControlledRotationGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ControlledRzGate(double theta = 0)
 			{
@@ -873,7 +873,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = ThreeQubitsGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass;
 
 			ThreeQubitsControlledGate() {};
 
@@ -899,7 +899,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = ThreeQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			ToffoliGate()
 			{
@@ -920,7 +920,7 @@ namespace QC {
 		{
 		public:
 			using BaseClass = ThreeQubitsControlledGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass::BaseClass;
+			using OpClass = typename typename BaseClass::BaseClass::BaseClass;
 
 			FredkinGate()
 			{
