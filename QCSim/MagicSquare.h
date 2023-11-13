@@ -25,7 +25,7 @@ namespace Games {
 			: BaseClass(4, addseed), distInd(1, 3), nrPlays(100)
 		{
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
-			const std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
+			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
 			rng.seed(seed);
 
 			const double invSqrt2 = 1. / sqrt(2.);

@@ -21,8 +21,7 @@ namespace QC {
 			resultsStorage = VectorClass::Zero(NrBasisStates);
 
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
-			const std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
-
+			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
 			rng.seed(seed);
 
 			registerStorage(0) = 1;
