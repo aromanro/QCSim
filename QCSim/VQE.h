@@ -486,7 +486,7 @@ namespace VQE {
 		size_t nrMeasurements = 10000;
 
 		std::vector<std::vector<double>> vertices;
-		int terminateLimit = 20;
+		int terminateLimit = 10;
 		double delta = 0.0001;
 		std::vector<double> vertexEnergies;
 	};

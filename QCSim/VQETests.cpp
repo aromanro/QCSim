@@ -30,8 +30,8 @@ bool VQETests()
 	vqeSingleQubit.AddTerm(Yterm);
 	vqeSingleQubit.AddTerm(Zterm);
 
-	const double theta = dist_zo(gen) * M_PI;
-	const double phi = dist_zo(gen) * 2. * M_PI;
+	const double theta = dist_zo(gen) * M_PI / 2;
+	const double phi = dist_zo(gen) * M_PI;
 	const double radius = 0.35;
 	
 	std::vector<std::vector<double>> vertices(3);
@@ -80,14 +80,16 @@ bool VQETests()
 	vqeDoubleQubits.AddTerm(XYterm);
 	vqeDoubleQubits.AddTerm(ZZterm);
 
+	vqeDoubleQubits.SetTerminateLimit(15);
+
 	vertices.clear();
 	vertices.resize(9);
 
 	std::vector<double> params;
 	for (int i = 0; i < 4; ++i)
 	{
+		params.push_back(dist_zo(gen) * M_PI / 2);
 		params.push_back(dist_zo(gen) * M_PI);
-		params.push_back(dist_zo(gen) * M_PI * 2);
 	}
 
 	for (int v = 0; v < vertices.size(); ++v)
