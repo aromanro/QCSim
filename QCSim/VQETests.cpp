@@ -14,6 +14,7 @@ bool VQETests()
 	std::cout << "\nVQE Tests" << std::endl;
 
 	std::cout << "\nOne qubit" << std::endl;
+
 	VQE::VariationalQuantumEigensolver<> vqeSingleQubit(1);
 	VQE::PauliStringVQE<> Xterm(1);
 	Xterm.setOperatorForQubit(0, PauliString::PauliString::PauliOp::opX);
@@ -30,7 +31,7 @@ bool VQETests()
 	vqeSingleQubit.AddTerm(Zterm);
 
 	const double theta = dist_zo(gen) * M_PI;
-	const double phi = dist_zo(gen) * 2 * M_PI;
+	const double phi = dist_zo(gen) * 2. * M_PI;
 	const double radius = 0.35;
 	
 	std::vector<std::vector<double>> vertices(3);
@@ -54,11 +55,11 @@ bool VQETests()
 
 	double lowestEnergy = vqeSingleQubit.GetMinEnergy();
 
-	std::cout << "Single qubit energy: " << lowestEnergy << " Best found should be around -3.8!" << std::endl;
 	std::vector<double> vertex = vqeSingleQubit.GetMinVertex();
 	std::cout << "Theta: " << vertex[0] << " Phi : " << vertex[1] << std::endl;
-
-	if (lowestEnergy >= 0)
+	std::cout << "Energy: " << lowestEnergy << " Best found should be around -3.8!" << std::endl;
+	
+	if (lowestEnergy > -3.)
 	{
 		std::cout << "Energy is too high!" << std::endl;
 		return false;
@@ -68,9 +69,9 @@ bool VQETests()
 
 	VQE::VariationalQuantumEigensolver<> vqeDoubleQubits(2);
 	VQE::PauliStringVQE<> XYterm(2);
-	Xterm.setOperatorForQubit(0, PauliString::PauliString::PauliOp::opX);
-	Xterm.setOperatorForQubit(1, PauliString::PauliString::PauliOp::opY);
-	Xterm.setCoefficient(3.0);
+	XYterm.setOperatorForQubit(0, PauliString::PauliString::PauliOp::opX);
+	XYterm.setOperatorForQubit(1, PauliString::PauliString::PauliOp::opY);
+	XYterm.setCoefficient(3.0);
 	VQE::PauliStringVQE<> ZZterm(2);
 	ZZterm.setOperatorForQubit(0, PauliString::PauliString::PauliOp::opZ);
 	ZZterm.setOperatorForQubit(1, PauliString::PauliString::PauliOp::opZ);
@@ -80,13 +81,13 @@ bool VQETests()
 	vqeDoubleQubits.AddTerm(ZZterm);
 
 	vertices.clear();
-	vertices.resize(8);
+	vertices.resize(9);
 
 	std::vector<double> params;
 	for (int i = 0; i < 4; ++i)
 	{
 		params.push_back(dist_zo(gen) * M_PI);
-		params.push_back(dist_zo(gen) * 2. * M_PI);
+		params.push_back(dist_zo(gen) * M_PI * 2);
 	}
 
 	for (int v = 0; v < vertices.size(); ++v)
@@ -101,9 +102,9 @@ bool VQETests()
 
 	lowestEnergy = vqeDoubleQubits.GetMinEnergy();
 
-	std::cout << "Double qubits energy: " << lowestEnergy << " Best found should be around -5!" << std::endl;
+	std::cout << "Energy: " << lowestEnergy << " Best found should be around -5!" << std::endl;
 
-	if (lowestEnergy >= 0)
+	if (lowestEnergy > -4)
 	{
 		std::cout << "Energy is too high!" << std::endl;
 		return false;

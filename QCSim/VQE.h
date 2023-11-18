@@ -307,7 +307,6 @@ namespace VQE {
 
 			const auto centroid = Centroid(vertices, maxIndex);
 			const auto reflectedPoint = ReflectionPoint(vertices[maxIndex], centroid, 2.0);
-
 			const double reflectedEnergy = EstimateEnergy(reflectedPoint, nrMeasurements);
 
 			// TODO: now using information from the 'reflected' point, decide what point should be chosen to replace the worst point
@@ -357,16 +356,26 @@ namespace VQE {
 					// with the reflected point we're worse than all the points we were starting with
 					// including the one that was reflected
 					// try a point between the original point and the centroid, maybe it's better
-					const auto contractPoint = ReflectionPoint(centroid, vertices[maxIndex], 0.5);
-					const double contractEnergy = EstimateEnergy(contractPoint, nrMeasurements);
+					auto contractPoint = ReflectionPoint(centroid, vertices[maxIndex], 0.5);
+					double contractEnergy = EstimateEnergy(contractPoint, nrMeasurements);
 					if (contractEnergy < maxEnergy)
 					{
 						vertices[maxIndex] = contractPoint;
 						vertexEnergies[maxIndex] = contractEnergy;
 					}
 					else
+					{
+						contractPoint = ReflectionPoint(centroid, vertices[maxIndex], 1.5);
+						contractEnergy = EstimateEnergy(contractPoint, nrMeasurements);
+						if (contractEnergy < maxEnergy)
+						{
+							vertices[maxIndex] = contractPoint;
+							vertexEnergies[maxIndex] = contractEnergy;
+						}
+
 						// shrink
 						shrink = true;
+					}
 				}
 
 
@@ -404,7 +413,7 @@ namespace VQE {
 					centroid[i] += p[i];
 			}
 
-			size_t nrPoints = (excludeIndex == -1) ? points.size() - 1 : points.size();
+			size_t nrPoints = (excludeIndex == -1) ? points.size() : points.size() - 1;
 			for (auto& c : centroid)
 				c /= nrPoints;
 
@@ -443,10 +452,10 @@ namespace VQE {
 			maxIndex = 0;
 
 			maxEnergy2 = maxEnergy;
-			maxIndex2 = maxIndex;
+			maxIndex2 = 0;
 
 			minEnergy = maxEnergy;
-			minIndex = maxIndex;
+			minIndex = 0;
 
 			// pick up the worst point
 
