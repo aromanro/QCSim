@@ -312,23 +312,7 @@ namespace VQE {
 			// TODO: now using information from the 'reflected' point, decide what point should be chosen to replace the worst point
 			// options are: reflect / expand / contract / shrink
 			
-			if (reflectedEnergy < minEnergy)
-			{
-				// we're on the right track, try to expand further
-				const auto expandPoint = ReflectionPoint(centroid, reflectedPoint, 2.0);
-				const double expandEnergy = EstimateEnergy(expandPoint, nrMeasurements);
-				if (expandEnergy < reflectedEnergy)
-				{
-					vertices[maxIndex] = expandPoint;
-					vertexEnergies[maxIndex] = expandEnergy;
-				}
-				else
-				{
-					vertices[maxIndex] = reflectedPoint;
-					vertexEnergies[maxIndex] = reflectedEnergy;
-				}
-			}
-			else if (reflectedEnergy > maxEnergy2)
+			if (reflectedEnergy > maxEnergy2)
 			{
 				bool shrink = false;
 
@@ -393,8 +377,19 @@ namespace VQE {
 			}
 			else 
 			{
-				vertices[maxIndex] = reflectedPoint;
-				vertexEnergies[maxIndex] = reflectedEnergy;
+				// we're on the right track, try to expand further
+				const auto expandPoint = ReflectionPoint(centroid, reflectedPoint, 2.0);
+				const double expandEnergy = EstimateEnergy(expandPoint, nrMeasurements);
+				if (expandEnergy < reflectedEnergy)
+				{
+					vertices[maxIndex] = expandPoint;
+					vertexEnergies[maxIndex] = expandEnergy;
+				}
+				else
+				{
+					vertices[maxIndex] = reflectedPoint;
+					vertexEnergies[maxIndex] = reflectedEnergy;
+				}
 			}
 		}
 
