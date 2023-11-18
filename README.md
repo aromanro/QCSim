@@ -57,6 +57,7 @@ Quantum Machine Learning
 
 Optimization
 *   QAOA (quantum approximate optimization algorithm) on Ising Model
+*   VQE (variational quantum eigensolver)
 
 First, a brief description about usage, if somebody wants to use it in a separate project. The minimal thing to do is to add to include directories the Eigen directory and this project directory (the one that contains the source files). That's about it. Here is some minimal code that can be extended to execute a quantum algorithm:
 

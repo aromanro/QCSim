@@ -13,7 +13,7 @@ namespace PauliString {
 			opY = 2
 		};
 
-		PauliString(int nrQubits) : ops(nrQubits, PauliOp::opZ), coeff(1.0) {}
+		PauliString(int nrQubits = 2) : ops(nrQubits, PauliOp::opZ), coeff(1.0) {}
 
 		void setOperatorForQubit(unsigned int qubit, PauliOp op)
 		{

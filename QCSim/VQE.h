@@ -22,7 +22,8 @@ namespace VQE {
 		public QC::QuantumSubAlgorithm<VectorClass, MatrixClass>
 	{
 	public:
-		PauliStringVQE()
+		PauliStringVQE(int nrQubits)
+			: QC::QuantumSubAlgorithm<VectorClass, MatrixClass>(), pauliString(nrQubits)
 		{
 			const double theta = 0.5 * M_PI;
 			rx.SetTheta(theta);
@@ -78,7 +79,7 @@ namespace VQE {
 			if (params.size() < nrQubits) return;
 
 			unsigned int pos = 0;
-			for (unsigned int q = 0; q < nrQubits; ++q)
+			for (unsigned int q = 0; q < nrQubits && pos < params.size() - 1; ++q)
 			{
 				SingleQubitAnsatz(reg, q, params[pos], params[pos + 1]);
 				pos += 2;
@@ -92,7 +93,7 @@ namespace VQE {
 						reg.ApplyGate(cnot, q - 1, q);
 
 					if (nrQubits > 2)
-						reg.ApplyGate(nrQubits - 1, 0);
+						reg.ApplyGate(cnot, nrQubits - 1, 0);
 				}
 				else
 				{
@@ -100,14 +101,13 @@ namespace VQE {
 						reg.ApplyGate(cnot, q + 1, q);
 
 					if (nrQubits > 2)
-						reg.ApplyGate(0, nrQubits - 1);
+						reg.ApplyGate(cnot, 0, nrQubits - 1);
 				}
 
 				flip = !flip;
 
-				for (unsigned int q = 0; q < nrQubits; ++q)
+				for (unsigned int q = 0; q < nrQubits && pos < params.size() - 1; ++q)
 				{
-					if (pos >= params.size() - 1) break;
 					SingleQubitAnsatz(reg, q, params[pos], params[pos + 1]);
 					pos += 2;
 				}
@@ -162,14 +162,13 @@ namespace VQE {
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
 		VariationalQuantumEigensolver(unsigned int N = 2, bool addSeed = false)
-			: BaseClass(N, addSeed), nrMeasurements(10000)
+			: BaseClass(N, addSeed)
 		{
 		}
 
-		void AddTerm(double coeff, const PauliStringVQE<VectorClass, MatrixClass>& term)
+		void AddTerm(const PauliStringVQE<VectorClass, MatrixClass>& term)
 		{
-			terms.push_back(term);
-			terms.back().setCoefficient(coeff);
+			terms.emplace_back(term);
 		}
 
 		void Clear()
@@ -179,8 +178,215 @@ namespace VQE {
 
 		unsigned int Execute() override
 		{
-			// TODO: implement it, using Nelder-Mead algorithm
+			if (vertices.empty()) return 0;
+
+			EstimateEnergiesForVertices();
+			double oldLowestEnergy = GetMinEnergy();
+
+			int terminateCount = 0;
+			for (int i = 0; i < 1000; ++i)
+			{
+				NelderMeadStep();
+
+				double newLowestEnergy = GetMinEnergy();
+
+				if (abs(newLowestEnergy - oldLowestEnergy) < delta)
+					++terminateCount;
+				else
+					terminateCount = 0;
+
+				oldLowestEnergy = newLowestEnergy;
+
+				if (i % 5 == 0)
+					std::cout << "Iteration " << i << ", Energy: " << newLowestEnergy << std::endl;
+
+				if (terminateCount >= terminateLimit) break;
+			}
+
 			return 0;
+		}
+
+		double EstimateEnergy(const std::vector<double>& params, size_t nrMeasurements = 10000)
+		{
+			double energy = 0.0;
+
+			for (auto& term : terms)
+				energy += term.EstimateEnergy(BaseClass::reg, params, nrMeasurements);
+
+			return energy;
+		}
+
+		void SetNrMeasurements(size_t n)
+		{
+			nrMeasurements = n;
+		}
+
+		size_t GetNrMeasurements() const
+		{
+			return nrMeasurements;
+		}
+
+		void SetVertices(const std::vector<std::vector<double>>& v)
+		{
+			vertices = v;
+		}
+
+		const std::vector<std::vector<double>>& GetVertices() const
+		{
+			return vertices;
+		}
+
+		void SetTerminateLimit(int limit)
+		{
+			terminateLimit = limit;
+		}
+
+		int GetTerminateLimit() const
+		{
+			return terminateLimit;
+		}
+
+		void SetDelta(double d)
+		{
+			delta = d;
+		}
+
+		double GetDelta() const
+		{
+			return delta;
+		}
+
+		double GetMinEnergy() const
+		{
+			if (vertexEnergies.empty()) return 0.0;
+
+			double minEnergy = vertexEnergies[0];
+			for (int i = 1; i < vertexEnergies.size(); ++i)
+				if (vertexEnergies[i] < minEnergy)
+					minEnergy = vertexEnergies[i];
+
+			return minEnergy;
+		}
+
+		std::vector<double> GetMinVertex() const
+		{
+			if (vertexEnergies.empty()) return {};
+
+			double minEnergy = vertexEnergies[0];
+			int minIndex = 0;
+			for (int i = 1; i < vertexEnergies.size(); ++i)
+				if (vertexEnergies[i] < minEnergy)
+				{
+					minEnergy = vertexEnergies[i];
+					minIndex = i;
+				}
+
+			return vertices[minIndex];
+		}
+
+	protected:
+		void NelderMeadStep()
+		{
+			if (vertices.empty()) return;
+
+			double maxEnergy = 0;
+			int maxIndex = 0;
+
+			double maxEnergy2 = maxEnergy;
+			int maxIndex2 = maxIndex;
+
+			double minEnergy = maxEnergy;
+			int minIndex = maxIndex;
+			
+			// pick up the worst point
+
+			// also identify the best one, need its value for comparisons and shrinking if needed
+			// also keep the second worst, for comparisons
+
+			GetMinMaxEnergy(minEnergy, maxEnergy, maxEnergy2, minIndex, maxIndex, maxIndex2);
+
+			const auto centroid = Centroid(vertices, maxIndex);
+			const auto reflectedPoint = ReflectionPoint(vertices[maxIndex], centroid, 2.0);
+
+			const double reflectedEnergy = EstimateEnergy(reflectedPoint, nrMeasurements);
+
+			// TODO: now using information from the 'reflected' point, decide what point should be chosen to replace the worst point
+			// options are: reflect / expand / contract / shrink
+			
+			if (reflectedEnergy < minEnergy)
+			{
+				// we're on the right track, try to expand further
+				const auto expandPoint = ReflectionPoint(centroid, reflectedPoint, 2.0);
+				const double expandEnergy = EstimateEnergy(expandPoint, nrMeasurements);
+				if (expandEnergy < reflectedEnergy)
+				{
+					vertices[maxIndex] = expandPoint;
+					vertexEnergies[maxIndex] = expandEnergy;
+				}
+				else
+				{
+					vertices[maxIndex] = reflectedPoint;
+					vertexEnergies[maxIndex] = reflectedEnergy;
+				}
+			}
+			else if (reflectedEnergy > maxEnergy2)
+			{
+				bool shrink = false;
+
+				if (reflectedEnergy < maxEnergy)
+				{
+					// with the reflected point we're worse than any other point (except the one that was the worst and was reflected)
+					// try a point between the centroid and the reflected point, maybe it's better
+					// if not, the reflected one is still better than the original one
+					const auto contractPoint = ReflectionPoint(centroid, reflectedPoint, 0.5);
+					const double contractEnergy = EstimateEnergy(contractPoint, nrMeasurements);
+					if (contractEnergy < reflectedEnergy)
+					{
+						vertices[maxIndex] = contractPoint;
+						vertexEnergies[maxIndex] = contractEnergy;
+					}
+					else
+					{
+						vertices[maxIndex] = reflectedPoint;
+						vertexEnergies[maxIndex] = reflectedEnergy;
+						shrink = true;
+					}
+				}
+				else
+				{
+					// with the reflected point we're worse than all the points we were starting with
+					// including the one that was reflected
+					// try a point between the original point and the centroid, maybe it's better
+					const auto contractPoint = ReflectionPoint(centroid, vertices[maxIndex], 0.5);
+					const double contractEnergy = EstimateEnergy(contractPoint, nrMeasurements);
+					if (contractEnergy < maxEnergy)
+					{
+						vertices[maxIndex] = contractPoint;
+						vertexEnergies[maxIndex] = contractEnergy;
+					}
+					else
+						// shrink
+						shrink = true;
+				}
+
+
+				if (shrink)
+				{
+					// shrink all points (except the min one)
+					// by reflecting them about the min point, with alpha = 0.5
+					for (int i = 0; i < vertices.size(); ++i)
+					{
+						if (i == minIndex) continue;
+						vertices[i] = ReflectionPoint(vertices[minIndex], vertices[i], 0.5);
+						vertexEnergies[i] = EstimateEnergy(vertices[i], nrMeasurements);
+					}
+				}
+			}
+			else 
+			{
+				vertices[maxIndex] = reflectedPoint;
+				vertexEnergies[maxIndex] = reflectedEnergy;
+			}
 		}
 
 		static std::vector<double> Centroid(const std::vector<std::vector<double>>& points, int excludeIndex = -1)
@@ -198,7 +404,7 @@ namespace VQE {
 					centroid[i] += p[i];
 			}
 
-			size_t nrPoints = excludeIndex == -1 ? points.size() - 1 : points.size();
+			size_t nrPoints = (excludeIndex == -1) ? points.size() - 1 : points.size();
 			for (auto& c : centroid)
 				c /= nrPoints;
 
@@ -220,33 +426,36 @@ namespace VQE {
 			return rp;
 		}
 
-		double EstimateEnergy(const std::vector<double>& params, size_t nrMeasurements = 10000)
+		void EstimateEnergiesForVertices()
 		{
-			double energy = 0.0;
+			if (vertices.empty()) return;
 
-			for (const auto& term : terms)
-				energy += term.EstimateEnergy(BaseClass::reg, params, nrMeasurements);
-
-			return energy;
+			vertexEnergies.resize(vertices.size());
+			for (int v = 0; v < vertices.size(); ++v)
+				vertexEnergies[v] = EstimateEnergy(vertices[v], nrMeasurements);
 		}
 
 
-		void NelderMeadStep(std::vector<std::vector<double>>& points)
+		void GetMinMaxEnergy(double& minEnergy, double& maxEnergy, double& maxEnergy2, int& minIndex, int& maxIndex, int& maxIndex2) const
 		{
-			if (points.empty()) return;
+			if (vertexEnergies.empty()) return;
+			maxEnergy = vertexEnergies[0];
+			maxIndex = 0;
 
-			double maxEnergy = EstimateEnergy(BaseClass::reg, points[0], nrMeasurements);
-			int maxIndex = 0;
+			maxEnergy2 = maxEnergy;
+			maxIndex2 = maxIndex;
 
-			double maxEnergy2 = maxEnergy;
-			int maxIndex2 = maxIndex;
+			minEnergy = maxEnergy;
+			minIndex = maxIndex;
 
-			double minEnergy = maxEnergy;
-			int minIndex = maxIndex;
+			// pick up the worst point
 
-			for (int i = 1; i < points.size(); ++i)
+			// also identify the best one, need its value for comparisons and shrinking if needed
+			// also keep the second worst, for comparisons
+
+			for (int i = 1; i < vertexEnergies.size(); ++i)
 			{
-				const double e = EstimateEnergy(BaseClass::reg, points[i], nrMeasurements);
+				const double e = vertexEnergies[i];
 				if (e > maxEnergy)
 				{
 					maxEnergy2 = maxEnergy;
@@ -260,83 +469,17 @@ namespace VQE {
 					minIndex = i;
 				}
 			}
-
-			const auto centroid = Centroid(points, minIndex);
-			auto newPoint = ReflectionPoint(centroid, points[minIndex], 2.0);
-
-			const double reflectedEnergy = EstimateEnergy(BaseClass::reg, newPoint, nrMeasurements);
-
-			// TODO: now using information from the 'reflected' point, decide what point should be chosen to replace the worst point
-			// options are: reflect / expand / contract / shrink
-			bool shrink = false;
-			if (reflectedEnergy < minEnergy)
-			{
-				// we're on the right track, try to expand further
-				const auto expandPoint = ReflectionPoint(centroid, newPoint, 2.0);
-				const double expandEnergy = EstimateEnergy(BaseClass::reg, expandPoint, nrMeasurements);
-				if (expandEnergy < reflectedEnergy)
-					newPoint = expandPoint;
-				points[maxIndex] = newPoint;
-			} 
-			else if (reflectedEnergy >= maxEnergy2)
-			{
-				if (reflectedEnergy < maxEnergy)
-				{
-					// with the reflected point we're worse than any other point (except the one that was the worst and was reflected)
-					// try a point between the centroid and the reflected point, maybe it's better
-					// if not, the reflected one is still better than the original one
-					const auto contractPoint = ReflectionPoint(centroid, newPoint, 0.5);
-					const double contractEnergy = EstimateEnergy(BaseClass::reg, contractPoint, nrMeasurements);
-					if (contractEnergy < reflectedEnergy)
-						points[maxIndex] = contractPoint;
-					else
-					{
-						points[maxIndex] = newPoint;
-						// also shrink
-						shrink = true;
-					}
-				}
-				else
-				{
-					// with the reflected point we're worse than all the points we were starting with
-					// including the one that was reflected
-					// try a point between the origianl point and the centroid, maybe it's better
-					const auto contractPoint = ReflectionPoint(centroid, points[maxIndex], 0.5);
-					const double contractEnergy = EstimateEnergy(BaseClass::reg, contractPoint, nrMeasurements);
-					if (contractEnergy < minEnergy)
-						points[maxIndex] = contractPoint;
-					else
-						// shrink
-						shrink = true;
-				}
-			}
-			else points[maxIndex] = newPoint;
-
-			if (shrink)
-			{
-				// shrink all points (except the min one)
-				// by reflecting them about the min point, with alpha = 0.5
-				for (int i = 0; i < points.size(); ++i)
-				{
-					if (i == minIndex) continue;
-					points[i] = ReflectionPoint(points[minIndex], points[i], 0.5);
-				}
-			}
 		}
 
-		void SetNrMeasurements(size_t n)
-		{
-			nrMeasurements = n;
-		}
 
-		size_t GetNrMeasurements() const
-		{
-			return nrMeasurements;
-		}
 
-	protected:
 		std::vector<PauliStringVQE<VectorClass, MatrixClass>> terms;
-		size_t nrMeasurements;
+		size_t nrMeasurements = 10000;
+
+		std::vector<std::vector<double>> vertices;
+		int terminateLimit = 20;
+		double delta = 0.0001;
+		std::vector<double> vertexEnergies;
 	};
 
 }
