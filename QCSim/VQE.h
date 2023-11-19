@@ -362,18 +362,7 @@ namespace VQE {
 					}
 				}
 
-
-				if (shrink)
-				{
-					// shrink all points (except the min one)
-					// by reflecting them about the min point, with alpha = 0.5
-					for (int i = 0; i < vertices.size(); ++i)
-					{
-						if (i == minIndex) continue;
-						vertices[i] = ReflectionPoint(vertices[minIndex], vertices[i], 0.5);
-						vertexEnergies[i] = EstimateEnergy(vertices[i], nrMeasurements);
-					}
-				}
+				if (shrink) ShrinkVertices(minIndex);
 			}
 			else 
 			{
@@ -390,6 +379,18 @@ namespace VQE {
 					vertices[maxIndex] = reflectedPoint;
 					vertexEnergies[maxIndex] = reflectedEnergy;
 				}
+			}
+		}
+
+		void ShrinkVertices(int minIndex)
+		{
+			// shrink all points (except the min one)
+			// by reflecting them about the min point, with alpha = 0.5
+			for (int i = 0; i < vertices.size(); ++i)
+			{
+				if (i == minIndex) continue;
+				vertices[i] = ReflectionPoint(vertices[minIndex], vertices[i], 0.5);
+				vertexEnergies[i] = EstimateEnergy(vertices[i], nrMeasurements);
 			}
 		}
 
