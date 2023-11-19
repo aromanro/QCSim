@@ -239,10 +239,7 @@ namespace Models {
 			{
 				Eold = E;
 
-				// this is more like stochastic gradient descent, so it would benefit from
-				// the methods used in the machine learning project (momentum/nesterov/adagrad/rmsprop/adam/whatever) 
-				// I won't bother, for the curious the methods are implemented there (also in the python repo, the dft notebook)
-
+				// TODO: Maybe I should change to Nelder-Mead - see the VQE implementation for an example
 				gammaBeta = GradientDescentStep(reg, gammaBeta.first, gammaBeta.second, epsilon, stepSize, nrMeasurements);
 
 				Exec(reg, gammaBeta.first, gammaBeta.second);
@@ -655,14 +652,14 @@ namespace Models {
 		std::vector<double> sBeta;
 		std::vector<double> mBeta;
 
-		double beta1 = 0.7;
-		double beta2 = 0.9;
-		double lambda = 0.01; // with lambda 0 is the same as Adam
+		double beta1 = 0.8;
+		double beta2 = 0.95;
+		double lambda = 0.001; // with lambda 0 is the same as Adam
 		int stepNr = 0;
 
 
-		double epsilon = 0.0001;
-		double stepSize = 0.001;
+		double epsilon = 0.001;
+		double stepSize = 0.0005;
 		unsigned int nrMeasurements = 100000;
 		bool betterMixing = false;
 	};
