@@ -357,7 +357,6 @@ namespace VQE {
 							vertexEnergies[maxIndex] = contractEnergy;
 						}
 
-						// shrink
 						shrink = true;
 					}
 				}
