@@ -29,23 +29,23 @@ namespace QC {
 
 			unsigned int Execute(RegisterClass& reg) override
 			{
-				unsigned int sQubit = BaseClass::BaseClass::getStartQubit();
-				unsigned int eQubit = BaseClass::BaseClass::getEndQubit();
-				unsigned int nrQubits = eQubit - sQubit + 1;
-				unsigned int nrBasisStates = 1 << nrQubits;
+				unsigned int stQubit = BaseClass::BaseClass::getStartQubit();
+				unsigned int enQubit = BaseClass::BaseClass::getEndQubit();
+				unsigned int nrQubits = enQubit - stQubit + 1;
+				unsigned int nrBasisStates = 1U << nrQubits;
 
 				/*
 					for (unsigned int state = 0; state < nrBasisStates; ++state)
 					{
 						if (!func(state)) continue;
 
-						unsigned int realState = state << sQubit;
+						unsigned int realState = state << stQubit;
 
 						unsigned int v = realState;
 						for (unsigned int q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
-								reg.ApplyGate(x, sQubit + q);
+								reg.ApplyGate(x, stQubit + q);
 
 							v >>= 1;
 						}
@@ -57,7 +57,7 @@ namespace QC {
 						for (unsigned int q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
-								reg.ApplyGate(x, sQubit + q);
+								reg.ApplyGate(x, stQubit + q);
 
 							v >>= 1;
 						}
@@ -72,14 +72,14 @@ namespace QC {
 				{
 					if (!func(state)) continue;
 
-					unsigned int realState = state << sQubit;
+					unsigned int realState = state << stQubit;
 
 					unsigned int v = realState;
 					for (unsigned int q = 0; q < nrQubits; ++q)
 					{
 						if (qubits[q] != ((v & 1) == 0))
 						{
-							reg.ApplyGate(x, sQubit + q);
+							reg.ApplyGate(x, stQubit + q);
 							qubits[q] = !qubits[q]; // x gate was applied
 						}
 
@@ -92,7 +92,7 @@ namespace QC {
 				// undo the x gates
 				for (unsigned int q = 0; q < nrQubits; ++q)
 					if (qubits[q])
-						reg.ApplyGate(x, sQubit + q);
+						reg.ApplyGate(x, stQubit + q);
 
 				return 0;
 			}
@@ -133,10 +133,10 @@ namespace QC {
 
 			unsigned int Execute(RegisterClass& reg) override
 			{
-				unsigned int sQubit = BaseClass::BaseClass::getStartQubit();
-				unsigned int eQubit = BaseClass::BaseClass::getEndQubit();
-				unsigned int nrQubits = eQubit - sQubit + 1;
-				unsigned int nrBasisStates = 1 << nrQubits;
+				unsigned int stQubit = BaseClass::BaseClass::getStartQubit();
+				unsigned int enQubit = BaseClass::BaseClass::getEndQubit();
+				unsigned int nrQubits = enQubit - stQubit + 1;
+				unsigned int nrBasisStates = 1U << nrQubits;
 
 				/*
 					for (unsigned int state = 0; state < nrBasisStates; ++state)
@@ -158,13 +158,13 @@ namespace QC {
 							++q;
 						}
 
-						unsigned int realState = state << sQubit;
+						unsigned int realState = state << stQubit;
 
 						unsigned int v = realState;
 						for (unsigned int q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
-								reg.ApplyGate(x, sQubit + q);
+								reg.ApplyGate(x, stQubit + q);
 
 							v >>= 1;
 						}
@@ -176,7 +176,7 @@ namespace QC {
 						for (unsigned int q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
-								reg.ApplyGate(x, sQubit + q);
+								reg.ApplyGate(x, stQubit + q);
 
 							v >>= 1;
 						}
@@ -205,14 +205,14 @@ namespace QC {
 						fval >>= 1;
 					}
 
-					unsigned int realState = state << sQubit;
+					unsigned int realState = state << stQubit;
 
 					unsigned int v = realState;
 					for (unsigned int q = 0; q < nrQubits; ++q)
 					{
 						if (qubits[q] != ((v & 1) == 0))
 						{
-							reg.ApplyGate(x, sQubit + q);
+							reg.ApplyGate(x, stQubit + q);
 							qubits[q] = !qubits[q]; // x gate was applied
 						}
 
@@ -225,7 +225,7 @@ namespace QC {
 				// undo the x gates
 				for (unsigned int q = 0; q < nrQubits; ++q)
 					if (qubits[q])
-						reg.ApplyGate(x, sQubit + q);
+						reg.ApplyGate(x, stQubit + q);
 
 				return 0;
 			}
@@ -235,7 +235,7 @@ namespace QC {
 				func = f;
 			}
 
-		protected:
+		private:
 			Function func;
 
 			QC::SubAlgo::NControlledGatesWithAncilla<VectorClass, MatrixClass> nControlledNOTs;

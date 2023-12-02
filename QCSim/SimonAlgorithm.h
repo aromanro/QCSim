@@ -19,7 +19,7 @@ namespace Simon {
 		{
 			if (functionTable.empty()) return 0;
 
-			const unsigned int mask = static_cast<unsigned int>(functionTable.size() - 1);
+			const auto mask = static_cast<unsigned int>(functionTable.size() - 1);
 
 			return functionTable[x & mask];
 		}
@@ -36,7 +36,7 @@ namespace Simon {
 				functionTable[i] = i;
 
 			// this is a random way of generating it
-			const unsigned long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
+			const long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
 			auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
 			std::shuffle(functionTable.begin(), functionTable.end(), rng);
 

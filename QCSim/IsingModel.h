@@ -484,7 +484,7 @@ namespace Models {
 	protected:
 		void ApplyHadamardOnAll(RegisterClass& reg)
 		{
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+			for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
 				reg.ApplyGate(h, q);
 		}
 
@@ -515,7 +515,7 @@ namespace Models {
 				}
 
 			// on site
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+			for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
 			{
 				const double hval = model.GetH(q);
 
@@ -535,7 +535,7 @@ namespace Models {
 			const double twobeta = 2 * beta;
 			rx.SetTheta(twobeta);
 
-			for (size_t q = 0; q < reg.getNrQubits(); ++q)
+			for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
 				reg.ApplyGate(rx, q);
 
 			
@@ -544,11 +544,11 @@ namespace Models {
 				ry.SetTheta(twobeta);
 
 				unsigned int lastQubit = reg.getNrQubits() - 1;
-				for (size_t q = 0; q < lastQubit; ++q)
+				for (unsigned int q = 0; q < lastQubit; ++q)
 					reg.ApplyGate(cnot, q + 1, q);
 				reg.ApplyGate(cnot, 0, lastQubit);
 
-				for (size_t q = 0; q < reg.getNrQubits(); ++q)
+				for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
 					reg.ApplyGate(ry, q);
 			}
 		}

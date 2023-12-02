@@ -101,7 +101,7 @@ namespace QuantumCounting {
 			return static_cast<unsigned int>(round(static_cast<double>(1 << groverQubits) * s * s));
 		}
 
-	protected:
+	private:
 		void ExecuteWithoutMeasurement()
 		{
 			unsigned int firstAncillaQubit = precisionQubits + groverQubits;
@@ -192,10 +192,11 @@ namespace QuantumCounting {
 		QC::Gates::CNOTGate<MatrixClass> cx;
 
 		QC::SubAlgo::NControlledNotWithAncilla<VectorClass, MatrixClass> nControlledNOT;
-		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
-
+		
 		unsigned int precisionQubits;
 		unsigned int groverQubits;
+
+		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};
 
 }

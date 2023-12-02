@@ -29,7 +29,7 @@ bool MagicSquareTests()
 	std::cout << "\nTesting magic square pseudo-telepathy game..." << std::endl;
 
 	Games::MagicSquare<> magicSquare;
-	int wins = magicSquare.Execute();
+	unsigned int wins = magicSquare.Execute();
 
 	if (wins != magicSquare.getNrPlays())
 	{

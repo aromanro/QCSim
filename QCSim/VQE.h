@@ -33,7 +33,6 @@ namespace VQE {
 		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
 			const unsigned int nrQubits = reg.getNrQubits();
-			const unsigned int lastQubit = nrQubits - 1;
 
 			for (unsigned int qubit = 0; qubit < nrQubits; ++qubit)
 				if (getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opX)
@@ -114,7 +113,7 @@ namespace VQE {
 			}
 		}
 
-		double EstimateEnergy(QC::QubitRegister<VectorClass, MatrixClass>& reg, const std::vector<double>& params, size_t nrMeasurements = 10000)
+		double EstimateEnergy(QC::QubitRegister<VectorClass, MatrixClass>& reg, const std::vector<double>& params, unsigned int nrMeasurements = 10000)
 		{
 			reg.setToBasisState(0);
 			Ansatz(reg, params);
@@ -206,22 +205,22 @@ namespace VQE {
 			return 0;
 		}
 
-		double EstimateEnergy(const std::vector<double>& params, size_t nrMeasurements = 10000)
+		double EstimateEnergy(const std::vector<double>& params, unsigned int nrMeas = 10000)
 		{
 			double energy = 0.0;
 
 			for (auto& term : terms)
-				energy += term.EstimateEnergy(BaseClass::reg, params, nrMeasurements);
+				energy += term.EstimateEnergy(BaseClass::reg, params, nrMeas);
 
 			return energy;
 		}
 
-		void SetNrMeasurements(size_t n)
+		void SetNrMeasurements(unsigned int n)
 		{
 			nrMeasurements = n;
 		}
 
-		size_t GetNrMeasurements() const
+		unsigned int GetNrMeasurements() const
 		{
 			return nrMeasurements;
 		}
@@ -478,7 +477,7 @@ namespace VQE {
 
 
 		std::vector<PauliStringVQE<VectorClass, MatrixClass>> terms;
-		size_t nrMeasurements = 10000;
+		unsigned int nrMeasurements = 10000;
 
 		std::vector<std::vector<double>> vertices;
 		int terminateLimit = 10;

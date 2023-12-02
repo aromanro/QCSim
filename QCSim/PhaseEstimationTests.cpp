@@ -35,8 +35,8 @@ bool PhaseEstimationTestsNoTesorProduct()
 
 		int mx = -1;
 		int prevMx = -1;
-		int cnt = 0;
-		int prevCnt = 0;
+		unsigned int cnt = 0;
+		unsigned int prevCnt = 0;
 		for (const auto& m : measurements)
 		{
 			if (m.second > cnt)
@@ -95,8 +95,8 @@ bool PhaseEstimationTests()
 
 		int mx = -1;
 		int prevMx = -1;
-		int cnt = 0;
-		int prevCnt = 0;
+		unsigned int cnt = 0;
+		unsigned int prevCnt = 0;
 		for (const auto& m : measurements)
 		{
 			if (m.second > cnt)

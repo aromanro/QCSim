@@ -18,7 +18,7 @@ namespace QuantumCryptograpy {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		BB84Protocol(int addseed = 0)
+		explicit BB84Protocol(int addseed = 0)
 			: BaseClass(1, addseed),
 			eavesdropping(false), randomEavesdropping(false)
 		{
@@ -174,13 +174,13 @@ namespace QuantumCryptograpy {
 			return match;
 		}
 
-		unsigned int chooseMeasurementBasisForSending()
+		bool chooseMeasurementBasisForSending()
 		{
 			// use this to generate a random value used to pick a measurement basis
 			// alternatively you can use a random number generator or a pregenerated sequence in whatever way you want
 			// but I like this way more
 			BaseClass::setToCatState();
-			return BaseClass::Measure();
+			return BaseClass::Measure() == 1;
 		}
 
 		unsigned int generateRandomBitToSend()

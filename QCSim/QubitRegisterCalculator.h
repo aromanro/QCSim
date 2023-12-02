@@ -532,10 +532,10 @@ namespace QC {
 #endif
 		}
 
-		static size_t GetNumberOfThreads()
+		static int GetNumberOfThreads()
 		{
 			const size_t threads = std::thread::hardware_concurrency();
-			return threads ? threads : GetCpuInfoNrThreads();
+			return static_cast<int>(threads ? threads : GetCpuInfoNrThreads());
 		}
 	};
 

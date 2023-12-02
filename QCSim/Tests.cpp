@@ -191,7 +191,7 @@ bool GroverWithGatesTests()
 
 	const int nrMeasurements = 500;
 
-	for (int nrQubits = 4; nrQubits <= 6; ++nrQubits)
+	for (unsigned int nrQubits = 4; nrQubits <= 6; ++nrQubits)
 	{
 		std::cout << nrQubits << " qubits" << std::endl;
 
@@ -200,7 +200,7 @@ bool GroverWithGatesTests()
 
 		for (int i = 0; i < 5; ++i)
 		{
-			const unsigned int ans = dist(gen);
+			const unsigned int ans = static_cast<unsigned int>(dist(gen));
 
 			std::cout << "Testing for answer: " << ans << std::endl;
 			
@@ -234,7 +234,7 @@ bool GroverTests()
 
 	const int nrMeasurements = 500;
 
-	for (int nrQubits = 4; nrQubits <= 6; ++nrQubits)
+	for (unsigned int nrQubits = 4; nrQubits <= 6; ++nrQubits)
 	{
 		std::cout << nrQubits << " qubits" << std::endl;
 
@@ -243,7 +243,7 @@ bool GroverTests()
 
 		for (int i = 0; i < 5; ++i)
 		{
-			const unsigned int ans = dist(gen);
+			const unsigned int ans = static_cast<unsigned int>(dist(gen));
 
 			std::cout << "Testing for answer: " << ans << std::endl;
 
@@ -481,7 +481,8 @@ bool QuantumCryptograpyTests()
 		bb84.setEavesdropping(eavesdrop);
 		bb84.setRandomEavesdropping(randomEavesdrop);
 
-		std::cout << "Transmission with" << (eavesdrop ? " eavesdropping" : "out eavesdropping") << (eavesdrop ? (randomEavesdrop ? " randomly" : " each time") : "") << std::endl;
+		const char* randStr = (randomEavesdrop ? " randomly" : " each time");
+		std::cout << "Transmission with" << (eavesdrop ? " eavesdropping" : "out eavesdropping") << (eavesdrop ? randStr : "") << std::endl;
 
 		const unsigned int match = bb84.Execute();
 		if (match)
@@ -527,7 +528,7 @@ bool SimonWithGatesTests()
 
 		Simon::SimonAlgorithmWithGatesOracle<> simonAlgorithm(nrQubits);
 
-		const unsigned int lim = (1 << nrQubits) - 1;
+		const unsigned int lim = static_cast<unsigned int>((1 << nrQubits) - 1);
 		for (unsigned int functionString = 0; functionString <= lim; ++functionString)
 		{
 			std::cout << "Trying with string: " << functionString << "...";
@@ -619,7 +620,7 @@ bool CountingTests()
 	unsigned int nrPrecisionQubits = 6;
 	unsigned int nrMeasurements = 10000;
 
-	unsigned int nrGroverStates = 1 << nrGroverQubits;
+	unsigned int nrGroverStates = 1U << nrGroverQubits;
 	for (unsigned int nrMarked = 0; nrMarked <= nrGroverStates; ++nrMarked)
 	{
 		// pick 'nrMarked' states at random:		

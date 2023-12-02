@@ -135,12 +135,12 @@ namespace Games {
 			return alice == bob;
 		}
 
-		int getNrPlays() const
+		unsigned int getNrPlays() const
 		{
 			return nrPlays;
 		}
 
-		void setNrPlays(int n)
+		void setNrPlays(unsigned int n)
 		{
 			nrPlays = n;
 		}
@@ -230,7 +230,7 @@ namespace Games {
 		QC::Gates::TwoQubitsGate<MatrixClass> B2;
 		QC::Gates::TwoQubitsGate<MatrixClass> B3;
 
-		int nrPlays;
+		unsigned int nrPlays;
 	};
 
 }

@@ -153,7 +153,7 @@ namespace MachineLearning {
 
 					// don't allow two centroids to be too close to each other
 					retry = false;
-					for (int oc = 0; oc < c; ++oc)
+					for (unsigned int oc = 0; oc < c; ++oc)
 					{
 						const double dx = centroids[c].x - centroids[oc].x;
 						const double dy = centroids[c].y - centroids[oc].y;

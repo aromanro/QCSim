@@ -13,7 +13,7 @@ namespace BellInequalities {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		CheckCHSHInequality(int addseed = 0)
+		explicit CheckCHSHInequality(int addseed = 0)
 			: BaseClass(2, addseed),
 			S((-Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (-Z-X)/sqrt(2)=-H
 			T((Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (Z-X)/sqrt(2)
