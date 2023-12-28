@@ -44,7 +44,7 @@ LINK_DIRECTORIES (${FFTW3_DIR})
 IF(WIN32)
 LINK_LIBRARIES(libfftw3-3)
 ELSE()
-LINK_LIBRARIES(libfftw3.a)
+LINK_LIBRARIES(libfftw3_threads.a)
 ENDIF()
 
 add_executable (QCSim ${SOURCES})
