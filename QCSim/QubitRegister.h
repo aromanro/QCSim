@@ -9,8 +9,8 @@ namespace QC {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
 	{
 	public:
-		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
-		using BaseClass = QubitRegisterCalculator<VectorClass, MatrixClass>;
+		using GateClass = typename Gates::QuantumGateWithOp<MatrixClass>;
+		using BaseClass = typename QubitRegisterCalculator<VectorClass, MatrixClass>;
 
 		QubitRegister(unsigned int N = 3, int addseed = 0)
 			: NrQubits(N), NrBasisStates(1u << NrQubits), uniformZeroOne(0, 1), recordGates(false)
