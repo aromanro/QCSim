@@ -1,6 +1,10 @@
 #include <iostream>
 #include <map>
 
+#define TESTS_CPP_ 1
+#include "Tests.h"
+#undef TESTS_CPP_
+
 #include "QubitRegister.h"
 
 #include "GroverAlgorithm.h"
@@ -13,8 +17,7 @@
 #include "SimonAlgorithm.h"
 #include "QuantumCountingAlgorithm.h"
 
-#define TESTS_CPP_ 1
-#include "Tests.h"
+
 
 std::random_device rd;
 std::mt19937 gen(rd());
