@@ -41,7 +41,12 @@ find_package(OpenMP)
 
 INCLUDE_DIRECTORIES ( QCSim "${EIGEN3_INCLUDE_DIR}" "${FFTW3_DIR}" )
 LINK_DIRECTORIES (${FFTW3_DIR})
+IF(WIN32)
 LINK_LIBRARIES(libfftw3-3)
+ELSE()
+LINK_LIBRARIES(libfftw3)
+ENDIF()
+
 add_executable (QCSim ${SOURCES})
 
 if(OpenMP_CXX_FOUND)
