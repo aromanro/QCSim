@@ -1,10 +1,11 @@
+#include <iostream>
+#include <iterator>
+#include <map>
+
 #include "Tests.h"
 #include "QuantumAdder.h"
 #include "DraperAdder.h"
 
-#include <iostream>
-#include <iterator>
-#include <map>
 
 extern std::bernoulli_distribution dist_bool;
 
