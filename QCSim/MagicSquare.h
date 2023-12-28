@@ -107,7 +107,7 @@ namespace Games {
 		// returns true if Alice and Bob won, false otherwise
 		bool Play(int a, int b, unsigned int& resAlice, unsigned int& resBob)
 		{
-			assert(a >= 1 && a <= 3 && b >= 0 && b <= 2);
+			assert(a >= 0 && a <= 2 && b >= 0 && b <= 2);
 
 			Init();
 
