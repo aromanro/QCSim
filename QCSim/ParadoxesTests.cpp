@@ -1,11 +1,13 @@
+#include <iostream>
+#include <iterator>
+#include <map>
+
 #include "Tests.h"
 
 #include "QuantumEraser.h"
 #include "GeneralElitzurVaidmanBomb.h"
 #include "HardyParadox.h"
 
-#include <iostream>
-#include <map>
 
 
 bool QuantumEraserTests()

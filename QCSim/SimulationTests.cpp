@@ -1,11 +1,13 @@
+#include <iostream>
+#include <iterator>
+#include <map>
+
 #include "Tests.h"
 
 #include "QubitRegister.h"
 #include "PauliStringSimulation.h"
 #include "Schrodinger.h"
 
-#include <iostream>
-#include <map>
 
 void PrintState(const Eigen::VectorXcd& regVals, unsigned int nrBasisStates)
 {

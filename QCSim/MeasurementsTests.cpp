@@ -1,8 +1,10 @@
+#include <iostream>
+#include <iterator>
+#include <map>
+
 #include "Tests.h"
 #include "QubitRegister.h"
 
-#include <iostream>
-#include <map>
 
 bool approxEqual(double val1, double val2, double err)
 {

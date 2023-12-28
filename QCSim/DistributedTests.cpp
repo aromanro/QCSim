@@ -1,10 +1,11 @@
+#include <iostream>
+#include <iterator>
+#include <map>
+
 #include "Tests.h"
 
 #include "DistributedCNOT.h"
 #include "TeleportedCNOT.h"
-
-#include <iostream>
-#include <map>
 
 
 bool distributedCNOTTest()

@@ -2,6 +2,7 @@
 //
 
 #include <iostream>
+#include <iterator>
 #include <string>
 
 #define _USE_MATH_DEFINES

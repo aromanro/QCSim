@@ -1,9 +1,12 @@
+#include <iostream>
+#include <iterator>
+#include <map>
+
 #include "Tests.h"
 #include "ErrorCorrection3Qubits.h"
 #include "ShorCode.h"
 
-#include <iostream>
-#include <map>
+
 
 
 std::pair<std::complex<double>, std::complex <double>> getRandomState()

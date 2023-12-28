@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iterator>
 #include <map>
 
 #include "QubitRegister.h"

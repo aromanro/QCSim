@@ -1,7 +1,9 @@
+#include <iostream>
+#include <iterator>
+
 #include "Tests.h"
 #include "VQE.h"
 
-#include <iostream>
 
 // tests values follow the Lesson 11 from
 // "Fundamentals In Quantum Algorithms: A Tutorial Series Using Qiskit Continued" by Daniel Koch, Saahil Patel, Laura Wessing, Paul M. Alsing

@@ -1,8 +1,9 @@
+#include <iostream>
+#include <iterator>
+
 #include "Tests.h"
 #include "CoinFlipping.h"
 #include "MagicSquare.h"
-
-#include <iostream>
 
 
 bool CoinFlippingTests()

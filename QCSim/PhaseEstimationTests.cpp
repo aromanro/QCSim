@@ -1,9 +1,12 @@
+#include <iostream>
+#include <iterator>
+#include <vector>
+
 #include "Tests.h"
 
 #include "PhaseEstimation.h"
 
-#include <iostream>
-#include <vector>
+
 
 bool PhaseEstimationTestsNoTesorProduct()
 {

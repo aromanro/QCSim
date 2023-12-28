@@ -2,6 +2,7 @@
 #include <math.h>
 
 #include <iostream>
+#include <iterator>
 #include <map>
 
 #include "Tests.h"

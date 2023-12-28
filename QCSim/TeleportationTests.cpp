@@ -1,8 +1,10 @@
+#include <iostream>
+#include <iterator>
+
 #include "Tests.h"
 #include "Teleportation.h"
 #include "EntanglementSwapping.h"
 
-#include <iostream>
 
 bool TeleportTests()
 {
