@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <climits>
+#include <cfloat>
 
 #include "Tests.h"
 
