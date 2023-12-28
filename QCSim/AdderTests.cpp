@@ -3,6 +3,7 @@
 #include "DraperAdder.h"
 
 #include <iostream>
+#include <iterator>
 #include <map>
 
 extern std::bernoulli_distribution dist_bool;
