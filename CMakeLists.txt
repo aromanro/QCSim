@@ -23,7 +23,7 @@ set(SOURCES QCSim/QCSim.cpp
             QCSim/PhaseEstimationTests.cpp
             QCSim/TeleportationTests.cpp
             QCSim/DeutschJozsaTests.cpp
-            QCSim/QmlTests.cpp
+            QCSim/QMLTests.cpp
             QCSim/IsingTests.cpp
             QCSim/VQETests.cpp)
  
@@ -38,13 +38,12 @@ IF( NOT FFTW3_DIR )
 ENDIF()
 
 find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(QCSim PUBLIC OpenMP::OpenMP_CXX)
-endif()
 
 INCLUDE_DIRECTORIES ( QCSim "${EIGEN3_INCLUDE_DIR}" "${FFTW3_DIR}" )
 LINK_DIRECTORIES (${FFTW3_DIR})
 LINK_LIBRARIES(libfftw3-3)
 add_executable (QCSim ${SOURCES})
 
-
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(QCSim PUBLIC OpenMP::OpenMP_CXX)
+endif()

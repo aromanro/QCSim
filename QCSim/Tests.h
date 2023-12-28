@@ -1,7 +1,7 @@
 #pragma once
 
 #include <complex>
-#include <Eigen/eigen>
+#include <Eigen/Eigen>
 #include <random>
 
 bool approxEqual(double val1, double val2, double err = 1E-10);

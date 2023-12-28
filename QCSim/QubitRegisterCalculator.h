@@ -8,7 +8,7 @@
 #endif // _WIN32
 
 #include <math.h>
-#include <Eigen/eigen>
+#include <Eigen/Eigen>
 
 #include <random>
 #include <complex>

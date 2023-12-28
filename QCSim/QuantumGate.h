@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Eigen/eigen>
+#include <Eigen/Eigen>
 
 // Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
 
