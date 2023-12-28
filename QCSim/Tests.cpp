@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iterator>
 #include <map>
 
 #define TESTS_CPP_ 1
