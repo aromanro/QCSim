@@ -1,8 +1,10 @@
+#include <algorithm>
+#include <climits>
+
 #include "Tests.h"
 
 #include "QMeansClustering2D.h"
 
-#include <algorithm>
 
 int clusterForPoint(const MachineLearning::QMeansClustering2D<>::DataPoint& p, const std::vector<MachineLearning::QMeansClustering2D<>::DataPoint>& centroids)
 {
