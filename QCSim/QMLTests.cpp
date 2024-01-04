@@ -77,7 +77,7 @@ bool QMeansClustering2DTests()
 
 	std::vector<int> clusterCounts(k, 0);
 	const auto& dataPoints = qMeansClustering.getData();
-	for (int i = 0; i < dataPoints.size(); ++i)
+	for (int i = 0; i < static_cast<int>(dataPoints.size()); ++i)
 		++clusterCounts[dataPoints[i].cluster];
 
 	const auto& centroids = qMeansClustering.getCentroids();
