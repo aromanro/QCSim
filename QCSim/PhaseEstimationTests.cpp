@@ -18,7 +18,7 @@ bool PhaseEstimationTestsNoTesorProduct()
 	std::vector<double> phases{ 1. / 4., 1. / 3., 1. / 2., 2. / 3., 3. / 4. };
 
 
-	for (int p = 0; p < phases.size(); ++p)
+	for (int p = 0; p < static_cast<int>(phases.size()); ++p)
 	{
 		const double realPhase = phases[p];
 		QC::Gates::PhaseShiftGate phaseShift(realPhase * 2 * M_PI);
@@ -78,7 +78,7 @@ bool PhaseEstimationTests()
 	std::vector<double> phases{ 1. / 4., 1. / 3., 1. / 2., 2. / 3., 3. / 4. };
 
 
-	for (int p = 0; p < phases.size(); ++p)
+	for (int p = 0; p < static_cast<int>(phases.size()); ++p)
 	{
 		const double realPhase = phases[p];
 		QC::Gates::PhaseShiftGate phaseShift(realPhase * 2 * M_PI);

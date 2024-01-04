@@ -35,7 +35,7 @@ bool distributedCNOTTest()
 			// now check them to have the same results
 			for (int i = 0; i < 4; ++i)
 			{
-				if (!approxEqual(distStorage((i & 2) << 2 | measurements | i & 1), res(i)))
+				if (!approxEqual(distStorage((i & 2) << 2 | measurements | (i & 1)), res(i)))
 				{
 					std::cout << "Error: distributed CNOT failed for ctrl = " << ctrlQubit << ", target = " << targetQubit << ", results were different than for the local CNOT" << std::endl;
 
@@ -50,7 +50,7 @@ bool distributedCNOTTest()
 						if (state == measurements)
 							continue;
 
-						if (!approxEqual(distStorage(((i & 2) << 2) | state | i & 1), 0.0))
+						if (!approxEqual(distStorage(((i & 2) << 2) | state | (i & 1)), 0.0))
 						{
 							std::cout << "Error: distributed CNOT failed for ctrl = " << ctrlQubit << ", target = " << targetQubit << ", amplitude that should be zero is not" << std::endl;
 							return false;

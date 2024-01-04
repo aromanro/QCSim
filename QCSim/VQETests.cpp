@@ -39,7 +39,7 @@ bool VQETests()
 	std::vector<std::vector<double>> vertices(3);
 
 	const double R = dist_zo(gen) * 2. * M_PI / 3.;
-	for (int v = 0; v < vertices.size(); ++v)
+	for (int v = 0; v < static_cast<int>(vertices.size()); ++v)
 	{
 		const double angle = R + v * 2. * M_PI / 3.;
 		vertices[v].push_back(theta + radius * cos(angle));
@@ -94,8 +94,8 @@ bool VQETests()
 		params.push_back(dist_zo(gen) * M_PI);
 	}
 
-	for (int v = 0; v < vertices.size(); ++v)
-		for (int i = 0; i < params.size(); ++i)
+	for (int v = 0; v < static_cast<int>(vertices.size()); ++v)
+		for (int i = 0; i < static_cast<int>(params.size()); ++i)
 		{
 			const double R = (0.4 + 0.8 * dist_zo(gen)) * (dist_bool(gen) ? -1 : 1);
 			vertices[v].push_back(params[i] + R);

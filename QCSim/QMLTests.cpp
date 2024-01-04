@@ -13,7 +13,7 @@ int clusterForPoint(const MachineLearning::QMeansClustering2D<>::DataPoint& p, c
 
 	double dist = std::numeric_limits<double>::max();
 
-	for (int i = 0; i < centroids.size(); ++i)
+	for (int i = 0; i < static_cast<int>(centroids.size()); ++i)
 	{
 		const double dx = p.x - centroids[i].x;
 		const double dy = p.y - centroids[i].y;
@@ -82,14 +82,14 @@ bool QMeansClustering2DTests()
 
 	const auto& centroids = qMeansClustering.getCentroids();
 
-	for (int c = 0; c < centroids.size(); ++c)
+	for (int c = 0; c < static_cast<int>(centroids.size()); ++c)
 		std::cout << "Cluster " << c << " centroid: x: " << centroids[c].x << ", y: " << centroids[c].y << " Points count: " << clusterCounts[c] << std::endl;
 
 	// not surprisingly it fails sometimes (especially for k > 2) for the euclidian metric test (since it's not the same metric as the one used for clustering)
 	// but also sometimes (not so often as for the euclidian metric check, though) for the 'overlap' one, due of the probabilistic nature
 	// increasing the number of measurements helps, of course, but obviously it slows down the execution
 	
-	for (int i = 0; i < dataPoints.size(); ++i)
+	for (int i = 0; i < static_cast<int>(dataPoints.size()); ++i)
 	{
 		const double dx = dataPoints[i].x - centroids[dataPoints[i].cluster].x;
 		const double dy = dataPoints[i].y - centroids[dataPoints[i].cluster].y;
@@ -99,7 +99,7 @@ bool QMeansClustering2DTests()
 		qMeansClustering.SetDataPoint2(centroids[dataPoints[i].cluster]);
 		auto res = qMeansClustering.ExecuteWithMultipleMeasurements(nrMeasurements);
 
-		for (int c = 0; c < centroids.size(); ++c)
+		for (int c = 0; c < static_cast<int>(centroids.size()); ++c)
 		{
 			if (c == dataPoints[i].cluster) continue;
 

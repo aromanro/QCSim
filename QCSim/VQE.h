@@ -260,7 +260,7 @@ namespace VQE {
 			if (vertexEnergies.empty()) return 0.0;
 
 			double minEnergy = vertexEnergies[0];
-			for (int i = 1; i < vertexEnergies.size(); ++i)
+			for (int i = 1; i < static_cast<int>(vertexEnergies.size()); ++i)
 				if (vertexEnergies[i] < minEnergy)
 					minEnergy = vertexEnergies[i];
 
@@ -273,7 +273,7 @@ namespace VQE {
 
 			double minEnergy = vertexEnergies[0];
 			int minIndex = 0;
-			for (int i = 1; i < vertexEnergies.size(); ++i)
+			for (int i = 1; i < static_cast<int>(vertexEnergies.size()); ++i)
 				if (vertexEnergies[i] < minEnergy)
 				{
 					minEnergy = vertexEnergies[i];
@@ -384,7 +384,7 @@ namespace VQE {
 		{
 			// shrink all points (except the min one)
 			// by reflecting them about the min point, with alpha = 0.5
-			for (int i = 0; i < vertices.size(); ++i)
+			for (int i = 0; i < static_cast<int>(vertices.size()); ++i)
 			{
 				if (i == minIndex) continue;
 				vertices[i] = ReflectionPoint(vertices[minIndex], vertices[i], 0.5);
@@ -398,7 +398,7 @@ namespace VQE {
 
 			std::vector<double> centroid(points[0].size(), 0.0);
 
-			for (int pi = 0; pi < points.size(); ++pi)
+			for (int pi = 0; pi < static_cast<int>(points.size()); ++pi)
 			{
 				if (pi == excludeIndex) continue;
 
@@ -434,7 +434,7 @@ namespace VQE {
 			if (vertices.empty()) return;
 
 			vertexEnergies.resize(vertices.size());
-			for (int v = 0; v < vertices.size(); ++v)
+			for (int v = 0; v < static_cast<int>(vertices.size()); ++v)
 				vertexEnergies[v] = EstimateEnergy(vertices[v], nrMeasurements);
 		}
 
@@ -456,7 +456,7 @@ namespace VQE {
 			// also identify the best one, need its value for comparisons and shrinking if needed
 			// also keep the second worst, for comparisons
 
-			for (int i = 1; i < vertexEnergies.size(); ++i)
+			for (int i = 1; i < static_cast<int>(vertexEnergies.size()); ++i)
 			{
 				const double e = vertexEnergies[i];
 				if (e > maxEnergy)

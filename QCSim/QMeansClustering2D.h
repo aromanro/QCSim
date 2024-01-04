@@ -60,7 +60,7 @@ namespace MachineLearning {
 			ymin = DBL_MAX;
 			ymax = -DBL_MAX;
 
-			for (int i = 0; i < data.size(); ++i)
+			for (int i = 0; i < static_cast<int>(data.size()); ++i)
 			{
 				m_data[i].x = data[i].x;
 				m_data[i].y = data[i].y;
@@ -186,7 +186,7 @@ namespace MachineLearning {
 		{
 			std::vector<int> clusterSizes(centroids.size(), 0);
 
-			for (int c = 0; c < centroids.size(); ++c)
+			for (int c = 0; c < static_cast<int>(centroids.size()); ++c)
 				centroids[c].x = centroids[c].y = 0;
 
 			for (const auto& p : m_data)
@@ -196,7 +196,7 @@ namespace MachineLearning {
 				++clusterSizes[p.cluster];
 			}
 
-			for (int c = 0; c < centroids.size(); ++c)
+			for (int c = 0; c < static_cast<int>(centroids.size()); ++c)
 			{
 				if (clusterSizes[c] == 0) continue;
 				centroids[c].x /= clusterSizes[c];
@@ -208,14 +208,14 @@ namespace MachineLearning {
 		{
 			bool terminate = true;
 
-			for (int i = 0; i < m_data.size(); ++i)
+			for (int i = 0; i < static_cast<int>(m_data.size()); ++i)
 			{
 				unsigned int overlap = 0;
 				int cluster = 0;
 
 				SetDataPoint1(m_data[i]);
 
-				for (int c = 0; c < centroids.size(); ++c)
+				for (int c = 0; c < static_cast<int>(centroids.size()); ++c)
 				{
 					SetDataPoint2(centroids[c]);
 				

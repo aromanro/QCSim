@@ -41,10 +41,10 @@ namespace Adders {
 
 			// the operations commute with each other, so one can change the ordering
 
-			for (unsigned int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
+			for (int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
 			{
 				double phase = M_PI;
-				for (int cbit = static_cast<int>(qbit) - n; cbit >= 0; --cbit)
+				for (int cbit = qbit - n; cbit >= 0; --cbit)
 				{
 					fourier.cPhaseShift.SetPhaseShift(phase);
 					BaseClass::ApplyGate(fourier.cPhaseShift, qbit, cbit);
@@ -101,10 +101,10 @@ namespace Adders {
 			}
 
 			// the other ones
-			for (unsigned int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
+			for (int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
 			{
 				phase = M_PI;
-				for (int cbit = static_cast<int>(qbit) - n; cbit >= 0; --cbit)
+				for (int cbit = qbit - n; cbit >= 0; --cbit)
 				{
 					fourier.cPhaseShift.SetPhaseShift(phase);
 					BaseClass::ApplyGate(fourier.cPhaseShift, qbit, cbit);

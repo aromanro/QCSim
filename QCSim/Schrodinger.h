@@ -65,7 +65,7 @@ namespace QuantumSimulation {
 			return deltax;
 		}
 
-		double setDeltax(double v)
+		void setDeltax(double v)
 		{
 			deltax = v;
 		}
