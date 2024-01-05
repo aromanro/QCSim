@@ -97,4 +97,4 @@ if(OpenMP_CXX_FOUND)
     target_compile_options(QCSim PRIVATE ${OpenMP_CXX_FLAGS})
 endif()
 
-target_compile_options(QCSim PRIVATE ${SIMD_FLAGS})
+target_compile_options(QCSim PUBLIC ${SIMD_FLAGS})
