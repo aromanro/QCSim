@@ -49,7 +49,7 @@ jobs:
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: |
          export EIGEN3_INCLUDE_DIR=$PWD/eigen-3.4.0/
-         export FFTW3_DIR=$PWD/fftw-3.3.10/include/
+         export FFTW3_DIR=$PWD/fftw-3.3.10/
          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
