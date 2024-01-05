@@ -40,14 +40,10 @@ jobs:
       run: ./fftw-3.3.10/configure --enable-threads
       
     - name: Compile fftw
-      run: cd fftw-3.3.10/
-        make/
-        cd ..
+      run: cd ./fftw-3.3.10 && make && cd ..
 
     - name: Install fftw
-      run: cd fftw-3.3.10/
-        make install/
-        cd ..  
+      run: cd ./fftw-3.3.10 && make install && cd ..  
       
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
