@@ -40,10 +40,10 @@ jobs:
       run: ./fftw-3.3.10/configure --enable-threads
       
     - name: Compile fftw
-      run: make -f ./fftw-3.3.10/Makefile
+      run: make -C ./fftw-3.3.10
 
     - name: Install fftw
-      run: make -f ./fftw-3.3.10/Makefile install
+      run: make -C ./fftw-3.3.10 install
   
       
     - name: Configure CMake
