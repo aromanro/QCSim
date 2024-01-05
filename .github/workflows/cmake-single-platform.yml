@@ -54,4 +54,7 @@ jobs:
 
     - name: Build
       # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: |
+         export EIGEN3_INCLUDE_DIR=$PWD/eigen-3.4.0/
+         export FFTW3_DIR=$PWD/fftw-3.3.10/include/
+         cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
