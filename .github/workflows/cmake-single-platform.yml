@@ -37,7 +37,7 @@ jobs:
         export FFTW3_DIR="/usr/local/include"
           
     - name: Configure fftw
-      run: ./configure --enable-threads
+      run: ./fftw-3.3.10/configure --enable-threads
       
     - name: Compile fftw
       run: make -f ./fftw-3.3.10/Makefile
