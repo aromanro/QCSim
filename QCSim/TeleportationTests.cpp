@@ -18,7 +18,7 @@ bool TeleportTests()
 		{
 			reg.setToBasisState(1); // set the qubit to teleport to 'up'
 			teleport.Execute(reg);
-			const unsigned int state = reg.Measure(2);
+			const unsigned int state = reg.MeasureQubit(2);
 
 			std::cout << "Teleported 1, measured: " << state << std::endl;
 
@@ -28,7 +28,7 @@ bool TeleportTests()
 		{
 			reg.setToBasisState(0); // set the qubit to teleport to 'down'
 			teleport.Execute(reg);
-			const unsigned int state = reg.Measure(2);
+			const unsigned int state = reg.MeasureQubit(2);
 
 			std::cout << "Teleported 0, measured: " << state << std::endl;
 

@@ -19,7 +19,7 @@ bool quantumHalfAdderTests()
 	std::cout << "Adding 0 + 0...";
 	regThreeQubits.setToBasisState(0);
 	halfAdder.Execute(regThreeQubits);
-	unsigned int res = regThreeQubits.Measure();
+	unsigned int res = regThreeQubits.MeasureAll();
 	if (res & 1)
 	{
 		std::cout << " Half-adder measured 1 on the first qubit when adding 0 + 0" << std::endl;
@@ -37,7 +37,7 @@ bool quantumHalfAdderTests()
 	std::cout << "Adding 0 + 1...";
 	regThreeQubits.setToBasisState(1);
 	halfAdder.Execute(regThreeQubits);
-	res = regThreeQubits.Measure();
+	res = regThreeQubits.MeasureAll();
 	if ((res & 1) == 0)
 	{
 		std::cout << " Half-adder measured 0 on the first qubit when adding 1 + 0" << std::endl;
@@ -55,7 +55,7 @@ bool quantumHalfAdderTests()
 	std::cout << "Adding 1 + 0...";
 	regThreeQubits.setToBasisState(2);
 	halfAdder.Execute(regThreeQubits);
-	res = regThreeQubits.Measure();
+	res = regThreeQubits.MeasureAll();
 	if (res & 1)
 	{
 		std::cout << " Half-adder measured 1 on the first qubit when adding 0 + 1" << std::endl;
@@ -73,7 +73,7 @@ bool quantumHalfAdderTests()
 	std::cout << "Adding 1 + 1...";
 	regThreeQubits.setToBasisState(3);
 	halfAdder.Execute(regThreeQubits);
-	res = regThreeQubits.Measure();
+	res = regThreeQubits.MeasureAll();
 	if ((res & 1) == 0)
 	{
 		std::cout << " Half-adder measured 0 on the first qubit when adding 1 + 1" << std::endl;
@@ -100,7 +100,7 @@ bool quantumFullAdderTests()
 	std::cout << "Adding 0 + 0...";
 	regFourQubits.setToBasisState(0);
 	fullAdder.Execute(regFourQubits);
-	unsigned int res = regFourQubits.Measure();
+	unsigned int res = regFourQubits.MeasureAll();
 	if (res & 3)
 	{
 		std::cout << " Full-adder altered the qubits when adding 0 + 0: " << (res & 3) << std::endl;
@@ -118,7 +118,7 @@ bool quantumFullAdderTests()
 	std::cout << "Adding 0 + 1...";
 	regFourQubits.setToBasisState(1);
 	fullAdder.Execute(regFourQubits);
-	res = regFourQubits.Measure();
+	res = regFourQubits.MeasureAll();
 	if ((res & 3) != 1)
 	{
 		std::cout << " Full-adder altered the qubits when adding 1 + 0: " << (res & 3) << std::endl;
@@ -136,7 +136,7 @@ bool quantumFullAdderTests()
 	std::cout << "Adding 1 + 0...";
 	regFourQubits.setToBasisState(2);
 	fullAdder.Execute(regFourQubits);
-	res = regFourQubits.Measure();
+	res = regFourQubits.MeasureAll();
 	if ((res & 3) != 2)
 	{
 		std::cout << " Full-adder altered the qubits when adding 0 + 1: " << (res & 3) << std::endl;
@@ -154,7 +154,7 @@ bool quantumFullAdderTests()
 	std::cout << "Adding 1 + 1...";
 	regFourQubits.setToBasisState(3);
 	fullAdder.Execute(regFourQubits);
-	res = regFourQubits.Measure();
+	res = regFourQubits.MeasureAll();
 	if ((res & 3) != 3)
 	{
 		std::cout << " Full-adder altered the qubits when adding 1 + 1: " << (res & 3) << std::endl;

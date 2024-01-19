@@ -126,12 +126,12 @@ namespace QC {
 
 		unsigned int Measure()
 		{
-			return reg.Measure();
+			return reg.MeasureAll();
 		}
 
 		unsigned int Measure(unsigned int qubit)
 		{
-			return reg.Measure(qubit);
+			return reg.MeasureQubit(qubit);
 		}
 		
 		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)

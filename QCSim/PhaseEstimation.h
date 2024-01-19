@@ -118,7 +118,7 @@ namespace QC {
 				// the f should be measured separately to find out its content
 
 				//return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
-				return reg.Measure();
+				return reg.MeasureAll();
 			}
 
 			std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(RegisterClass& reg, unsigned int nrMeasurements = 10000)
@@ -169,7 +169,7 @@ namespace QC {
 				// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 				// the f should be measured separately to find out its content
 
-				//return reg.Measure();
+				//return reg.MeasureAll();
 				return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
 			}
 
@@ -249,7 +249,7 @@ namespace QC {
 				// any of those following should do, but if one does not do the f register measurement above and here there is no full register measurement
 				// the f should be measured separately to find out its content
 
-				//return reg.Measure();
+				//return reg.MeasureAll();
 				return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
 			}
 

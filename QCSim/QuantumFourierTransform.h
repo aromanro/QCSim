@@ -24,7 +24,7 @@ namespace QC {
 			{
 				QFT(reg);
 
-				return reg.Measure();
+				return reg.MeasureAll();
 			}
 
 			// execute this to avoid measurement

@@ -73,7 +73,7 @@ int main()
     QC::QubitRegister reg(3);
     QC::Gates::PauliXGate x;
     reg.ApplyGate(x, 0);
-    unsigned int m = reg.Measure();
+    unsigned int m = reg.MeasureAll();
 
     std::cout << "Result should be 1, it's: " << m << std::endl;
 

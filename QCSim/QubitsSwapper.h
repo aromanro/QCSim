@@ -37,7 +37,7 @@ namespace QC {
 			{
 				Swap(reg);
 
-				return reg.Measure();
+				return reg.MeasureAll();
 			}
 
 		protected:

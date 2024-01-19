@@ -132,7 +132,7 @@ namespace QC {
 			Normalize();
 		}
 
-		unsigned int Measure()
+		unsigned int MeasureAll()
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 			double accum = 0;
@@ -154,7 +154,7 @@ namespace QC {
 		}
 
 		// shortcut for measuring a single qubit
-		unsigned int Measure(unsigned int qubit)
+		unsigned int MeasureQubit(unsigned int qubit)
 		{
 			return Measure(qubit, qubit);
 		}

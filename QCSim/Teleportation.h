@@ -179,7 +179,7 @@ namespace QC {
 				entangler.Execute(reg);
 
 				reg.ApplyGate(cnot, entQubit, sQubit);
-				const unsigned int measurement = reg.Measure(entQubit);
+				const unsigned int measurement = reg.MeasureQubit(entQubit);
 				if (measurement) reg.ApplyGate(x, targetQubit);
 
 				const unsigned int measurement2 = disentangler.Execute(reg);
