@@ -14,18 +14,18 @@ namespace Fourier {
 
 	class FFTWPlan {
 	public:
-		FFTWPlan() : plan(0) {}
+		FFTWPlan() = default;
+		FFTWPlan(const FFTWPlan&) = delete;
+		FFTWPlan& operator=(const FFTWPlan&) = delete;
+
 		~FFTWPlan() 
 		{ 
 		  if (plan) 
 		  { 
-			std::lock_guard<std::mutex> lock(planMutex);
+			std::lock_guard lock(planMutex);
 			fftw_destroy_plan(plan); 
 		  } 
 		}
-
-		static std::mutex planMutex;
-
 
 		// 1D
 
@@ -33,7 +33,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_1d(n, src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
@@ -42,7 +42,7 @@ namespace Fourier {
 		inline void inv(fftw_complex* src, fftw_complex* dst, unsigned int n) {
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_1d(n, src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
@@ -52,7 +52,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_r2c_1d(n, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_r2c(plan, src, dst);
@@ -62,7 +62,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_c2r_1d(n, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_c2r(plan, src, dst);
@@ -74,7 +74,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_2d(n0, n1, src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
@@ -84,7 +84,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_2d(n0, n1, src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
@@ -94,7 +94,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_r2c_2d(n0, n1, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_r2c(plan, src, dst);
@@ -104,7 +104,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_c2r_2d(n0, n1, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_c2r(plan, src, dst);
@@ -116,7 +116,7 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_3d(n0, n1, n2, src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
@@ -126,7 +126,7 @@ namespace Fourier {
 		{
 			if (!plan) 
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_3d(n0, n1, n2, src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
@@ -136,7 +136,7 @@ namespace Fourier {
 		{
 			if (!plan) 
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_r2c_3d(n0, n1, n2, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_r2c(plan, src, dst);
@@ -146,21 +146,22 @@ namespace Fourier {
 		{
 			if (!plan)
 			{
-				std::lock_guard<std::mutex> lock(planMutex);
+				std::lock_guard lock(planMutex);
 				plan = fftw_plan_dft_c2r_3d(n0, n1, n2, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_c2r(plan, src, dst);
 		}
 
-	protected:
-		fftw_plan plan;
+		static std::mutex planMutex;
+
+	private:
+		fftw_plan plan = nullptr;
 	};
 
 	class FFT
 	{
 	public:
 		explicit FFT(int numThreads = 0); // zero means let it alone for FFTW to decide
-		~FFT();
 
 		// 1D
 
@@ -217,16 +218,17 @@ namespace Fourier {
 			//fftw_cleanup_threads();
 		}
 
+		void SetNumThreads(int numThreads);
 
-	protected:
+	private:
 		// in place, aligned, inverse, different types, n
-		std::map< std::tuple<bool, bool, bool, bool, unsigned int>, FFTWPlan> Plans1D;
+		std::map<std::tuple<bool, bool, bool, bool, unsigned int>, FFTWPlan> Plans1D;
 
 		// in place, aligned, inverse, different types, n1, n2
-		std::map< std::tuple<bool, bool, bool, bool, unsigned int, unsigned int>, FFTWPlan> Plans2D;
+		std::map<std::tuple<bool, bool, bool, bool, unsigned int, unsigned int>, FFTWPlan> Plans2D;
 
 		// in place, aligned, inverse, different types, n1, n2, n3
-		std::map< std::tuple<bool, bool, bool, bool, unsigned int, unsigned int, unsigned int>, FFTWPlan> Plans3D;
+		std::map<std::tuple<bool, bool, bool, bool, unsigned int, unsigned int, unsigned int>, FFTWPlan> Plans3D;
 
 		inline bool InPlace(const void *src, const void *dst) { return src == dst; }
 		inline bool Aligned(const void *src, const void *dst) { return ((reinterpret_cast<size_t>(src) & 0xF) | (reinterpret_cast<size_t>(dst) & 0xF)) == 0; }
@@ -246,8 +248,7 @@ namespace Fourier {
 			return Plans3D[std::tuple<bool, bool, bool, bool, unsigned int, unsigned int, unsigned int>(InPlace(src, dst), Aligned(src, dst), inverse, differentTypes, n0, n1, n2)];
 		}
 
-	public:
-		void SetNumThreads(int numThreads);
+		static const int init;
 	};
 
 
