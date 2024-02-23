@@ -293,6 +293,12 @@ namespace QC {
 			Normalize();
 		}
 
+		// warning, you should be sure that the vector is normalized and has the proper size
+		void setRegisterStorageFastNoNormalize(VectorClass& vals)
+		{
+			registerStorage.swap(vals);
+		}
+
 		// to check how well the computed state matches some 'exact' known one
 		double stateFidelity(const VectorClass& state) const
 		{
