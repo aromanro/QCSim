@@ -6,7 +6,7 @@
 
 namespace QC {
 
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitRegister : private QubitRegisterCalculator<VectorClass, MatrixClass>
+	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
 	{
 	public:
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
