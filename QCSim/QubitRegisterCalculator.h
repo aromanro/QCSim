@@ -519,6 +519,12 @@ namespace QC {
 			return measuredState;
 		}
 
+		static int GetNumberOfThreads()
+		{
+			const size_t threads = std::thread::hardware_concurrency();
+			return static_cast<int>(threads ? threads : GetCpuInfoNrThreads());
+		}
+
 	private:
 		static size_t GetCpuInfoNrThreads()
 		{
@@ -531,12 +537,6 @@ namespace QC {
 
 			return std::count(std::istream_iterator<std::string>(cpuinfo), std::istream_iterator<std::string>(), std::string("processor"));
 #endif
-		}
-
-		static int GetNumberOfThreads()
-		{
-			const size_t threads = std::thread::hardware_concurrency();
-			return static_cast<int>(threads ? threads : GetCpuInfoNrThreads());
 		}
 	};
 
