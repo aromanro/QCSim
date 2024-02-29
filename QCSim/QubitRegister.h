@@ -27,6 +27,20 @@ namespace QC {
 			registerStorage(0) = 1;
 		}
 
+		// this is a special constructor, I need it for something in a derived work (closed source)
+		QubitRegister(size_t N, VectorClass& v, int addseed = 0)
+			: NrQubits(N), NrBasisStates(1ULL << NrQubits),
+			uniformZeroOne(0, 1), recordGates(false)
+		{
+			assert(N > 0);
+			registerStorage.swap(v);
+			resultsStorage.resize(NrBasisStates);
+
+			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
+			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
+			rng.seed(seed);
+		}
+
 		size_t getNrQubits() const { return NrQubits; };
 		size_t getNrBasisStates() const { return NrBasisStates; };
 
