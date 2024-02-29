@@ -526,7 +526,7 @@ namespace QC {
 		}
 
 
-		constexpr static size_t OneQubitOmpLimit = 2048;
+		constexpr static size_t OneQubitOmpLimit = 4096;
 		constexpr static size_t TwoQubitOmpLimit = OneQubitOmpLimit / 2;
 		constexpr static size_t ThreeQubitOmpLimit = TwoQubitOmpLimit / 2;
 
