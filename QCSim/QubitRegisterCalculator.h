@@ -367,7 +367,7 @@ namespace QC {
 
 			// collapse
 #pragma omp parallel for num_threads(processor_count)
-			for (long long state = 0; state < NrBasisStates; ++state)
+			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
 
 			return measuredState;
