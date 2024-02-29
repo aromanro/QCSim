@@ -93,7 +93,7 @@ bool EntanglementSwappingTests()
 
 		const Eigen::VectorXcd& regStorage = entSwap.getRegisterStorage();
 
-		for (size_t state = 0; state < regStorage.size(); ++state)
+		for (size_t state = 0; state < static_cast<size_t>(regStorage.size()); ++state)
 		{
 			if ((state & 0xf) == meas)
 			{

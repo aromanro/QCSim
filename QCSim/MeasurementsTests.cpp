@@ -19,8 +19,8 @@ bool approxEqual(std::complex<double> val1, std::complex<double> val2, double er
 bool checkUnitary(const Eigen::MatrixXcd& m)
 {
 	const Eigen::MatrixXcd r = m.adjoint() * m;
-	for (size_t i = 0; i < r.rows(); ++i)
-		for (size_t j = 0; j < r.cols(); ++j)
+	for (size_t i = 0; i < static_cast<size_t>(r.rows()); ++i)
+		for (size_t j = 0; j < static_cast<size_t>(r.cols()); ++j)
 			if (!approxEqual(r(i, j), std::complex(i == j ? 1. : 0., 0.))) return false;
 
 	return true;
