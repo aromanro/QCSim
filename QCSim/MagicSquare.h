@@ -88,13 +88,13 @@ namespace Games {
 			BaseClass::reg.setToBasisState(0);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
-			unsigned int nrWins = 0;
+			size_t nrWins = 0;
 
-			for (unsigned int i = 0; i < nrPlays; ++i)
+			for (size_t i = 0; i < nrPlays; ++i)
 			{
-				unsigned int resAlice, resBob;
+				size_t resAlice, resBob;
 				if (Play(distInd(rng), distInd(rng), resAlice, resBob))
 					++nrWins;
 			}
@@ -105,7 +105,7 @@ namespace Games {
 		// a = the number of the row for Alice, b = the number of the column for Bob
 		// resAlice = the row from Alice, bit encoded, resBob = the column from Bob, bit encoded
 		// returns true if Alice and Bob won, false otherwise
-		bool Play(int a, int b, unsigned int& resAlice, unsigned int& resBob)
+		bool Play(int a, int b, size_t& resAlice, size_t& resBob)
 		{
 			assert(a >= 0 && a <= 2 && b >= 0 && b <= 2);
 
@@ -124,23 +124,23 @@ namespace Games {
 			}
 
 			// check the intersection, Alice and Bob need to have the same value for the common matrix element
-			unsigned int alice = resAlice;
+			size_t alice = resAlice;
 			alice >>= 3 - b;
 			alice &= 1;
 
-			unsigned int bob = resBob; 
+			size_t bob = resBob; 
 			bob >>= 3 - a;
 			bob &= 1;
 
 			return alice == bob;
 		}
 
-		unsigned int getNrPlays() const
+		size_t getNrPlays() const
 		{
 			return nrPlays;
 		}
 
-		void setNrPlays(unsigned int n)
+		void setNrPlays(size_t n)
 		{
 			nrPlays = n;
 		}
@@ -161,7 +161,7 @@ namespace Games {
 			BaseClass::ApplyGate(x, 3);
 		}
 
-		unsigned int AliceOperations(int a)
+		size_t AliceOperations(int a)
 		{
 			switch (a)
 			{
@@ -177,7 +177,7 @@ namespace Games {
 			}
 
 			// Alice measures
-			unsigned int resAlice = BaseClass::Measure(0, 1) << 1;
+			size_t resAlice = BaseClass::Measure(0, 1) << 1;
 			// complete the result, Alice needs to have the row with an even number of ones
 			if (resAlice == 2 || resAlice == 4)
 				resAlice |= 1;
@@ -185,7 +185,7 @@ namespace Games {
 			return resAlice;
 		}
 
-		unsigned int BobOperations(int b)
+		size_t BobOperations(int b)
 		{
 			switch (b)
 			{
@@ -201,7 +201,7 @@ namespace Games {
 			}
 
 			// Bob measures
-			unsigned int resBob = BaseClass::Measure(2, 3) << 1;
+			size_t resBob = BaseClass::Measure(2, 3) << 1;
 			// complete the result, Bob needs to have the column with an odd number of ones
 			if (resBob == 0 || resBob == 6)
 				resBob |= 1;
@@ -230,7 +230,7 @@ namespace Games {
 		QC::Gates::TwoQubitsGate<MatrixClass> B2;
 		QC::Gates::TwoQubitsGate<MatrixClass> B3;
 
-		unsigned int nrPlays;
+		size_t nrPlays;
 	};
 
 }

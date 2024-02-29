@@ -16,10 +16,10 @@ namespace QC {
 			using BaseClass = QC::QuantumSubAlgorithmOnSubregisterWithAncilla<VectorClass, MatrixClass>;
 			using RegisterClass = typename BaseClass::RegisterClass;
 
-			OracleWithGatesSimpleFunction(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX, unsigned int targetQubit = 0, unsigned int startAncilla = INT_MAX)
+			OracleWithGatesSimpleFunction(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX, size_t targetQubit = 0, size_t startAncilla = INT_MAX)
 				: BaseClass(N, startQubit, endQubit), nControlledNOT(INT_MAX), target(targetQubit)
 			{
-				std::vector<unsigned int> controlQubits(endQubit - startQubit + 1);
+				std::vector<size_t> controlQubits(endQubit - startQubit + 1);
 				std::iota(controlQubits.begin(), controlQubits.end(), startQubit);
 
 				nControlledNOT.SetControlQubits(controlQubits);
@@ -27,22 +27,22 @@ namespace QC {
 				nControlledNOT.SetStartAncillaQubits(startAncilla);
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
-				unsigned int stQubit = BaseClass::BaseClass::getStartQubit();
-				unsigned int enQubit = BaseClass::BaseClass::getEndQubit();
-				unsigned int nrQubits = enQubit - stQubit + 1;
-				unsigned int nrBasisStates = 1U << nrQubits;
+				size_t stQubit = BaseClass::BaseClass::getStartQubit();
+				size_t enQubit = BaseClass::BaseClass::getEndQubit();
+				size_t nrQubits = enQubit - stQubit + 1;
+				size_t nrBasisStates = 1U << nrQubits;
 
 				/*
-					for (unsigned int state = 0; state < nrBasisStates; ++state)
+					for (size_t state = 0; state < nrBasisStates; ++state)
 					{
 						if (!func(state)) continue;
 
-						unsigned int realState = state << stQubit;
+						size_t realState = state << stQubit;
 
-						unsigned int v = realState;
-						for (unsigned int q = 0; q < nrQubits; ++q)
+						size_t v = realState;
+						for (size_t q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
 								reg.ApplyGate(x, stQubit + q);
@@ -54,7 +54,7 @@ namespace QC {
 
 						// undo the x gates
 						v = realState;
-						for (unsigned int q = 0; q < nrQubits; ++q)
+						for (size_t q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
 								reg.ApplyGate(x, stQubit + q);
@@ -68,14 +68,14 @@ namespace QC {
 				// this one avoids applying x gates twice on the same qubit, between applying n controlled nots
 				std::vector<bool> qubits(nrQubits, false);
 
-				for (unsigned int state = 0; state < nrBasisStates; ++state)
+				for (size_t state = 0; state < nrBasisStates; ++state)
 				{
 					if (!func(state)) continue;
 
-					unsigned int realState = state << stQubit;
+					size_t realState = state << stQubit;
 
-					unsigned int v = realState;
-					for (unsigned int q = 0; q < nrQubits; ++q)
+					size_t v = realState;
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						if (qubits[q] != ((v & 1) == 0))
 						{
@@ -90,7 +90,7 @@ namespace QC {
 				}
 
 				// undo the x gates
-				for (unsigned int q = 0; q < nrQubits; ++q)
+				for (size_t q = 0; q < nrQubits; ++q)
 					if (qubits[q])
 						reg.ApplyGate(x, stQubit + q);
 
@@ -108,7 +108,7 @@ namespace QC {
 			QC::SubAlgo::NControlledNotWithAncilla<VectorClass, MatrixClass> nControlledNOT;
 			QC::Gates::PauliXGate<MatrixClass> x;
 
-			unsigned int target;
+			size_t target;
 		};
 
 
@@ -121,31 +121,31 @@ namespace QC {
 			using BaseClass = QC::QuantumSubAlgorithmOnSubregisterWithAncilla<VectorClass, MatrixClass>;
 			using RegisterClass = typename BaseClass::RegisterClass;
 
-			OracleWithGates(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX, unsigned int startTargetQubits = 0, unsigned int startAncilla = INT_MAX)
+			OracleWithGates(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX, size_t startTargetQubits = 0, size_t startAncilla = INT_MAX)
 				: BaseClass(N, startQubit, endQubit), nControlledNOTs(INT_MAX), target(startTargetQubits)
 			{
-				std::vector<unsigned int> controlQubits(endQubit - startQubit + 1);
+				std::vector<size_t> controlQubits(endQubit - startQubit + 1);
 				std::iota(controlQubits.begin(), controlQubits.end(), startQubit);
 
 				nControlledNOTs.SetControlQubits(controlQubits);
 				nControlledNOTs.SetStartAncillaQubits(startAncilla);
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
-				unsigned int stQubit = BaseClass::BaseClass::getStartQubit();
-				unsigned int enQubit = BaseClass::BaseClass::getEndQubit();
-				unsigned int nrQubits = enQubit - stQubit + 1;
-				unsigned int nrBasisStates = 1U << nrQubits;
+				size_t stQubit = BaseClass::BaseClass::getStartQubit();
+				size_t enQubit = BaseClass::BaseClass::getEndQubit();
+				size_t nrQubits = enQubit - stQubit + 1;
+				size_t nrBasisStates = 1U << nrQubits;
 
 				/*
-					for (unsigned int state = 0; state < nrBasisStates; ++state)
+					for (size_t state = 0; state < nrBasisStates; ++state)
 					{
-						unsigned int fval = func(state);
+						size_t fval = func(state);
 						if (!fval) continue;
 						nControlledNOTs.ClearGates();
 						
-						unsigned int q = target;
+						size_t q = target;
 						while (fval)
 						{
 							if (fval & 1)
@@ -158,10 +158,10 @@ namespace QC {
 							++q;
 						}
 
-						unsigned int realState = state << stQubit;
+						size_t realState = state << stQubit;
 
-						unsigned int v = realState;
-						for (unsigned int q = 0; q < nrQubits; ++q)
+						size_t v = realState;
+						for (size_t q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
 								reg.ApplyGate(x, stQubit + q);
@@ -173,7 +173,7 @@ namespace QC {
 
 						// undo the x gates
 						v = realState;
-						for (unsigned int q = 0; q < nrQubits; ++q)
+						for (size_t q = 0; q < nrQubits; ++q)
 						{
 							if ((v & 1) == 0)
 								reg.ApplyGate(x, stQubit + q);
@@ -187,14 +187,14 @@ namespace QC {
 				// this one avoids applying x gates twice on the same qubit, between applying n controlled nots
 				std::vector<bool> qubits(nrQubits, false);
 
-				for (unsigned int state = 0; state < nrBasisStates; ++state)
+				for (size_t state = 0; state < nrBasisStates; ++state)
 				{
-					unsigned int fval = func(state);
+					size_t fval = func(state);
 					if (!fval) continue;
 
 					nControlledNOTs.ClearGates();
 					
-					for (unsigned int q = target; fval; ++q)
+					for (size_t q = target; fval; ++q)
 					{
 						if (fval & 1)
 						{
@@ -205,10 +205,10 @@ namespace QC {
 						fval >>= 1;
 					}
 
-					unsigned int realState = state << stQubit;
+					size_t realState = state << stQubit;
 
-					unsigned int v = realState;
-					for (unsigned int q = 0; q < nrQubits; ++q)
+					size_t v = realState;
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						if (qubits[q] != ((v & 1) == 0))
 						{
@@ -223,7 +223,7 @@ namespace QC {
 				}
 
 				// undo the x gates
-				for (unsigned int q = 0; q < nrQubits; ++q)
+				for (size_t q = 0; q < nrQubits; ++q)
 					if (qubits[q])
 						reg.ApplyGate(x, stQubit + q);
 
@@ -241,7 +241,7 @@ namespace QC {
 			QC::SubAlgo::NControlledGatesWithAncilla<VectorClass, MatrixClass> nControlledNOTs;
 			QC::Gates::PauliXGate<MatrixClass> x;
 
-			unsigned int target;
+			size_t target;
 		};
 	}
 }

@@ -44,7 +44,7 @@ namespace ErrorCorrection {
 		{
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			BaseClass::Encode();
 
@@ -77,7 +77,7 @@ namespace ErrorCorrection {
 		{
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			BaseClass::Encode();
 			ApplyHadamardOnAllQubits();
@@ -102,7 +102,7 @@ namespace ErrorCorrection {
 
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int i = 0; i < AlgorithmClass::getNrQubits(); ++i)
+			for (size_t i = 0; i < AlgorithmClass::getNrQubits(); ++i)
 				AlgorithmClass::ApplyGate(hadamard, i);
 		}
 

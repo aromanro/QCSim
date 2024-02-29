@@ -18,12 +18,12 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			NControlledGatesWithAncilla(unsigned int N = INT_MAX, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			NControlledGatesWithAncilla(size_t N = INT_MAX, size_t startQubit = 0, size_t endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit), startAncillaQubits(1), clearAncillaAtTheEnd(true)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				if (controlQubits.empty())
 					return 1;
@@ -47,8 +47,8 @@ namespace QC {
 
 
 				// 1. Walk over the control qubits, use ccnot on pairs of them with an ancilla qubit as target (different ancilla for each pair)
-				unsigned int curFreeAncilla = startAncillaQubits;
-				for (unsigned int i = 0; i < controlQubits.size() - 1; i += 2)
+				size_t curFreeAncilla = startAncillaQubits;
+				for (size_t i = 0; i < controlQubits.size() - 1; i += 2)
 				{
 					reg.ApplyGate(ccnot, curFreeAncilla, controlQubits[i], controlQubits[i + 1]);
 					++curFreeAncilla;
@@ -56,7 +56,7 @@ namespace QC {
 
 				// 2. One could remain unpaired, ccnot it with the first used ancilla qubit if that's the case, targeting the next unused ancilla
 
-				unsigned int curAncilla = startAncillaQubits;
+				size_t curAncilla = startAncillaQubits;
 				if (controlQubits.size() % 2)
 				{
 					reg.ApplyGate(ccnot, curFreeAncilla, controlQubits[controlQubits.size() - 1], curAncilla);
@@ -92,22 +92,22 @@ namespace QC {
 				return 0; // no measurement, so the return should be ignored
 			}
 
-			const std::vector<unsigned int>& GetControlQubits() const
+			const std::vector<size_t>& GetControlQubits() const
 			{
 				return controlQubits;
 			}
 
-			void SetControlQubits(const std::vector<unsigned int>& cq)
+			void SetControlQubits(const std::vector<size_t>& cq)
 			{
 				controlQubits = cq;
 			}
 
-			unsigned int GetStartAncillaQubits() const
+			size_t GetStartAncillaQubits() const
 			{
 				return startAncillaQubits;
 			}
 
-			void SetStartAncillaQubits(unsigned int saq)
+			void SetStartAncillaQubits(size_t saq)
 			{
 				startAncillaQubits = saq;
 			}
@@ -165,8 +165,8 @@ namespace QC {
 
 		protected:
 			Gates::ToffoliGate<MatrixClass> ccnot;
-			std::vector<unsigned int> controlQubits;
-			unsigned int startAncillaQubits;
+			std::vector<size_t> controlQubits;
+			size_t startAncillaQubits;
 			std::vector<Gates::AppliedGate<MatrixClass>> gates;
 			bool clearAncillaAtTheEnd;
 		};

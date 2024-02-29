@@ -37,14 +37,14 @@ namespace MachineLearning {
 			rng.seed(seed);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure(0);
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 1000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 1000)
 		{
 			ExecuteWithoutMeasurement();
 
@@ -89,7 +89,7 @@ namespace MachineLearning {
 			return centroids;
 		}
 
-		bool Cluster(unsigned int k, unsigned int nrMeasurements = 1000, unsigned int maxSteps = 100000)
+		bool Cluster(size_t k, size_t nrMeasurements = 1000, size_t maxSteps = 100000)
 		{
 			getStartCentroids(k);
 
@@ -131,18 +131,18 @@ namespace MachineLearning {
 			BaseClass::ApplyGate(hadamard, 0);
 		}
 
-		const std::vector<ClusterDataPoint>& getStartCentroids(unsigned int k)
+		const std::vector<ClusterDataPoint>& getStartCentroids(size_t k)
 		{
 			static const double eps = 0.01 * xspan * xspan;
 			centroids.resize(k);
 
-			std::stack<unsigned int> s;
+			std::stack<size_t> s;
 
-			unsigned int index = 0;
+			size_t index = 0;
 			bool retry = false;
-			for (unsigned int c = 0; c < k; ++c)
+			for (size_t c = 0; c < k; ++c)
 			{
-				std::uniform_int_distribution<> dist_nr(c, static_cast<unsigned int>(m_data.size()) - 1);
+				std::uniform_int_distribution<> dist_nr(c, static_cast<size_t>(m_data.size()) - 1);
 				
 				do {
 					index = dist_nr(rng);
@@ -153,7 +153,7 @@ namespace MachineLearning {
 
 					// don't allow two centroids to be too close to each other
 					retry = false;
-					for (unsigned int oc = 0; oc < c; ++oc)
+					for (size_t oc = 0; oc < c; ++oc)
 					{
 						const double dx = centroids[c].x - centroids[oc].x;
 						const double dy = centroids[c].y - centroids[oc].y;
@@ -204,13 +204,13 @@ namespace MachineLearning {
 			}
 		}
 
-		bool UpdateClusters(unsigned int nrMeasurements)
+		bool UpdateClusters(size_t nrMeasurements)
 		{
 			bool terminate = true;
 
 			for (int i = 0; i < static_cast<int>(m_data.size()); ++i)
 			{
-				unsigned int overlap = 0;
+				size_t overlap = 0;
 				int cluster = 0;
 
 				SetDataPoint1(m_data[i]);
@@ -239,17 +239,17 @@ namespace MachineLearning {
 			return terminate;
 		}
 
-		bool Update(unsigned int nrMeasurements, unsigned int maxSteps)
+		bool Update(size_t nrMeasurements, size_t maxSteps)
 		{
 			bool terminate = false;
 
-			for (unsigned int i = 0; i < maxSteps && !terminate; ++i)
+			for (size_t i = 0; i < maxSteps && !terminate; ++i)
 				terminate = UpdateStep(nrMeasurements);
 
 			return terminate;
 		}
 
-		bool UpdateStep(unsigned int nrMeasurements)
+		bool UpdateStep(size_t nrMeasurements)
 		{
 			const bool terminate = UpdateClusters(nrMeasurements);
 			if (!terminate) UpdateCentroids();

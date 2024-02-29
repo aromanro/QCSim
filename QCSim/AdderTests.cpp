@@ -19,7 +19,7 @@ bool quantumHalfAdderTests()
 	std::cout << "Adding 0 + 0...";
 	regThreeQubits.setToBasisState(0);
 	halfAdder.Execute(regThreeQubits);
-	unsigned int res = regThreeQubits.MeasureAll();
+	size_t res = regThreeQubits.MeasureAll();
 	if (res & 1)
 	{
 		std::cout << " Half-adder measured 1 on the first qubit when adding 0 + 0" << std::endl;
@@ -100,7 +100,7 @@ bool quantumFullAdderTests()
 	std::cout << "Adding 0 + 0...";
 	regFourQubits.setToBasisState(0);
 	fullAdder.Execute(regFourQubits);
-	unsigned int res = regFourQubits.MeasureAll();
+	size_t res = regFourQubits.MeasureAll();
 	if (res & 3)
 	{
 		std::cout << " Full-adder altered the qubits when adding 0 + 0: " << (res & 3) << std::endl;
@@ -184,15 +184,15 @@ bool NQubitsAdderTests()
 
 	for (int i = 0; i < 10; ++i)
 	{
-		const unsigned int n1 = dist_nr(gen);
-		unsigned int n2 = dist_nr(gen);
+		const size_t n1 = dist_nr(gen);
+		size_t n2 = dist_nr(gen);
 		std::cout << "Computing " << n1 << "+" << n2 << "...";
 
-		const unsigned int expected = n1 + n2;
+		const size_t expected = n1 + n2;
 		n2 <<= 3;
 		n2 |= n1;
 		threeQubitsAdder.setToBasisState(n2);
-		unsigned int res = threeQubitsAdder.Execute();
+		size_t res = threeQubitsAdder.Execute();
 		if ((res & 0x3f) != n2)
 		{
 			std::cout << " Adder altered the qubits, the input qubits are now: " << (res & 0x3f) << std::endl;
@@ -213,8 +213,8 @@ bool NQubitsAdderTests()
 
 bool SimpleDrapperAdderTests()
 {
-	const unsigned int nQubits = 3;
-	const unsigned int mask = (1 << nQubits) - 1;
+	const size_t nQubits = 3;
+	const size_t mask = (1 << nQubits) - 1;
 
 	std::cout << "Draper adder, adding " << nQubits << "-qubit values..." << std::endl;
 
@@ -227,13 +227,13 @@ bool SimpleDrapperAdderTests()
 
 	for (int i = 0; i < 20; ++i)
 	{
-		unsigned int n1 = dist_nr1(gen);
-		unsigned int n2 = dist_nr2(gen);
+		size_t n1 = dist_nr1(gen);
+		size_t n2 = dist_nr2(gen);
 		if (dist_bool(gen)) std::swap(n1, n2); // this allows having the bigger values (if the ones from distributions are not equal) have equal probability in both registers
 
 		std::cout << "Computing " << n1 << "+" << n2 << "...";
 
-		const unsigned int expected = n1 + n2;
+		const size_t expected = n1 + n2;
 
 		n2 <<= nQubits;
 		n2 |= n1;
@@ -244,12 +244,12 @@ bool SimpleDrapperAdderTests()
 
 		const auto measurements = adder.ExecuteWithMultipleMeasurements(100);
 
-		unsigned int mostFreqRes = measurements.begin()->first;
+		size_t mostFreqRes = measurements.begin()->first;
 		mostFreqRes >>= nQubits;
-		unsigned int freqMax = measurements.begin()->second;
+		size_t freqMax = measurements.begin()->second;
 		for (const auto& v : measurements)
 		{
-			unsigned int res = v.first;
+			size_t res = v.first;
 
 			if ((res & mask) != n1)
 			{
@@ -261,7 +261,7 @@ bool SimpleDrapperAdderTests()
 			if (res != expected)
 				++failures;
 
-			unsigned int freq = v.second;
+			size_t freq = v.second;
 			if (freq > freqMax)
 			{
 				freqMax = freq;
@@ -289,8 +289,8 @@ bool SimpleDrapperAdderTests()
 
 bool DrapperAdderWithCarryTests()
 {
-	const unsigned int nQubits = 3;
-	const unsigned int mask = (1 << nQubits) - 1;
+	const size_t nQubits = 3;
+	const size_t mask = (1 << nQubits) - 1;
 
 	std::cout << "Draper adder with carry, adding " << nQubits << "-qubit values..." << std::endl;
 
@@ -302,12 +302,12 @@ bool DrapperAdderWithCarryTests()
 
 	for (int i = 0; i < 30; ++i)
 	{
-		unsigned int n1 = dist_nr(gen);
-		unsigned int n2 = dist_nr(gen);
+		size_t n1 = dist_nr(gen);
+		size_t n2 = dist_nr(gen);
 
 		std::cout << "Computing " << n1 << "+" << n2 << "...";
 
-		const unsigned int expected = n1 + n2;
+		const size_t expected = n1 + n2;
 
 		n2 <<= nQubits;
 		n2 |= n1;
@@ -316,12 +316,12 @@ bool DrapperAdderWithCarryTests()
 		adder.setToBasisState(n2);
 		const auto measurements = adder.ExecuteWithMultipleMeasurements(100);
 
-		unsigned int mostFreqRes = measurements.begin()->first;
+		size_t mostFreqRes = measurements.begin()->first;
 		mostFreqRes >>= nQubits;
-		unsigned int freqMax = measurements.begin()->second;
+		size_t freqMax = measurements.begin()->second;
 		for (const auto& v : measurements)
 		{
-			unsigned int res = v.first;
+			size_t res = v.first;
 
 			if ((res & mask) != n1)
 			{
@@ -333,7 +333,7 @@ bool DrapperAdderWithCarryTests()
 			if (res != expected)
 				++failures;
 
-			unsigned int freq = v.second;
+			size_t freq = v.second;
 			if (freq > freqMax)
 			{
 				freqMax = freq;

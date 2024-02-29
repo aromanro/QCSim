@@ -11,7 +11,7 @@ namespace ErrorCorrection {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ErrorCorrectionBase(unsigned int N, int addseed = 0)
+		ErrorCorrectionBase(size_t N, int addseed = 0)
 			: BaseClass(N, addseed), errorQubit(N)
 		{
 			BaseClass::setToBasisState(0);
@@ -29,12 +29,12 @@ namespace ErrorCorrection {
 		}
 
 		// set it to bigger than two for 'no error'
-		void SetErrorQubit(unsigned int q = 0)
+		void SetErrorQubit(size_t q = 0)
 		{
 			errorQubit = q;
 		}
 
-		unsigned int GetErrorQubit() const
+		size_t GetErrorQubit() const
 		{
 			return errorQubit;
 		}
@@ -42,7 +42,7 @@ namespace ErrorCorrection {
 	protected:
 		virtual void ApplyError() = 0;
 
-		unsigned int errorQubit;
+		size_t errorQubit;
 
 		QC::Gates::CNOTGate<MatrixClass> cnot;
 		QC::Gates::ToffoliGate<MatrixClass> ccnot;

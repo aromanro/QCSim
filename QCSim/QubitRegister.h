@@ -12,8 +12,8 @@ namespace QC {
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 		using BaseClass = QubitRegisterCalculator<VectorClass, MatrixClass>;
 
-		QubitRegister(unsigned int N = 3, int addseed = 0)
-			: NrQubits(N), NrBasisStates(1u << NrQubits), uniformZeroOne(0, 1), recordGates(false)
+		QubitRegister(size_t N = 3, int addseed = 0)
+			: NrQubits(N), NrBasisStates(1ULL << NrQubits), uniformZeroOne(0, 1), recordGates(false)
 		{
 			assert(N > 0);
 
@@ -27,22 +27,22 @@ namespace QC {
 			registerStorage(0) = 1;
 		}
 
-		unsigned int getNrQubits() const { return NrQubits; };
-		unsigned int getNrBasisStates() const { return NrBasisStates; };
+		size_t getNrQubits() const { return NrQubits; };
+		size_t getNrBasisStates() const { return NrBasisStates; };
 
-		std::complex<double> getBasisStateAmplitude(unsigned int State) const {
+		std::complex<double> getBasisStateAmplitude(size_t State) const {
 			if (State >= NrBasisStates) return 0;
 
 			return registerStorage(State);
 		}
 
-		double getBasisStateProbability(unsigned int State) const {
+		double getBasisStateProbability(size_t State) const {
 			if (State >= NrBasisStates) return 0;
 
 			return std::norm(registerStorage(State));
 		}
 
-		void setToBasisState(unsigned int State)
+		void setToBasisState(size_t State)
 		{
 			if (State >= NrBasisStates) return;
 
@@ -50,12 +50,12 @@ namespace QC {
 			registerStorage(State) = 1;
 		}
 
-		void setToQubitState(unsigned int q)
+		void setToQubitState(size_t q)
 		{
 			if (q >= NrQubits) return;
 
 			Clear();
-			registerStorage(1u << q) = 1;
+			registerStorage(1ULL << q) = 1;
 		}
 
 		// measurement should give either all 0 or all 1
@@ -75,7 +75,7 @@ namespace QC {
 		}
 
 		// to be able to set them all, after setting them, call Normalize
-		void setRawAmplitude(unsigned int State, std::complex<double> val)
+		void setRawAmplitude(size_t State, std::complex<double> val)
 		{
 			if (State >= NrBasisStates) return;
 
@@ -103,7 +103,7 @@ namespace QC {
 
 			if (av0 >= 1E-5)
 			{
-				for (unsigned int i = 0; i < getNrBasisStates(); ++i)
+				for (size_t i = 0; i < getNrBasisStates(); ++i)
 					registerStorage[i] /= v0;
 			}
 			else
@@ -113,7 +113,7 @@ namespace QC {
 
 				if (av0 >= 1E-5)
 				{
-					for (unsigned int i = 0; i < getNrBasisStates(); ++i)
+					for (size_t i = 0; i < getNrBasisStates(); ++i)
 						registerStorage[i] /= v0;
 				}
 				else
@@ -123,7 +123,7 @@ namespace QC {
 
 					if (av0 >= 1E-5)
 					{
-						for (unsigned int i = 0; i < getNrBasisStates(); ++i)
+						for (size_t i = 0; i < getNrBasisStates(); ++i)
 							registerStorage[i] /= v0;
 					}
 				}
@@ -132,13 +132,13 @@ namespace QC {
 			Normalize();
 		}
 
-		unsigned int MeasureAll()
+		size_t MeasureAll()
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 			double accum = 0;
-			unsigned int state = NrBasisStates - 1;
+			size_t state = NrBasisStates - 1;
 
-			for (unsigned int i = 0; i < NrBasisStates; ++i)
+			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
@@ -154,7 +154,7 @@ namespace QC {
 		}
 
 		// shortcut for measuring a single qubit
-		unsigned int MeasureQubit(unsigned int qubit)
+		size_t MeasureQubit(size_t qubit)
 		{
 			return Measure(qubit, qubit);
 		}
@@ -164,13 +164,13 @@ namespace QC {
 		// will return a 'state' as if the measured sequence is in a separate register (that is, the 'firstQubit' is on position 0 and so on)
 		// so 0 means that all measured qubits are zero, 1 means that firstQubit is 1 and all other measured ones are zero, 2 means that the next one 1 one and all others are zero and so on
 
-		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
+		size_t Measure(size_t firstQubit, size_t secondQubit)
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 
 			if (firstQubit == secondQubit)
 			{
-				if (NrBasisStates < 16384 + 8192)
+				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
 					return BaseClass::MeasureQubit(NrBasisStates, registerStorage, firstQubit, prob);
 
 				return BaseClass::MeasureQubitOmp(NrBasisStates, registerStorage, firstQubit, prob);
@@ -180,26 +180,26 @@ namespace QC {
 		}
 
 
-		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int nrTimes = 1000)
+		std::map<size_t, size_t> RepeatedMeasure(size_t nrTimes = 1000)
 		{
-			std::map<unsigned int, unsigned int> measurements;
+			std::map<size_t, size_t> measurements;
 
-			for (unsigned int i = 0; i < nrTimes; ++i)
+			for (size_t i = 0; i < nrTimes; ++i)
 			{
-				const unsigned int res = MeasureNoCollapse();
+				const size_t res = MeasureNoCollapse();
 				++measurements[res];
 			}
 
 			return measurements;
 		}
 
-		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int firstQubit, unsigned int secondQubit, unsigned int nrTimes = 1000)
+		std::map<size_t, size_t> RepeatedMeasure(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
 		{
-			std::map<unsigned int, unsigned int> measurements;
+			std::map<size_t, size_t> measurements;
 
-			for (unsigned int i = 0; i < nrTimes; ++i)
+			for (size_t i = 0; i < nrTimes; ++i)
 			{
-				const unsigned int res = MeasureNoCollapse(firstQubit, secondQubit);
+				const size_t res = MeasureNoCollapse(firstQubit, secondQubit);
 				++measurements[res];
 			}
 
@@ -209,16 +209,16 @@ namespace QC {
 
 
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
-		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0)
+		void ApplyGate(const GateClass& gate, size_t qubit, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0)
 		{
 #define OPTIMIZED_TENSOR_PRODUCT 1
 #ifdef OPTIMIZED_TENSOR_PRODUCT
 
-			const unsigned int gateQubits = gate.getQubitsNumber();
+			const size_t gateQubits = gate.getQubitsNumber();
 
 			assert(gateQubits > 0 && gateQubits <= 3);
 
-			const unsigned int qubitBit = 1u << qubit;
+			const size_t qubitBit = 1ULL << qubit;
 
 			const MatrixClass& gateMatrix = gate.getRawOperatorMatrix();
 
@@ -227,26 +227,26 @@ namespace QC {
 			
 			if (gateQubits == 1)
 			{
-				if (NrBasisStates < 16384 + 8192)
+				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
 					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
 			}
 			else if (gateQubits == 2)
 			{
-				const unsigned int ctrlQubitBit = 1u << controllingQubit1;
+				const size_t ctrlQubitBit = 1u << controllingQubit1;
 
-				if (NrBasisStates < 8192 + 4096)
+				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
 					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 			}
 			else
 			{
-				const unsigned int qubitBit2 = 1u << controllingQubit1;
-				const unsigned int ctrlQubitBit = 1u << controllingQubit2;
+				const size_t qubitBit2 = 1u << controllingQubit1;
+				const size_t ctrlQubitBit = 1u << controllingQubit2;
 
-				if (NrBasisStates < 4096 + 2048)
+				if (NrBasisStates < BaseClass::TwoQubitOmpLimit)
 					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
@@ -321,7 +321,7 @@ namespace QC {
 
 				if (append) thefile << std::endl << std::endl;
 
-				for (unsigned int i = 0; i < NrBasisStates; ++i)
+				for (size_t i = 0; i < NrBasisStates; ++i)
 				{
 					thefile << i << "\t"; 
 					if (amplitude) thefile << std::abs(registerStorage(i));
@@ -337,13 +337,13 @@ namespace QC {
 		}
 
 
-		void displayState(unsigned int state) const
+		void displayState(size_t state) const
 		{
-			const unsigned int nQubits = getNrQubits();
+			const size_t nQubits = getNrQubits();
 			std::cout << "|";
 
-			unsigned int mask = 1 << (nQubits - 1);
-			for (unsigned int qubit = 0; qubit < nQubits; ++qubit)
+			size_t mask = 1 << (nQubits - 1);
+			for (size_t qubit = 0; qubit < nQubits; ++qubit)
 			{
 				std::cout << ((state & mask) ? "1" : "0");
 				mask >>= 1;
@@ -354,13 +354,13 @@ namespace QC {
 
 		void displayRegister() const
 		{
-			const unsigned int nQubits = getNrQubits();
-			const unsigned int nStates = getNrBasisStates();
+			const size_t nQubits = getNrQubits();
+			const size_t nStates = getNrBasisStates();
 
 			//std::cout << std::fixed;
 			std::cout << std::setprecision(4);
 
-			for (unsigned int state = 0; state < nStates; ++state)
+			for (size_t state = 0; state < nStates; ++state)
 			{
 				const std::complex<double> val = getBasisStateAmplitude(state);
 				if (abs(real(val)) < 1E-10 && abs(imag(val)) < 1E-10) continue;
@@ -442,12 +442,12 @@ namespace QC {
 
 	protected:
 		// the following ones should be used for 'repeated measurements' that avoid reexecuting the circuit each time
-		unsigned int MeasureNoCollapse()
+		size_t MeasureNoCollapse()
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 			double accum = 0;
-			unsigned int state = NrBasisStates - 1;
-			for (unsigned int i = 0; i < NrBasisStates; ++i)
+			size_t state = NrBasisStates - 1;
+			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
 				accum += norm(registerStorage(i));
 				if (prob <= accum)
@@ -461,7 +461,7 @@ namespace QC {
 		}
 
 		// shortcut for measuring a single qubit
-		unsigned int MeasureNoCollapse(unsigned int qubit)
+		size_t MeasureNoCollapse(size_t qubit)
 		{
 			return MeasureNoCollapse(qubit, qubit);
 		}
@@ -471,13 +471,13 @@ namespace QC {
 		// will return a 'state' as if the measured sequence is in a separate register (that is, the 'firstQubit' is on position 0 and so on)
 		// so 0 means that all measured qubits are zero, 1 means that firstQubit is 1 and all other measured ones are zero, 2 means that the next one 1 one and all others are zero and so on
 
-		unsigned int MeasureNoCollapse(unsigned int firstQubit, unsigned int secondQubit)
+		size_t MeasureNoCollapse(size_t firstQubit, size_t secondQubit)
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 
 			if (firstQubit == secondQubit)
 			{
-				if (NrBasisStates < 16384 + 8192)
+				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
 					return BaseClass::MeasureQubitNoCollapse(NrBasisStates, registerStorage, firstQubit, prob);
 
 				return BaseClass::MeasureQubitNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, prob);
@@ -486,8 +486,8 @@ namespace QC {
 			return BaseClass::MeasureNoCollapse(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}
 
-		unsigned int NrQubits;
-		unsigned int NrBasisStates;
+		size_t NrQubits;
+		size_t NrBasisStates;
 
 		VectorClass registerStorage;
 		VectorClass resultsStorage;

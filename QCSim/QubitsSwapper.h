@@ -15,15 +15,15 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			QubitsSwapper(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			QubitsSwapper(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit)
 			{
 			}
 
 			void Swap(RegisterClass& reg) const
 			{
-				unsigned int startQubit = BaseClass::getStartQubit();
-				unsigned int endQubit = BaseClass::getEndQubit();
+				size_t startQubit = BaseClass::getStartQubit();
+				size_t endQubit = BaseClass::getEndQubit();
 
 				while (startQubit < endQubit)
 				{
@@ -33,7 +33,7 @@ namespace QC {
 				}
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				Swap(reg);
 

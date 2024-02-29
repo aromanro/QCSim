@@ -18,7 +18,7 @@ bool DeutschWithGatesTests()
 		else
 			deutschWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::balanced);
 
-		unsigned int state = deutschWithGates.Execute();
+		size_t state = deutschWithGates.Execute();
 
 		if (i < 20)
 		{
@@ -59,7 +59,7 @@ bool DeutschTests()
 		else
 			deutsch.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::balanced);
 
-		unsigned int state = deutsch.Execute();
+		size_t state = deutsch.Execute();
 
 		if (i < 10)
 		{
@@ -99,7 +99,7 @@ bool DeutschJozsaWithGatesTests()
 		else
 			deutschJozsaWithGates.setFunction(DeutschJozsa::DeutschJozsaAlgorithmWithGatesOracle<>::FunctionType::balanced);
 
-		unsigned int state = deutschJozsaWithGates.Execute();
+		size_t state = deutschJozsaWithGates.Execute();
 
 		if (i < 20)
 		{
@@ -143,7 +143,7 @@ bool DeutschJozsaTests()
 		else
 			deutschJozsa.setFunction(DeutschJozsa::DeutschJozsaAlgorithm<>::FunctionType::balanced);
 
-		unsigned int state = deutschJozsa.Execute();
+		size_t state = deutschJozsa.Execute();
 
 		if (i < 20)
 		{

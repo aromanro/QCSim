@@ -51,7 +51,7 @@ bool ShorTestsWithoutTensorProduct()
 
 		for (int i = 0; i < nrMeasurements; ++i)
 		{
-			unsigned int state = shorAlgo.Execute();
+			size_t state = shorAlgo.Execute();
 			++measurements[state & 0x7]; //only the l bits matter
 
 			// this should work only if Execute calls full register measurement, otherwise use the commented part below
@@ -74,8 +74,8 @@ bool ShorTestsWithoutTensorProduct()
 	for (int i = 0; i < 10;)
 	{
 		Shor::ShorAlgorithmWithoutTensorProduct<> shorAlgo;
-		unsigned int p1;
-		unsigned int p2;
+		size_t p1;
+		size_t p2;
 		bool res = shorAlgo.factorize(p1, p2);
 		if (p2 > p1) std::swap(p1, p2);
 
@@ -92,8 +92,8 @@ bool ShorTestsWithoutTensorProduct()
 	/*
 	for (;;) {
 		Shor::ShorAlgorithmWithoutTensorProduct shorAlgo(21, 9, 5);
-		unsigned int p1;
-		unsigned int p2;
+		size_t p1;
+		size_t p2;
 		bool res = shorAlgo.factorize(p1, p2);
 		if (p2 > p1) std::swap(p1, p2);
 
@@ -132,7 +132,7 @@ bool ShorTests()
 
 		for (int i = 0; i < nrMeasurements; ++i)
 		{
-			unsigned int state = shorAlgo.Execute();
+			size_t state = shorAlgo.Execute();
 			++measurements[state & 0x7]; //only the l bits matter
 
 			// this should work only if Execute calls full register measurement, otherwise use the commented part below
@@ -156,8 +156,8 @@ bool ShorTests()
 	for (int i = 0; i < 10;)
 	{
 		Shor::ShorAlgorithm<> shorAlgo;//(21, 14, 9)
-		unsigned int p1;
-		unsigned int p2;
+		size_t p1;
+		size_t p2;
 		bool res = shorAlgo.factorize(p1, p2);
 		if (p2 > p1) std::swap(p1, p2);
 
@@ -172,8 +172,8 @@ bool ShorTests()
 	/*
 	for (;;) {
 		Shor::ShorAlgorithm shorAlgo(21, 14, 9);
-		unsigned int p1;
-		unsigned int p2;
+		size_t p1;
+		size_t p2;
 		bool res = shorAlgo.factorize(p1, p2);
 		if (p2 > p1) std::swap(p1, p2);
 
@@ -195,7 +195,7 @@ bool GroverWithGatesTests()
 
 	const int nrMeasurements = 500;
 
-	for (unsigned int nrQubits = 4; nrQubits <= 6; ++nrQubits)
+	for (size_t nrQubits = 4; nrQubits <= 6; ++nrQubits)
 	{
 		std::cout << nrQubits << " qubits" << std::endl;
 
@@ -204,7 +204,7 @@ bool GroverWithGatesTests()
 
 		for (int i = 0; i < 5; ++i)
 		{
-			const unsigned int ans = static_cast<unsigned int>(dist(gen));
+			const size_t ans = static_cast<size_t>(dist(gen));
 
 			std::cout << "Testing for answer: " << ans << std::endl;
 			
@@ -238,7 +238,7 @@ bool GroverTests()
 
 	const int nrMeasurements = 500;
 
-	for (unsigned int nrQubits = 4; nrQubits <= 6; ++nrQubits)
+	for (size_t nrQubits = 4; nrQubits <= 6; ++nrQubits)
 	{
 		std::cout << nrQubits << " qubits" << std::endl;
 
@@ -247,7 +247,7 @@ bool GroverTests()
 
 		for (int i = 0; i < 5; ++i)
 		{
-			const unsigned int ans = static_cast<unsigned int>(dist(gen));
+			const size_t ans = static_cast<size_t>(dist(gen));
 
 			std::cout << "Testing for answer: " << ans << std::endl;
 
@@ -288,7 +288,7 @@ bool SuperdenseCodingTests()
 		const bool bit1 = dist_bool(gen);
 		const bool bit2 = dist_bool(gen);
 		coding.SetBits(bit1, bit2);
-		unsigned int classicalBits = coding.Execute();
+		size_t classicalBits = coding.Execute();
 
 		const bool recvbit1 = (classicalBits & 1) != 0;
 		const bool recvbit2 = (classicalBits & 2) != 0;
@@ -337,9 +337,9 @@ bool BernsteinVaziraniWithGatesTests()
 	std::cout << "Three qubits:" << std::endl;
 	BernsteinVazirani::BernsteinVaziraniAlgorithmWithGatesOracle<> bv;
 
-	unsigned int b0 = 1;
-	unsigned int b1 = 2;
-	unsigned int b2 = 4;
+	size_t b0 = 1;
+	size_t b1 = 2;
+	size_t b2 = 4;
 
 	for (int i = 0; i < 10; ++i)
 	{
@@ -347,14 +347,14 @@ bool BernsteinVaziraniWithGatesTests()
 		const bool bit1 = dist_bool(gen);
 		const bool bit2 = dist_bool(gen);
 
-		unsigned int str = 0;
+		size_t str = 0;
 		if (bit0) str |= b0;
 		if (bit1) str |= b1;
 		if (bit2) str |= b2;
 
 		std::cout << "Setting string to: " << str << std::endl;
 		bv.setString(str);
-		unsigned int state = bv.Execute();
+		size_t state = bv.Execute();
 
 		if (state != str)
 		{
@@ -364,9 +364,9 @@ bool BernsteinVaziraniWithGatesTests()
 	}
 
 	std::cout << "Six qubits:" << std::endl;
-	unsigned int b3 = 8;
-	unsigned int b4 = 16;
-	unsigned int b5 = 32;
+	size_t b3 = 8;
+	size_t b4 = 16;
+	size_t b5 = 32;
 
 	BernsteinVazirani::BernsteinVaziraniAlgorithmWithGatesOracle<> bvBig(6);
 	for (int i = 0; i < 30; ++i)
@@ -378,7 +378,7 @@ bool BernsteinVaziraniWithGatesTests()
 		const bool bit4 = dist_bool(gen);
 		const bool bit5 = dist_bool(gen);
 
-		unsigned int str = 0;
+		size_t str = 0;
 		if (bit0) str |= b0;
 		if (bit1) str |= b1;
 		if (bit2) str |= b2;
@@ -388,7 +388,7 @@ bool BernsteinVaziraniWithGatesTests()
 
 		std::cout << "Setting string to: " << str << std::endl;
 		bvBig.setString(str);
-		unsigned int state = bvBig.Execute();
+		size_t state = bvBig.Execute();
 
 		if (state != str)
 		{
@@ -408,9 +408,9 @@ bool BernsteinVaziraniTests()
 	std::cout << "Three qubits:" << std::endl;
 	BernsteinVazirani::BernsteinVaziraniAlgorithm<> bv;
 
-	unsigned int b0 = 1;
-	unsigned int b1 = 2;
-	unsigned int b2 = 4;
+	size_t b0 = 1;
+	size_t b1 = 2;
+	size_t b2 = 4;
 
 	for (int i = 0; i < 10; ++i)
 	{
@@ -418,14 +418,14 @@ bool BernsteinVaziraniTests()
 		const bool bit1 = dist_bool(gen);
 		const bool bit2 = dist_bool(gen);
 
-		unsigned int str = 0;
+		size_t str = 0;
 		if (bit0) str |= b0;
 		if (bit1) str |= b1;
 		if (bit2) str |= b2;
 
 		std::cout << "Setting string to: " << str << std::endl;
 		bv.setString(str);
-		unsigned int state = bv.Execute();
+		size_t state = bv.Execute();
 
 		if (state != str)
 		{
@@ -435,9 +435,9 @@ bool BernsteinVaziraniTests()
 	}
 
 	std::cout << "Six qubits:" << std::endl;
-	unsigned int b3 = 8;
-	unsigned int b4 = 16;
-	unsigned int b5 = 32;
+	size_t b3 = 8;
+	size_t b4 = 16;
+	size_t b5 = 32;
 
 	BernsteinVazirani::BernsteinVaziraniAlgorithm<> bvBig(6);
 	for (int i = 0; i < 30; ++i)
@@ -449,7 +449,7 @@ bool BernsteinVaziraniTests()
 		const bool bit4 = dist_bool(gen);
 		const bool bit5 = dist_bool(gen);
 
-		unsigned int str = 0;
+		size_t str = 0;
 		if (bit0) str |= b0;
 		if (bit1) str |= b1;
 		if (bit2) str |= b2;
@@ -459,7 +459,7 @@ bool BernsteinVaziraniTests()
 
 		std::cout << "Setting string to: " << str << std::endl;
 		bvBig.setString(str);
-		unsigned int state = bvBig.Execute();
+		size_t state = bvBig.Execute();
 
 		if (state != str)
 		{
@@ -488,7 +488,7 @@ bool QuantumCryptograpyTests()
 		const char* randStr = (randomEavesdrop ? " randomly" : " each time");
 		std::cout << "Transmission with" << (eavesdrop ? " eavesdropping" : "out eavesdropping") << (eavesdrop ? randStr : "") << std::endl;
 
-		const unsigned int match = bb84.Execute();
+		const size_t match = bb84.Execute();
 		if (match)
 		{
 			if (eavesdrop)
@@ -523,7 +523,7 @@ bool SimonWithGatesTests()
 {
 	std::cout << "\nTesting Simon using gates for oracle..." << std::endl;
 
-	for (unsigned int nrQubits = 2; nrQubits <= 4; ++nrQubits)
+	for (size_t nrQubits = 2; nrQubits <= 4; ++nrQubits)
 	{
 		std::cout << "Nr of qubits: " << nrQubits << std::endl;
 
@@ -532,8 +532,8 @@ bool SimonWithGatesTests()
 
 		Simon::SimonAlgorithmWithGatesOracle<> simonAlgorithm(nrQubits);
 
-		const unsigned int lim = static_cast<unsigned int>((1 << nrQubits) - 1);
-		for (unsigned int functionString = 0; functionString <= lim; ++functionString)
+		const size_t lim = static_cast<size_t>((1 << nrQubits) - 1);
+		for (size_t functionString = 0; functionString <= lim; ++functionString)
 		{
 			std::cout << "Trying with string: " << functionString << "...";
 
@@ -551,7 +551,7 @@ bool SimonWithGatesTests()
 
 			simonAlgorithm.setString(functionString);
 
-			const unsigned int res = simonAlgorithm.Execute();
+			const size_t res = simonAlgorithm.Execute();
 
 			if (res != functionString)
 			{
@@ -572,7 +572,7 @@ bool SimonTests()
 {
 	std::cout << "\nTesting Simon..." << std::endl;
 
-	for (unsigned int nrQubits = 2; nrQubits <= 4; ++nrQubits)
+	for (size_t nrQubits = 2; nrQubits <= 4; ++nrQubits)
 	{
 		std::cout << "Nr of qubits: " << nrQubits << std::endl;
 
@@ -581,8 +581,8 @@ bool SimonTests()
 
 		Simon::SimonAlgorithm<> simonAlgorithm(nrQubits);
 
-		const unsigned int lim = (1 << nrQubits) - 1;
-		for (unsigned int functionString = 0; functionString <= lim; ++functionString)
+		const size_t lim = (1 << nrQubits) - 1;
+		for (size_t functionString = 0; functionString <= lim; ++functionString)
 		{
 			std::cout << "Trying with string: " << functionString << "...";
 
@@ -600,7 +600,7 @@ bool SimonTests()
 
 			simonAlgorithm.setString(functionString);
 
-			const unsigned int res = simonAlgorithm.Execute();
+			const size_t res = simonAlgorithm.Execute();
 
 			if (res != functionString)
 			{
@@ -620,17 +620,17 @@ bool CountingTests()
 {
 	std::cout << "\nTesting Quantum Counting..." << std::endl;
 
-	unsigned int nrGroverQubits = 4;
-	unsigned int nrPrecisionQubits = 6;
-	unsigned int nrMeasurements = 10000;
+	size_t nrGroverQubits = 4;
+	size_t nrPrecisionQubits = 6;
+	size_t nrMeasurements = 10000;
 
-	unsigned int nrGroverStates = 1U << nrGroverQubits;
-	for (unsigned int nrMarked = 0; nrMarked <= nrGroverStates; ++nrMarked)
+	size_t nrGroverStates = 1ULL << nrGroverQubits;
+	for (size_t nrMarked = 0; nrMarked <= nrGroverStates; ++nrMarked)
 	{
 		// pick 'nrMarked' states at random:		
-		std::vector<unsigned int> states(nrGroverStates);
+		std::vector<size_t> states(nrGroverStates);
 		std::iota(states.begin(), states.end(), 0);
-		std::shuffle(states.begin(), states.end(), std::default_random_engine(static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count())));
+		std::shuffle(states.begin(), states.end(), std::default_random_engine(static_cast<size_t>(std::chrono::system_clock::now().time_since_epoch().count())));
 		states.resize(nrMarked);
 
 		QuantumCounting::QuantumCountingAlgorithm<> quantumCountingAlgorithm(nrPrecisionQubits, nrGroverQubits);
@@ -639,8 +639,8 @@ bool CountingTests()
 		const auto res = quantumCountingAlgorithm.ExecuteWithMultipleMeasurements(nrMeasurements);
 
 		// get the result with the most measurements:
-		unsigned int nrMeasured = 0;
-		unsigned int state = 0;
+		size_t nrMeasured = 0;
+		size_t state = 0;
 		for (const auto& v : res)
 		{
 			if (v.second > nrMeasured)
@@ -652,7 +652,7 @@ bool CountingTests()
 
 		//std::cout << "Measured " << res.size() << " states, most probable state: " << state << " probability: " << static_cast<double>(nrMeasured)/nrMeasurements << std::endl;
 
-		unsigned int approxCnt = quantumCountingAlgorithm.GetCountForState(state);
+		size_t approxCnt = quantumCountingAlgorithm.GetCountForState(state);
 
 		std::cout << "Nr of marked states: " << nrMarked << ", approx count: " << approxCnt << ", real theta: " << quantumCountingAlgorithm.GetCorrectThetaForMarkedStates() << ", approx theta: " << quantumCountingAlgorithm.GetThetaForState(state) << std::endl;
 

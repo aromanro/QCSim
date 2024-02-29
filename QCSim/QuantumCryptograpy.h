@@ -28,12 +28,12 @@ namespace QuantumCryptograpy {
 		}
 
 		// unlike other Execute functions, returns 0 if a mismatch was found and 1 if the verified bits matched
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Init();
 
 			// key generation & transmission
-			for (unsigned int b = 0; b < nrBits; ++b)
+			for (size_t b = 0; b < nrBits; ++b)
 			{
 				sendBasis[b] = chooseMeasurementBasisForSending(); // 0 - Z basis, 1 - X basis
 				send[b] = generateRandomBitToSend();
@@ -87,7 +87,7 @@ namespace QuantumCryptograpy {
 		// this is to be used for tests, in 'real world' those remain private to Alice and Bob and they are not to be compared
 		bool compareKeys() const
 		{
-			for (unsigned int b = 0; b < nrBits; ++b)
+			for (size_t b = 0; b < nrBits; ++b)
 				if (commonBasis[b] && !compare[b]) // key bits are those that had a common measurement basis and were not used in comparison for eavesdrop detection
 					if (receive[b] != send[b]) return false;
 
@@ -98,7 +98,7 @@ namespace QuantumCryptograpy {
 		{
 			std::vector<bool> key;
 
-			for (unsigned int b = 0; b < nrBits; ++b)
+			for (size_t b = 0; b < nrBits; ++b)
 				if (commonBasis[b] && !compare[b])
 					key.push_back(receive[b]);
 
@@ -109,7 +109,7 @@ namespace QuantumCryptograpy {
 		{
 			std::vector<bool> key;
 
-			for (unsigned int b = 0; b < nrBits; ++b)
+			for (size_t b = 0; b < nrBits; ++b)
 				if (commonBasis[b] && !compare[b])
 					key.push_back(send[b]);
 
@@ -129,7 +129,7 @@ namespace QuantumCryptograpy {
 			compare.reset();
 		};
 
-		void Receive(unsigned int b, std::bitset<nrBits>& recv, std::bitset<nrBits>& recvBasis, bool switchBackToZ = false)
+		void Receive(size_t b, std::bitset<nrBits>& recv, std::bitset<nrBits>& recvBasis, bool switchBackToZ = false)
 		{
 			// pick a basis for measurement
 			const bool basis = getRandomBool();
@@ -147,7 +147,7 @@ namespace QuantumCryptograpy {
 
 		void checkCommonBasisMeasurements()
 		{
-			for (unsigned int b = 0; b < nrBits; ++b)
+			for (size_t b = 0; b < nrBits; ++b)
 				if (sendBasis[b] == receiveBasis[b])
 					commonBasis[b] = true;
 		}
@@ -163,7 +163,7 @@ namespace QuantumCryptograpy {
 			// those will be discarded because they are publicly shared
 			// the remaining ones will be the actual key
 			bool match = true;
-			for (unsigned int b = 0; b < nrBits; ++b)
+			for (size_t b = 0; b < nrBits; ++b)
 				if (commonBasis[b] && dist_percent(rng) == 0)
 				{
 					compare[b] = true;
@@ -183,7 +183,7 @@ namespace QuantumCryptograpy {
 			return BaseClass::Measure() == 1;
 		}
 
-		unsigned int generateRandomBitToSend()
+		size_t generateRandomBitToSend()
 		{
 			// another way would be to simply generate a random value for the state in some other way (0 or 1) and then simply set the register - one qubit - to that state
 			// but as for generating the random value above, I like this method more

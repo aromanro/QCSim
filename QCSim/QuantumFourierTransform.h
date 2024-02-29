@@ -15,12 +15,12 @@ namespace QC {
 			using BaseClass = QubitsSwapper<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			QuantumFourierTransform(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			QuantumFourierTransform(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				QFT(reg);
 
@@ -34,16 +34,16 @@ namespace QC {
 
 			void QFT(RegisterClass& reg, bool doSwap = true)
 			{
-				const unsigned int sq = BaseClass::BaseClass::getStartQubit();
-				const unsigned int eq = BaseClass::BaseClass::getEndQubit();
+				const size_t sq = BaseClass::BaseClass::getStartQubit();
+				const size_t eq = BaseClass::BaseClass::getEndQubit();
 
 				reg.ApplyGate(hadamard, eq);
 
 				const double startPhase = M_PI_2;
 
-				for (unsigned int curQubit = eq; curQubit > sq; --curQubit)
+				for (size_t curQubit = eq; curQubit > sq; --curQubit)
 				{
-					const unsigned int curQubitm1 = curQubit - 1;
+					const size_t curQubitm1 = curQubit - 1;
 					double phase = startPhase; // starts from R2 = phase shift with 2 PI / 2^2 = PI / 2
 					for (int ctrlq = curQubitm1; ctrlq >= static_cast<int>(sq); --ctrlq)
 					{
@@ -61,16 +61,16 @@ namespace QC {
 
 			void IQFT(RegisterClass& reg, bool doSwap = true)
 			{
-				const unsigned int sq = BaseClass::BaseClass::getStartQubit();
-				const unsigned int eq = BaseClass::BaseClass::getEndQubit();
+				const size_t sq = BaseClass::BaseClass::getStartQubit();
+				const size_t eq = BaseClass::BaseClass::getEndQubit();
 
 				if (doSwap) BaseClass::Swap(reg);
 
 				const double startPhase = -M_PI_2;
 
-				for (unsigned int curQubit = sq + 1; curQubit <= eq; ++curQubit)
+				for (size_t curQubit = sq + 1; curQubit <= eq; ++curQubit)
 				{
-					const unsigned int curQubitm1 = curQubit - 1;
+					const size_t curQubitm1 = curQubit - 1;
 					reg.ApplyGate(hadamard, curQubitm1);
 
 					double phase = startPhase; // starts from R2 = phase shift with 2 PI / 2^2 = PI / 2

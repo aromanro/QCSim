@@ -18,7 +18,7 @@ bool TeleportTests()
 		{
 			reg.setToBasisState(1); // set the qubit to teleport to 'up'
 			teleport.Execute(reg);
-			const unsigned int state = reg.MeasureQubit(2);
+			const size_t state = reg.MeasureQubit(2);
 
 			std::cout << "Teleported 1, measured: " << state << std::endl;
 
@@ -28,7 +28,7 @@ bool TeleportTests()
 		{
 			reg.setToBasisState(0); // set the qubit to teleport to 'down'
 			teleport.Execute(reg);
-			const unsigned int state = reg.MeasureQubit(2);
+			const size_t state = reg.MeasureQubit(2);
 
 			std::cout << "Teleported 0, measured: " << state << std::endl;
 
@@ -55,7 +55,7 @@ bool TeleportTests()
 
 		std::cout << "Teleporting " << alpha << "|0> + " << beta << "|1>";
 
-		const unsigned int classicalBits = teleport.Execute(reg);
+		const size_t classicalBits = teleport.Execute(reg);
 		std::cout << " Measured values for the two qubits: " << classicalBits;
 
 		// how is the whole thing looking before Bob's measurement?
@@ -89,15 +89,15 @@ bool EntanglementSwappingTests()
 		bellState.setBellState(reg, 0, 1, s1, s2);
 
 		entSwap.SetBellStateToBeSent(s1, s2);
-		const unsigned int meas = entSwap.Teleport(i < 8 ? false : true);
+		const size_t meas = entSwap.Teleport(i < 8 ? false : true);
 
 		const Eigen::VectorXcd& regStorage = entSwap.getRegisterStorage();
 
-		for (unsigned int state = 0; state < regStorage.size(); ++state)
+		for (size_t state = 0; state < regStorage.size(); ++state)
 		{
 			if ((state & 0xf) == meas)
 			{
-				const unsigned int redState = state >> 4;
+				const size_t redState = state >> 4;
 				if (!approxEqual(regStorage[state], reg.getBasisStateAmplitude(redState)))
 				{
 					std::cout << "Entanglement swapping failed: Expecting " << reg.getBasisStateAmplitude(redState) << " but got " << regStorage[state] << " for state: " << redState << std::endl;
@@ -130,7 +130,7 @@ bool TeleportationTests()
 		if (dist_bool(gen))
 		{
 			qt.SetState(0, 1); // set the qubit to teleport to 'up'
-			const unsigned int state = qt.Execute();
+			const size_t state = qt.Execute();
 
 			std::cout << "Teleported 1, measured: " << state << std::endl;
 
@@ -139,7 +139,7 @@ bool TeleportationTests()
 		else
 		{
 			qt.SetState(1, 0); // set the qubit to teleport to 'down'
-			const unsigned int state = qt.Execute();
+			const size_t state = qt.Execute();
 
 			std::cout << "Teleported 0, measured: " << state << std::endl;
 
@@ -162,7 +162,7 @@ bool TeleportationTests()
 		qt.SetState(alpha, beta);
 		std::cout << "Teleporting " << alpha << "|0> + " << beta << "|1>";
 
-		const unsigned int classicalBits = qt.Teleport(i < 8 ? false : true); // also test sending explicitely the two classical bits for half the tests, although it should not make a difference
+		const size_t classicalBits = qt.Teleport(i < 8 ? false : true); // also test sending explicitely the two classical bits for half the tests, although it should not make a difference
 		std::cout << " Measured values for the two qubits: " << classicalBits;
 
 		// how is the whole thing looking before Bob's measurement?

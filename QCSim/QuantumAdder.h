@@ -14,14 +14,14 @@ namespace Adders {
 		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
 
 
-		TwoQubitsHalfAdder(unsigned int qubit1, unsigned int qubit2, unsigned int qubitaux)
+		TwoQubitsHalfAdder(size_t qubit1, size_t qubit2, size_t qubitaux)
 			: q1(qubit1), q2(qubit2), aux(qubitaux)
 		{
 		}
 
-		unsigned int Execute(RegisterClass& reg) override
+		size_t Execute(RegisterClass& reg) override
 		{
-			const unsigned int nrQubits = reg.getNrQubits();
+			const size_t nrQubits = reg.getNrQubits();
 			if (aux >= nrQubits || q2 >= nrQubits || q1 >= nrQubits) return 1; // error code
 			else if (q1 == q2 || q1 == aux || q2 == aux) return 2;
 
@@ -34,9 +34,9 @@ namespace Adders {
 	protected:
 		// q1, q2 - the qubits to be added, aux, the auxiliary that should be initialized to |0> and has the 'carry' functionality
 		// 'sum' ends up in q2, carry in aux
-		unsigned int q1;
-		unsigned int q2;
-		unsigned int aux;
+		size_t q1;
+		size_t q2;
+		size_t aux;
 
 		QC::Gates::ToffoliGate<MatrixClass> toffoli;
 		QC::Gates::CNOTGate<MatrixClass> cnot;
@@ -48,15 +48,15 @@ namespace Adders {
 		using BaseClass = TwoQubitsHalfAdder<VectorClass, MatrixClass>;
 		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
 
-		TwoQubitsFullAdder(unsigned int qubit1, unsigned int qubit2, unsigned int cin, unsigned int qubitaux)
+		TwoQubitsFullAdder(size_t qubit1, size_t qubit2, size_t cin, size_t qubitaux)
 			: BaseClass(qubit1, qubit2, qubitaux), ci(cin),
 			halfAdder(qubit2, cin, qubitaux)
 		{
 		}
 
-		unsigned int Execute(RegisterClass& reg) override
+		size_t Execute(RegisterClass& reg) override
 		{
-			const unsigned int nrQubits = reg.getNrQubits();
+			const size_t nrQubits = reg.getNrQubits();
 			if (BaseClass::aux >= nrQubits || BaseClass::q2 >= nrQubits || BaseClass::q1 >= nrQubits || ci >= nrQubits)
 				return 1; // error code
 			else if (BaseClass::q1 == BaseClass::q2 || BaseClass::q1 == BaseClass::aux ||
@@ -72,7 +72,7 @@ namespace Adders {
 		}
 
 	protected:
-		unsigned int ci;
+		size_t ci;
 
 		BaseClass halfAdder;
 	};
@@ -84,22 +84,22 @@ namespace Adders {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		NQubitsAdderAlgorithm(unsigned int N = 3, int addseed = 0)
+		NQubitsAdderAlgorithm(size_t N = 3, int addseed = 0)
 			: BaseClass(3*N + 1, addseed) // the qubits for the two N inputs, N outputs and one for carry
 		{
 			BaseClass::setToBasisState(0);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
+			const size_t nrQubits = BaseClass::getNrQubits();
 			assert(nrQubits >= 4);
 
-			const unsigned int nrQubitsNumber = (nrQubits - 1) / 3;
+			const size_t nrQubitsNumber = (nrQubits - 1) / 3;
 
-			unsigned int n1q = 0;
-			unsigned int n2q = nrQubitsNumber;
-			unsigned int ci = 2 * nrQubitsNumber;
+			size_t n1q = 0;
+			size_t n2q = nrQubitsNumber;
+			size_t ci = 2 * nrQubitsNumber;
 
 			while (n1q < nrQubitsNumber)
 			{

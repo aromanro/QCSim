@@ -50,13 +50,13 @@ bool ElitzurVaidmanBombTests()
 {
 	std::cout << "\nTesting the Elitzur-Vaidman bomb tester/interaction free measurement..." << std::endl;
 
-	const unsigned int maxStages = 4;
+	const size_t maxStages = 4;
 	Paradoxes::GeneralElitzurVaidmanBomb ElitzurVaidmanBomb(maxStages); // 4 stages max, 5 qubits
 
 	const int nrMeasurements = 10000;
 
 	const double incr = 0.05 * M_PI;
-	for (unsigned int stages = 1; stages <= maxStages; ++stages)
+	for (size_t stages = 1; stages <= maxStages; ++stages)
 	{
 		std::cout << "\nWith " << stages << " stage" << (stages == 1 ? ":" : "s:") << std::endl;
 
@@ -94,8 +94,8 @@ bool HardyParadoxTests()
 	Paradoxes::HardyParadox HardysParadox;
 
 	const double incr = 0.025 * M_PI;
-	unsigned int cnt1 = 0;
-	unsigned int cnt2 = 0;
+	size_t cnt1 = 0;
+	size_t cnt2 = 0;
 	for (double theta0 = incr; theta0 < M_PI - incr; theta0 += incr)
 	{
 		HardysParadox.setTheta0(theta0);

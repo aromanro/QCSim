@@ -50,14 +50,14 @@ namespace Paradoxes {
 			return theta1;
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 			
 			return BaseClass::Measure();
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 

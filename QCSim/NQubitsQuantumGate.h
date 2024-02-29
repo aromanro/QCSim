@@ -12,12 +12,12 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			NQubitsQuantumGate(unsigned int N, const MatrixClass& op, unsigned int startQubit = 0)
+			NQubitsQuantumGate(size_t N, const MatrixClass& op, size_t startQubit = 0)
 				: BaseClass(N, startQubit, startQubit + getOperatorQubitsNumber(op)), U(op), nrQubits(N)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				reg.ApplyOperatorMatrix(getOperatorMatrix());
 
@@ -26,19 +26,19 @@ namespace QC {
 
 			MatrixClass getOperatorMatrix() const
 			{
-				const unsigned int startQubit = BaseClass::getStartQubit();
-				const unsigned int endQubit = BaseClass::getEndQubit();
-				const unsigned int nrBasisStates = 1u << nrQubits;
+				const size_t startQubit = BaseClass::getStartQubit();
+				const size_t endQubit = BaseClass::getEndQubit();
+				const size_t nrBasisStates = 1u << nrQubits;
 				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
-				unsigned int mask = 0;
-				for (unsigned int i = startQubit; i <= endQubit; ++i)
+				size_t mask = 0;
+				for (size_t i = startQubit; i <= endQubit; ++i)
 					mask |= 1u << i;
 
-				for (unsigned int i = 0; i < nrBasisStates; ++i)
+				for (size_t i = 0; i < nrBasisStates; ++i)
 				{
-					const unsigned int ind1 = i | mask;
-					for (unsigned int j = 0; j < nrBasisStates; ++j)
+					const size_t ind1 = i | mask;
+					for (size_t j = 0; j < nrBasisStates; ++j)
 						if (ind1 == (j | mask)) // the delta 'function'
 							extOperatorMat(i, j) = U((i & mask) >> startQubit, (j & mask) >> startQubit);
 				}
@@ -51,17 +51,17 @@ namespace QC {
 				return U;
 			}
 
-			unsigned int getRawOperatorQubitsNumber() const
+			size_t getRawOperatorQubitsNumber() const
 			{
 				return getOperatorQubitsNumber(U);
 			};
 
 		protected:
-			static unsigned int getOperatorQubitsNumber(const MatrixClass& op)
+			static size_t getOperatorQubitsNumber(const MatrixClass& op)
 			{
-				unsigned int sz = static_cast<unsigned int>(op.rows() - 1);
+				size_t sz = static_cast<size_t>(op.rows() - 1);
 
-				unsigned int res = 0;
+				size_t res = 0;
 				while (sz) {
 					++res;
 					sz >>= 1;
@@ -71,7 +71,7 @@ namespace QC {
 			};
 
 			MatrixClass U;
-			unsigned int nrQubits;
+			size_t nrQubits;
 		};
 
 	}

@@ -25,22 +25,22 @@ namespace Paradoxes {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		GeneralElitzurVaidmanBomb(unsigned int maxStages, int addseed = 0)
+		GeneralElitzurVaidmanBomb(size_t maxStages, int addseed = 0)
 			: BaseClass(maxStages + 1, addseed), stages(maxStages), theta(M_PI / (maxStages + 1.))
 		{
 			assert((BaseClass::getNrQubits() >= 2));
 		}
 
-		void setStages(unsigned int s)
+		void setStages(size_t s)
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
+			const size_t nrQubits = BaseClass::getNrQubits();
 			
 			if (s >= nrQubits) s = nrQubits - 1;
 			else if (s == 0) s = 1;
 			stages = s;
 		}
 
-		unsigned int getStages() const
+		size_t getStages() const
 		{
 			return stages;
 		}
@@ -60,14 +60,14 @@ namespace Paradoxes {
 			return (M_PI - theta) / stages;
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure();
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 
@@ -107,7 +107,7 @@ namespace Paradoxes {
 			Init();
 			// now we're in the state given by the first beam splitter
 
-			for (unsigned int stage = 1; stage < stages; ++stage)
+			for (size_t stage = 1; stage < stages; ++stage)
 			{
 				BaseClass::ApplyGate(cnot, stage);
 				BaseClass::ApplyGate(ryGate, 0);
@@ -118,7 +118,7 @@ namespace Paradoxes {
 			BaseClass::ApplyGate(ryGate, 0);
 		}
 
-		unsigned int stages;
+		size_t stages;
 		double theta;
 
 		QC::Gates::RyGate<MatrixClass> ryGate;

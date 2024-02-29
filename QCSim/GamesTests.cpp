@@ -15,7 +15,7 @@ bool CoinFlippingTests()
 	int wins = 0;
 	for (int i = 0; i < 100; ++i)
 	{
-		const unsigned int state = coinFlipping.Execute();
+		const size_t state = coinFlipping.Execute();
 		if (state)
 			++wins;
 	}
@@ -30,7 +30,7 @@ bool MagicSquareTests()
 	std::cout << "\nTesting magic square pseudo-telepathy game..." << std::endl;
 
 	Games::MagicSquare<> magicSquare;
-	unsigned int wins = magicSquare.Execute();
+	size_t wins = magicSquare.Execute();
 
 	if (wins != magicSquare.getNrPlays())
 	{

@@ -29,25 +29,25 @@ namespace QuantumCounting {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		QuantumCountingAlgorithm(unsigned int PrecisionQubits = 6, unsigned int GroverQubits = 4, int addseed = 0)
+		QuantumCountingAlgorithm(size_t PrecisionQubits = 6, size_t GroverQubits = 4, int addseed = 0)
 			: BaseClass(PrecisionQubits + 2 * GroverQubits, addseed), precisionQubits(PrecisionQubits), groverQubits(GroverQubits), fourier(PrecisionQubits, 0, PrecisionQubits - 1)
 		{
 			assert(PrecisionQubits >= 3);
 			assert(GroverQubits >= 1);
 
-			unsigned int firstAncillaQubit = PrecisionQubits + GroverQubits;
+			size_t firstAncillaQubit = PrecisionQubits + GroverQubits;
 			nControlledNOT.SetTargetQubit(firstAncillaQubit);
 			nControlledNOT.SetStartAncillaQubits(firstAncillaQubit + 1);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure(0, precisionQubits - 1);
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 
@@ -60,23 +60,23 @@ namespace QuantumCounting {
 		}
 
 		// start from zero, don't go over the maximum that is allowed by the GroverQubits
-		void AddMarkedState(unsigned int state)
+		void AddMarkedState(size_t state)
 		{
 			if (state >= (1u << groverQubits)) return;
 
 			markedStates.insert(state);
 		}
 
-		void SetMarkedStates(const std::vector<unsigned int>& states)
+		void SetMarkedStates(const std::vector<size_t>& states)
 		{
 			ClearMarkedStates();
-			for (unsigned int state : states)
+			for (size_t state : states)
 				AddMarkedState(state);
 		}
 
-		unsigned int GetNumberOfMarkedStates() const
+		size_t GetNumberOfMarkedStates() const
 		{
-			return static_cast<unsigned int>(markedStates.size());
+			return static_cast<size_t>(markedStates.size());
 		}
 
 		double GetCorrectThetaForMarkedStates() const
@@ -84,7 +84,7 @@ namespace QuantumCounting {
 			return asin(static_cast<double>(sqrt(static_cast<double>(GetNumberOfMarkedStates())/ static_cast<double>(1 << groverQubits)))) * M_1_PI;
 		}
 
-		double GetThetaForState(unsigned int state) const
+		double GetThetaForState(size_t state) const
 		{
 			double theta = static_cast<double>(state) / static_cast<double>(1 << precisionQubits);
 
@@ -94,33 +94,33 @@ namespace QuantumCounting {
 			return theta;
 		}
 
-		unsigned int GetCountForState(unsigned int state) const
+		size_t GetCountForState(size_t state) const
 		{
 			double s = sin(M_PI * GetThetaForState(state));
 
-			return static_cast<unsigned int>(round(static_cast<double>(1 << groverQubits) * s * s));
+			return static_cast<size_t>(round(static_cast<double>(1 << groverQubits) * s * s));
 		}
 
 	private:
 		void ExecuteWithoutMeasurement()
 		{
-			unsigned int firstAncillaQubit = precisionQubits + groverQubits;
+			size_t firstAncillaQubit = precisionQubits + groverQubits;
 
 			BaseClass::setToBasisState(0);
 
-			for (unsigned int q = 0; q < firstAncillaQubit; ++q)
+			for (size_t q = 0; q < firstAncillaQubit; ++q)
 				BaseClass::ApplyGate(hadamard, q);
 
 			BaseClass::ApplyGate(x, firstAncillaQubit);
 			BaseClass::ApplyGate(hadamard, firstAncillaQubit);
 
-			for (unsigned int q = 0; q < precisionQubits; ++q)
+			for (size_t q = 0; q < precisionQubits; ++q)
 			{
-				unsigned int nrOps = 1 << q;
-				unsigned int ctrlQubit = precisionQubits - q - 1;
+				size_t nrOps = 1 << q;
+				size_t ctrlQubit = precisionQubits - q - 1;
 				// or this, if you want to use the IQFT with swapping, but obviously that's slower due of the additional swap gates
-				//unsigned int ctrlQubit = q;
-				for (unsigned int i = 0; i < nrOps; ++i)
+				//size_t ctrlQubit = q;
+				for (size_t i = 0; i < nrOps; ++i)
 					ControlledGrover(ctrlQubit);
 			}
 			
@@ -130,19 +130,19 @@ namespace QuantumCounting {
 			fourier.IQFT(BaseClass::reg, false);
 		}
 
-		void ControlledGrover(unsigned int ctrlQubit)
+		void ControlledGrover(size_t ctrlQubit)
 		{
-			for (unsigned int state : markedStates)
+			for (size_t state : markedStates)
 				ControlledOracle(ctrlQubit, state);
 
 			ControlledDiffusion(ctrlQubit);
 		}
 
 
-		void ControlledOracle(unsigned int ctrlQubit, unsigned int state)
+		void ControlledOracle(size_t ctrlQubit, size_t state)
 		{
-			unsigned int v = state;
-			for (unsigned int q = 0; q < groverQubits; ++q)
+			size_t v = state;
+			for (size_t q = 0; q < groverQubits; ++q)
 			{
 				if ((v & 1) == 0)
 					BaseClass::ApplyGate(cx, precisionQubits + q, ctrlQubit);
@@ -151,7 +151,7 @@ namespace QuantumCounting {
 			}
 			
 			
-			std::vector<unsigned int> controlQubits(groverQubits + 1);
+			std::vector<size_t> controlQubits(groverQubits + 1);
 			std::iota(controlQubits.begin(), controlQubits.end(), precisionQubits);
 			controlQubits.back() = ctrlQubit;
 			
@@ -159,7 +159,7 @@ namespace QuantumCounting {
 			nControlledNOT.Execute(BaseClass::reg);
 			
 			v = state;
-			for (unsigned int q = 0; q < groverQubits; ++q)
+			for (size_t q = 0; q < groverQubits; ++q)
 			{
 				if ((v & 1) == 0)
 					BaseClass::ApplyGate(cx, precisionQubits + q, ctrlQubit);
@@ -169,21 +169,21 @@ namespace QuantumCounting {
 		}
 
 
-		void ControlledDiffusion(unsigned int ctrlQubit)
+		void ControlledDiffusion(size_t ctrlQubit)
 		{
-			for (unsigned int q = 0; q < groverQubits; ++q)
+			for (size_t q = 0; q < groverQubits; ++q)
 				BaseClass::ApplyGate(chadamard, precisionQubits + q, ctrlQubit);
 
-			unsigned int nrGroverStates = 1 << groverQubits;
-			for (unsigned int state = 1; state < nrGroverStates; ++state)
+			size_t nrGroverStates = 1 << groverQubits;
+			for (size_t state = 1; state < nrGroverStates; ++state)
 				ControlledOracle(ctrlQubit, state);
 
-			for (unsigned int q = 0; q < groverQubits; ++q)
+			for (size_t q = 0; q < groverQubits; ++q)
 				BaseClass::ApplyGate(chadamard, precisionQubits + q, ctrlQubit);
 		}
 
 
-		std::set<unsigned int> markedStates;
+		std::set<size_t> markedStates;
 
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
 		QC::Gates::ControlledHadamardGate<MatrixClass> chadamard;
@@ -193,8 +193,8 @@ namespace QuantumCounting {
 
 		QC::SubAlgo::NControlledNotWithAncilla<VectorClass, MatrixClass> nControlledNOT;
 		
-		unsigned int precisionQubits;
-		unsigned int groverQubits;
+		size_t precisionQubits;
+		size_t groverQubits;
 
 		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};

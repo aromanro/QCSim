@@ -15,42 +15,42 @@ namespace Simon {
 	class SimonFunction
 	{
 	public:
-		unsigned int operator()(unsigned int x) const
+		size_t operator()(size_t x) const
 		{
 			if (functionTable.empty()) return 0;
 
-			const auto mask = static_cast<unsigned int>(functionTable.size() - 1);
+			const auto mask = static_cast<size_t>(functionTable.size() - 1);
 
 			return functionTable[x & mask];
 		}
 
-		void setString(unsigned int str, unsigned int N)
+		void setString(size_t str, size_t N)
 		{
 			stringFunction = str;
 
-			const unsigned int nrBasisStates = 1u << N;
+			const size_t nrBasisStates = 1ULL << N;
 			functionTable.resize(nrBasisStates);
 
 			// generate a function compatible with the string
-			for (unsigned int i = 0; i < nrBasisStates; ++i)
+			for (size_t i = 0; i < nrBasisStates; ++i)
 				functionTable[i] = i;
 
 			// this is a random way of generating it
 			const long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
-			auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
+			auto rng = std::default_random_engine(static_cast<size_t>(seed));
 			std::shuffle(functionTable.begin(), functionTable.end(), rng);
 
 			// add some more randomness, do not look in order to indices when searching for a matching index
 			// this is probably unneeded complexity, but...
-			std::vector<unsigned int> indicesTable(functionTable.size());
-			for (unsigned int i = 0; i < nrBasisStates; ++i)
+			std::vector<size_t> indicesTable(functionTable.size());
+			for (size_t i = 0; i < nrBasisStates; ++i)
 				indicesTable[i] = i;
 			std::shuffle(indicesTable.begin(), indicesTable.end(), rng);
 
-			for (unsigned int x = 0; x < nrBasisStates; ++x)
-				for (unsigned int i = 0; i < nrBasisStates; ++i)
+			for (size_t x = 0; x < nrBasisStates; ++x)
+				for (size_t i = 0; i < nrBasisStates; ++i)
 				{
-					const unsigned int y = indicesTable[i];
+					const size_t y = indicesTable[i];
 					if (y == UINT_MAX || x == y) continue;
 					// note that is the string function is zero, then the function will be one-to-one
 					// because there is always at least a bit that is different between to different values,
@@ -69,13 +69,13 @@ namespace Simon {
 		{
 			if (stringFunction == 0)
 			{
-				std::unordered_set<unsigned int> s(functionTable.begin(), functionTable.end());
+				std::unordered_set<size_t> s(functionTable.begin(), functionTable.end());
 				if (s.size() != functionTable.size()) return false;
 			}
 			else
 			{
-				std::unordered_map<unsigned int, std::unordered_set<unsigned int>> m;
-				for (unsigned int i = 0; i < functionTable.size(); ++i)
+				std::unordered_map<size_t, std::unordered_set<size_t>> m;
+				for (size_t i = 0; i < functionTable.size(); ++i)
 					m[operator()(i)].insert(i);
 
 				if (m.size() != functionTable.size() / 2) return false;
@@ -84,9 +84,9 @@ namespace Simon {
 				{
 					if (s.second.size() != 2) return false;
 
-					const unsigned int a = *s.second.begin();
-					const unsigned int b = *(++s.second.begin());
-					const unsigned int ab = a ^ b;
+					const size_t a = *s.second.begin();
+					const size_t b = *(++s.second.begin());
+					const size_t ab = a ^ b;
 					if (ab != 0 && ab != stringFunction) return false;
 				}
 			}
@@ -95,18 +95,18 @@ namespace Simon {
 		}
 
 	protected:
-		unsigned int stringFunction = 0;
-		std::vector<unsigned int> functionTable;
+		size_t stringFunction = 0;
+		std::vector<size_t> functionTable;
 	};
 
 	template<class MatrixClass = Eigen::MatrixXcd> class Oracle :
 		public QC::Gates::QuantumGate<MatrixClass>
 	{
 	public:
-		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
+		MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 		{
-			const unsigned int nrBasisStates = 1u << nrQubits;
-			const unsigned int N = nrQubits >> 1;
+			const size_t nrBasisStates = 1ULL << nrQubits;
+			const size_t N = nrQubits >> 1;
 
 			MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
@@ -116,15 +116,15 @@ namespace Simon {
 			// <y1|<x1| B |x2>|y2> = <x1|x2><y1|y2+f(x2)>
 			// + is XOR here
 
-			const unsigned int xmask = (1u << N) - 1;
-			const unsigned int ymask = xmask << N;
+			const size_t xmask = (1u << N) - 1;
+			const size_t ymask = xmask << N;
 
-			for (unsigned int stateBra = 0; stateBra < nrBasisStates; ++stateBra)
-				for (unsigned int stateKet = 0; stateKet < nrBasisStates; ++stateKet)
+			for (size_t stateBra = 0; stateBra < nrBasisStates; ++stateBra)
+				for (size_t stateKet = 0; stateKet < nrBasisStates; ++stateKet)
 				{
-					const unsigned int xval = (stateBra & xmask);
-					const unsigned int ypart = (stateBra & ymask);
-					//const unsigned int yval = ypart >> N;
+					const size_t xval = (stateBra & xmask);
+					const size_t ypart = (stateBra & ymask);
+					//const size_t yval = ypart >> N;
 
 					// the operator is sumi sumj |i><j|, so line corresponds to ket and column to bra 
 					extOperatorMat(stateKet, stateBra) = (stateKet & ymask) == ((f(xval) << N) ^ ypart) && xval == (stateKet & xmask);
@@ -135,7 +135,7 @@ namespace Simon {
 			return extOperatorMat;
 		}
 
-		void setString(unsigned int str, unsigned int N)
+		void setString(size_t str, size_t N)
 		{
 			f.setString(str, N);
 		}
@@ -150,7 +150,7 @@ namespace Simon {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		SimonAlgorithm(unsigned int N = 3, int addseed = 0)
+		SimonAlgorithm(size_t N = 3, int addseed = 0)
 			: BaseClass(2 * N, addseed)
 		{
 			assert(N >= 2);
@@ -158,28 +158,28 @@ namespace Simon {
 			setString(0); // prevent issues if the string is not set before execution
 		}
 
-		void setString(unsigned int str)
+		void setString(size_t str)
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
-			const int unsigned N = nrQubits >> 1;
+			const size_t nrQubits = BaseClass::getNrQubits();
+			const size_t N = nrQubits >> 1;
 
 			oracle.setString(str, N);
 			OracleOp = oracle.getOperatorMatrix(nrQubits);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
-			const int unsigned N = nrQubits >> 1;
-			const unsigned int mask = (1u << N) - 1;
-			const unsigned int nrBasisStates = 1u << N;
+			const size_t nrQubits = BaseClass::getNrQubits();
+			const size_t N = nrQubits >> 1;
+			const size_t mask = (1ULL << N) - 1;
+			const size_t nrBasisStates = 1u << N;
 
-			std::unordered_map<unsigned int, unsigned int> measurements;
-			const unsigned int nrMeasurements = 300; // make it highly unlikely to fail
+			std::unordered_map<size_t, size_t> measurements;
+			const size_t nrMeasurements = 300; // make it highly unlikely to fail
 
 			// not exactly how it should be done, but again, I'm lazy
 
-			for (unsigned int i = 0;i < nrMeasurements; ++i)
+			for (size_t i = 0;i < nrMeasurements; ++i)
 			{
 				Init();
 				BaseClass::ApplyOperatorMatrix(OracleOp);
@@ -189,10 +189,10 @@ namespace Simon {
 				// unless the string function is zero, in which case all of them could be measured, they have equal probability
 				// either measure only the first half of the qubits
 				 
-				const unsigned int m = BaseClass::Measure(0, N - 1);
+				const size_t m = BaseClass::Measure(0, N - 1);
 				
 				// or all of them but discard the not interesting ones, using a mask:
-				//const unsigned int m = (BaseClass::Measure() & mask);
+				//const size_t m = (BaseClass::Measure() & mask);
 
 				++measurements[m];
 
@@ -201,8 +201,8 @@ namespace Simon {
 
 			if (measurements.size() == nrBasisStates) return 0;
 
-			std::unordered_set<unsigned int> potential_results;
-			for (unsigned int i = 1; i <= mask; ++i)
+			std::unordered_set<size_t> potential_results;
+			for (size_t i = 1; i <= mask; ++i)
 				potential_results.insert(i);
 			
 			// Not exactly the most optimal way, but I'm lazy
@@ -212,8 +212,8 @@ namespace Simon {
 
 				for (auto pit = potential_results.begin(); pit != potential_results.end();)
 				{
-					unsigned int v = ((*pit) & it->first);
-					unsigned int cnt = 0;
+					size_t v = ((*pit) & it->first);
+					size_t cnt = 0;
 					while (v) {
 						cnt += v & 1;
 						v >>= 1;
@@ -236,8 +236,8 @@ namespace Simon {
 
 		void ApplyHadamardOnHalfQubits()
 		{
-			const unsigned int halfQubits = BaseClass::getNrQubits() >> 1;
-			for (unsigned int i = 0; i < halfQubits; ++i)
+			const size_t halfQubits = BaseClass::getNrQubits() >> 1;
+			for (size_t i = 0; i < halfQubits; ++i)
 				BaseClass::ApplyGate(hadamard, i);
 		}
 
@@ -254,7 +254,7 @@ namespace Simon {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		SimonAlgorithmWithGatesOracle(unsigned int N = 3, int addseed = 0)
+		SimonAlgorithmWithGatesOracle(size_t N = 3, int addseed = 0)
 			: BaseClass(3 * N - 1, addseed), // 2 * N qubits for the algorithm, N - 1 for the oracle
 			oracle(3 * N - 1, 0, N - 1, N, 2 * N)
 		{
@@ -263,28 +263,28 @@ namespace Simon {
 			setString(0); // prevent issues if the string is not set before execution
 		}
 
-		void setString(unsigned int str)
+		void setString(size_t str)
 		{
-			const unsigned int nrQubits = getAlgoQubits();
-			const int unsigned N = nrQubits >> 1;
+			const size_t nrQubits = getAlgoQubits();
+			const size_t N = nrQubits >> 1;
 
 			func.setString(str, N);
 			oracle.setFunction(func);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
-			const unsigned int nrQubits = getAlgoQubits();
-			const int unsigned N = nrQubits >> 1;
-			const unsigned int mask = (1u << N) - 1;
-			const unsigned int nrBasisStates = 1u << N;
+			const size_t nrQubits = getAlgoQubits();
+			const size_t N = nrQubits >> 1;
+			const size_t mask = (1u << N) - 1;
+			const size_t nrBasisStates = 1u << N;
 
-			std::unordered_map<unsigned int, unsigned int> measurements;
-			const unsigned int nrMeasurements = 300; // make it highly unlikely to fail
+			std::unordered_map<size_t, size_t> measurements;
+			const size_t nrMeasurements = 300; // make it highly unlikely to fail
 
 			// not exactly how it should be done, but again, I'm lazy
 
-			for (unsigned int i = 0; i < nrMeasurements; ++i)
+			for (size_t i = 0; i < nrMeasurements; ++i)
 			{
 				Init();
 				
@@ -296,10 +296,10 @@ namespace Simon {
 				// unless the string function is zero, in which case all of them could be measured, they have equal probability
 				// either measure only the first half of the qubits
 
-				const unsigned int m = BaseClass::Measure(0, N - 1);
+				const size_t m = BaseClass::Measure(0, N - 1);
 
 				// or all of them but discard the not interesting ones, using a mask:
-				//const unsigned int m = (BaseClass::Measure() & mask);
+				//const size_t m = (BaseClass::Measure() & mask);
 
 				++measurements[m];
 
@@ -308,8 +308,8 @@ namespace Simon {
 
 			if (measurements.size() == nrBasisStates) return 0;
 
-			std::unordered_set<unsigned int> potential_results;
-			for (unsigned int i = 1; i <= mask; ++i)
+			std::unordered_set<size_t> potential_results;
+			for (size_t i = 1; i <= mask; ++i)
 				potential_results.insert(i);
 
 			// Not exactly the most optimal way, but I'm lazy
@@ -319,8 +319,8 @@ namespace Simon {
 
 				for (auto pit = potential_results.begin(); pit != potential_results.end();)
 				{
-					unsigned int v = ((*pit) & it->first);
-					unsigned int cnt = 0;
+					size_t v = ((*pit) & it->first);
+					size_t cnt = 0;
 					while (v) {
 						cnt += v & 1;
 						v >>= 1;
@@ -334,9 +334,9 @@ namespace Simon {
 			return (potential_results.empty() || potential_results.size() > 1) ? mask + 1 : *potential_results.begin();
 		}
 
-		unsigned int getAlgoQubits() const
+		size_t getAlgoQubits() const
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
+			const size_t nrQubits = BaseClass::getNrQubits();
 
 			return (nrQubits + 1) / 3 * 2;
 		}
@@ -350,8 +350,8 @@ namespace Simon {
 
 		void ApplyHadamardOnHalfQubits()
 		{
-			const unsigned int halfQubits = getAlgoQubits() >> 1;
-			for (unsigned int i = 0; i < halfQubits; ++i)
+			const size_t halfQubits = getAlgoQubits() >> 1;
+			for (size_t i = 0; i < halfQubits; ++i)
 				BaseClass::ApplyGate(hadamard, i);
 		}
 

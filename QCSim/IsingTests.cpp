@@ -13,7 +13,7 @@ bool IsingModelTest()
 
 	ising.Set({ {0, 1, 1.5}, { 1, 2, 2 }, { 0, 2, -3} }, { 1.25, 3.25, -2.5 });
 
-	for (unsigned int state = 0; state < reg.getNrBasisStates(); ++state)
+	for (size_t state = 0; state < reg.getNrBasisStates(); ++state)
 		std::cout << "State: " << state << " Energy: " << ising.Energy(state) << std::endl;
 	std::cout << std::endl;
 
@@ -27,9 +27,9 @@ bool IsingModelTest()
 
 	ising.SetMixing(true);
 
-	unsigned int state = ising.Execute(reg);
+	size_t state = ising.Execute(reg);
 
-	unsigned int realMinState = ising.GetMinEnergyState();
+	size_t realMinState = ising.GetMinEnergyState();
 	if (state != realMinState)
 	{
 		std::cout << "Error: Min energy state found: " << state << " is not the same as the real one: " << realMinState << std::endl;
@@ -52,7 +52,7 @@ bool MaxCutTest()
 	maxcut.Set({ {0, 1, -1}, { 0, 2, -1 }, { 0, 5, -1}, { 1, 2, -1 }, { 1, 3, -1 }, { 2, 3, -1 }, { 2, 4, -1 }, { 3, 5, -1 } }, { 0, 0, 0, 0, 0, 0 });
 
 	/*
-	for (unsigned int state = 0; state < reg.getNrBasisStates(); ++state)
+	for (size_t state = 0; state < reg.getNrBasisStates(); ++state)
 		std::cout << "State: " << state << " Energy: " << maxcut.Energy(state) << std::endl;
 	std::cout << std::endl;
 	*/
@@ -77,7 +77,7 @@ bool MaxCutTest()
 
 	//maxcut.SetMixing(true);
 
-	unsigned int state = maxcut.Execute(reg);
+	size_t state = maxcut.Execute(reg);
 
 
 	if (minStates.find(state) == minStates.end())

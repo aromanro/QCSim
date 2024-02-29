@@ -19,12 +19,12 @@ bool distributedCNOTTest()
 	QC::Gates::CNOTGate cnot;
 	QC::QubitRegister reg(2);
 
-	for (unsigned int ctrlQubit = 0; ctrlQubit <= 1; ++ctrlQubit)
-		for (unsigned int targetQubit = 0; targetQubit <= 1; ++targetQubit)
+	for (size_t ctrlQubit = 0; ctrlQubit <= 1; ++ctrlQubit)
+		for (size_t targetQubit = 0; targetQubit <= 1; ++targetQubit)
 		{
 			// distributed CNOT
 			distCnot.setToBasisState((targetQubit << 3) | ctrlQubit);
-			const unsigned int measurements = distCnot.Execute() << 1;
+			const size_t measurements = distCnot.Execute() << 1;
 			const Eigen::VectorXcd distStorage = distCnot.getRegisterStorage();
 
 			// now do the same thing but not distributed
@@ -46,7 +46,7 @@ bool distributedCNOTTest()
 				for (int q1 = 0; q1 < 2; ++q1)
 					for (int q2 = 0; q2 < 2; ++q2)
 					{
-						const unsigned int state = ((q2 << 1) | q1) << 1;
+						const size_t state = ((q2 << 1) | q1) << 1;
 						if (state == measurements)
 							continue;
 
@@ -72,7 +72,7 @@ bool distributedCNOTTest()
 		distCnot.setRawAmplitude(0x8, gamma);
 		distCnot.setRawAmplitude(0x9, delta);
 		distCnot.Normalize();
-		const unsigned int measurements = distCnot.Execute() << 1;
+		const size_t measurements = distCnot.Execute() << 1;
 
 		reg.Clear();
 		reg.setRawAmplitude(0, alpha);
@@ -117,12 +117,12 @@ bool teleportedCNOTTest()
 	QC::Gates::CNOTGate cnot;
 	QC::QubitRegister reg(2);
 
-	for (unsigned int ctrlQubit = 0; ctrlQubit <= 1; ++ctrlQubit)
-		for (unsigned int targetQubit = 0; targetQubit <= 1; ++targetQubit)
+	for (size_t ctrlQubit = 0; ctrlQubit <= 1; ++ctrlQubit)
+		for (size_t targetQubit = 0; targetQubit <= 1; ++targetQubit)
 		{
 			// teleported CNOT
 			teleportedCnot.setToBasisState(targetQubit | (ctrlQubit << 5));
-			const unsigned int measurements = teleportedCnot.Execute();
+			const size_t measurements = teleportedCnot.Execute();
 			const Eigen::VectorXcd distStorage = teleportedCnot.getRegisterStorage();
 
 			// now do the same thing but not teleported
@@ -162,7 +162,7 @@ bool teleportedCNOTTest()
 		teleportedCnot.setRawAmplitude(0x20, gamma);
 		teleportedCnot.setRawAmplitude(0x21, delta);
 		teleportedCnot.Normalize();
-		const unsigned int measurements = teleportedCnot.Execute();
+		const size_t measurements = teleportedCnot.Execute();
 		
 		reg.Clear();
 		reg.setRawAmplitude(0, alpha);

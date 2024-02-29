@@ -16,7 +16,7 @@ namespace ErrorCorrection {
 		{
 		}
 
-		enum ErrorType : unsigned int
+		enum ErrorType : size_t
 		{
 			Flip,
 			Sign,
@@ -34,7 +34,7 @@ namespace ErrorCorrection {
 			return errorType;
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Encode();
 
@@ -68,7 +68,7 @@ namespace ErrorCorrection {
 			AlgorithmClass::ApplyGate(BaseClass::cnot, 3, 0);
 			AlgorithmClass::ApplyGate(BaseClass::cnot, 6, 0);
 
-			for (unsigned int qubit = 0; qubit <= 6; qubit += 3)
+			for (size_t qubit = 0; qubit <= 6; qubit += 3)
 			{
 				// the following make up a generalized entangling gate for 3 qubits
 				// the first two being the two-qubits 'entangling gate'
@@ -81,7 +81,7 @@ namespace ErrorCorrection {
 
 		void DetectAndCorrect()
 		{
-			for (unsigned int qubit = 0; qubit <= 6; qubit += 3)
+			for (size_t qubit = 0; qubit <= 6; qubit += 3)
 			{
 				AlgorithmClass::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::cnot, qubit + 1, qubit);
 				AlgorithmClass::ApplyGate(ErrorCorrectionBase<VectorClass, MatrixClass>::cnot, qubit + 2, qubit);

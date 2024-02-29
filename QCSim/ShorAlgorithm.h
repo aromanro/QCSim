@@ -15,41 +15,41 @@ namespace Shor {
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class FxBase : public QC::Function<VectorClass, MatrixClass>
 	{
 	public:
-		FxBase(unsigned int L, unsigned int M, unsigned int C)
+		FxBase(size_t L, size_t M, size_t C)
 			: fRegisterStartQubit(L), Number(C), A(2), fRegisterNrQubits(M)
 		{
 		}
 
-		void setParam(unsigned int a)
+		void setParam(size_t a)
 		{
 			A = a;
 		}
 
-		unsigned int getParam() const
+		size_t getParam() const
 		{
 			return A;
 		}
 
-		unsigned int mod(unsigned long long int v)
+		size_t mod(unsigned long long int v)
 		{
 			return v % Number;
 		}
 
-		unsigned int getFunctionStartQubit() const
+		size_t getFunctionStartQubit() const
 		{
 			return fRegisterStartQubit;
 		}
 
-		unsigned int getFunctionNrQubits() const
+		size_t getFunctionNrQubits() const
 		{
 			return fRegisterNrQubits;
 		}
 
 	protected:
-		unsigned int fRegisterStartQubit;
-		unsigned int Number;
-		unsigned int A;
-		unsigned int fRegisterNrQubits;
+		size_t fRegisterStartQubit;
+		size_t Number;
+		size_t A;
+		size_t fRegisterNrQubits;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class Fx : public FxBase<VectorClass, MatrixClass>
@@ -57,7 +57,7 @@ namespace Shor {
 	public:
 		using BaseClass = FxBase<VectorClass, MatrixClass>;
 
-		Fx(unsigned int L, unsigned int M, unsigned int C)
+		Fx(size_t L, size_t M, size_t C)
 			: BaseClass(L, M, C)
 		{
 		}
@@ -66,23 +66,23 @@ namespace Shor {
 		{
 			// for each l qubit from x (0 - L-1 range)
 			// construct a controlled gate by the qubit 
-			const unsigned int BasisStatesNo = reg.getNrBasisStates();
-			const unsigned int xmask = (1 << BaseClass::fRegisterStartQubit) - 1;
-			const unsigned int fmask = ~xmask;
+			const size_t BasisStatesNo = reg.getNrBasisStates();
+			const size_t xmask = (1 << BaseClass::fRegisterStartQubit) - 1;
+			const size_t fmask = ~xmask;
 
 
 			unsigned long long int An = BaseClass::A;
-			unsigned int lbit = 1;
-			for (unsigned int l = 0; l < BaseClass::fRegisterStartQubit; ++l)
+			size_t lbit = 1;
+			for (size_t l = 0; l < BaseClass::fRegisterStartQubit; ++l)
 			{
 				MatrixClass gateOperator = MatrixClass::Zero(BasisStatesNo, BasisStatesNo);
 
-				for (unsigned int k = 0; k < BasisStatesNo; ++k)
+				for (size_t k = 0; k < BasisStatesNo; ++k)
 				{
-					const unsigned int xbits = k & xmask;
+					const size_t xbits = k & xmask;
 					if (xbits & lbit)
 					{
-						unsigned int f = (k & fmask) >> BaseClass::fRegisterStartQubit;
+						size_t f = (k & fmask) >> BaseClass::fRegisterStartQubit;
 
 						if (f >= BaseClass::Number)
 							gateOperator(k, k) = 1;
@@ -115,14 +115,14 @@ namespace Shor {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ShorAlgorithmBase(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, unsigned int M = 4, int addseed = 0)
+		ShorAlgorithmBase(size_t C = 15, size_t N = 7, size_t L = 3, size_t M = 4, int addseed = 0)
 			: BaseClass(N, addseed),
 			Number(C), fx(L, M, C)
 		{
 		}
 
 		// returns false is Shor algorithm was not used, otherwise true 
-		bool factorize(unsigned int& p1, unsigned int& p2, unsigned int numAttempts = 10)
+		bool factorize(size_t& p1, size_t& p2, size_t numAttempts = 10)
 		{
 			if (Number > 22)
 			{
@@ -138,7 +138,7 @@ namespace Shor {
 				return false;
 			}
 
-			const unsigned int sq = static_cast<unsigned int>(round(sqrt(Number)));
+			const size_t sq = static_cast<size_t>(round(sqrt(Number)));
 			if (sq * sq == Number)
 			{
 				p1 = p2 = sq;
@@ -151,11 +151,11 @@ namespace Shor {
 			std::uniform_int_distribution<> dist(2, Number - 1);
 
 			// well, this probably should be more optimized, but it seems to work
-			for (unsigned int t = 0; t < numAttempts; ++t)
+			for (size_t t = 0; t < numAttempts; ++t)
 			{
 				const int a = dist(genr);
 
-				const unsigned int g = gcd(Number, a);
+				const size_t g = gcd(Number, a);
 				if (g > 1)
 				{
 					//continue;
@@ -168,11 +168,11 @@ namespace Shor {
 
 				// period finding
 
-				const unsigned int xmask = (1 << fx.getFunctionStartQubit()) - 1;
+				const size_t xmask = (1 << fx.getFunctionStartQubit()) - 1;
 
 				// use a single measurement to guess the period (but not zero)
 
-				unsigned int state = static_cast<Derived*>(this)->Execute() & xmask;
+				size_t state = static_cast<Derived*>(this)->Execute() & xmask;
 				while (!state) state = static_cast<Derived*>(this)->Execute() & xmask;
 
 				const int d = static_cast<int>(pow(2, fx.getFunctionStartQubit()));
@@ -185,22 +185,22 @@ namespace Shor {
 
 				for (size_t i = 1; i < divs.size(); ++i) // skip first as it's for the integer part
 				{
-					unsigned int p = divs[i];
+					size_t p = divs[i];
 					if (p % 2) p *= 2;
 					while (p < Number)
 					{
-						if (fx.mod(static_cast<unsigned int>(pow(fx.getParam(), p))) == 1)
+						if (fx.mod(static_cast<size_t>(pow(fx.getParam(), p))) == 1)
 						{
-							const unsigned int v = static_cast<unsigned int>(pow(fx.getParam(), p / 2));
-							const unsigned int m = fx.mod(v);
+							const size_t v = static_cast<size_t>(pow(fx.getParam(), p / 2));
+							const size_t m = fx.mod(v);
 							if (m != 1 && m != Number - 1)
 							{
 								p1 = gcd(m - 1, Number);
 								p2 = gcd(m + 1, Number);
 
 								// either both or at least one are factors
-								const unsigned int t1 = Number / p1;
-								const unsigned int t2 = Number / p2;
+								const size_t t1 = Number / p1;
+								const size_t t2 = Number / p2;
 								if (p1 * t1 == Number)
 									p2 = t1;
 								else
@@ -222,7 +222,7 @@ namespace Shor {
 			return false;
 		}
 
-		void setA(unsigned int a)
+		void setA(size_t a)
 		{
 			fx.setParam(a);
 		}
@@ -283,7 +283,7 @@ namespace Shor {
 			}
 		}
 
-		unsigned int Number;
+		size_t Number;
 		ShorFunction fx;
 	};
 
@@ -293,18 +293,18 @@ namespace Shor {
 	public:
 		using BaseClass = ShorAlgorithmBase<ShorAlgorithm<VectorClass, MatrixClass, ShorFunction>, VectorClass, MatrixClass>;
 
-		ShorAlgorithm(unsigned int C = 15, unsigned int N = 7, unsigned int L = 3, int addseed = 0)
+		ShorAlgorithm(size_t C = 15, size_t N = 7, size_t L = 3, int addseed = 0)
 			: BaseClass(C, N, L, N - L, addseed),
 			phaseEstimation(BaseClass::fx, N, L)
 		{
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			return phaseEstimation.Execute(BaseClass::BaseClass::reg);
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			return phaseEstimation.ExecuteWithMultipleMeasurements(BaseClass::BaseClass::reg, nrMeasurements);
 		}
@@ -329,10 +329,10 @@ namespace Shor {
 	public:
 		using BaseClass = FxBase<VectorClass, MatrixClass>;
 		
-		FxWithoutTensorProduct(unsigned int L, unsigned int M, unsigned int C)
+		FxWithoutTensorProduct(size_t L, size_t M, size_t C)
 			: BaseClass(L, M, C)
 		{
-			std::vector<unsigned int> controlQubits(L);
+			std::vector<size_t> controlQubits(L);
 			std::iota(controlQubits.begin(), controlQubits.end(), 0);
 
 			nControlledNOTs.SetControlQubits(controlQubits);
@@ -341,20 +341,20 @@ namespace Shor {
 
 		void Apply(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			const unsigned int nrStates = 1 << BaseClass::fRegisterStartQubit;
-			const unsigned int mask = ((1 << (BaseClass::fRegisterStartQubit + BaseClass::fRegisterNrQubits)) - 1) >> BaseClass::fRegisterStartQubit;
+			const size_t nrStates = 1 << BaseClass::fRegisterStartQubit;
+			const size_t mask = ((1 << (BaseClass::fRegisterStartQubit + BaseClass::fRegisterNrQubits)) - 1) >> BaseClass::fRegisterStartQubit;
 
 			std::vector<bool> qubits(BaseClass::fRegisterStartQubit, false);
 
-			unsigned int An = BaseClass::mod(BaseClass::A);
+			size_t An = BaseClass::mod(BaseClass::A);
 
-			for (unsigned int state = 0; state < nrStates; ++state)
+			for (size_t state = 0; state < nrStates; ++state)
 			{
-				unsigned int fval = An;
+				size_t fval = An;
 				if (!fval) continue;
 
-				unsigned int v = state;
-				for (unsigned int q = 0; q < BaseClass::fRegisterStartQubit; ++q)
+				size_t v = state;
+				for (size_t q = 0; q < BaseClass::fRegisterStartQubit; ++q)
 				{
 					if (qubits[q] != ((v & 1) == 0))
 					{
@@ -367,7 +367,7 @@ namespace Shor {
 
 				nControlledNOTs.ClearGates();
 
-				for (unsigned int q = BaseClass::fRegisterStartQubit; (fval & mask) != 0 && q < BaseClass::fRegisterStartQubit + BaseClass::fRegisterNrQubits; ++q)
+				for (size_t q = BaseClass::fRegisterStartQubit; (fval & mask) != 0 && q < BaseClass::fRegisterStartQubit + BaseClass::fRegisterNrQubits; ++q)
 				{
 					if (fval & 1)
 					{
@@ -385,7 +385,7 @@ namespace Shor {
 			}
 
 			// undo the x gates
-			for (unsigned int q = 0; q < BaseClass::fRegisterStartQubit; ++q)
+			for (size_t q = 0; q < BaseClass::fRegisterStartQubit; ++q)
 				if (qubits[q])
 					reg.ApplyGate(x, q);
 		}
@@ -402,13 +402,13 @@ namespace Shor {
 	public:
 		using BaseClass = ShorAlgorithmBase<ShorAlgorithmWithoutTensorProduct<VectorClass, MatrixClass, ShorFunction>, VectorClass, MatrixClass, ShorFunction>;
 
-		ShorAlgorithmWithoutTensorProduct(unsigned int C = 15, unsigned int L = 3, int M = 4, int addseed = 0)
+		ShorAlgorithmWithoutTensorProduct(size_t C = 15, size_t L = 3, int M = 4, int addseed = 0)
 			: BaseClass(C, 2 * L + M - 1, L, M, addseed),
 			fourier(2 * L + M - 1, 0, L - 1)
 		{
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
@@ -419,7 +419,7 @@ namespace Shor {
 			return BaseClass::BaseClass::Measure();
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 
@@ -448,7 +448,7 @@ namespace Shor {
 		{
 			// apply hadamard over each qubit from the x-register
 			// reuse the hadamard gate from the fourier transform base class
-			for (unsigned int q = 0; q < BaseClass::fx.getFunctionStartQubit(); ++q)
+			for (size_t q = 0; q < BaseClass::fx.getFunctionStartQubit(); ++q)
 				BaseClass::BaseClass::ApplyGate(fourier.hadamard, q);
 		}
 

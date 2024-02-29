@@ -17,17 +17,17 @@ namespace BernsteinVazirani {
 		public QC::Gates::QuantumGate<MatrixClass>
 	{
 	public:
-		void setString(unsigned int str)
+		void setString(size_t str)
 		{
 			stringFunction = str;
 		}
 
-		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
+		MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 		{
-			const unsigned int nrBasisStates = 1u << nrQubits;
+			const size_t nrBasisStates = 1u << nrQubits;
 			MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
 
-			for (unsigned int x = 0; x < nrBasisStates; ++x)
+			for (size_t x = 0; x < nrBasisStates; ++x)
 			{
 				if (f(x))
 					extOperatorMat(x, x) = -1;
@@ -39,12 +39,12 @@ namespace BernsteinVazirani {
 		}
 
 	protected:
-		unsigned int f(unsigned int x) const
+		size_t f(size_t x) const
 		{
 			// dot product modulo 2 between x and string
-			unsigned int prod = x & stringFunction;
+			size_t prod = x & stringFunction;
 
-			unsigned int accum = 0;
+			size_t accum = 0;
 			while (prod)
 			{
 				accum += prod & 1;
@@ -54,7 +54,7 @@ namespace BernsteinVazirani {
 			return accum % 2;
 		}
 
-		unsigned int stringFunction = 0;
+		size_t stringFunction = 0;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class BernsteinVaziraniAlgorithm :
@@ -63,7 +63,7 @@ namespace BernsteinVazirani {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		BernsteinVaziraniAlgorithm(unsigned int N = 3, int addseed = 0)
+		BernsteinVaziraniAlgorithm(size_t N = 3, int addseed = 0)
 			: BaseClass(N, addseed)
 		{
 			assert(N >= 1);
@@ -71,14 +71,14 @@ namespace BernsteinVazirani {
 			setString(0); // prevent issues if the string is not set before execution
 		}
 
-		void setString(unsigned int str)
+		void setString(size_t str)
 		{
 			Oracle<MatrixClass> o;
 			o.setString(str);
 			OracleOp = o.getOperatorMatrix(BaseClass::getNrQubits());
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Init();
 
@@ -98,7 +98,7 @@ namespace BernsteinVazirani {
 
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int i = 0; i < BaseClass::getNrQubits(); ++i)
+			for (size_t i = 0; i < BaseClass::getNrQubits(); ++i)
 				BaseClass::ApplyGate(hadamard, i);
 		}
 
@@ -118,15 +118,15 @@ namespace BernsteinVazirani {
 	class BernsteinVaziraniFunction
 	{
 	public:
-		BernsteinVaziraniFunction(unsigned int str = 0)
+		BernsteinVaziraniFunction(size_t str = 0)
 			: stringFunction(str)
 		{
 		}
 
-		bool operator()(unsigned int state) const
+		bool operator()(size_t state) const
 		{
-			unsigned int prod = state & stringFunction;
-			unsigned int accum = 0;
+			size_t prod = state & stringFunction;
+			size_t accum = 0;
 			while (prod)
 			{
 				accum += prod & 1;
@@ -139,7 +139,7 @@ namespace BernsteinVazirani {
 		}
 
 	protected:
-		unsigned int stringFunction;
+		size_t stringFunction;
 	};
 
 
@@ -149,20 +149,20 @@ namespace BernsteinVazirani {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		BernsteinVaziraniAlgorithmWithGatesOracle(unsigned int N = 3, int addseed = 0)
+		BernsteinVaziraniAlgorithmWithGatesOracle(size_t N = 3, int addseed = 0)
 			: BaseClass(2 * N - 1, addseed),
 			oracle(2 * N - 1, 0, N - 1, N, N + 1)
 		{
 			assert(N >= 1);
 		}
 
-		void setString(unsigned int str)
+		void setString(size_t str)
 		{
 			BernsteinVaziraniFunction func(str);
 			oracle.setFunction(func);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Init();
 
@@ -173,9 +173,9 @@ namespace BernsteinVazirani {
 			return BaseClass::Measure(0, getAlgoQubits() - 1);
 		}
 
-		unsigned int getAlgoQubits() const
+		size_t getAlgoQubits() const
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
+			const size_t nrQubits = BaseClass::getNrQubits();
 
 			return (nrQubits + 1) / 2;
 		}
@@ -193,7 +193,7 @@ namespace BernsteinVazirani {
 		void ApplyHadamardOnAllQubits()
 		{
 			// including on the ancilla one
-			for (unsigned int q = 0; q <= getAlgoQubits(); ++q)
+			for (size_t q = 0; q <= getAlgoQubits(); ++q)
 				BaseClass::ApplyGate(hadamard, q);
 		}
 

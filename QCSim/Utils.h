@@ -11,7 +11,7 @@ namespace QC {
 	public:
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-		bool setBellState(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1, bool s1 = false, bool s2 = false)
+		bool setBellState(RegisterClass& reg, size_t qubit1 = 0, size_t qubit2 = 1, bool s1 = false, bool s2 = false)
 		{
 			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
 				return false;
@@ -25,22 +25,22 @@ namespace QC {
 			return true;
 		}
 
-		bool setBellState00(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1)
+		bool setBellState00(RegisterClass& reg, size_t qubit1 = 0, size_t qubit2 = 1)
 		{
 			return setBellState(reg, qubit1, qubit2, false, false);
 		}
 
-		bool setBellState01(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1)
+		bool setBellState01(RegisterClass& reg, size_t qubit1 = 0, size_t qubit2 = 1)
 		{
 			return setBellState(reg, qubit1, qubit2, false, true);
 		}
 
-		bool setBellState10(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1)
+		bool setBellState10(RegisterClass& reg, size_t qubit1 = 0, size_t qubit2 = 1)
 		{
 			return setBellState(reg, qubit1, qubit2, true, false);
 		}
 
-		bool setBellState11(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1)
+		bool setBellState11(RegisterClass& reg, size_t qubit1 = 0, size_t qubit2 = 1)
 		{
 			return setBellState(reg, qubit1, qubit2, true, true);
 		}
@@ -61,7 +61,7 @@ namespace QC {
 			//s.SetPhaseShift(M_PI_2); // no need for this, PhaseShift has already the proper phase
 		}
 
-		bool switchToXBasis(RegisterClass& reg, unsigned int qubit = 0) const
+		bool switchToXBasis(RegisterClass& reg, size_t qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
@@ -71,7 +71,7 @@ namespace QC {
 			return true;
 		};
 
-		bool switchToYBasis(RegisterClass& reg, unsigned int qubit = 0) const
+		bool switchToYBasis(RegisterClass& reg, size_t qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
@@ -83,7 +83,7 @@ namespace QC {
 			return true;
 		};
 
-		bool switchToBellBasis(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1) const
+		bool switchToBellBasis(RegisterClass& reg, size_t qubit1 = 0, size_t qubit2 = 1) const
 		{
 			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
 				return false;
@@ -98,7 +98,7 @@ namespace QC {
 		// if the operator to switch to a basis was U, the one to switch back is U^t
 		// if it's a product of two (as in two gates used for changing the basis) then (O1 * O2)^t = O2^t * O1^t
 
-		bool switchToComputationalFromXBasis(RegisterClass& reg, unsigned int qubit = 0) const
+		bool switchToComputationalFromXBasis(RegisterClass& reg, size_t qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
@@ -108,7 +108,7 @@ namespace QC {
 			return true;
 		}
 
-		bool switchToComputationalFromYBasis(RegisterClass& reg, unsigned int qubit = 0) const
+		bool switchToComputationalFromYBasis(RegisterClass& reg, size_t qubit = 0) const
 		{
 			if (qubit >= reg.getNrQubits())
 				return false;
@@ -120,7 +120,7 @@ namespace QC {
 			return true;
 		}
 
-		bool switchToComputationalFromBellBasis(RegisterClass& reg, unsigned int qubit1 = 0, unsigned int qubit2 = 1) const
+		bool switchToComputationalFromBellBasis(RegisterClass& reg, size_t qubit1 = 0, size_t qubit2 = 1) const
 		{
 			if (qubit1 == qubit2 || qubit1 >= reg.getNrQubits() || qubit2 >= reg.getNrQubits())
 				return false;
@@ -137,12 +137,12 @@ namespace QC {
 		// or for the case when one wants to switch to some other basis along the algoritm, measure, then switch back to the computational basis, then continue
 		// an application could be in quantum cryptography - see for example BB84 protocol
 
-		bool switchToOperatorBasis(RegisterClass& reg, const QC::Gates::SingleQubitGate<MatrixClass>& gate, unsigned int qubit = 0, bool switchBack = false) const
+		bool switchToOperatorBasis(RegisterClass& reg, const QC::Gates::SingleQubitGate<MatrixClass>& gate, size_t qubit = 0, bool switchBack = false) const
 		{
 			return switchToOperatorBasis(reg, gate.getRawOperatorMatrix(), qubit, switchBack);
 		}
 
-		bool switchToOperatorBasis(RegisterClass& reg, const MatrixClass& op, unsigned int qubit = 0, bool switchBack = false) const
+		bool switchToOperatorBasis(RegisterClass& reg, const MatrixClass& op, size_t qubit = 0, bool switchBack = false) const
 		{
 			if (qubit >= reg.getNrQubits()) return false;
 			else if (op.rows() != 2 || op.cols() != 2) return false;

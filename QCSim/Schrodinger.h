@@ -22,19 +22,19 @@ namespace QuantumSimulation {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		SchrodingerSimulation(unsigned int N = 8, double dt = 0.1, double dx = 0.1, unsigned int nrSteps = 50, bool addSeed = false)
+		SchrodingerSimulation(size_t N = 8, double dt = 0.1, double dx = 0.1, size_t nrSteps = 50, bool addSeed = false)
 			: BaseClass(N, addSeed), deltat(dt), steps(nrSteps), deltax(dx), fourier(N, 0, N - 1)
 		{
 			potential.resize(BaseClass::getNrBasisStates(), 0.);
 			BaseClass::setToBasisState(0); // useless if the initialization of the start state is done, but better be safe...
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Init();
 			
 			// Suzuki-Trotter expansion
-			for (unsigned int step = 0; step < steps; ++step)
+			for (size_t step = 0; step < steps; ++step)
 			{
 				ApplyPotentialOperatorEvolution();
 				fourier.IQFT(BaseClass::reg);
@@ -46,14 +46,14 @@ namespace QuantumSimulation {
 		}
 
 		// the index is from 0 to nrStates, but the position is going to be from -nrStates/2 * deltax to nrStates/2 * deltax
-		double getPotential(unsigned int pos) const
+		double getPotential(size_t pos) const
 		{
 			if (pos >= potential.size()) return 0.;
 
 			return potential[pos];
 		}
 
-		void setPotential(unsigned int pos, double val)
+		void setPotential(size_t pos, double val)
 		{
 			if (pos >= potential.size()) return;
 
@@ -75,13 +75,13 @@ namespace QuantumSimulation {
 			deltat = dt;
 		}
 
-		void setNrSteps(unsigned int nrSteps)
+		void setNrSteps(size_t nrSteps)
 		{
 			steps = nrSteps;
 		}
 
 		// use it to set a square barrier (positive val) or well (negative val) in the middle
-		void setConstantPotentialInTheMiddle(double val, unsigned int halfwidth)
+		void setConstantPotentialInTheMiddle(double val, size_t halfwidth)
 		{
 			const int nrStates = BaseClass::getNrBasisStates();
 			const int halfStates = nrStates / 2;
@@ -110,7 +110,7 @@ namespace QuantumSimulation {
 
 		// set a gaussian wavefunction in the register, k makes it 'move'
 		// set it to the left side
-		void setGaussian(unsigned int pos, double stdev, double k)
+		void setGaussian(size_t pos, double stdev, double k)
 		{
 			BaseClass::Clear();
 
@@ -147,7 +147,7 @@ namespace QuantumSimulation {
 
 		void solveWithFiniteDifferences()
 		{
-			const unsigned int nrStates = BaseClass::getNrBasisStates();
+			const size_t nrStates = BaseClass::getNrBasisStates();
 			const double eps2 =  2 * deltax * deltax; // the easiest way to add 1/2. for kinetic term, just having multiplied with 2 here
 			const double lambda = 2. * eps2 / deltat;
 			const std::complex<double> ilambda = std::complex<double>(0, lambda);
@@ -162,7 +162,7 @@ namespace QuantumSimulation {
 			double eps2pot = eps2 * potential[1];
 			e[1] = twominusilambda + eps2pot;
 			omegaterm[1] = twoplusilambda + eps2pot;
-			for (unsigned int i = 2; i < nrStates - 1; ++i)
+			for (size_t i = 2; i < nrStates - 1; ++i)
 			{
 				eps2pot = eps2 * potential[i];
 				// see eq (17)
@@ -170,11 +170,11 @@ namespace QuantumSimulation {
 				omegaterm[i] = twoplusilambda + eps2pot; // see the def of omega, above eq (14)
 			}
 
-			for (unsigned int step = 0; step < steps; ++step)
+			for (size_t step = 0; step < steps; ++step)
 			{
 				// compute the needed values first
 				f[1] = omegaterm[1] * BaseClass::getBasisStateAmplitude(1) - BaseClass::getBasisStateAmplitude(2);
-				for (unsigned int i = 2; i < nrStates - 1; ++i)
+				for (size_t i = 2; i < nrStates - 1; ++i)
 				{
 					// see eq (18)
 					const std::complex<double> omega = omegaterm[i] * BaseClass::getBasisStateAmplitude(i) - (BaseClass::getBasisStateAmplitude(i + 1) + BaseClass::getBasisStateAmplitude(i - 1));
@@ -183,7 +183,7 @@ namespace QuantumSimulation {
 
 				// now compute the wavefunction
 				// the limits will stay at zero
-				for (unsigned int i = nrStates - 2; i > 0; --i)
+				for (size_t i = nrStates - 2; i > 0; --i)
 				{
 					// see eq (20)
 					const std::complex<double> val = (BaseClass::getBasisStateAmplitude(i + 1) - f[i]) / e[i];
@@ -200,7 +200,7 @@ namespace QuantumSimulation {
 		{
 			InitSimpleFiniteDifferences();
 
-			for (unsigned int step = 0; step < steps; ++step)
+			for (size_t step = 0; step < steps; ++step)
 			{
 				BaseClass::ApplyOperatorMatrix(evolutionOp);
 				ApplyPotentialOperatorEvolution();
@@ -213,18 +213,18 @@ namespace QuantumSimulation {
 			// ensure that the starting wavefunction is normalized
 			BaseClass::Normalize();
 
-			const unsigned int nrStates = BaseClass::getNrBasisStates();
-			const unsigned int nrStatesM1 = nrStates - 1;
+			const size_t nrStates = BaseClass::getNrBasisStates();
+			const size_t nrStatesM1 = nrStates - 1;
 			const std::complex<double> j(0, 1);
 			const double eps = 0.5 * deltat / (deltax * deltax);
 			
 			VectorClass newPsi = VectorClass::Zero(nrStates);
 
-			for (unsigned int step = 0; step < steps; ++step)
+			for (size_t step = 0; step < steps; ++step)
 			{	
 				const VectorClass& oldPsi = BaseClass::getRegisterStorage();
 
-				for (unsigned int i = 1; i < nrStatesM1; ++i)
+				for (size_t i = 1; i < nrStatesM1; ++i)
 					newPsi(i) = oldPsi(i) + j * eps * (oldPsi(i - 1) - 2. * oldPsi(i) + oldPsi(i + 1)) - j * potential[i] * deltat * oldPsi(i);
 				
 				BaseClass::setRegisterStorage(newPsi); // this also normalizes the wavefunction
@@ -240,7 +240,7 @@ namespace QuantumSimulation {
 			Fourier::FFT fft;
 
 			// Suzuki-Trotter expansion
-			for (unsigned int step = 0; step < steps; ++step)
+			for (size_t step = 0; step < steps; ++step)
 			{
 				ApplyPotentialOperatorEvolution();
 
@@ -251,7 +251,7 @@ namespace QuantumSimulation {
 					Eigen::Map<VectorClass>(vec.data(), oldPsi.size()) = oldPsi;
 
 					std::vector<std::complex<double>> newvec(oldPsi.size());
-					fft.fwd(vec.data(), newvec.data(), static_cast<unsigned int>(vec.size()));
+					fft.fwd(vec.data(), newvec.data(), static_cast<size_t>(vec.size()));
 
 					const VectorClass newPsi = Eigen::Map<VectorClass>(newvec.data(), newvec.size());
 					BaseClass::setRegisterStorage(newPsi);
@@ -266,7 +266,7 @@ namespace QuantumSimulation {
 					Eigen::Map<VectorClass>(vec.data(), oldPsi.size()) = oldPsi;
 
 					std::vector<std::complex<double>> newvec(oldPsi.size());
-					fft.inv(vec.data(), newvec.data(), static_cast<unsigned int>(vec.size()));
+					fft.inv(vec.data(), newvec.data(), static_cast<size_t>(vec.size()));
 
 					const VectorClass newPsi = Eigen::Map<VectorClass>(newvec.data(), newvec.size());
 					BaseClass::setRegisterStorage(newPsi);
@@ -347,7 +347,7 @@ namespace QuantumSimulation {
 		}
 
 		double deltat;
-		unsigned int steps;
+		size_t steps;
 		double deltax;
 
 		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;

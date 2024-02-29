@@ -13,20 +13,20 @@ namespace Adders {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DraperAdder(unsigned int N = 3, int addseed = 0)
+		DraperAdder(size_t N = 3, int addseed = 0)
 			: BaseClass(2 * N, addseed), n(N), fourier(2 * N, N)
 		{
 			BaseClass::setToBasisState(0);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure();
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 
@@ -55,7 +55,7 @@ namespace Adders {
 			fourier.IQFT(BaseClass::reg, false);
 		}
 
-		unsigned int n;
+		size_t n;
 		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};
 
@@ -64,20 +64,20 @@ namespace Adders {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DraperAdderWithCarry(unsigned int N = 3, int addseed = 0)
+		DraperAdderWithCarry(size_t N = 3, int addseed = 0)
 			: BaseClass(2 * N + 1, addseed), n(N), fourier(2 * N + 1, N)
 		{
 			BaseClass::setToBasisState(0);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure();
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 
@@ -115,7 +115,7 @@ namespace Adders {
 			fourier.IQFT(BaseClass::reg, false);
 		}
 
-		unsigned int n;
+		size_t n;
 		QC::SubAlgo::QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 	};
 

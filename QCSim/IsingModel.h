@@ -118,7 +118,7 @@ namespace Models {
 			return -energy;
 		}
 
-		void SetState(unsigned int state)
+		void SetState(size_t state)
 		{
 			for (size_t pos = 0; pos < spins.size(); ++pos)
 			{
@@ -127,20 +127,20 @@ namespace Models {
 			}
 		}
 
-		double Energy(unsigned int state)
+		double Energy(size_t state)
 		{
 			SetState(state);
 			return Energy();
 		}
 
-		unsigned int GetMinEnergyState()
+		size_t GetMinEnergyState()
 		{
-			unsigned int maxStates = 1 << spins.size();
+			size_t maxStates = 1 << spins.size();
 
 			double minEnergy = std::numeric_limits<double>::max();
-			unsigned int minState = 0;
+			size_t minState = 0;
 
-			for (unsigned int state = 0; state < maxStates; ++state)
+			for (size_t state = 0; state < maxStates; ++state)
 			{
 				const double stateEnergy = Energy(state);
 				if (minEnergy > stateEnergy)
@@ -153,15 +153,15 @@ namespace Models {
 			return minState;
 		}
 
-		std::set<unsigned int> GetMinEnergyStates()
+		std::set<size_t> GetMinEnergyStates()
 		{
-			std::set<unsigned int> res;
-			unsigned int maxStates = 1 << spins.size();
+			std::set<size_t> res;
+			size_t maxStates = 1 << spins.size();
 
 			double minEnergy = std::numeric_limits<double>::max();
-			unsigned int minState = 0;
+			size_t minState = 0;
 
-			for (unsigned int state = 0; state < maxStates; ++state)
+			for (size_t state = 0; state < maxStates; ++state)
 			{
 				const double stateEnergy = Energy(state);
 
@@ -217,7 +217,7 @@ namespace Models {
 	public:
 		using RegisterClass = QC::QubitRegister<VectorClass, MatrixClass>;
 
-		unsigned int Execute(RegisterClass& reg) override
+		size_t Execute(RegisterClass& reg) override
 		{
 			double Eold = std::numeric_limits<double>::max();
 			double Emin = Eold;
@@ -259,7 +259,7 @@ namespace Models {
 			auto res = reg.RepeatedMeasure(nrMeasurements);
 
 			Emin = std::numeric_limits<double>::max();
-			unsigned int state = 0;
+			size_t state = 0;
 			for (const auto& r : res)
 			{
 				E = Energy(r.first) * static_cast<double>(r.second) / nrMeasurements;
@@ -324,22 +324,22 @@ namespace Models {
 			return model.Energy();
 		}
 
-		void SetState(unsigned int state)
+		void SetState(size_t state)
 		{
 			model.SetState(state);
 		}
 
-		double Energy(unsigned int state)
+		double Energy(size_t state)
 		{
 			return model.Energy(state);
 		}
 
-		unsigned int GetMinEnergyState()
+		size_t GetMinEnergyState()
 		{
 			return model.GetMinEnergyState();
 		}
 
-		std::set<unsigned int> GetMinEnergyStates()
+		std::set<size_t> GetMinEnergyStates()
 		{
 			return model.GetMinEnergyStates();
 		}
@@ -398,12 +398,12 @@ namespace Models {
 			betaStart[index] = beta;
 		}
 
-		unsigned int GetP() const
+		size_t GetP() const
 		{
 			return gammaStart.size();
 		}
 
-		void SetP(unsigned int p)
+		void SetP(size_t p)
 		{
 			if (p < 1) return;
 
@@ -484,7 +484,7 @@ namespace Models {
 	protected:
 		void ApplyHadamardOnAll(RegisterClass& reg)
 		{
-			for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
 				reg.ApplyGate(h, q);
 		}
 
@@ -497,8 +497,8 @@ namespace Models {
 			for (const auto& site : neighbors)
 				for (const auto& n : site.second)
 				{
-					const unsigned int q1 = site.first;
-					const unsigned int q2 = n;
+					const size_t q1 = site.first;
+					const size_t q2 = n;
 					const auto& J = interactions.find({ q1, q2 });
 					if (J != interactions.end())
 					{
@@ -515,7 +515,7 @@ namespace Models {
 				}
 
 			// on site
-			for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
 			{
 				const double hval = model.GetH(q);
 
@@ -535,7 +535,7 @@ namespace Models {
 			const double twobeta = 2 * beta;
 			rx.SetTheta(twobeta);
 
-			for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
+			for (size_t q = 0; q < reg.getNrQubits(); ++q)
 				reg.ApplyGate(rx, q);
 
 			
@@ -543,12 +543,12 @@ namespace Models {
 			{
 				ry.SetTheta(twobeta);
 
-				unsigned int lastQubit = reg.getNrQubits() - 1;
-				for (unsigned int q = 0; q < lastQubit; ++q)
+				size_t lastQubit = reg.getNrQubits() - 1;
+				for (size_t q = 0; q < lastQubit; ++q)
 					reg.ApplyGate(cnot, q + 1, q);
 				reg.ApplyGate(cnot, 0, lastQubit);
 
-				for (unsigned int q = 0; q < reg.getNrQubits(); ++q)
+				for (size_t q = 0; q < reg.getNrQubits(); ++q)
 					reg.ApplyGate(ry, q);
 			}
 		}
@@ -559,14 +559,14 @@ namespace Models {
 			reg.setToBasisState(0);
 			ApplyHadamardOnAll(reg);
 
-			for (unsigned int i = 0; i < gamma.size(); ++i)
+			for (size_t i = 0; i < gamma.size(); ++i)
 			{
 				ApplyIsingOperator(reg, gamma[i]);
 				ApplyMixingOperator(reg, beta[i], betterMixing);
 			}
 		}
 
-		double EnergyExpectationValue(RegisterClass& reg, unsigned int nrShots = 100000)
+		double EnergyExpectationValue(RegisterClass& reg, size_t nrShots = 100000)
 		{
 			double energy = 0;
 
@@ -577,7 +577,7 @@ namespace Models {
 			return energy;
 		}
 
-		std::pair<std::vector<double>, std::vector<double>> GradientDescentStep(RegisterClass& reg, std::vector<double>& gamma, std::vector<double>& beta, double eps = 0.0002, double alpha = 0.0001, unsigned int nrShots = 100000)
+		std::pair<std::vector<double>, std::vector<double>> GradientDescentStep(RegisterClass& reg, std::vector<double>& gamma, std::vector<double>& beta, double eps = 0.0002, double alpha = 0.0001, size_t nrShots = 100000)
 		{
 			const double twoEps = 2. * eps;
 
@@ -660,7 +660,7 @@ namespace Models {
 
 		double epsilon = 0.001;
 		double stepSize = 0.0005;
-		unsigned int nrMeasurements = 100000;
+		size_t nrMeasurements = 100000;
 		bool betterMixing = false;
 	};
 

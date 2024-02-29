@@ -17,14 +17,14 @@ namespace Grover {
 		public QC::Gates::QuantumGate<MatrixClass>
 	{
 	public:
-		void setCorrectQuestionState(unsigned int state)
+		void setCorrectQuestionState(size_t state)
 		{
 			correctQuestionState = state;
 		}
 
-		MatrixClass getOperatorMatrix(unsigned int nrQubits, unsigned int qubit = 0, unsigned int controllingQubit1 = 0, unsigned int controllingQubit2 = 0) const override
+		MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 		{
-			const unsigned int nrBasisStates = 1u << nrQubits;
+			const size_t nrBasisStates = 1u << nrQubits;
 			MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
 
 			if (correctQuestionState < nrBasisStates)
@@ -36,7 +36,7 @@ namespace Grover {
 		}
 
 	protected:
-		unsigned int correctQuestionState = 0;
+		size_t correctQuestionState = 0;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class GroverAlgorithm :
@@ -45,7 +45,7 @@ namespace Grover {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		GroverAlgorithm(unsigned int N = 3, int addseed = 0)
+		GroverAlgorithm(size_t N = 3, int addseed = 0)
 			: BaseClass(N, addseed)
 		{
 			assert(N >= 1);
@@ -57,21 +57,21 @@ namespace Grover {
 			setCorrectQuestionState(0);
 		}
 
-		void setCorrectQuestionState(unsigned int state)
+		void setCorrectQuestionState(size_t state)
 		{
 			Oracle<MatrixClass> o;
 			o.setCorrectQuestionState(state);
 			OracleOp = o.getOperatorMatrix(BaseClass::getNrQubits());
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure();
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 
@@ -90,9 +90,9 @@ namespace Grover {
 		{
 			Init();
 
-			const unsigned int repeatNo = static_cast<unsigned int>(round(M_PI / 4. * sqrt(BaseClass::getNrBasisStates())));
+			const size_t repeatNo = static_cast<size_t>(round(M_PI / 4. * sqrt(BaseClass::getNrBasisStates())));
 
-			for (unsigned int i = 0; i < repeatNo; ++i)
+			for (size_t i = 0; i < repeatNo; ++i)
 			{
 				BaseClass::ApplyOperatorMatrix(OracleOp);
 				ApplyDiffusionOperator();
@@ -101,7 +101,7 @@ namespace Grover {
 
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int i = 0; i < BaseClass::getNrQubits(); ++i)
+			for (size_t i = 0; i < BaseClass::getNrQubits(); ++i)
 				BaseClass::ApplyGate(hadamard, i);
 		}
 
@@ -131,12 +131,12 @@ namespace Grover {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		GroverAlgorithmWithGatesOracle(unsigned int N = 3, int addseed = 0)
+		GroverAlgorithmWithGatesOracle(size_t N = 3, int addseed = 0)
 			: BaseClass(2 * N - 1, addseed), nControlledNOT(INT_MAX), correctQuestionState(0)
 		{
 			assert(N >= 1);
 
-			std::vector<unsigned int> controlQubits(N);
+			std::vector<size_t> controlQubits(N);
 			std::iota(controlQubits.begin(), controlQubits.end(), 0);
 
 			nControlledNOT.SetControlQubits(controlQubits);
@@ -144,28 +144,28 @@ namespace Grover {
 			nControlledNOT.SetStartAncillaQubits(N + 1);
 		}
 
-		void setCorrectQuestionState(unsigned int state)
+		void setCorrectQuestionState(size_t state)
 		{
 			correctQuestionState = state;
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::Measure(0, getAlgoQubits() - 1);
 		}
 
-		std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(unsigned int nrMeasurements = 10000)
+		std::map<size_t, size_t> ExecuteWithMultipleMeasurements(size_t nrMeasurements = 10000)
 		{
 			ExecuteWithoutMeasurement();
 
 			return BaseClass::RepeatedMeasure(0, getAlgoQubits() - 1, nrMeasurements);
 		}
 
-		unsigned int getAlgoQubits() const
+		size_t getAlgoQubits() const
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
+			const size_t nrQubits = BaseClass::getNrQubits();
 
 			return (nrQubits + 1) / 2;
 		}
@@ -182,11 +182,11 @@ namespace Grover {
 		{
 			Init();
 
-			const unsigned int nrQubits = getAlgoQubits();
-			const unsigned int nrBasisStates = 1u << nrQubits;
-			const unsigned int repeatNo = static_cast<unsigned int>(round(M_PI / 4. * sqrt(nrBasisStates)));
+			const size_t nrQubits = getAlgoQubits();
+			const size_t nrBasisStates = 1u << nrQubits;
+			const size_t repeatNo = static_cast<size_t>(round(M_PI / 4. * sqrt(nrBasisStates)));
 
-			for (unsigned int i = 0; i < repeatNo; ++i)
+			for (size_t i = 0; i < repeatNo; ++i)
 			{
 				ApplyOracle(correctQuestionState);
 				ApplyDiffusionOperator();
@@ -195,7 +195,7 @@ namespace Grover {
 
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int i = 0; i < getAlgoQubits(); ++i)
+			for (size_t i = 0; i < getAlgoQubits(); ++i)
 				BaseClass::ApplyGate(hadamard, i);
 		}
 
@@ -206,14 +206,14 @@ namespace Grover {
 			ApplyHadamardOnAllQubits();
 		}
 
-		void ApplyOracle(unsigned int state = 0)
+		void ApplyOracle(size_t state = 0)
 		{
-			const unsigned int nrQubits = getAlgoQubits();
+			const size_t nrQubits = getAlgoQubits();
 
 			BaseClass::ApplyGate(hadamard, nrQubits);
 			
-			unsigned int v = state;
-			for (unsigned int q = 0; q < nrQubits; ++q)
+			size_t v = state;
+			for (size_t q = 0; q < nrQubits; ++q)
 			{
 				if ((v & 1) == 0)
 					BaseClass::ApplyGate(x, q);
@@ -224,7 +224,7 @@ namespace Grover {
 			nControlledNOT.Execute(BaseClass::reg);
 	
 			v = state;
-			for (unsigned int q = 0; q < nrQubits; ++q)
+			for (size_t q = 0; q < nrQubits; ++q)
 			{
 				if ((v & 1) == 0)
 					BaseClass::ApplyGate(x, q);
@@ -238,7 +238,7 @@ namespace Grover {
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
 		QC::SubAlgo::NControlledNotWithAncilla<VectorClass, MatrixClass> nControlledNOT;
 		QC::Gates::PauliXGate<MatrixClass> x;
-		unsigned int correctQuestionState;
+		size_t correctQuestionState;
 	};
 
 }

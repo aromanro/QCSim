@@ -22,7 +22,7 @@ namespace Distributed {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DistributedCU(unsigned int nrQubits = 4, unsigned int ctrlq = 0, unsigned int targetq = 3, unsigned int entq1 = 1, unsigned int entq2 = 2, int addseed = 0)
+		DistributedCU(size_t nrQubits = 4, size_t ctrlq = 0, size_t targetq = 3, size_t entq1 = 1, size_t entq2 = 2, int addseed = 0)
 			: BaseClass(nrQubits, addseed), ctrlQubit(ctrlq), targetQubit(targetq), entQubit1(entq1), entQubit2(entq2)
 		{
 			BaseClass::setToBasisState(0);
@@ -30,7 +30,7 @@ namespace Distributed {
 
 
 		// could be implemented using subalgorithms, see CatEntangler, CatDisentangler and GeneralizedEntanglingGate
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			// the two gates make up an 'entangling gate', sometimes noted by E or E2
 			BaseClass::ApplyGate(hadamard, entQubit1);
@@ -40,7 +40,7 @@ namespace Distributed {
 
 			BaseClass::ApplyGate(cnot, entQubit1, ctrlQubit);
 
-			const unsigned int qubit1measurement = BaseClass::Measure(entQubit1); // measured and sent to the other
+			const size_t qubit1measurement = BaseClass::Measure(entQubit1); // measured and sent to the other
 			if (qubit1measurement) // the other applies x conditionally on the received measurement
 				BaseClass::ApplyGate(x, entQubit2);
 
@@ -50,7 +50,7 @@ namespace Distributed {
 			// cat-disentangler follows
 			BaseClass::ApplyGate(hadamard, entQubit2);
 
-			const unsigned int qubit2measurement = BaseClass::Measure(entQubit2); // measured and sent to the other
+			const size_t qubit2measurement = BaseClass::Measure(entQubit2); // measured and sent to the other
 			if (qubit2measurement) // the other applies z conditionally on the received measurement
 				BaseClass::ApplyGate(z, ctrlQubit);
 
@@ -59,10 +59,10 @@ namespace Distributed {
 		}
 
 	protected:
-		unsigned int ctrlQubit;
-		unsigned int targetQubit;
-		unsigned int entQubit1;
-		unsigned int entQubit2;
+		size_t ctrlQubit;
+		size_t targetQubit;
+		size_t entQubit1;
+		size_t entQubit2;
 		QC::Gates::CNOTGate<MatrixClass> cnot;
 		ControlledUClass cU;
 		QC::Gates::HadamardGate<MatrixClass> hadamard;

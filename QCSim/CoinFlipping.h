@@ -26,7 +26,7 @@ namespace Games {
 			rng.seed(seed);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			BaseClass::setToBasisState(0);
 

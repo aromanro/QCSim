@@ -10,7 +10,7 @@ namespace QC {
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
-		QuantumAlgorithm(unsigned int N = 3, int addseed = 0)
+		QuantumAlgorithm(size_t N = 3, int addseed = 0)
 			: reg(N, addseed)
 		{
 			assert(N > 0);
@@ -18,27 +18,27 @@ namespace QC {
 
 		virtual ~QuantumAlgorithm() {};
 
-		virtual unsigned int Execute() = 0;
+		virtual size_t Execute() = 0;
 
-		unsigned int getNrQubits() const { return reg.getNrQubits(); };
-		unsigned int getNrBasisStates() const { return reg.getNrBasisStates(); };
+		size_t getNrQubits() const { return reg.getNrQubits(); };
+		size_t getNrBasisStates() const { return reg.getNrBasisStates(); };
 
-		std::complex<double> getBasisStateAmplitude(unsigned int State) const
+		std::complex<double> getBasisStateAmplitude(size_t State) const
 		{
 			return reg.getBasisStateAmplitude(State);
 		}
 
-		double getBasisStateProbability(unsigned int State) const
+		double getBasisStateProbability(size_t State) const
 		{
 			return reg.getBasisStateProbability(State);
 		}
 
-		void setToBasisState(unsigned int State)
+		void setToBasisState(size_t State)
 		{
 			reg.setToBasisState(State);
 		}
 
-		void setToQubitState(unsigned int q)
+		void setToQubitState(size_t q)
 		{
 			reg.setToQubitState(q);
 		}
@@ -54,7 +54,7 @@ namespace QC {
 		}
 
 		// to be able to set them all, after setting them, call Normalize
-		void setRawAmplitude(unsigned int State, std::complex<double> val)
+		void setRawAmplitude(size_t State, std::complex<double> val)
 		{
 			reg.setRawAmplitude(State, val);
 		}
@@ -74,7 +74,7 @@ namespace QC {
 			reg.AdjustPhaseAndNormalize();
 		}
 
-		static unsigned int getQubitState(unsigned int q)
+		static size_t getQubitState(size_t q)
 		{
 			return 1u << q;
 		}
@@ -94,7 +94,7 @@ namespace QC {
 			reg.setRegisterStorage(vals);
 		}
 
-		void ApplyGate(const GateClass& gate, unsigned int qubit, unsigned int controllingQubit = 0, unsigned int controllingQubit2 = 0)
+		void ApplyGate(const GateClass& gate, size_t qubit, size_t controllingQubit = 0, size_t controllingQubit2 = 0)
 		{
 			reg.ApplyGate(gate, qubit, controllingQubit, controllingQubit2);
 		}
@@ -114,27 +114,27 @@ namespace QC {
 			reg.ApplyOperatorMatrix(m);
 		}
 
-		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int nrTimes = 1000)
+		std::map<size_t, size_t> RepeatedMeasure(size_t nrTimes = 1000)
 		{
 			return reg.RepeatedMeasure(nrTimes);
 		}
 
-		std::map<unsigned int, unsigned int> RepeatedMeasure(unsigned int firstQubit, unsigned int secondQubit, unsigned int nrTimes = 1000)
+		std::map<size_t, size_t> RepeatedMeasure(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
 		{
 			return reg.RepeatedMeasure(firstQubit, secondQubit, nrTimes);
 		}
 
-		unsigned int Measure()
+		size_t Measure()
 		{
 			return reg.MeasureAll();
 		}
 
-		unsigned int Measure(unsigned int qubit)
+		size_t Measure(size_t qubit)
 		{
 			return reg.MeasureQubit(qubit);
 		}
 		
-		unsigned int Measure(unsigned int firstQubit, unsigned int secondQubit)
+		size_t Measure(size_t firstQubit, size_t secondQubit)
 		{
 			return reg.Measure(firstQubit, secondQubit);
 		}
@@ -149,15 +149,15 @@ namespace QC {
 		{
 			std::complex<double> v = abs(regVals[0]) > 1E-5 ? regVals[0] : std::complex<double>(1, 0);
 			std::complex<double> accum(0, 0);
-			const unsigned int nrBasisStates = static_cast<unsigned int>(regVals.size());
-			for (unsigned int i = 0; i < nrBasisStates; ++i)
+			const size_t nrBasisStates = static_cast<size_t>(regVals.size());
+			for (size_t i = 0; i < nrBasisStates; ++i)
 			{
 				regVals[i] /= v;
 
 				accum += norm(regVals[i]);
 			}
 			const double norm = 1. / sqrt(accum.real());
-			for (unsigned int i = 0; i < nrBasisStates; ++i)
+			for (size_t i = 0; i < nrBasisStates; ++i)
 				regVals[i] *= norm;
 		}
 
@@ -216,7 +216,7 @@ namespace QC {
 		
 		virtual ~QuantumSubAlgorithm() {};
 
-		virtual unsigned int Execute(RegisterClass& reg) = 0;
+		virtual size_t Execute(RegisterClass& reg) = 0;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithmOnSubregister : public QuantumSubAlgorithm<VectorClass, MatrixClass>
@@ -225,17 +225,17 @@ namespace QC {
 		using BaseClass = QuantumSubAlgorithm<VectorClass, MatrixClass>;
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-		QuantumSubAlgorithmOnSubregister(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+		QuantumSubAlgorithmOnSubregister(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX)
 			: sQubit(startQubit), eQubit(std::max(startQubit, std::min(N - 1, endQubit)))
 		{
 		}
 
-		unsigned int getStartQubit() const { return sQubit; };
-		unsigned int getEndQubit() const { return eQubit; };
+		size_t getStartQubit() const { return sQubit; };
+		size_t getEndQubit() const { return eQubit; };
 
 	protected:
-		unsigned int sQubit;
-		unsigned int eQubit;
+		size_t sQubit;
+		size_t eQubit;
 	};
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumSubAlgorithmOnSubregisterWithAncilla : public QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>
@@ -244,14 +244,14 @@ namespace QC {
 		using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-		QuantumSubAlgorithmOnSubregisterWithAncilla(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX, unsigned int startAncila = INT_MAX)
+		QuantumSubAlgorithmOnSubregisterWithAncilla(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX, size_t startAncila = INT_MAX)
 			: BaseClass(N, startQubit, endQubit), sAncilla(startAncila)
 		{
 		}
 
-		unsigned int getStartAncilla() const { return sAncilla; };
+		size_t getStartAncilla() const { return sAncilla; };
 
 	protected:
-		unsigned int sAncilla;
+		size_t sAncilla;
 	};
 }

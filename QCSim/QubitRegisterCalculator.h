@@ -34,25 +34,25 @@ namespace QC {
 		QubitRegisterCalculator() = default;
 		virtual ~QubitRegisterCalculator() = default;
 
-		static inline void ApplyOneQubitGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int NrBasisStates)
+		static inline void ApplyOneQubitGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t NrBasisStates)
 		{
-			const unsigned int notQubitBit = ~qubitBit;
+			const size_t notQubitBit = ~qubitBit;
 
 			if (gate.isDiagonal())
 			{
-				for (unsigned int state = 0; state < NrBasisStates; ++state)
+				for (size_t state = 0; state < NrBasisStates; ++state)
 					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 1) * registerStorage(state | qubitBit) : gateMatrix(0, 0) * registerStorage(state & notQubitBit);
 			}
 			else if (gate.isAntidiagonal())
 			{
-				for (unsigned int state = 0; state < NrBasisStates; ++state)
+				for (size_t state = 0; state < NrBasisStates; ++state)
 					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 0) * registerStorage(state & notQubitBit) : gateMatrix(0, 1) * registerStorage(state | qubitBit);
 			}
 			else
 			{
-				for (unsigned int state = 0; state < NrBasisStates; ++state)
+				for (size_t state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = state & qubitBit ? 1 : 0;
+					const size_t row = state & qubitBit ? 1 : 0;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & notQubitBit) +
 						gateMatrix(row, 1) * registerStorage(state | qubitBit);
@@ -60,9 +60,9 @@ namespace QC {
 			}
 		}
 
-		static inline void ApplyOneQubitGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int NrBasisStates)
+		static inline void ApplyOneQubitGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t NrBasisStates)
 		{
-			const unsigned int notQubitBit = ~qubitBit;
+			const size_t notQubitBit = ~qubitBit;
 			const auto processor_count = GetNumberOfThreads();
 
 			if (gate.isDiagonal())
@@ -85,7 +85,7 @@ namespace QC {
 				//schedule(static, 8192)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = state & qubitBit ? 1 : 0;
+					const size_t row = state & qubitBit ? 1 : 0;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & notQubitBit) +
 						gateMatrix(row, 1) * registerStorage(state | qubitBit);
@@ -93,21 +93,21 @@ namespace QC {
 			}
 		}
 
-		static inline void ApplyTwoQubitsGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int ctrlQubitBit, const unsigned int NrBasisStates)
+		static inline void ApplyTwoQubitsGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
-			const unsigned int notQubitBit = ~qubitBit;
-			const unsigned int notCtrlQubitBit = ~ctrlQubitBit;
-			const unsigned int orqubits = qubitBit | ctrlQubitBit;
+			const size_t notQubitBit = ~qubitBit;
+			const size_t notCtrlQubitBit = ~ctrlQubitBit;
+			const size_t orqubits = qubitBit | ctrlQubitBit;
 
 			if (gate.isControlled())
 			{
-				for (unsigned int state = 0; state < ctrlQubitBit; ++state)
+				for (size_t state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
-				for (unsigned int state = ctrlQubitBit; state < NrBasisStates; ++state)
+				for (size_t state = ctrlQubitBit; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit; // ensure it's not computed twice
+					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit; // ensure it's not computed twice
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
 						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
@@ -117,10 +117,10 @@ namespace QC {
 			}
 			else
 			{
-				for (unsigned int state = 0; state < NrBasisStates; ++state)
+				for (size_t state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit; // ensure it's not computed twice
+					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit; // ensure it's not computed twice
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
 						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
@@ -130,11 +130,11 @@ namespace QC {
 			}
 		}
 
-		static inline void ApplyTwoQubitsGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int ctrlQubitBit, const unsigned int NrBasisStates)
+		static inline void ApplyTwoQubitsGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
-			const unsigned int notQubitBit = ~qubitBit;
-			const unsigned int notCtrlQubitBit = ~ctrlQubitBit;
-			const unsigned int orqubits = qubitBit | ctrlQubitBit;
+			const size_t notQubitBit = ~qubitBit;
+			const size_t notCtrlQubitBit = ~ctrlQubitBit;
+			const size_t orqubits = qubitBit | ctrlQubitBit;
 			const auto processor_count = GetNumberOfThreads();
 			
 			if (gate.isControlled())
@@ -148,8 +148,8 @@ namespace QC {
 				//schedule(static, 4096)
 				for (long long int state = ctrlQubitBit; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit; // ensure it's not computed twice
+					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit; // ensure it's not computed twice
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
 						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
@@ -163,8 +163,8 @@ namespace QC {
 				//schedule(static, 4096) 
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit; // ensure it's not computed twice
+					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit; // ensure it's not computed twice
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
 						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
@@ -174,31 +174,31 @@ namespace QC {
 			}
 		}
 
-		static inline void ApplyThreeQubitsGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int qubitBit2, const unsigned int ctrlQubitBit, const unsigned int NrBasisStates)
+		static inline void ApplyThreeQubitsGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
-			const unsigned int notQubitBit = ~qubitBit;
-			const unsigned int notCtrlQubitBit = ~ctrlQubitBit;
-			const unsigned int notQubitBit2 = ~qubitBit2;
-			const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
-			const unsigned int orqubits = qubitBit | qubitBit2;
-			const unsigned int orallqubits = qubitBit | ctrlqubits;
-			const unsigned int ctrlorqubit2 = ctrlQubitBit | qubitBit;
+			const size_t notQubitBit = ~qubitBit;
+			const size_t notCtrlQubitBit = ~ctrlQubitBit;
+			const size_t notQubitBit2 = ~qubitBit2;
+			const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
+			const size_t orqubits = qubitBit | qubitBit2;
+			const size_t orallqubits = qubitBit | ctrlqubits;
+			const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
 
 			if (gate.isControlled())
 			{
-				unsigned int limit = ctrlQubitBit;
+				size_t limit = ctrlQubitBit;
 				if (gate.isControlQubit(1))
 					limit = std::max(limit, qubitBit2);
 
-				for (unsigned int state = 0; state < limit; ++state)
+				for (size_t state = 0; state < limit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
-				for (unsigned int state = limit; state < NrBasisStates; ++state)
+				for (size_t state = limit; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit;
-					const unsigned int m2 = state & notQubitBit2;
-					const unsigned int mnctrlQubitBit = m & notCtrlQubitBit;
+					const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+					const size_t m2 = state & notQubitBit2;
+					const size_t mnctrlQubitBit = m & notCtrlQubitBit;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
 						gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
@@ -212,12 +212,12 @@ namespace QC {
 			}
 			else
 			{
-				for (unsigned int state = 0; state < NrBasisStates; ++state)
+				for (size_t state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit;
-					const unsigned int m2 = state & notQubitBit2;
-					const unsigned int mnctrlQubitBit = m & notCtrlQubitBit;
+					const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+					const size_t m2 = state & notQubitBit2;
+					const size_t mnctrlQubitBit = m & notCtrlQubitBit;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
 						gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
@@ -231,15 +231,15 @@ namespace QC {
 			}
 		}
 
-		static inline void ApplyThreeQubitsGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const unsigned int qubitBit, const unsigned int qubitBit2, const unsigned int ctrlQubitBit, const unsigned int NrBasisStates)
+		static inline void ApplyThreeQubitsGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
-			const unsigned int notQubitBit = ~qubitBit;
-			const unsigned int notCtrlQubitBit = ~ctrlQubitBit;
-			const unsigned int notQubitBit2 = ~qubitBit2;
-			const unsigned int ctrlqubits = ctrlQubitBit | qubitBit2;
-			const unsigned int orqubits = qubitBit | qubitBit2;
-			const unsigned int orallqubits = qubitBit | ctrlqubits;
-			const unsigned int ctrlorqubit2 = ctrlQubitBit | qubitBit;
+			const size_t notQubitBit = ~qubitBit;
+			const size_t notCtrlQubitBit = ~ctrlQubitBit;
+			const size_t notQubitBit2 = ~qubitBit2;
+			const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
+			const size_t orqubits = qubitBit | qubitBit2;
+			const size_t orallqubits = qubitBit | ctrlqubits;
+			const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
 			const auto processor_count = GetNumberOfThreads();
 
 			if (gate.isControlled())
@@ -256,10 +256,10 @@ namespace QC {
 				//schedule(static, 2048)
 				for (long long int state = limit; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit;
-					const unsigned int m2 = state & notQubitBit2;
-					const unsigned int mnctrlQubitBit = m & notCtrlQubitBit;
+					const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+					const size_t m2 = state & notQubitBit2;
+					const size_t mnctrlQubitBit = m & notCtrlQubitBit;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
 						gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
@@ -277,10 +277,10 @@ namespace QC {
 				//schedule(static, 2048)
 				for (long long int state = 0; state < NrBasisStates; ++state)
 				{
-					const unsigned int row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const unsigned int m = state & notQubitBit;
-					const unsigned int m2 = state & notQubitBit2;
-					const unsigned int mnctrlQubitBit = m & notCtrlQubitBit;
+					const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+					const size_t m2 = state & notQubitBit2;
+					const size_t mnctrlQubitBit = m & notCtrlQubitBit;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
 						gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
@@ -300,26 +300,26 @@ namespace QC {
 // 
 //*****************************************************************************************************************************************************************************************
 
-		static inline unsigned int MeasureQubit(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		static inline size_t MeasureQubit(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
 		{
 			double accum = 0;
 
-			const unsigned int measuredQubitMask = 1u << qubit;
+			const size_t measuredQubitMask = 1u << qubit;
 			
-			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			for (size_t state = 0; state < NrBasisStates; ++state)
 			{	
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
 			}
 
-			unsigned int measuredState = 0;
+			size_t measuredState = 0ULL;
 			if (prob <= accum)
-				measuredState = 1;
+				measuredState = 1ULL;
 
 			// find the norm
 			accum = 0;
-			const unsigned int measuredStateMask = measuredState << qubit;
-			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			const size_t measuredStateMask = measuredState << qubit;
+			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
 				if ((state & measuredQubitMask) == measuredStateMask)
 					accum += std::norm(registerStorage[state]);
@@ -328,18 +328,18 @@ namespace QC {
 
 			// collapse
 			
-			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			for (size_t state = 0; state < NrBasisStates; ++state)
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
 
 			return measuredState;
 		}
 
-		static inline unsigned int MeasureQubitOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		static inline size_t MeasureQubitOmp(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
 		{
 			double accum = 0;
 			const auto processor_count = GetNumberOfThreads();
 
-			const unsigned int measuredQubitMask = 1u << qubit;
+			const size_t measuredQubitMask = 1u << qubit;
 
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
 			for (long long state = 0; state < NrBasisStates; ++state)
@@ -348,14 +348,14 @@ namespace QC {
 					accum += std::norm(registerStorage[state]);
 			}
 
-			unsigned int measuredState = 0;
+			size_t measuredState = 0;
 			if (prob <= accum)
 				measuredState = 1;
 
 			// find the norm
 			accum = 0;
 
-			const unsigned int measuredStateMask = measuredState << qubit;
+			const size_t measuredStateMask = measuredState << qubit;
 
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) 			
 			for (long long state = 0; state < NrBasisStates; ++state)
@@ -373,31 +373,31 @@ namespace QC {
 			return measuredState;
 		}
 
-		static inline unsigned int MeasureQubitNoCollapse(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		static inline size_t MeasureQubitNoCollapse(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
 		{
 			double accum = 0;
 
-			const unsigned int measuredQubitMask = 1u << qubit;
+			const size_t measuredQubitMask = 1u << qubit;
 
-			for (unsigned int state = 0; state < NrBasisStates; ++state)
+			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
 			}
 
-			unsigned int measuredState = 0;
+			size_t measuredState = 0;
 			if (prob <= accum)
 				measuredState = 1;
 
 			return measuredState;
 		}
 
-		static inline unsigned int MeasureQubitNoCollapseOmp(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int qubit, const double prob)
+		static inline size_t MeasureQubitNoCollapseOmp(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
 		{
 			double accum = 0;
 			const auto processor_count = GetNumberOfThreads();
 
-			const unsigned int measuredQubitMask = 1u << qubit;
+			const size_t measuredQubitMask = 1ULL << qubit;
 
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
 			for (long long state = 0; state < NrBasisStates; ++state)
@@ -406,7 +406,7 @@ namespace QC {
 					accum += std::norm(registerStorage[state]);
 			}
 
-			unsigned int measuredState = 0;
+			size_t measuredState = 0;
 			if (prob <= accum)
 				measuredState = 1;
 
@@ -416,31 +416,31 @@ namespace QC {
 
 		// TODO: the following are awful, there might be a better way to optimize this based on cache locality
 		// see the above that implement a single qubit measurement
-		static inline unsigned int Measure(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
+		static inline size_t Measure(size_t NrBasisStates, VectorClass& registerStorage, size_t firstQubit, size_t secondQubit, const double prob)
 		{
 			double accum = 0;
 
-			const unsigned int secondQubitp1 = secondQubit + 1;
+			const size_t secondQubitp1 = secondQubit + 1;
 
-			const unsigned int firstPartMask = (1u << firstQubit) - 1;
-			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
-			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+			const size_t firstPartMask = (1u << firstQubit) - 1;
+			const size_t measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
-			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
-			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+			const size_t secondPartMax = secondPartMask >> secondQubitp1;
+			const size_t maxMeasuredState = measuredPartMask >> firstQubit;
 
-			unsigned int measuredState = maxMeasuredState;
+			size_t measuredState = maxMeasuredState;
 
 			double norm = 1;
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			for (size_t state = 0; state <= maxMeasuredState; ++state)
 			{
-				const unsigned int stateRegBits = state << firstQubit;
+				const size_t stateRegBits = state << firstQubit;
 				double stateProbability = 0;
 
-				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 				{
-					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+					const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+					for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
 				}
 
@@ -454,25 +454,25 @@ namespace QC {
 			}
 
 			// collapse
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			for (size_t state = 0; state <= maxMeasuredState; ++state)
 			{
-				const unsigned int stateRegBits = state << firstQubit;
+				const size_t stateRegBits = state << firstQubit;
 
 				if (state == measuredState)
 				{
-					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+					for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 					{
-						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+						for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 							registerStorage[secondPart | firstPartBits] *= norm;
 					}
 				}
 				else
 				{
-					for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+					for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 					{
-						const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+						const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+						for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 							registerStorage[secondPart | firstPartBits] = 0;
 					}
 				}
@@ -482,29 +482,29 @@ namespace QC {
 			return measuredState;
 		}
 
-		static inline unsigned int MeasureNoCollapse(unsigned int NrBasisStates, VectorClass& registerStorage, unsigned int firstQubit, unsigned int secondQubit, const double prob)
+		static inline size_t MeasureNoCollapse(size_t NrBasisStates, VectorClass& registerStorage, size_t firstQubit, size_t secondQubit, const double prob)
 		{
 			double accum = 0;
 
-			const unsigned int secondQubitp1 = secondQubit + 1;
+			const size_t secondQubitp1 = secondQubit + 1;
 
-			const unsigned int firstPartMask = (1u << firstQubit) - 1;
-			const unsigned int measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
-			const unsigned int secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+			const size_t firstPartMask = (1u << firstQubit) - 1;
+			const size_t measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
-			const unsigned int secondPartMax = secondPartMask >> secondQubitp1;
-			const unsigned int maxMeasuredState = measuredPartMask >> firstQubit;
+			const size_t secondPartMax = secondPartMask >> secondQubitp1;
+			const size_t maxMeasuredState = measuredPartMask >> firstQubit;
 
-			unsigned int measuredState = maxMeasuredState;
-			for (unsigned int state = 0; state <= maxMeasuredState; ++state)
+			size_t measuredState = maxMeasuredState;
+			for (size_t state = 0; state <= maxMeasuredState; ++state)
 			{
-				const unsigned int stateRegBits = state << firstQubit;
+				const size_t stateRegBits = state << firstQubit;
 				double stateProbability = 0;
 
-				for (unsigned int secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
+				for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
 				{
-					const unsigned int secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (unsigned int firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
+					const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
+					for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
 						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
 				}
 
@@ -524,6 +524,11 @@ namespace QC {
 			const size_t threads = std::thread::hardware_concurrency();
 			return static_cast<int>(threads ? threads : GetCpuInfoNrThreads());
 		}
+
+
+		constexpr static size_t OneQubitOmpLimit = 2048;
+		constexpr static size_t TwoQubitOmpLimit = OneQubitOmpLimit / 2;
+		constexpr static size_t ThreeQubitOmpLimit = TwoQubitOmpLimit / 2;
 
 	private:
 		static size_t GetCpuInfoNrThreads()

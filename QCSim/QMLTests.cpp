@@ -33,10 +33,10 @@ bool QMeansClustering2DTests()
 {
 	std::cout << "\nTesting Q-Means clustering..." << std::endl;
 
-	const unsigned int nrMeasurements = 1000000;
+	const size_t nrMeasurements = 1000000;
 
-	unsigned int k = 3;
-	unsigned int pointsPerCluster = 15;
+	size_t k = 3;
+	size_t pointsPerCluster = 15;
 
 	std::vector<MachineLearning::QMeansClustering2D<>::DataPoint> origCentroids(k);
 	origCentroids[0].x = 0;
@@ -53,9 +53,9 @@ bool QMeansClustering2DTests()
 
 	std::uniform_real_distribution<> dist(-1.5, 1.5);
 
-	for (unsigned int c = 0; c < k; ++c)
+	for (size_t c = 0; c < k; ++c)
 	{
-		for (unsigned int j = 0; j < pointsPerCluster; ++j)
+		for (size_t j = 0; j < pointsPerCluster; ++j)
 		{
 			MachineLearning::QMeansClustering2D<>::DataPoint p;
 			p.x = origCentroids[c].x + dist(gen);

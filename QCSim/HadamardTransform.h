@@ -12,12 +12,12 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			OneQubitGateTransform(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			OneQubitGateTransform(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				ApplyHadamardOnAllQubits(reg);
 
@@ -27,7 +27,7 @@ namespace QC {
 		protected:
 			void ApplyHadamardOnAllQubits(RegisterClass& reg) const
 			{
-				for (unsigned int q = BaseClass::getStartQubit(); q <= BaseClass::getEndQubit(); ++q)
+				for (size_t q = BaseClass::getStartQubit(); q <= BaseClass::getEndQubit(); ++q)
 					reg.ApplyGate(gate, q);
 			}
 

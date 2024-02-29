@@ -19,14 +19,14 @@ namespace DeutschJozsa {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DeutschJozsaAlgorithm(unsigned int N = 2, int addseed = 0)
+		DeutschJozsaAlgorithm(size_t N = 2, int addseed = 0)
 			: BaseClass(N, addseed),
 			functionType(FunctionType::constantZero)
 		{
 			assert(N >= 2);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Init();
 
@@ -37,9 +37,9 @@ namespace DeutschJozsa {
 			return BaseClass::Measure();
 		}
 
-		bool WasConstantResult(unsigned int state) const
+		bool WasConstantResult(size_t state) const
 		{
-			const unsigned int xmask = (BaseClass::getNrBasisStates() - 1) >> 1;
+			const size_t xmask = (BaseClass::getNrBasisStates() - 1) >> 1;
 
 			return (state & xmask) == 0;
 		}
@@ -57,16 +57,16 @@ namespace DeutschJozsa {
 
 			if (functionType == FunctionType::balanced)
 			{
-				const unsigned int funcSize = BaseClass::getNrBasisStates() >> 1;
+				const size_t funcSize = BaseClass::getNrBasisStates() >> 1;
 				fvalues.resize(funcSize);
-				const unsigned int nrOnes = funcSize >> 1;
-				for (unsigned int i = 0; i < nrOnes; ++i)
+				const size_t nrOnes = funcSize >> 1;
+				for (size_t i = 0; i < nrOnes; ++i)
 					fvalues[i] = true;
-				for (unsigned int i = nrOnes; i < funcSize; ++i)
+				for (size_t i = nrOnes; i < funcSize; ++i)
 					fvalues[i] = false;
 
 				const unsigned long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
-				auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
+				auto rng = std::default_random_engine(static_cast<size_t>(seed));
 				std::shuffle(fvalues.begin(), fvalues.end(), rng);
 			}
 			else fvalues.clear();
@@ -85,20 +85,20 @@ namespace DeutschJozsa {
 
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int q = 0; q < BaseClass::getNrQubits(); ++q)
+			for (size_t q = 0; q < BaseClass::getNrQubits(); ++q)
 				BaseClass::ApplyGate(hadamard, q);
 		}
 
 		void ApplyHadamardOnAllQubitsExceptLast()
 		{
-			const unsigned int limit = BaseClass::getNrQubits() - 1;
-			for (unsigned int q = 0; q < limit; ++q)
+			const size_t limit = BaseClass::getNrQubits() - 1;
+			for (size_t q = 0; q < limit; ++q)
 				BaseClass::ApplyGate(hadamard, q);
 		}
 
 		void ApplyOracle()
 		{
-			const unsigned int nrBasisStates = BaseClass::getNrBasisStates();
+			const size_t nrBasisStates = BaseClass::getNrBasisStates();
 			MatrixClass U = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
 			// we have U |y>|x> = |y + f(x)> |x>
@@ -107,15 +107,15 @@ namespace DeutschJozsa {
 			// <x1|<y1| U |y2>|x2> = <x1|x2><y1|y2+f(x2)>
 			// + is modulo 2 addition
 
-			const unsigned int mask = nrBasisStates - 1;
-			const unsigned int xmask = mask >> 1;
-			const unsigned int ymask = nrBasisStates >> 1;
+			const size_t mask = nrBasisStates - 1;
+			const size_t xmask = mask >> 1;
+			const size_t ymask = nrBasisStates >> 1;
 
-			for (unsigned int stateBra = 0; stateBra < nrBasisStates; ++stateBra)
-				for (unsigned int stateKet = 0; stateKet < nrBasisStates; ++stateKet)
+			for (size_t stateBra = 0; stateBra < nrBasisStates; ++stateBra)
+				for (size_t stateKet = 0; stateKet < nrBasisStates; ++stateKet)
 				{
-					const unsigned int xval = (stateBra & xmask);
-					const unsigned int yval = (stateBra & ymask) ? 1 : 0;
+					const size_t xval = (stateBra & xmask);
+					const size_t yval = (stateBra & ymask) ? 1 : 0;
 
 					// the operator is sumi sumj |i><j|, so line corresponds to ket and column to bra 
 					U(stateKet, stateBra) = ((stateKet & ymask) ? 1U : 0U) == (f(xval) + yval) % 2 && xval == (stateKet & xmask);
@@ -126,7 +126,7 @@ namespace DeutschJozsa {
 			BaseClass::ApplyOperatorMatrix(U);
 		}
 
-		unsigned int f(unsigned int xstate) const
+		size_t f(size_t xstate) const
 		{
 			if (functionType == FunctionType::constantZero) return 0;
 			else if (functionType == FunctionType::constantOne) return 1;
@@ -155,14 +155,14 @@ namespace DeutschJozsa {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DeutschJozsaAlgorithmWithGatesOracle(unsigned int N = 2, int addseed = 0)
+		DeutschJozsaAlgorithmWithGatesOracle(size_t N = 2, int addseed = 0)
 			: BaseClass(N == 2 ? 2 : 2 * N - 3, addseed), oracle(N == 2 ? 2 : 2 * N - 3, 0, N - 2, N - 1, N)
 			
 		{
 			assert(N >= 2);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Init();
 
@@ -173,9 +173,9 @@ namespace DeutschJozsa {
 			return BaseClass::Measure(0, getAlgoQubits() - 2);
 		}
 
-		bool WasConstantResult(unsigned int state) const
+		bool WasConstantResult(size_t state) const
 		{
-			const unsigned int xmask = (getAlgoNrBasisStates() - 1) >> 1;
+			const size_t xmask = (getAlgoNrBasisStates() - 1) >> 1;
 
 			return (state & xmask) == 0;
 		}
@@ -193,28 +193,28 @@ namespace DeutschJozsa {
 		public:
 			DeutschJozsaFunction() : functionType(FunctionType::constantZero) {}
 
-			bool operator()(unsigned int state) const
+			bool operator()(size_t state) const
 			{
 				if (functionType != FunctionType::balanced) return false;
 				
 				return fvalues[state];
 			}
 
-			void setFunction(FunctionType ft, unsigned int funcSize)
+			void setFunction(FunctionType ft, size_t funcSize)
 			{
 				functionType = ft;
 
 				if (functionType == FunctionType::balanced)
 				{
 					fvalues.resize(funcSize);
-					const unsigned int nrOnes = funcSize >> 1;
-					for (unsigned int i = 0; i < nrOnes; ++i)
+					const size_t nrOnes = funcSize >> 1;
+					for (size_t i = 0; i < nrOnes; ++i)
 						fvalues[i] = true;
-					for (unsigned int i = nrOnes; i < funcSize; ++i)
+					for (size_t i = nrOnes; i < funcSize; ++i)
 						fvalues[i] = false;
 
 					const unsigned long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
-					auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
+					auto rng = std::default_random_engine(static_cast<size_t>(seed));
 					std::shuffle(fvalues.begin(), fvalues.end(), rng);
 				}
 				else fvalues.clear();
@@ -236,15 +236,15 @@ namespace DeutschJozsa {
 			oracle.setFunction(func);
 		}
 
-		unsigned int getAlgoQubits() const
+		size_t getAlgoQubits() const
 		{
-			const unsigned int nrQubits = BaseClass::getNrQubits();
+			const size_t nrQubits = BaseClass::getNrQubits();
 			if (nrQubits == 2) return 2;
 
 			return (nrQubits + 3) / 2;
 		}
 
-		unsigned int getAlgoNrBasisStates() const
+		size_t getAlgoNrBasisStates() const
 		{
 			return 1u << getAlgoQubits();
 		}
@@ -261,14 +261,14 @@ namespace DeutschJozsa {
 		// not on the ancilla ones used for the n controlled not, though
 		void ApplyHadamardOnAllQubits()
 		{
-			for (unsigned int q = 0; q < getAlgoQubits(); ++q)
+			for (size_t q = 0; q < getAlgoQubits(); ++q)
 				BaseClass::ApplyGate(hadamard, q);
 		}
 
 		void ApplyHadamardOnAllQubitsExceptLast()
 		{
-			const unsigned int limit = getAlgoQubits() - 1;
-			for (unsigned int q = 0; q < limit; ++q)
+			const size_t limit = getAlgoQubits() - 1;
+			for (size_t q = 0; q < limit; ++q)
 				BaseClass::ApplyGate(hadamard, q);
 		}
 

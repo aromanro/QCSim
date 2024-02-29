@@ -18,23 +18,23 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			CatDisentangler(unsigned int N, unsigned int restoredQubit = 0, unsigned int startQubit = 1, unsigned int endQubit = INT_MAX)
+			CatDisentangler(size_t N, size_t restoredQubit = 0, size_t startQubit = 1, size_t endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit), rQubit(restoredQubit)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
-				const unsigned int startQubit = BaseClass::getStartQubit();
-				const unsigned int endQubit = BaseClass::getEndQubit();
+				const size_t startQubit = BaseClass::getStartQubit();
+				const size_t endQubit = BaseClass::getEndQubit();
 
-				for (unsigned int q = startQubit; q <= endQubit; ++q)
+				for (size_t q = startQubit; q <= endQubit; ++q)
 					reg.ApplyGate(hadamard, q);
 
-				const unsigned int measurement = reg.Measure(startQubit, endQubit);
+				const size_t measurement = reg.Measure(startQubit, endQubit);
 
-				unsigned int r = measurement;
-				unsigned int s = 0;
+				size_t r = measurement;
+				size_t s = 0;
 				while (r)
 				{
 					s += r & 1;
@@ -48,7 +48,7 @@ namespace QC {
 			}
 
 		protected:
-			unsigned int rQubit;
+			size_t rQubit;
 			QC::Gates::HadamardGate<MatrixClass> hadamard;
 			QC::Gates::PauliZGate<MatrixClass> z;
 		};

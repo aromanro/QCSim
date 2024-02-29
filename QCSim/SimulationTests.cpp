@@ -9,13 +9,13 @@
 #include "Schrodinger.h"
 
 
-void PrintState(const Eigen::VectorXcd& regVals, unsigned int nrBasisStates)
+void PrintState(const Eigen::VectorXcd& regVals, size_t nrBasisStates)
 {
-	for (unsigned int i = 0; i < nrBasisStates; ++i)
+	for (size_t i = 0; i < nrBasisStates; ++i)
 		std::cout << regVals[i] << std::endl;
 }
 
-void PrintStates(const Eigen::VectorXcd& regVals, const Eigen::VectorXcd& regValsEx, unsigned int nrBasisStates)
+void PrintStates(const Eigen::VectorXcd& regVals, const Eigen::VectorXcd& regValsEx, size_t nrBasisStates)
 {
 	std::cout << "Exact:" << std::endl;
 	PrintState(regValsEx, nrBasisStates);
@@ -37,7 +37,7 @@ bool PauliSimulationTests()
 	std::uniform_real_distribution<double> dist_coeff(0.1, 10.);
 
 	const double simTime = 1. / (2. * M_PI);
-	const unsigned int nrSteps = 100;
+	const size_t nrSteps = 100;
 
 	for (int i = 0; i < 10; ++i)
 	{
@@ -88,7 +88,7 @@ bool PauliSimulationTests()
 			return false;
 		}
 
-		for (unsigned int j = 0; j < sim.getNrBasisStates(); ++j)
+		for (size_t j = 0; j < sim.getNrBasisStates(); ++j)
 		{
 			if (!approxEqual(regVals(j), regValsEx(j), 0.5)) // in some circumstances some values can differ quite a bit but the fidelity is still high
 			{
@@ -110,7 +110,7 @@ bool SchrodingerSimulationTests()
 {
 	std::cout << "\nTesting Schrodinger simulations, this is going to take a while..." << std::endl;
 	
-	const unsigned int nrStates = 512;
+	const size_t nrStates = 512;
 	const int nrSteps = 50;
 
 	// the following values work for finite differences, unfortunately they do not work for the Schrodinger simulation
@@ -135,13 +135,13 @@ bool SchrodingerSimulationTests()
 	QuantumSimulation::SchrodingerSimulation schrSim(9, dt, dx, nrSteps);
 	QuantumSimulation::SchrodingerSimulation fftSchr(9, dt, dx, nrSteps);
 
-	const unsigned int startPos = nrStates / 4;
+	const size_t startPos = nrStates / 4;
 	const double sigma = nrStates / 20;
 	//const double sigma = nrStates / 30;
 
 	std::cout << "First, with a potential barrier..." << std::endl;
 
-	const unsigned int halfPotWidth = static_cast<unsigned int>(sigma / 4.);
+	const size_t halfPotWidth = static_cast<size_t>(sigma / 4.);
 	schrSim.setConstantPotentialInTheMiddle(E, halfPotWidth);
 	fftSchr.setConstantPotentialInTheMiddle(E, halfPotWidth);
 
@@ -150,7 +150,7 @@ bool SchrodingerSimulationTests()
 
 	schrSim.getRegister().writeToFile("c:\\temp\\schrodinger_start.dat");
 
-	for (unsigned int i = 0; i < 6; ++i)
+	for (size_t i = 0; i < 6; ++i)
 	{
 		schrSim.Execute();
 		fftSchr.solveWithClassicalFFT();
@@ -181,7 +181,7 @@ bool SchrodingerSimulationTests()
 	schrSim.setGaussian(startPos, sigma, k);
 	fftSchr.setGaussian(startPos, sigma, k);
 
-	for (unsigned int i = 0; i < 6; ++i)
+	for (size_t i = 0; i < 6; ++i)
 	{
 		schrSim.Execute();
 		fftSchr.solveWithClassicalFFT();
@@ -212,7 +212,7 @@ bool SchrodingerSimulationTests()
 	schrSim.setGaussian(startPos, sigma, k);
 	fftSchr.setGaussian(startPos, sigma, k);
 
-	for (unsigned int i = 0; i < 4; ++i)
+	for (size_t i = 0; i < 4; ++i)
 	{
 		schrSim.Execute();
 		fftSchr.solveWithClassicalFFT();

@@ -18,19 +18,19 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			CatEntangler(unsigned int N, unsigned int startQubit = 0, unsigned int endQubit = INT_MAX)
+			CatEntangler(size_t N, size_t startQubit = 0, size_t endQubit = INT_MAX)
 				: BaseClass(N, startQubit, endQubit)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
-				const unsigned int startQubit = BaseClass::getStartQubit();
-				const unsigned int endQubit = BaseClass::getEndQubit();
+				const size_t startQubit = BaseClass::getStartQubit();
+				const size_t endQubit = BaseClass::getEndQubit();
 
 				reg.ApplyGate(hadamard, startQubit);
 
-				for (unsigned int q = startQubit; q < endQubit; ++q)
+				for (size_t q = startQubit; q < endQubit; ++q)
 					reg.ApplyGate(cnot, q + 1, q);
 
 

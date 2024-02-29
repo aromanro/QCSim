@@ -15,14 +15,14 @@ namespace PauliString {
 
 		PauliString(int nrQubits = 2) : ops(nrQubits, PauliOp::opZ), coeff(1.0) {}
 
-		void setOperatorForQubit(unsigned int qubit, PauliOp op)
+		void setOperatorForQubit(size_t qubit, PauliOp op)
 		{
 			if (qubit >= ops.size()) return;
 
 			ops[qubit] = op;
 		}
 
-		PauliOp getOperatorForQubit(unsigned int qubit) const
+		PauliOp getOperatorForQubit(size_t qubit) const
 		{
 			if (qubit >= ops.size()) return PauliOp::opZ;
 

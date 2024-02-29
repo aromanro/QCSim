@@ -30,7 +30,7 @@ namespace Coding
 			Encode(bit1, bit2);
 		}
 
-		unsigned int Receive()
+		size_t Receive()
 		{
 			Decode();
 
@@ -44,7 +44,7 @@ namespace Coding
 			b2 = bit2;
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Send(b1, b2);
 

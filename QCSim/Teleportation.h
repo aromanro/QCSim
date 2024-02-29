@@ -13,13 +13,13 @@ namespace Teleportation
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		QuantumTeleportation(unsigned int N = 3, int addseed = 0)
+		QuantumTeleportation(size_t N = 3, int addseed = 0)
 			: BaseClass(N, addseed)
 		{
 			BaseClass::setToBasisState(0);
 		}
 
-		void Entangle(unsigned int q1 = 1, unsigned int q2 = 2)
+		void Entangle(size_t q1 = 1, size_t q2 = 2)
 		{
 			// make an EPR pair out of the second and third qubit:
 
@@ -30,7 +30,7 @@ namespace Teleportation
 			BaseClass::ApplyGate(cnot, q2, q1);
 		}
 
-		void ApplyTeleportationCircuit(unsigned int sentQubit = 0, unsigned int q2 = 1)
+		void ApplyTeleportationCircuit(size_t sentQubit = 0, size_t q2 = 1)
 		{
 			// the cnot and hadamard that follow do the inverse of the entangling gate - this way the measurement that follows is a measurement in the Bell basis
 
@@ -45,13 +45,13 @@ namespace Teleportation
 			BaseClass::ApplyGate(hadamard, sentQubit);
 		}
 
-		void RestoreState(bool sentQubitMeasurement, bool firstEntangledQubitMeasurement, unsigned int targetQubit = 2)
+		void RestoreState(bool sentQubitMeasurement, bool firstEntangledQubitMeasurement, size_t targetQubit = 2)
 		{
 			if (firstEntangledQubitMeasurement) BaseClass::ApplyGate(x, targetQubit);
 			if (sentQubitMeasurement) BaseClass::ApplyGate(z, targetQubit);
 		}
 
-		unsigned int Teleport(unsigned int sentQubit = 0, unsigned int firstEntangledQubit = 1, unsigned int targetQubit = 2, bool explicitClassicalTransmission = false)
+		size_t Teleport(size_t sentQubit = 0, size_t firstEntangledQubit = 1, size_t targetQubit = 2, bool explicitClassicalTransmission = false)
 		{
 			// TODO: Using something like the `BellState` class to create the EPR pair, not only the one currently used, but also the other three
 			// it works with any of them as long as Alice and Bob agree on which one to use
@@ -66,7 +66,7 @@ namespace Teleportation
 			// one could do here only the first qubit measurement, the second one being done earlier
 
 			// anyhow, it's basically the same thing
-			unsigned int measuredValues = BaseClass::Measure(sentQubit);
+			size_t measuredValues = BaseClass::Measure(sentQubit);
 			measuredValues |= BaseClass::Measure(firstEntangledQubit) << 1;
 
 			// now that they are measured they go to Bob, which uses the values to act on his entangled qubit:
@@ -134,13 +134,13 @@ namespace Teleportation
 		// the qubits to be entangled start as |00> and they are entangled to a EPR state using hadamard and cnot gates (together they make the E/E2 entangling gate)
 		// the first two qubits are on the Alice side, the third belongs to Bob
 		// returns the values of the two measured qubits
-		unsigned int Teleport(bool explicitClassicalTransmission = false)
+		size_t Teleport(bool explicitClassicalTransmission = false)
 		{
 			return BaseClass::Teleport(0, 1, 2, explicitClassicalTransmission);
 		}
 
 		// called only if one wants the teleported qubit to be measured, otherwise just check the register contents
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Teleport();
 
@@ -166,29 +166,29 @@ namespace QC {
 			using BaseClass = QuantumSubAlgorithmOnSubregister<VectorClass, MatrixClass>;
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			Teleport(unsigned int N = 3, unsigned int sourceQubit = 0, unsigned int entangledQubit = 1, unsigned int targetQubit = 2)
+			Teleport(size_t N = 3, size_t sourceQubit = 0, size_t entangledQubit = 1, size_t targetQubit = 2)
 				: BaseClass(N, entangledQubit, targetQubit), sQubit(sourceQubit), entangler(N, entangledQubit, targetQubit), disentangler(N, targetQubit, sourceQubit, sourceQubit)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
-				const unsigned int entQubit = BaseClass::getStartQubit();
-				const unsigned int targetQubit = BaseClass::getEndQubit();
+				const size_t entQubit = BaseClass::getStartQubit();
+				const size_t targetQubit = BaseClass::getEndQubit();
 
 				entangler.Execute(reg);
 
 				reg.ApplyGate(cnot, entQubit, sQubit);
-				const unsigned int measurement = reg.MeasureQubit(entQubit);
+				const size_t measurement = reg.MeasureQubit(entQubit);
 				if (measurement) reg.ApplyGate(x, targetQubit);
 
-				const unsigned int measurement2 = disentangler.Execute(reg);
+				const size_t measurement2 = disentangler.Execute(reg);
 
 				return measurement2 | (measurement << 1);
 			}
 
 		protected:
-			unsigned int sQubit;
+			size_t sQubit;
 			Gates::CNOTGate<MatrixClass> cnot;
 			Gates::PauliXGate<MatrixClass> x;
 			CatEntangler<VectorClass, MatrixClass> entangler;

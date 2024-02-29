@@ -19,8 +19,8 @@ bool approxEqual(std::complex<double> val1, std::complex<double> val2, double er
 bool checkUnitary(const Eigen::MatrixXcd& m)
 {
 	const Eigen::MatrixXcd r = m.adjoint() * m;
-	for (unsigned int i = 0; i < r.rows(); ++i)
-		for (unsigned int j = 0; j < r.cols(); ++j)
+	for (size_t i = 0; i < r.rows(); ++i)
+		for (size_t j = 0; j < r.cols(); ++j)
 			if (!approxEqual(r(i, j), std::complex(i == j ? 1. : 0., 0.))) return false;
 
 	return true;
@@ -66,7 +66,7 @@ bool checkQubit0()
 
 		// measure first qubit only
 
-		const unsigned int state = reg.Measure(0, 0);
+		const size_t state = reg.Measure(0, 0);
 		++measurements[state];
 
 		Eigen::VectorXcd amplitudes = reg.getRegisterStorage();
@@ -129,7 +129,7 @@ bool checkQubit1()
 
 		// measure second qubit only
 
-		const unsigned int state = reg.Measure(1, 1);
+		const size_t state = reg.Measure(1, 1);
 		++measurements[state];
 
 		Eigen::VectorXcd amplitudes = reg.getRegisterStorage();
@@ -190,7 +190,7 @@ bool checkSingleQubitMeasurements()
 	{
 		setRegister(reg);
 
-		unsigned int state = reg.Measure(0, 0);
+		size_t state = reg.Measure(0, 0);
 		++measurements[state];
 
 		state = reg.Measure(1, 1);
@@ -211,7 +211,7 @@ bool checkSingleQubitMeasurements()
 	{
 		setRegister(reg);
 
-		unsigned int state = reg.Measure(1, 1);
+		size_t state = reg.Measure(1, 1);
 		++measurements[state];
 
 		state = reg.Measure(0, 0);

@@ -29,7 +29,7 @@ namespace Distributed {
 			BaseClass::setToBasisState(0);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Entangle(1, 2);
 			Entangle(3, 4);
@@ -66,7 +66,7 @@ namespace Distributed {
 			BaseClass::ApplyGate(cnot, q2, q1);
 		}
 
-		void ApplyTeleportationCircuit(unsigned int q1, unsigned int q2)
+		void ApplyTeleportationCircuit(size_t q1, size_t q2)
 		{
 			BaseClass::ApplyGate(cnot, q2, q1);
 			BaseClass::ApplyGate(hadamard, q1);

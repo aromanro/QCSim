@@ -35,13 +35,13 @@ namespace BellInequalities {
 			return (QScount ? static_cast<double>(QSaccum) / QScount : 0.) + (RScount ? static_cast<double>(RSaccum) / RScount : 0.) + (RTcount ? static_cast<double>(RTaccum) / RTcount : 0.) - (QTcount ? static_cast<double>(QTaccum) / QTcount : 0.);
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			return Check();
 		}
 
 		// allows separate measurements on qubits, obviously the results should be the same but it's better to have a way to test it
-		unsigned int Check(bool separateMeasurements = false)
+		size_t Check(bool separateMeasurements = false)
 		{
 			// start with the Bell state:
 			bellState.setBellState11(BaseClass::reg);
@@ -54,7 +54,7 @@ namespace BellInequalities {
 			const QC::Gates::SingleQubitGate<MatrixClass>& aliceMeasurement = aM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(R) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(Q);
 			measurementBasis.switchToOperatorBasis(BaseClass::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
 
-			unsigned int state = 0;
+			size_t state = 0;
 
 			int res1 = -1;
 			if (separateMeasurements)

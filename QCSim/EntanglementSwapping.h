@@ -39,9 +39,9 @@ namespace Teleportation {
 			bellState.setBellState(BaseClass::BaseClass::reg, 0, 2, s1, s2);
 		}
 
-		unsigned int Teleport(bool explicitClassicalTransmission = false)
+		size_t Teleport(bool explicitClassicalTransmission = false)
 		{
-			unsigned int res = BaseClass::Teleport(0, 1, 4, explicitClassicalTransmission);
+			size_t res = BaseClass::Teleport(0, 1, 4, explicitClassicalTransmission);
 
 			res |= BaseClass::Teleport(2, 3, 5, explicitClassicalTransmission) << 2;
 
@@ -49,7 +49,7 @@ namespace Teleportation {
 		}
 
 		// called only if one wants the teleported qubits to be measured, otherwise just check the register contents
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			Teleport();
 

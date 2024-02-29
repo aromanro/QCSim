@@ -30,11 +30,11 @@ namespace VQE {
 			ry.SetTheta(-theta);
 		}
 
-		unsigned int Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
+		size_t Execute(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			const unsigned int nrQubits = reg.getNrQubits();
+			const size_t nrQubits = reg.getNrQubits();
 
-			for (unsigned int qubit = 0; qubit < nrQubits; ++qubit)
+			for (size_t qubit = 0; qubit < nrQubits; ++qubit)
 				if (getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opX)
 					reg.ApplyGate(ry, qubit);
 				else if (getOperatorForQubit(qubit) == PauliString::PauliString::PauliOp::opY)
@@ -43,12 +43,12 @@ namespace VQE {
 			return 0; // not used here
 		}
 
-		void setOperatorForQubit(unsigned int qubit, PauliString::PauliString::PauliOp op)
+		void setOperatorForQubit(size_t qubit, PauliString::PauliString::PauliOp op)
 		{
 			pauliString.setOperatorForQubit(qubit, op);
 		}
 
-		PauliString::PauliString::PauliOp getOperatorForQubit(unsigned int qubit) const
+		PauliString::PauliString::PauliOp getOperatorForQubit(size_t qubit) const
 		{
 			return pauliString.getOperatorForQubit(qubit);
 		}
@@ -63,7 +63,7 @@ namespace VQE {
 			pauliString.setCoefficient(c);
 		}
 
-		void SingleQubitAnsatz(QC::QubitRegister<VectorClass, MatrixClass>& reg, unsigned int qubit, double theta, double phi)
+		void SingleQubitAnsatz(QC::QubitRegister<VectorClass, MatrixClass>& reg, size_t qubit, double theta, double phi)
 		{
 			rya.SetTheta(theta);
 			reg.ApplyGate(rya, qubit);
@@ -73,12 +73,12 @@ namespace VQE {
 
 		void Ansatz(QC::QubitRegister<VectorClass, MatrixClass>& reg, const std::vector<double>& params)
 		{
-			const unsigned int nrQubits = reg.getNrQubits();
+			const size_t nrQubits = reg.getNrQubits();
 
 			if (params.size() < nrQubits) return;
 
-			unsigned int pos = 0;
-			for (unsigned int q = 0; q < nrQubits && pos < params.size() - 1; ++q)
+			size_t pos = 0;
+			for (size_t q = 0; q < nrQubits && pos < params.size() - 1; ++q)
 			{
 				SingleQubitAnsatz(reg, q, params[pos], params[pos + 1]);
 				pos += 2;
@@ -88,7 +88,7 @@ namespace VQE {
 			while (pos < params.size() - 1) {
 				if (flip)
 				{
-					for (unsigned int q = nrQubits - 1; q > 0; --q)
+					for (size_t q = nrQubits - 1; q > 0; --q)
 						reg.ApplyGate(cnot, q - 1, q);
 
 					if (nrQubits > 2)
@@ -96,7 +96,7 @@ namespace VQE {
 				}
 				else
 				{
-					for (unsigned int q = 0; q < nrQubits - 1; ++q)
+					for (size_t q = 0; q < nrQubits - 1; ++q)
 						reg.ApplyGate(cnot, q + 1, q);
 
 					if (nrQubits > 2)
@@ -105,7 +105,7 @@ namespace VQE {
 
 				flip = !flip;
 
-				for (unsigned int q = 0; q < nrQubits && pos < params.size() - 1; ++q)
+				for (size_t q = 0; q < nrQubits && pos < params.size() - 1; ++q)
 				{
 					SingleQubitAnsatz(reg, q, params[pos], params[pos + 1]);
 					pos += 2;
@@ -113,7 +113,7 @@ namespace VQE {
 			}
 		}
 
-		double EstimateEnergy(QC::QubitRegister<VectorClass, MatrixClass>& reg, const std::vector<double>& params, unsigned int nrMeasurements = 10000)
+		double EstimateEnergy(QC::QubitRegister<VectorClass, MatrixClass>& reg, const std::vector<double>& params, size_t nrMeasurements = 10000)
 		{
 			reg.setToBasisState(0);
 			Ansatz(reg, params);
@@ -126,8 +126,8 @@ namespace VQE {
 			for (const auto& m : measurements)
 			{
 				double e = 1.0;
-				unsigned int val = m.first;
-				for (unsigned int q = 0; val && q < reg.getNrQubits(); ++q)
+				size_t val = m.first;
+				for (size_t q = 0; val && q < reg.getNrQubits(); ++q)
 				{
 					if (val & 1)
 						e *= -1;
@@ -160,7 +160,7 @@ namespace VQE {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		VariationalQuantumEigensolver(unsigned int N = 2, bool addSeed = false)
+		VariationalQuantumEigensolver(size_t N = 2, bool addSeed = false)
 			: BaseClass(N, addSeed)
 		{
 		}
@@ -175,7 +175,7 @@ namespace VQE {
 			terms.clear();
 		}
 
-		unsigned int Execute() override
+		size_t Execute() override
 		{
 			if (vertices.empty()) return 0;
 
@@ -205,7 +205,7 @@ namespace VQE {
 			return 0;
 		}
 
-		double EstimateEnergy(const std::vector<double>& params, unsigned int nrMeas = 10000)
+		double EstimateEnergy(const std::vector<double>& params, size_t nrMeas = 10000)
 		{
 			double energy = 0.0;
 
@@ -215,12 +215,12 @@ namespace VQE {
 			return energy;
 		}
 
-		void SetNrMeasurements(unsigned int n)
+		void SetNrMeasurements(size_t n)
 		{
 			nrMeasurements = n;
 		}
 
-		unsigned int GetNrMeasurements() const
+		size_t GetNrMeasurements() const
 		{
 			return nrMeasurements;
 		}
@@ -403,7 +403,7 @@ namespace VQE {
 				if (pi == excludeIndex) continue;
 
 				const auto& p = points[pi];
-				for (unsigned int i = 0; i < p.size(); ++i)
+				for (size_t i = 0; i < p.size(); ++i)
 					centroid[i] += p[i];
 			}
 
@@ -420,7 +420,7 @@ namespace VQE {
 
 			std::vector<double> rp(p1.size(), 0.0);
 
-			for (unsigned int i = 0; i < p1.size(); ++i)
+			for (size_t i = 0; i < p1.size(); ++i)
 			{
 				const double d = p2[i] - p1[i];
 				rp[i] = p1[i] + alpha * d;
@@ -477,7 +477,7 @@ namespace VQE {
 
 
 		std::vector<PauliStringVQE<VectorClass, MatrixClass>> terms;
-		unsigned int nrMeasurements = 10000;
+		size_t nrMeasurements = 10000;
 
 		std::vector<std::vector<double>> vertices;
 		int terminateLimit = 10;

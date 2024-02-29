@@ -13,24 +13,24 @@ namespace QC {
 		public:
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 
-			PhaseEstimationBase(unsigned int N = 7, unsigned int L = 3)
+			PhaseEstimationBase(size_t N = 7, size_t L = 3)
 				: fRegisterStartQubit(L), nrQubits(N), fourier(N, 0, L - 1)
 			{
 			}
 
-			unsigned int getFunctionStartQubit() const
+			size_t getFunctionStartQubit() const
 			{
 				return fRegisterStartQubit;
 			}
 
-			unsigned int getNrQubits() const
+			size_t getNrQubits() const
 			{
 				return nrQubits;
 			}
 
-			double getPhase(unsigned int mostMeasuredState, int secondMostMeasuredState, double estimatedProbability, unsigned int nrSteps = 10000) const
+			double getPhase(size_t mostMeasuredState, int secondMostMeasuredState, double estimatedProbability, size_t nrSteps = 10000) const
 			{
-				const unsigned int nrStates = 1u << fRegisterStartQubit;
+				const size_t nrStates = 1u << fRegisterStartQubit;
 				if (secondMostMeasuredState == -1)
 					return static_cast<double>(mostMeasuredState) / nrStates;
 
@@ -40,7 +40,7 @@ namespace QC {
 				const double pref = 1. / static_cast<double>(1ull << (2 * fRegisterStartQubit));
 				const std::complex<double> prefe = 2. * M_PI * std::complex(0., 1.);
 
-				for (unsigned int i = 1; i < nrSteps; ++i)
+				for (size_t i = 1; i < nrSteps; ++i)
 				{
 					const double curPhi = static_cast<double>(i) / nrSteps;
 					const std::complex<double> e = prefe * curPhi;
@@ -56,9 +56,9 @@ namespace QC {
 
 				if (mostMeasuredState != 0)
 				{
-					if (mostMeasuredState < static_cast<unsigned int>(secondMostMeasuredState) && static_cast<unsigned int>(secondMostMeasuredState) != nrStates - 1U)
+					if (mostMeasuredState < static_cast<size_t>(secondMostMeasuredState) && static_cast<size_t>(secondMostMeasuredState) != nrStates - 1U)
 						return (static_cast<double>(mostMeasuredState) + phi) / nrStates;
-					else if (mostMeasuredState > static_cast<unsigned int>(secondMostMeasuredState))
+					else if (mostMeasuredState > static_cast<size_t>(secondMostMeasuredState))
 						return (static_cast<double>(mostMeasuredState) - phi) / nrStates;
 				}
 
@@ -83,7 +83,7 @@ namespace QC {
 			{
 				// apply hadamard over each qubit from the x-register
 				// reuse the hadamard gate from the fourier transform base class
-				for (unsigned int i = 0; i < fRegisterStartQubit; ++i)
+				for (size_t i = 0; i < fRegisterStartQubit; ++i)
 					reg.ApplyGate(fourier.hadamard, i);
 			}
 
@@ -92,8 +92,8 @@ namespace QC {
 				fourier.IQFT(reg, swap);
 			}
 
-			unsigned int fRegisterStartQubit;
-			unsigned int nrQubits;
+			size_t fRegisterStartQubit;
+			size_t nrQubits;
 
 			QuantumFourierTransform<VectorClass, MatrixClass> fourier;
 		};
@@ -105,12 +105,12 @@ namespace QC {
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 			using BaseClass = PhaseEstimationBase<VectorClass, MatrixClass>;
 
-			ShorPhaseEstimation(QC::Function<VectorClass, MatrixClass>& f, unsigned int N = 7, unsigned int L = 3)
+			ShorPhaseEstimation(QC::Function<VectorClass, MatrixClass>& f, size_t N = 7, size_t L = 3)
 				: BaseClass(N, L), func(f)
 			{
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				ExecuteWithoutMeasurement(reg);
 
@@ -121,7 +121,7 @@ namespace QC {
 				return reg.MeasureAll();
 			}
 
-			std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(RegisterClass& reg, unsigned int nrMeasurements = 10000)
+			std::map<size_t, size_t> ExecuteWithMultipleMeasurements(RegisterClass& reg, size_t nrMeasurements = 10000)
 			{
 				ExecuteWithoutMeasurement(reg);
 
@@ -156,13 +156,13 @@ namespace QC {
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 			using BaseClass = PhaseEstimationBase<VectorClass, MatrixClass>;
 
-			PhaseEstimation(const MatrixClass& op, unsigned int N = 7, unsigned int L = 3)
+			PhaseEstimation(const MatrixClass& op, size_t N = 7, size_t L = 3)
 				: BaseClass(N, L), U(op)
 			{
 				assert(U.rows() == U.cols());
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				ExecuteWithoutMeasurement(reg);
 
@@ -173,7 +173,7 @@ namespace QC {
 				return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
 			}
 
-			std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(RegisterClass& reg, unsigned int nrMeasurements = 10000)
+			std::map<size_t, size_t> ExecuteWithMultipleMeasurements(RegisterClass& reg, size_t nrMeasurements = 10000)
 			{
 				ExecuteWithoutMeasurement(reg);
 
@@ -193,15 +193,15 @@ namespace QC {
 				BaseClass::Init(reg);
 
 				MatrixClass controlledGate = U;
-				const unsigned int lastQubit = BaseClass::getFunctionStartQubit() - 1;
+				const size_t lastQubit = BaseClass::getFunctionStartQubit() - 1;
 
 				// There is another way which I'll let commented out here
 				// the current one is more efficient due of avoiding the swap gates when doing the IQFT
 				// with the IQFT with the swap, just uncomment the following for loop and comment the one after it
 				// do a similar thing for the last U gate application
 
-				//for (unsigned int ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
-				for (unsigned int ctrlQubit = lastQubit; ctrlQubit > 0; --ctrlQubit)
+				//for (size_t ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
+				for (size_t ctrlQubit = lastQubit; ctrlQubit > 0; --ctrlQubit)
 				{
 					NQubitsControlledQuantumGate<VectorClass, MatrixClass> UGate(BaseClass::getNrQubits(), controlledGate, BaseClass::getFunctionStartQubit(), ctrlQubit);
 
@@ -236,13 +236,13 @@ namespace QC {
 			using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
 			using BaseClass = PhaseEstimationBase<VectorClass, MatrixClass>;
 
-			PhaseEstimationWithoutTensorProduct(const MatrixClass& op, unsigned int N = 7, unsigned int L = 3)
+			PhaseEstimationWithoutTensorProduct(const MatrixClass& op, size_t N = 7, size_t L = 3)
 				: BaseClass(N, L), U(op)
 			{
 				assert(U.rows() == 2);
 			}
 
-			unsigned int Execute(RegisterClass& reg) override
+			size_t Execute(RegisterClass& reg) override
 			{
 				ExecuteWithoutMeasurement(reg);
 
@@ -253,7 +253,7 @@ namespace QC {
 				return reg.Measure(0, BaseClass::getFunctionStartQubit() - 1);
 			}
 
-			std::map<unsigned int, unsigned int> ExecuteWithMultipleMeasurements(RegisterClass& reg, unsigned int nrMeasurements = 10000)
+			std::map<size_t, size_t> ExecuteWithMultipleMeasurements(RegisterClass& reg, size_t nrMeasurements = 10000)
 			{
 				ExecuteWithoutMeasurement(reg);
 
@@ -273,15 +273,15 @@ namespace QC {
 				BaseClass::Init(reg);
 
 				MatrixClass gateOp = U;
-				const unsigned int lastQubit = BaseClass::getFunctionStartQubit() - 1;
+				const size_t lastQubit = BaseClass::getFunctionStartQubit() - 1;
 
 				// There is another way which I'll let commented out here
 				// the current one is more efficient due of avoiding the swap gates when doing the IQFT
 				// with the IQFT with the swap, just uncomment the following for loop and comment the one after it
 				// do a similar thing for the last U gate application
 
-				//for (unsigned int ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
-				for (unsigned int ctrlQubit = lastQubit; ctrlQubit > 0; --ctrlQubit)
+				//for (size_t ctrlQubit = 0; ctrlQubit < lastQubit; ++ctrlQubit)
+				for (size_t ctrlQubit = lastQubit; ctrlQubit > 0; --ctrlQubit)
 				{
 					MatrixClass opMat = MatrixClass::Identity(4, 4);
 					opMat.block(2, 2, 2, 2) = gateOp;

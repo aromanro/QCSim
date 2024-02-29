@@ -35,13 +35,13 @@ bool FlipErrorCorrectionTests()
 
 		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
 
-		for (unsigned int q = 0; q <= 3; ++q)
+		for (size_t q = 0; q <= 3; ++q)
 		{
 			std::cout << "Flipping qubit: " << ((q == 3) ? "No qubit" : std::to_string(q)) << "...";
 			errorCorrectionFlip.SetState(alpha, beta);
 			errorCorrectionFlip.SetErrorQubit(q); // q = 3 means 'no qubit flip'
 
-			const unsigned int res = errorCorrectionFlip.Execute(); // return values: 3 means that the first qubit was flipped, 0 - no flip, 1 - first qubit was flipped, 2 - the second one was flipped
+			const size_t res = errorCorrectionFlip.Execute(); // return values: 3 means that the first qubit was flipped, 0 - no flip, 1 - first qubit was flipped, 2 - the second one was flipped
 
 			// check against return values that show that the qubit flip was not detected:
 			// either some qubit flip was done but not detected (first condition in if)
@@ -59,7 +59,7 @@ bool FlipErrorCorrectionTests()
 			// now check the fidelity of the wavefunction for the first qubit
 			// due of the measurement, the wavefunction collapsed, whence the complication:
 			QC::QubitRegister reg(3);
-			const unsigned int meas = res << 1;
+			const size_t meas = res << 1;
 			reg.setRawAmplitude(meas, alpha);
 			reg.setRawAmplitude(meas | 1, beta);
 
@@ -90,13 +90,13 @@ bool SignErrorCorrectionTests()
 
 		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
 
-		for (unsigned int q = 0; q <= 3; ++q)
+		for (size_t q = 0; q <= 3; ++q)
 		{
 			std::cout << "Changing sign for qubit: " << ((q == 3) ? "No qubit" : std::to_string(q)) << "...";
 			errorCorrectionSign.SetState(alpha, beta);
 			errorCorrectionSign.SetErrorQubit(q); // q = 3 means 'no error'
 
-			const unsigned int res = errorCorrectionSign.Execute(); // return values: 3 means that the first qubit had a sign change, 0 - no change, 1 - first qubit affected, 2 - the second one affected
+			const size_t res = errorCorrectionSign.Execute(); // return values: 3 means that the first qubit had a sign change, 0 - no change, 1 - first qubit affected, 2 - the second one affected
 
 			// check against return values that show that the qubit sign change was not detected:
 			// either some qubit sign change was done but not detected (first condition in if)
@@ -114,7 +114,7 @@ bool SignErrorCorrectionTests()
 			// now check the fidelity of the wavefunction for the first qubit
 			// due of the measurement, the wavefunction collapsed, whence the complication:
 			QC::QubitRegister reg(3);
-			const unsigned int meas = res << 1;
+			const size_t meas = res << 1;
 			reg.setRawAmplitude(meas, alpha);
 			reg.setRawAmplitude(meas | 1, beta);
 
@@ -160,11 +160,11 @@ bool ShorCodeTests()
 
 		std::cout << "Initial state: " << alpha << "|0> + " << beta << "|1>" << std::endl;
 
-		for (unsigned int q = 0; q <= 9; ++q)
+		for (size_t q = 0; q <= 9; ++q)
 		{
 			errorCorrection.SetErrorQubit(q); // q = 9 means 'no error'
 
-			for (unsigned int c = 0; c <= 2; ++c)
+			for (size_t c = 0; c <= 2; ++c)
 			{
 				ErrorCorrection::ShorCode<>::ErrorType errorType = static_cast<ErrorCorrection::ShorCode<>::ErrorType>(c);
 				if (q == 9) errorType = ErrorCorrection::ShorCode<>::ErrorType::None;
@@ -174,7 +174,7 @@ bool ShorCodeTests()
 				errorCorrection.SetState(alpha, beta);
 				errorCorrection.setErrorType(errorType);
 
-				const unsigned int res = errorCorrection.Execute();
+				const size_t res = errorCorrection.Execute();
 
 				// limited check of the result, more reliance on checking the fidelity
 				// this probably could be extended, but I won't bother:
@@ -187,7 +187,7 @@ bool ShorCodeTests()
 				// check the fidelity of the wavefunction for the first qubit
 				// due of the measurement, the wavefunction collapsed, whence the complication:
 				QC::QubitRegister reg(9);
-				const unsigned int meas = res << 1;
+				const size_t meas = res << 1;
 				reg.setRawAmplitude(meas, alpha);
 				reg.setRawAmplitude(meas | 1, beta);
 
