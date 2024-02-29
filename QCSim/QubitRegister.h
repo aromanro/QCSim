@@ -13,12 +13,12 @@ namespace QC {
 		using BaseClass = QubitRegisterCalculator<VectorClass, MatrixClass>;
 
 		QubitRegister(size_t N = 3, int addseed = 0)
-			: NrQubits(N), NrBasisStates(1ULL << NrQubits), uniformZeroOne(0, 1), recordGates(false)
+			: NrQubits(N), NrBasisStates(1ULL << NrQubits), 
+			registerStorage(VectorClass::Zero(NrBasisStates)),
+			resultsStorage(VectorClass::Zero(NrBasisStates)),
+			uniformZeroOne(0, 1), recordGates(false)
 		{
 			assert(N > 0);
-
-			registerStorage = VectorClass::Zero(NrBasisStates);
-			resultsStorage = VectorClass::Zero(NrBasisStates);
 
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
 			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
