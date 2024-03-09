@@ -51,12 +51,12 @@ namespace QC {
 			QuantumGateWithOp(const MatrixClass& U)
 				: operatorMat(U)
 			{
-			};
+			}
 
 			const MatrixClass& getRawOperatorMatrix() const
 			{
 				return operatorMat;
-			};
+			}
 
 			size_t getQubitsNumber() const override
 			{
@@ -69,7 +69,7 @@ namespace QC {
 				}
 
 				return res;
-			};
+			}
 
 			void setOperator(const MatrixClass& U)
 			{
@@ -82,42 +82,6 @@ namespace QC {
 			MatrixClass operatorMat;
 		};
 
-		// used for recording the applied gates, to be applied again later
-		// also for 'uncompute'
-		template<class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates::QuantumGateWithOp<MatrixClass>
-		{
-		public:
-			using BaseClass = Gates::QuantumGateWithOp<MatrixClass>;
-
-			AppliedGate()
-				: Gates::QuantumGateWithOp<MatrixClass>(MatrixClass::Zero(1, 1)), q1(0), q2(0), q3(0)
-			{
-			}
-
-			AppliedGate(const MatrixClass& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
-				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
-			{
-			}
-
-			size_t getQubit1() const { return q1; }
-			size_t getQubit2() const { return q2; }
-			size_t getQubit3() const { return q3; }
-
-			void setQubit1(size_t q) { q1 = q; }
-			void setQubit2(size_t q) { q2 = q; }
-			void setQubit3(size_t q) { q3 = q; }
-
-		private:
-			// don't use it!
-			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
-			{
-				return BaseClass::getRawOperatorMatrix();
-			}
-
-			size_t q1;
-			size_t q2;
-			size_t q3;
-		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public QuantumGateWithOp<MatrixClass>
 		{
@@ -127,12 +91,12 @@ namespace QC {
 			SingleQubitGate()
 				: BaseClass(MatrixClass::Zero(2, 2))
 			{
-			};
+			}
 
 			SingleQubitGate(const MatrixClass& U)
 				: BaseClass(U)
 			{
-			};
+			}
 
 			size_t getQubitsNumber() const override
 			{
@@ -167,6 +131,163 @@ namespace QC {
 				return extOperatorMat;
 			};
 		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public QuantumGateWithOp<MatrixClass>
+		{
+		public:
+			using BaseClass = QuantumGateWithOp<MatrixClass>;
+
+			TwoQubitsGate()
+				: BaseClass(MatrixClass::Identity(4, 4))
+			{
+			}
+
+			TwoQubitsGate(const MatrixClass& U)
+				: BaseClass(U)
+			{
+			}
+
+			size_t getQubitsNumber() const override
+			{
+				return 2;
+			}
+
+			// controllingQubit2 is ignored, it will be used for three qubit gates only
+			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
+			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
+			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
+			// and also could be useful for debugging in the case the optimized version has a problem
+			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
+			{
+				assert(qubit != controllingQubit1);
+
+				const size_t nrBasisStates = 1u << nrQubits;
+				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
+
+				const size_t qubitBit = 1u << qubit;
+				const size_t ctrlQubitBit = 1u << controllingQubit1;
+				const size_t mask = qubitBit | ctrlQubitBit;
+
+				// computing the tensor product between the gate matrix and identity operators for the other qubits
+
+				for (size_t i = 0; i < nrBasisStates; ++i)
+				{
+					const size_t ind1 = i | mask;
+					for (size_t j = 0; j < nrBasisStates; ++j)
+						if (ind1 == (j | mask)) // the delta 'function'
+							extOperatorMat(i, j) = BaseClass::operatorMat((i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 2 : 0) | (j & qubitBit ? 1 : 0));
+				}
+
+				return extOperatorMat;
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public QuantumGateWithOp<MatrixClass>
+		{
+		public:
+			using BaseClass = QuantumGateWithOp<MatrixClass>;
+
+			ThreeQubitsGate()
+				: BaseClass(MatrixClass::Identity(8, 8))
+			{
+			}
+
+			ThreeQubitsGate(const MatrixClass& U)
+				: BaseClass(U)
+			{
+			}
+
+			size_t getQubitsNumber() const override
+			{
+				return 3;
+			}
+
+			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
+			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
+			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
+			// and also could be useful for debugging in the case the optimized version has a problem
+			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
+			{
+				assert(qubit != controllingQubit1 && controllingQubit1 != controllingQubit2);
+
+				const size_t nrBasisStates = 1u << nrQubits;
+				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
+
+				const size_t qubitBit = 1u << qubit;
+				const size_t qubitBit2 = 1u << controllingQubit1;
+				const size_t ctrlQubitBit = 1u << controllingQubit2;
+				const size_t mask = qubitBit | qubitBit2 | ctrlQubitBit;
+
+				// computing the tensor product between the gate matrix and identity operators for the other qubits
+
+				for (size_t i = 0; i < nrBasisStates; ++i)
+				{
+					const size_t ind1 = i | mask;
+					for (size_t j = 0; j < nrBasisStates; ++j)
+						if (ind1 == (j | mask)) // the delta 'function'
+							extOperatorMat(i, j) = BaseClass::operatorMat((i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 4 : 0) | (j & qubitBit2 ? 2 : 0) | (j & qubitBit ? 1 : 0));
+				}
+
+				return extOperatorMat;
+			}
+		};
+
+		// used for recording the applied gates, to be applied again later
+		// also for 'uncompute'
+		template<class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates::QuantumGateWithOp<MatrixClass>
+		{
+		public:
+			using BaseClass = Gates::QuantumGateWithOp<MatrixClass>;
+
+			AppliedGate()
+				: Gates::QuantumGateWithOp<MatrixClass>(MatrixClass::Zero(1, 1)), q1(0), q2(0), q3(0)
+			{
+			}
+
+			AppliedGate(const MatrixClass& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
+				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
+			{
+			}
+
+			size_t getQubit1() const { return q1; }
+			size_t getQubit2() const { return q2; }
+			size_t getQubit3() const { return q3; }
+
+			void setQubit1(size_t q) { q1 = q; }
+			void setQubit2(size_t q) { q2 = q; }
+			void setQubit3(size_t q) { q3 = q; }
+
+		private:
+			// don't use it!
+			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
+			{
+				// this is a hack used only for trying out the old way... without OPTIMIZED_TENSOR_PRODUCT, to not be used otherwise!
+				const size_t N = log2(BaseClass::operatorMat.rows());
+				if (N == 1)
+				{
+					SingleQubitGate<MatrixClass> gate(BaseClass::operatorMat);
+					return gate.getOperatorMatrix(nrQubits, qubit);
+				}
+				else if (N == 2)
+				{
+					TwoQubitsGate<MatrixClass> gate(BaseClass::operatorMat);
+					return gate.getOperatorMatrix(nrQubits, qubit, controllingQubit1);
+				}
+				else if (N == 3)
+				{
+					ThreeQubitsGate<MatrixClass> gate(BaseClass::operatorMat);
+					return gate.getOperatorMatrix(nrQubits, qubit, controllingQubit1, controllingQubit2);
+				}
+
+				return BaseClass::getRawOperatorMatrix();
+			}
+
+			size_t q1;
+			size_t q2;
+			size_t q3;
+		};
+
+
 
 		template<class MatrixClass = Eigen::MatrixXcd> class HadamardGate : public SingleQubitGate<MatrixClass>
 		{
@@ -477,50 +598,7 @@ namespace QC {
 		};
 
 
-		template<class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public QuantumGateWithOp<MatrixClass>
-		{
-		public:
-			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
-			TwoQubitsGate()
-				: BaseClass (MatrixClass::Identity(4, 4))
-			{
-			}
-
-			size_t getQubitsNumber() const override
-			{
-				return 2;
-			}
-
-			// controllingQubit2 is ignored, it will be used for three qubit gates only
-			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
-			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
-			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
-			// and also could be useful for debugging in the case the optimized version has a problem
-			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
-			{
-				assert(qubit != controllingQubit1);
-
-				const size_t nrBasisStates = 1u << nrQubits;
-				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
-
-				const size_t qubitBit = 1u << qubit;
-				const size_t ctrlQubitBit = 1u << controllingQubit1;
-				const size_t mask = qubitBit | ctrlQubitBit;
-
-				// computing the tensor product between the gate matrix and identity operators for the other qubits
-
-				for (size_t i = 0; i < nrBasisStates; ++i)
-				{
-					const size_t ind1 = i | mask;
-					for (size_t j = 0; j < nrBasisStates; ++j)
-						if (ind1 == (j | mask)) // the delta 'function'
-							extOperatorMat(i, j) = BaseClass::operatorMat((i & ctrlQubitBit ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 2 : 0) | (j & qubitBit ? 1 : 0));
-				}
-
-				return extOperatorMat;
-			}
-		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class SwapGate : public TwoQubitsGate<MatrixClass>
 		{
@@ -824,50 +902,7 @@ namespace QC {
 			}
 		};
 
-		template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public QuantumGateWithOp<MatrixClass>
-		{
-		public:
-			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
-			ThreeQubitsGate()
-				: BaseClass(MatrixClass::Identity(8, 8))
-			{
-			}
-
-			size_t getQubitsNumber() const override
-			{
-				return 3;
-			}
-
-			// this is not used anymore, instead there is a more efficient implementation in QubitRegister::applyGate
-			// even this matrix could be constructed more efficiently in a similar manner (see QubitRegister::applyGate for details)
-			// but I won't bother, I'll keep this different implementation because it might be more clear - construction by tensor product
-			// and also could be useful for debugging in the case the optimized version has a problem
-			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
-			{
-				assert(qubit != controllingQubit1 && controllingQubit1 != controllingQubit2);
-
-				const size_t nrBasisStates = 1u << nrQubits;
-				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
-
-				const size_t qubitBit = 1u << qubit;
-				const size_t qubitBit2 = 1u << controllingQubit1;
-				const size_t ctrlQubitBit = 1u << controllingQubit2;
-				const size_t mask = qubitBit | qubitBit2 | ctrlQubitBit;
-
-				// computing the tensor product between the gate matrix and identity operators for the other qubits
-
-				for (size_t i = 0; i < nrBasisStates; ++i)
-				{
-					const size_t ind1 = i | mask;
-					for (size_t j = 0; j < nrBasisStates; ++j)
-						if (ind1 == (j | mask)) // the delta 'function'
-							extOperatorMat(i, j) = BaseClass::operatorMat((i & ctrlQubitBit ? 4 : 0) | (i & qubitBit2 ? 2 : 0) | (i & qubitBit ? 1 : 0), (j & ctrlQubitBit ? 4 : 0) | (j & qubitBit2 ? 2 : 0) | (j & qubitBit ? 1 : 0));
-				}
-
-				return extOperatorMat;
-			}
-		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsControlledGate : public ThreeQubitsGate<MatrixClass>
 		{

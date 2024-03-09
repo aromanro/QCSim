@@ -276,8 +276,8 @@ namespace Simon {
 		{
 			const size_t nrQubits = getAlgoQubits();
 			const size_t N = nrQubits >> 1;
-			const size_t mask = (1u << N) - 1;
-			const size_t nrBasisStates = 1u << N;
+			const size_t mask = (1ULL << N) - 1;
+			const size_t nrBasisStates = 1ULL << N;
 
 			std::unordered_map<size_t, size_t> measurements;
 			const size_t nrMeasurements = 300; // make it highly unlikely to fail
@@ -313,7 +313,7 @@ namespace Simon {
 				potential_results.insert(i);
 
 			// Not exactly the most optimal way, but I'm lazy
-			for (auto it = measurements.begin(); it != measurements.end(); ++it)
+			for (auto it = measurements.cbegin(); it != measurements.cend(); ++it)
 			{
 				if (it->first == 0) continue;
 
@@ -330,8 +330,7 @@ namespace Simon {
 				}
 			}
 
-
-			return (potential_results.empty() || potential_results.size() > 1) ? mask + 1 : *potential_results.begin();
+			return (potential_results.empty() || potential_results.size() > 1) ? mask + 1 : *potential_results.cbegin();
 		}
 
 		size_t getAlgoQubits() const
