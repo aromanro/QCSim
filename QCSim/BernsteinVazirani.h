@@ -24,7 +24,7 @@ namespace BernsteinVazirani {
 
 		MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 		{
-			const size_t nrBasisStates = 1u << nrQubits;
+			const size_t nrBasisStates = 1ULL << nrQubits;
 			MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
 
 			for (size_t x = 0; x < nrBasisStates; ++x)

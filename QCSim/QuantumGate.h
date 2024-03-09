@@ -12,7 +12,7 @@ namespace QC {
 		public:
 			// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 			virtual MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const = 0;
-			virtual ~QuantumGate() {};
+			virtual ~QuantumGate() = default;
 
 			virtual size_t getQubitsNumber() const
 			{
@@ -74,6 +74,7 @@ namespace QC {
 			void setOperator(const MatrixClass& U)
 			{
 				assert(U.rows() == U.cols());
+				assert(U.rows() == 1ULL << getQubitsNumber());
 
 				operatorMat = U;
 			}
@@ -96,6 +97,8 @@ namespace QC {
 			SingleQubitGate(const MatrixClass& U)
 				: BaseClass(U)
 			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 2);
 			}
 
 			size_t getQubitsNumber() const override
@@ -110,10 +113,10 @@ namespace QC {
 			// and also could be useful for debugging in the case the optimized version has a problem
 			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 			{
-				const size_t nrBasisStates = 1u << nrQubits;
+				const size_t nrBasisStates = 1ULL << nrQubits;
 				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
-				const size_t qubitBit = 1u << qubit;
+				const size_t qubitBit = 1ULL << qubit;
 
 				// since this can be quite condensed, here is a description:
 				// this just computes the tensor product between the 2x2 operator matrix for the qubit and the identity operators for the other qubits
@@ -145,6 +148,8 @@ namespace QC {
 			TwoQubitsGate(const MatrixClass& U)
 				: BaseClass(U)
 			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 4);
 			}
 
 			size_t getQubitsNumber() const override
@@ -161,11 +166,11 @@ namespace QC {
 			{
 				assert(qubit != controllingQubit1);
 
-				const size_t nrBasisStates = 1u << nrQubits;
+				const size_t nrBasisStates = 1ULL << nrQubits;
 				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
-				const size_t qubitBit = 1u << qubit;
-				const size_t ctrlQubitBit = 1u << controllingQubit1;
+				const size_t qubitBit = 1ULL << qubit;
+				const size_t ctrlQubitBit = 1ULL << controllingQubit1;
 				const size_t mask = qubitBit | ctrlQubitBit;
 
 				// computing the tensor product between the gate matrix and identity operators for the other qubits
@@ -195,6 +200,8 @@ namespace QC {
 			ThreeQubitsGate(const MatrixClass& U)
 				: BaseClass(U)
 			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 8);
 			}
 
 			size_t getQubitsNumber() const override
@@ -210,12 +217,12 @@ namespace QC {
 			{
 				assert(qubit != controllingQubit1 && controllingQubit1 != controllingQubit2);
 
-				const size_t nrBasisStates = 1u << nrQubits;
+				const size_t nrBasisStates = 1ULL << nrQubits;
 				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
-				const size_t qubitBit = 1u << qubit;
-				const size_t qubitBit2 = 1u << controllingQubit1;
-				const size_t ctrlQubitBit = 1u << controllingQubit2;
+				const size_t qubitBit = 1ULL << qubit;
+				const size_t qubitBit2 = 1ULL << controllingQubit1;
+				const size_t ctrlQubitBit = 1ULL << controllingQubit2;
 				const size_t mask = qubitBit | qubitBit2 | ctrlQubitBit;
 
 				// computing the tensor product between the gate matrix and identity operators for the other qubits
@@ -262,7 +269,8 @@ namespace QC {
 			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 			{
 				// this is a hack used only for trying out the old way... without OPTIMIZED_TENSOR_PRODUCT, to not be used otherwise!
-				const size_t N = log2(BaseClass::operatorMat.rows());
+				//const size_t N = log2(BaseClass::operatorMat.rows());
+				const size_t N = BaseClass::getQubitsNumber(); // no need to use log2, there is a function in the base class that computes it
 				if (N == 1)
 				{
 					SingleQubitGate<MatrixClass> gate(BaseClass::operatorMat);

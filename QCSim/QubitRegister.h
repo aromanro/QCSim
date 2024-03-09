@@ -249,7 +249,7 @@ namespace QC {
 			}
 			else if (gateQubits == 2)
 			{
-				const size_t ctrlQubitBit = 1u << controllingQubit1;
+				const size_t ctrlQubitBit = 1ULL << controllingQubit1;
 
 				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
 					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
@@ -258,8 +258,8 @@ namespace QC {
 			}
 			else
 			{
-				const size_t qubitBit2 = 1u << controllingQubit1;
-				const size_t ctrlQubitBit = 1u << controllingQubit2;
+				const size_t qubitBit2 = 1ULL << controllingQubit1;
+				const size_t ctrlQubitBit = 1ULL << controllingQubit2;
 
 				if (NrBasisStates < BaseClass::TwoQubitOmpLimit)
 					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);

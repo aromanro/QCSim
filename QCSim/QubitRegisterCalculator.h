@@ -304,7 +304,7 @@ namespace QC {
 		{
 			double accum = 0;
 
-			const size_t measuredQubitMask = 1u << qubit;
+			const size_t measuredQubitMask = 1ULL << qubit;
 			
 			for (size_t state = 0; state < NrBasisStates; ++state)
 			{	
@@ -339,7 +339,7 @@ namespace QC {
 			double accum = 0;
 			const auto processor_count = GetNumberOfThreads();
 
-			const size_t measuredQubitMask = 1u << qubit;
+			const size_t measuredQubitMask = 1ULL << qubit;
 
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
 			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
@@ -377,7 +377,7 @@ namespace QC {
 		{
 			double accum = 0;
 
-			const size_t measuredQubitMask = 1u << qubit;
+			const size_t measuredQubitMask = 1ULL << qubit;
 
 			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
@@ -422,8 +422,8 @@ namespace QC {
 
 			const size_t secondQubitp1 = secondQubit + 1;
 
-			const size_t firstPartMask = (1u << firstQubit) - 1;
-			const size_t measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
 			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
 			const size_t secondPartMax = secondPartMask >> secondQubitp1;
@@ -488,8 +488,8 @@ namespace QC {
 
 			const size_t secondQubitp1 = secondQubit + 1;
 
-			const size_t firstPartMask = (1u << firstQubit) - 1;
-			const size_t measuredPartMask = (1u << secondQubitp1) - 1 - firstPartMask;
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
 			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
 			const size_t secondPartMax = secondPartMask >> secondQubitp1;

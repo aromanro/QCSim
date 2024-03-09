@@ -6,6 +6,9 @@ Quantum computation simulator
 
 [![Build on Ubuntu](https://github.com/aromanro/QCSim/actions/workflows/cmake-single-platform.yml/badge.svg)](https://github.com/aromanro/QCSim/actions/workflows/cmake-single-platform.yml)
 
+
+Blog entry on the Computational Physics Blog: [Quantum Computing Simulator](https://compphys.go.ro/quantum-computing-simulator/)
+
 Implemented algorithms:
 
 *   Grover

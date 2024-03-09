@@ -76,7 +76,7 @@ namespace QC {
 
 		static size_t getQubitState(size_t q)
 		{
-			return 1u << q;
+			return 1ULL << q;
 		}
 
 		const RegisterClass& getRegister() const

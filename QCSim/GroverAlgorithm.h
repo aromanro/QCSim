@@ -24,7 +24,7 @@ namespace Grover {
 
 		MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 		{
-			const size_t nrBasisStates = 1u << nrQubits;
+			const size_t nrBasisStates = 1ULL << nrQubits;
 			MatrixClass extOperatorMat = MatrixClass::Identity(nrBasisStates, nrBasisStates);
 
 			if (correctQuestionState < nrBasisStates)
@@ -183,7 +183,7 @@ namespace Grover {
 			Init();
 
 			const size_t nrQubits = getAlgoQubits();
-			const size_t nrBasisStates = 1u << nrQubits;
+			const size_t nrBasisStates = 1ULL << nrQubits;
 			const size_t repeatNo = static_cast<size_t>(round(M_PI / 4. * sqrt(nrBasisStates)));
 
 			for (size_t i = 0; i < repeatNo; ++i)

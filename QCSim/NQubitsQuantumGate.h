@@ -28,12 +28,12 @@ namespace QC {
 			{
 				const size_t startQubit = BaseClass::getStartQubit();
 				const size_t endQubit = BaseClass::getEndQubit();
-				const size_t nrBasisStates = 1u << nrQubits;
+				const size_t nrBasisStates = 1ULL << nrQubits;
 				MatrixClass extOperatorMat = MatrixClass::Zero(nrBasisStates, nrBasisStates);
 
 				size_t mask = 0;
 				for (size_t i = startQubit; i <= endQubit; ++i)
-					mask |= 1u << i;
+					mask |= 1ULL << i;
 
 				for (size_t i = 0; i < nrBasisStates; ++i)
 				{

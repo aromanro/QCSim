@@ -62,7 +62,7 @@ namespace QuantumCounting {
 		// start from zero, don't go over the maximum that is allowed by the GroverQubits
 		void AddMarkedState(size_t state)
 		{
-			if (state >= (1u << groverQubits)) return;
+			if (state >= (1ULL << groverQubits)) return;
 
 			markedStates.insert(state);
 		}

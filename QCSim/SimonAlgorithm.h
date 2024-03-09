@@ -116,7 +116,7 @@ namespace Simon {
 			// <y1|<x1| B |x2>|y2> = <x1|x2><y1|y2+f(x2)>
 			// + is XOR here
 
-			const size_t xmask = (1u << N) - 1;
+			const size_t xmask = (1ULL << N) - 1;
 			const size_t ymask = xmask << N;
 
 			for (size_t stateBra = 0; stateBra < nrBasisStates; ++stateBra)
@@ -172,7 +172,7 @@ namespace Simon {
 			const size_t nrQubits = BaseClass::getNrQubits();
 			const size_t N = nrQubits >> 1;
 			const size_t mask = (1ULL << N) - 1;
-			const size_t nrBasisStates = 1u << N;
+			const size_t nrBasisStates = 1ULL << N;
 
 			std::unordered_map<size_t, size_t> measurements;
 			const size_t nrMeasurements = 300; // make it highly unlikely to fail

@@ -246,7 +246,7 @@ namespace DeutschJozsa {
 
 		size_t getAlgoNrBasisStates() const
 		{
-			return 1u << getAlgoQubits();
+			return 1ULL << getAlgoQubits();
 		}
 
 	protected:

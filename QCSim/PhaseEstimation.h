@@ -30,7 +30,7 @@ namespace QC {
 
 			double getPhase(size_t mostMeasuredState, int secondMostMeasuredState, double estimatedProbability, size_t nrSteps = 10000) const
 			{
-				const size_t nrStates = 1u << fRegisterStartQubit;
+				const size_t nrStates = 1ULL << fRegisterStartQubit;
 				if (secondMostMeasuredState == -1)
 					return static_cast<double>(mostMeasuredState) / nrStates;
 
