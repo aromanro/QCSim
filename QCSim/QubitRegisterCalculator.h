@@ -303,20 +303,23 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 			
-			for (size_t state = 0; state < NrBasisStates; ++state)
+			for (size_t state = measuredQubitMask; state < NrBasisStates; ++state)
 			{	
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
 			}
 
 			size_t measuredState = 0ULL;
+			size_t measuredStateMask = 0ULL;
 			if (prob <= accum)
+			{
 				measuredState = 1ULL;
+				measuredStateMask = measuredQubitMask;
+			}
 
 			// find the norm
 			accum = 0;
-			const size_t measuredStateMask = measuredState << qubit;
-			for (size_t state = 0; state < NrBasisStates; ++state)
+			for (size_t state = measuredStateMask; state < NrBasisStates; ++state)
 			{
 				if ((state & measuredQubitMask) == measuredStateMask)
 					accum += std::norm(registerStorage[state]);
@@ -339,23 +342,25 @@ namespace QC {
 			const size_t measuredQubitMask = 1ULL << qubit;
 
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
-			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
 			}
 
-			size_t measuredState = 0;
+			size_t measuredState = 0ULL;
+			size_t measuredStateMask = 0ULL;
 			if (prob <= accum)
-				measuredState = 1;
+			{
+				measuredState = 1ULL;
+				measuredStateMask = measuredQubitMask;
+			}
 
 			// find the norm
 			accum = 0;
 
-			const size_t measuredStateMask = measuredState << qubit;
-
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) 			
-			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long state = measuredStateMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if ((state & measuredQubitMask) == measuredStateMask)
 					accum += std::norm(registerStorage[state]);
@@ -376,7 +381,7 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-			for (size_t state = 0; state < NrBasisStates; ++state)
+			for (size_t state = measuredQubitMask; state < NrBasisStates; ++state)
 			{
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
@@ -397,7 +402,7 @@ namespace QC {
 			const size_t measuredQubitMask = 1ULL << qubit;
 
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
-			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
