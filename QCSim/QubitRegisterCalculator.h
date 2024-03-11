@@ -55,7 +55,7 @@ namespace QC {
 					const size_t row = state & qubitBit ? 1 : 0;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & notQubitBit) +
-						gateMatrix(row, 1) * registerStorage(state | qubitBit);
+							gateMatrix(row, 1) * registerStorage(state | qubitBit);
 				}
 			}
 		}
@@ -88,7 +88,7 @@ namespace QC {
 					const size_t row = state & qubitBit ? 1 : 0;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & notQubitBit) +
-						gateMatrix(row, 1) * registerStorage(state | qubitBit);
+							gateMatrix(row, 1) * registerStorage(state | qubitBit);
 				}
 			}
 		}
@@ -139,9 +139,7 @@ namespace QC {
 			
 			if (gate.isControlled())
 			{
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 4096)
-				for (long long int state = 0; state < static_cast<long long int>(ctrlQubitBit); ++state)
+				for (size_t state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
 #pragma omp parallel for num_threads(processor_count)
@@ -248,10 +246,9 @@ namespace QC {
 				if (gate.isControlQubit(1))
 					limit = std::max(limit, static_cast<long long>(qubitBit2));
 
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 2048)
 				for (long long int state = 0; state < static_cast<long long int>(limit); ++state)
 					resultsStorage(state) = registerStorage(state);
+
 #pragma omp parallel for num_threads(processor_count)
 				//schedule(static, 2048)
 				for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
@@ -525,6 +522,7 @@ namespace QC {
 			return static_cast<int>(threads ? threads : GetCpuInfoNrThreads());
 		}
 
+		//constexpr static auto cone = std::complex<double>(1.0, 0.0);
 
 		constexpr static size_t OneQubitOmpLimit = 4096;
 		constexpr static size_t TwoQubitOmpLimit = OneQubitOmpLimit / 2;
