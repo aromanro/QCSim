@@ -67,22 +67,19 @@ namespace QC {
 
 			if (gate.isDiagonal())
 			{
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 8192)
+#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 1) * registerStorage(state | qubitBit) : gateMatrix(0, 0) * registerStorage(state & notQubitBit);
 			}
 			else if (gate.isAntidiagonal())
 			{
-#pragma omp parallel for num_threads(processor_count) 
-				//schedule(static, 8192)
+#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 0) * registerStorage(state & notQubitBit) : gateMatrix(0, 1) * registerStorage(state | qubitBit);
 			}
 			else
 			{
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 8192)
+#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					const size_t row = state & qubitBit ? 1 : 0;
@@ -142,8 +139,7 @@ namespace QC {
 				for (size_t state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 4096)
+#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
 				for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -157,8 +153,7 @@ namespace QC {
 			}
 			else
 			{
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 4096) 
+#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -249,8 +244,7 @@ namespace QC {
 				for (long long int state = 0; state < static_cast<long long int>(limit); ++state)
 					resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 2048)
+#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
 				for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -270,8 +264,7 @@ namespace QC {
 			}
 			else
 			{
-#pragma omp parallel for num_threads(processor_count)
-				//schedule(static, 2048)
+#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -341,7 +334,7 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-#pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule) 
 			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if (state & measuredQubitMask)
@@ -359,7 +352,7 @@ namespace QC {
 			// find the norm
 			accum = 0;
 
-#pragma omp parallel for reduction(+:accum) num_threads(processor_count) 			
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)		
 			for (long long state = measuredStateMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if ((state & measuredQubitMask) == measuredStateMask)
@@ -368,7 +361,7 @@ namespace QC {
 			const double norm = 1. / sqrt(accum);
 
 			// collapse
-#pragma omp parallel for num_threads(processor_count)
+#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
 			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
 
@@ -401,7 +394,7 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-#pragma omp parallel for reduction(+:accum) num_threads(processor_count) 
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
 			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if (state & measuredQubitMask)
@@ -529,6 +522,7 @@ namespace QC {
 
 		//constexpr static auto cone = std::complex<double>(1.0, 0.0);
 
+		constexpr static int divSchedule = 4;
 		constexpr static size_t OneQubitOmpLimit = 4096;
 		constexpr static size_t TwoQubitOmpLimit = OneQubitOmpLimit / 2;
 		constexpr static size_t ThreeQubitOmpLimit = TwoQubitOmpLimit / 2;
