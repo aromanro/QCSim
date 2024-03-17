@@ -34,14 +34,15 @@ namespace QC {
 		QubitRegisterCalculator() = default;
 		virtual ~QubitRegisterCalculator() = default;
 
-		static inline void ApplyOneQubitGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t NrBasisStates)
+		static inline void ApplyOneQubitGate(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
 			const size_t notQubitBit = ~qubitBit;
 
 			if (gate.isDiagonal())
 			{
+				swapStorage = false;
 				for (size_t state = 0; state < NrBasisStates; ++state)
-					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 1) * registerStorage(state | qubitBit) : gateMatrix(0, 0) * registerStorage(state & notQubitBit);
+					registerStorage(state) *= state & qubitBit ? gateMatrix(1, 1) : gateMatrix(0, 0);
 			}
 			else if (gate.isAntidiagonal())
 			{
@@ -60,16 +61,17 @@ namespace QC {
 			}
 		}
 
-		static inline void ApplyOneQubitGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t NrBasisStates)
+		static inline void ApplyOneQubitGateOmp(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
 			const size_t notQubitBit = ~qubitBit;
 			const auto processor_count = GetNumberOfThreads();
 
 			if (gate.isDiagonal())
 			{
+				swapStorage = false;
 #pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
-					resultsStorage(state) = state & qubitBit ? gateMatrix(1, 1) * registerStorage(state | qubitBit) : gateMatrix(0, 0) * registerStorage(state & notQubitBit);
+					registerStorage(state) *= state & qubitBit ? gateMatrix(1, 1) : gateMatrix(0, 0);
 			}
 			else if (gate.isAntidiagonal())
 			{
@@ -523,9 +525,9 @@ namespace QC {
 		//constexpr static auto cone = std::complex<double>(1.0, 0.0);
 
 		constexpr static int divSchedule = 4;
-		constexpr static size_t OneQubitOmpLimit = 4096;
+		constexpr static size_t OneQubitOmpLimit = 1024;
 		constexpr static size_t TwoQubitOmpLimit = OneQubitOmpLimit / 2;
-		constexpr static size_t ThreeQubitOmpLimit = TwoQubitOmpLimit / 2;
+		constexpr static size_t ThreeQubitOmpLimit = OneQubitOmpLimit / 4;
 
 	private:
 		static size_t GetCpuInfoNrThreads()

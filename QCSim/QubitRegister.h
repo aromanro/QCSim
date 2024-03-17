@@ -240,12 +240,13 @@ namespace QC {
 			// TODO: perhaps also optimize better for controlled gates
 			// TODO: there are ways to optimize further for particular kind of gates, probably I won't bother since it's only a constant factor reduction
 			
+			bool swapStorage = true;
 			if (gateQubits == 1)
 			{
 				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
-					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
+					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates, swapStorage);
 				else
-					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates);
+					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates, swapStorage);
 			}
 			else if (gateQubits == 2)
 			{
@@ -267,7 +268,7 @@ namespace QC {
 					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 			}
 
-			registerStorage.swap(resultsStorage);
+			if (swapStorage) registerStorage.swap(resultsStorage);
 #else			
 			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 #endif

@@ -23,7 +23,7 @@ bool QuantumEraserTests()
 	for (auto m : measurements)
 		std::cout << "State: " << m.first << " measured " << m.second << " times, that is " << 100. * m.second / nrMeasurements << "%" << std::endl;
 
-	int expected = nrMeasurements / 4;
+	double expected = nrMeasurements / 4.;
 	const double allowedError = expected * 0.05;
 
 	if (!approxEqual(measurements[0], expected, allowedError) || !approxEqual(measurements[1], expected, allowedError)

@@ -44,8 +44,8 @@ void setRegister(QC::QubitRegister<>& reg)
 
 bool checkQubit0()
 {
-	std::map<int, int> measurements;
-	std::map<int, int> fmeasurements;
+	std::map<size_t, size_t> measurements;
+	std::map<size_t, size_t> fmeasurements;
 
 	const int nrMeasurements = 10000;
 
@@ -174,8 +174,8 @@ bool checkAmplitudesAfterSingleQubitMeasurement()
 
 bool checkSingleQubitMeasurements()
 {
-	std::map<int, int> measurements;
-	std::map<int, int> fmeasurements;
+	std::map<size_t, size_t> measurements;
+	std::map<size_t, size_t> fmeasurements;
 
 	const int nrMeasurements = 10000;
 

@@ -442,6 +442,11 @@ namespace QC {
 			{
 				OpClass::operatorMat(0, 1) = 1;
 			}
+
+			bool isAntidiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class SigmaMinusGate : public SingleQubitGate<MatrixClass>
@@ -453,6 +458,11 @@ namespace QC {
 			SigmaMinusGate()
 			{
 				OpClass::operatorMat(1, 0) = 1;
+			}
+
+			bool isAntidiagonal() const override
+			{
+				return true;
 			}
 		};
 
@@ -736,6 +746,11 @@ namespace QC {
 			{
 				OpClass::operatorMat(3, 3) = -1;
 			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledHadamardGate : public TwoQubitsControlledGate<MatrixClass>
@@ -795,6 +810,11 @@ namespace QC {
 			{
 				OpClass::operatorMat(3, 3) = std::complex<double>(0, 1);
 			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledPhaseShiftGate : public TwoQubitsControlledGate<MatrixClass>
@@ -811,6 +831,11 @@ namespace QC {
 			void SetPhaseShift(double theta)
 			{
 				OpClass::operatorMat(3, 3) = std::polar(1., theta);
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
 			}
 		};
 
@@ -907,6 +932,11 @@ namespace QC {
 
 				OpClass::operatorMat(2, 2) = std::polar(1., -t2);
 				OpClass::operatorMat(3, 3) = std::polar(1., t2);
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
 			}
 		};
 
