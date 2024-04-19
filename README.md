@@ -9,6 +9,8 @@ Quantum computation simulator
 
 Blog entry on the Computational Physics Blog: [Quantum Computing Simulator](https://compphys.go.ro/quantum-computing-simulator/)
 
+Test for git commit and sign from new comp... to be removed.
+
 Implemented algorithms:
 
 *   Grover
