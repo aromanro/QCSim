@@ -4,7 +4,7 @@
 
 #include <unsupported/Eigen/CXX11/Tensor>
 
-#include <eigen/eigen>
+#include <Eigen/Eigen>
 
 #include "QuantumGate.h"
 
