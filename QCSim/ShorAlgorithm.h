@@ -67,7 +67,7 @@ namespace Shor {
 			// for each l qubit from x (0 - L-1 range)
 			// construct a controlled gate by the qubit 
 			const size_t BasisStatesNo = reg.getNrBasisStates();
-			const size_t xmask = (1 << BaseClass::fRegisterStartQubit) - 1;
+			const size_t xmask = (1ULL << BaseClass::fRegisterStartQubit) - 1;
 			const size_t fmask = ~xmask;
 
 
@@ -168,7 +168,7 @@ namespace Shor {
 
 				// period finding
 
-				const size_t xmask = (1 << fx.getFunctionStartQubit()) - 1;
+				const size_t xmask = (1ULL << fx.getFunctionStartQubit()) - 1;
 
 				// use a single measurement to guess the period (but not zero)
 
@@ -341,8 +341,8 @@ namespace Shor {
 
 		void Apply(QC::QubitRegister<VectorClass, MatrixClass>& reg) override
 		{
-			const size_t nrStates = 1 << BaseClass::fRegisterStartQubit;
-			const size_t mask = ((1 << (BaseClass::fRegisterStartQubit + BaseClass::fRegisterNrQubits)) - 1) >> BaseClass::fRegisterStartQubit;
+			const size_t nrStates = 1ULL << BaseClass::fRegisterStartQubit;
+			const size_t mask = ((1ULL << (BaseClass::fRegisterStartQubit + BaseClass::fRegisterNrQubits)) - 1) >> BaseClass::fRegisterStartQubit;
 
 			std::vector<bool> qubits(BaseClass::fRegisterStartQubit, false);
 

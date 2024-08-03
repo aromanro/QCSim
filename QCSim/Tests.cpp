@@ -199,7 +199,7 @@ bool GroverWithGatesTests()
 	{
 		std::cout << nrQubits << " qubits" << std::endl;
 
-		std::uniform_int_distribution<> dist(0, (1 << nrQubits) - 1);
+		std::uniform_int_distribution<> dist(0, (1ULL << nrQubits) - 1);
 		Grover::GroverAlgorithmWithGatesOracle<> galgo(nrQubits);
 
 		for (int i = 0; i < 5; ++i)
@@ -242,7 +242,7 @@ bool GroverTests()
 	{
 		std::cout << nrQubits << " qubits" << std::endl;
 
-		std::uniform_int_distribution<> dist(0, (1 << nrQubits) - 1);
+		std::uniform_int_distribution<> dist(0, (1ULL << nrQubits) - 1);
 		Grover::GroverAlgorithm<> galgo(nrQubits);
 
 		for (int i = 0; i < 5; ++i)
@@ -532,7 +532,7 @@ bool SimonWithGatesTests()
 
 		Simon::SimonAlgorithmWithGatesOracle<> simonAlgorithm(nrQubits);
 
-		const size_t lim = static_cast<size_t>((1 << nrQubits) - 1);
+		const size_t lim = static_cast<size_t>((1ULL << nrQubits) - 1);
 		for (size_t functionString = 0; functionString <= lim; ++functionString)
 		{
 			std::cout << "Trying with string: " << functionString << "...";
@@ -581,7 +581,7 @@ bool SimonTests()
 
 		Simon::SimonAlgorithm<> simonAlgorithm(nrQubits);
 
-		const size_t lim = (1 << nrQubits) - 1;
+		const size_t lim = (1ULL << nrQubits) - 1;
 		for (size_t functionString = 0; functionString <= lim; ++functionString)
 		{
 			std::cout << "Trying with string: " << functionString << "...";

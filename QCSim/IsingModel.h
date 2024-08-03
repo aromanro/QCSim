@@ -135,7 +135,7 @@ namespace Models {
 
 		size_t GetMinEnergyState()
 		{
-			size_t maxStates = 1 << spins.size();
+			size_t maxStates = 1ULL << spins.size();
 
 			double minEnergy = std::numeric_limits<double>::max();
 			size_t minState = 0;
@@ -156,7 +156,7 @@ namespace Models {
 		std::set<size_t> GetMinEnergyStates()
 		{
 			std::set<size_t> res;
-			size_t maxStates = 1 << spins.size();
+			size_t maxStates = 1ULL << spins.size();
 
 			double minEnergy = std::numeric_limits<double>::max();
 			size_t minState = 0;

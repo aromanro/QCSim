@@ -214,7 +214,7 @@ bool NQubitsAdderTests()
 bool SimpleDrapperAdderTests()
 {
 	const size_t nQubits = 3;
-	const size_t mask = (1 << nQubits) - 1;
+	const size_t mask = (1ULL << nQubits) - 1;
 
 	std::cout << "Draper adder, adding " << nQubits << "-qubit values..." << std::endl;
 
@@ -290,7 +290,7 @@ bool SimpleDrapperAdderTests()
 bool DrapperAdderWithCarryTests()
 {
 	const size_t nQubits = 3;
-	const size_t mask = (1 << nQubits) - 1;
+	const size_t mask = (1ULL << nQubits) - 1;
 
 	std::cout << "Draper adder with carry, adding " << nQubits << "-qubit values..." << std::endl;
 

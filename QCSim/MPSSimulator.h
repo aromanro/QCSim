@@ -79,7 +79,7 @@ namespace QC {
 
 			void setToBasisState(size_t State)
 			{
-				const size_t NrBasisStates = gammas.size() > sizeof(size_t) * 8 ? 64 : (1 << gammas.size());
+				const size_t NrBasisStates = gammas.size() > sizeof(size_t) * 8 ? 64 : (1ULL << gammas.size());
 				if (State >= NrBasisStates) return;
 
 				Clear();
@@ -177,7 +177,7 @@ namespace QC {
 			VectorClass getRegisterStorage() const
 			{
 				if (gammas.size() > sizeof(size_t) * 8) throw std::runtime_error("Too many qubits to compute the state vector");
-				const size_t NrBasisStates = 1 << gammas.size();
+				const size_t NrBasisStates = 1ULL << gammas.size();
 
 				VectorClass res = VectorClass::Zero(NrBasisStates);
 

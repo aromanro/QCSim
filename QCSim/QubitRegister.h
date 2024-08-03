@@ -358,7 +358,7 @@ namespace QC {
 			const size_t nQubits = getNrQubits();
 			std::cout << "|";
 
-			size_t mask = 1 << (nQubits - 1);
+			size_t mask = 1ULL << (nQubits - 1);
 			for (size_t qubit = 0; qubit < nQubits; ++qubit)
 			{
 				std::cout << ((state & mask) ? "1" : "0");

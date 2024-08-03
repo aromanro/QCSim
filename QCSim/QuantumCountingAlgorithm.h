@@ -81,12 +81,12 @@ namespace QuantumCounting {
 
 		double GetCorrectThetaForMarkedStates() const
 		{
-			return asin(static_cast<double>(sqrt(static_cast<double>(GetNumberOfMarkedStates())/ static_cast<double>(1 << groverQubits)))) * M_1_PI;
+			return asin(static_cast<double>(sqrt(static_cast<double>(GetNumberOfMarkedStates())/ static_cast<double>(1ULL << groverQubits)))) * M_1_PI;
 		}
 
 		double GetThetaForState(size_t state) const
 		{
-			double theta = static_cast<double>(state) / static_cast<double>(1 << precisionQubits);
+			double theta = static_cast<double>(state) / static_cast<double>(1ULL << precisionQubits);
 
 			if (theta >= 0.5)
 				theta = 1.0 - theta;
@@ -98,7 +98,7 @@ namespace QuantumCounting {
 		{
 			double s = sin(M_PI * GetThetaForState(state));
 
-			return static_cast<size_t>(round(static_cast<double>(1 << groverQubits) * s * s));
+			return static_cast<size_t>(round(static_cast<double>(1ULL << groverQubits) * s * s));
 		}
 
 	private:
@@ -116,7 +116,7 @@ namespace QuantumCounting {
 
 			for (size_t q = 0; q < precisionQubits; ++q)
 			{
-				size_t nrOps = 1 << q;
+				size_t nrOps = 1ULL << q;
 				size_t ctrlQubit = precisionQubits - q - 1;
 				// or this, if you want to use the IQFT with swapping, but obviously that's slower due of the additional swap gates
 				//size_t ctrlQubit = q;
@@ -174,7 +174,7 @@ namespace QuantumCounting {
 			for (size_t q = 0; q < groverQubits; ++q)
 				BaseClass::ApplyGate(chadamard, precisionQubits + q, ctrlQubit);
 
-			size_t nrGroverStates = 1 << groverQubits;
+			size_t nrGroverStates = 1ULL << groverQubits;
 			for (size_t state = 1; state < nrGroverStates; ++state)
 				ControlledOracle(ctrlQubit, state);
 
