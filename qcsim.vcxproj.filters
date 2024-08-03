@@ -52,6 +52,9 @@
     <ClCompile Include="QCSim\VQETests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QCSim\MPSSimulatorTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -207,6 +210,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\VQE.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPSSimulator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

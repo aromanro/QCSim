@@ -34,6 +34,8 @@ bool IsingTests();
 
 bool VQETests();
 
+bool MPSSimulatorTests();
+
 bool tests();
 
 #ifndef TESTS_CPP_

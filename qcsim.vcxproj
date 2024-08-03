@@ -291,6 +291,7 @@
     <ClCompile Include="QCSim\DistributedTests.cpp" />
     <ClCompile Include="QCSim\GamesTests.cpp" />
     <ClCompile Include="QCSim\IsingTests.cpp" />
+    <ClCompile Include="QCSim\MPSSimulatorTests.cpp" />
     <ClCompile Include="QCSim\PhaseEstimationTests.cpp" />
     <ClCompile Include="QCSim\QMLTests.cpp" />
     <ClCompile Include="QCSim\TeleportationTests.cpp" />
@@ -317,6 +318,7 @@
     <ClInclude Include="QCSim\HardyParadox.h" />
     <ClInclude Include="QCSim\IsingModel.h" />
     <ClInclude Include="QCSim\MagicSquare.h" />
+    <ClInclude Include="QCSim\MPSSimulator.h" />
     <ClInclude Include="QCSim\NControlledGateWithAncilla.h" />
     <ClInclude Include="QCSim\NControlledNotWithAncilla.h" />
     <ClInclude Include="QCSim\NQubitsControlledQuantumGate.h" />
