@@ -20,6 +20,8 @@ namespace QC {
 			using MatrixClass = Eigen::MatrixXcd;
 			using VectorClass = Eigen::VectorXcd;
 			using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
+			using IntIndexPair = Eigen::IndexPair<int>;
+			using Indexes = Eigen::array<IntIndexPair, 1>;
 
 			MPSSimulator(size_t N)
 				: lambdas(N - 1, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1))
@@ -187,12 +189,35 @@ namespace QC {
 				return res;
 			}
 
+			void print() const
+			{
+				for (size_t i = 0; i < gammas.size() - 1; ++i)
+				{
+					std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
+					std::cout << "Gamma " << i << ":\n" << gammas[i] << std::endl;
+				}
+
+				std::cout << "Gamma " << gammas.size() - 1 << ":\n" << gammas[gammas.size() - 1] << std::endl;
+			}
+
 		private:
 			void ApplySingleQubitGate(const GateClass& gate, size_t qubit)
 			{
-				// TODO: Implement it
-				
 				// easy: shape the gate into a tensor and contract it with the qubit tensor
+				Eigen::Tensor<std::complex<double>, 2> opTensor(2, 2);
+
+				const MatrixClass& opMat = gate.getRawOperatorMatrix();
+
+				opTensor(0, 0) = opMat(0, 0);
+				opTensor(0, 1) = opMat(1, 0);
+				opTensor(1, 0) = opMat(0, 1);
+				opTensor(1, 1) = opMat(1, 1);
+
+				// contract the gate tensor with the qubit tensor
+
+				static const Indexes product_dims1{ IntIndexPair(1, 0) };
+				static const std::array<int, 3> permute{ 0, 2, 1 };
+				gammas[qubit] = gammas[qubit].contract(opTensor, product_dims1).shuffle(permute);
 			}
 
 			void ApplyTwoQubitGate(const GateClass& gate, size_t qubit, size_t controllingQubit1)
@@ -202,7 +227,7 @@ namespace QC {
 				// it's more complex than the single qubit gate
 				// very shortly:
 				// contract tensors for the two qubits, along with the correspnding lambdas
-				// shape the gate intro a tensor
+				// shape the gate into a tensor
 				// contract the gate tensor with the two qubit tensor
 				// apply SVD to separate out the resulting tensor into the two qubit tensors and the lambdas
 			}
