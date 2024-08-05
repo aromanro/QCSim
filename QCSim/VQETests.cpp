@@ -97,8 +97,8 @@ bool VQETests()
 	for (int v = 0; v < static_cast<int>(vertices.size()); ++v)
 		for (int i = 0; i < static_cast<int>(params.size()); ++i)
 		{
-			const double R = (0.4 + 0.8 * dist_zo(gen)) * (dist_bool(gen) ? -1 : 1);
-			vertices[v].push_back(params[i] + R);
+			const double Ri = (0.4 + 0.8 * dist_zo(gen)) * (dist_bool(gen) ? -1 : 1);
+			vertices[v].push_back(params[i] + Ri);
 		}
 	
 	vqeDoubleQubits.SetVertices(vertices);
