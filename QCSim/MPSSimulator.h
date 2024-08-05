@@ -262,7 +262,7 @@ namespace QC {
 
 				const LambdaType& Svalues = SVD.singularValues();
 
-				// TODO: not set back lambdas and gammas
+				// TODO: now set back lambdas and gammas
 			}
 
 
@@ -293,7 +293,7 @@ namespace QC {
 							const int m2 = q2 << 1;
 							for (int q3 = 0; q3 < 2; ++q3)
 								for (int q4 = 0; q4 < 2; ++q4)
-									result(q2, q1, q4, q3) = gate.getRawOperatorMatrix()(m1 + q3, m2 + q4);
+									result(q2, q1, q4, q3) = gate.getRawOperatorMatrix()(m1 | q3, m2 | q4);
 						}
 					}
 				else
