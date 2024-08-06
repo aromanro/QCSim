@@ -30,6 +30,12 @@ bool StateSimulationTest()
 	std::cout << "After applying Y gate:" << std::endl;
 	mps.print();
 
+	QC::Gates::CNOTGate cnotgate;
+	mps.ApplyGate(cnotgate, 1, 0);
+
+	std::cout << "After applying cnot gate:" << std::endl;
+	mps.print();
+
 	return true;
 }
 
