@@ -225,8 +225,6 @@ namespace QC {
 
 			void ApplyTwoQubitGate(const GateClass& gate, size_t qubit, size_t controllingQubit1)
 			{
-				// TODO: Implement it
-
 				// it's more complex than the single qubit gate
 				// very shortly:
 				// contract tensors for the two qubits, along with the correspnding lambdas
@@ -244,10 +242,10 @@ namespace QC {
 					reversed = true;
 				}
 
-				const Eigen::Tensor<std::complex<double>, 4> U = GetTwoBitsGateTensor(gate, reversed);
+				const Eigen::Tensor<std::complex<double>, 4> U = GetTwoQubitsGateTensor(gate, reversed);
 				const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructTheta(qubit1, U);
 
-				Eigen::MatrixXcd thetaMatrix = ReshapeTheta(thetabar);
+				const Eigen::MatrixXcd thetaMatrix = ReshapeTheta(thetabar);
 
 				Eigen::JacobiSVD<Eigen::MatrixXcd> SVD; 
 
@@ -256,13 +254,13 @@ namespace QC {
 
 				SVD.compute(thetaMatrix, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
 
-				const int sz = limitSize ? std::min<size_t>(chi, SVD.matrixU().cols()) : SVD.matrixU().cols();
+				const Eigen::MatrixXcd& UmatrixFull = SVD.matrixU();
 
-				std::cout << "Sz: " << sz << std::endl;
+				const int sz = limitSize ? std::min<size_t>(chi, UmatrixFull.cols()) : UmatrixFull.cols();
 
 				const int Dchi = 2 * sz;
-				Eigen::MatrixXcd Umatrix = SVD.matrixU().topLeftCorner(Dchi, sz);
-				Eigen::MatrixXcd Vmatrix = SVD.matrixV().topLeftCorner(Dchi, sz).adjoint();
+				const Eigen::MatrixXcd& Umatrix = UmatrixFull.topLeftCorner(Dchi, sz);
+				const Eigen::MatrixXcd& Vmatrix = SVD.matrixV().topLeftCorner(Dchi, sz).adjoint();
 
 				const LambdaType Svalues = SVD.singularValues().head(sz);
 				
@@ -336,7 +334,7 @@ namespace QC {
 			}
 
 
-			Eigen::Tensor<std::complex<double>, 4> GetTwoBitsGateTensor(const GateClass& gate, bool reversed) const
+			Eigen::Tensor<std::complex<double>, 4> GetTwoQubitsGateTensor(const GateClass& gate, bool reversed) const
 			{
 				Eigen::Tensor<std::complex<double>, 4> result(2, 2, 2, 2);
 
@@ -349,7 +347,7 @@ namespace QC {
 							const int m2 = q2 << 1;
 							for (int q3 = 0; q3 < 2; ++q3)
 								for (int q4 = 0; q4 < 2; ++q4)
-									result(q2, q1, q4, q3) = gate.getRawOperatorMatrix()(m1 | q3, m2 | q4);
+									result(q3, q1, q4, q2) = gate.getRawOperatorMatrix()(m1 | q3, m2 | q4);
 						}
 					}
 				else
@@ -361,7 +359,7 @@ namespace QC {
 							const int m2 = q2 << 1;
 							for (int q3 = 0; q3 < 2; ++q3)
 								for (int q4 = 0; q4 < 2; ++q4)
-									result(q1, q2, q3, q4) = gate.getRawOperatorMatrix()(m1 | q3, m2 | q4);
+									result(q1, q3, q2, q4) = gate.getRawOperatorMatrix()(m1 | q3, m2 | q4);
 						}
 					}
 
@@ -376,7 +374,7 @@ namespace QC {
 				static const Indexes product_dims_int{ IntIndexPair(2, 0) };
 				static const Indexes product_dims4{ IntIndexPair(3, 0) };
 
-				Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1);
+				const Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1);
 
 				if (qubit1 == 0 && qubit2 == lambdas.size())
 				{
@@ -384,21 +382,19 @@ namespace QC {
 				}
 				else if (qubit1 == 0 && qubit2 < lambdas.size())
 				{
-					Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1);
-					Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2);
+					const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2);
 
 					return gammas[qubit1].contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
 				}
 				else if (qubit1 > 0 && qubit2 == lambdas.size())
 				{
-					Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1);
-					Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1);
+					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1);
 
 					return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
 				}
 
-				Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1);
-				Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2);
+				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1);
+				const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2);
 
 				return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
 			}
@@ -406,7 +402,7 @@ namespace QC {
 			// for the two qubit gate - U is the gate tensor
 			Eigen::Tensor<std::complex<double>, 4> ConstructTheta(size_t qubit1, const Eigen::Tensor<std::complex<double>, 4>& U) const
 			{
-				Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+				const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
 
 				// apply evolution/gate operator
 				using DimPair = Eigen::Tensor<std::complex<double>, 4>::DimensionPair;
@@ -428,7 +424,6 @@ namespace QC {
 
 				int sz = static_cast<int>(theta.dimension(0));
 				assert(sz == theta.dimension(1));
-
 				assert(2 == theta.dimension(2));
 				assert(2 == theta.dimension(3));
 

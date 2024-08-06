@@ -684,7 +684,8 @@ bool tests()
 	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
 	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
 	if (res) res = CountingTests() && QMLTests() && IsingTests();
-	if (res) res = VQETests() && MPSSimulatorTests();
+	if (res) res = VQETests();
+	if (res) res = MPSSimulatorTests();
 	
 	/*
 	bool res = true;
