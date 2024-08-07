@@ -678,15 +678,13 @@ bool tests()
 
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 	
-	bool res = true; // basicTests() && quantumAdderTests() && DeutschJozsaTests();
-	/*
+	bool res = basicTests() && quantumAdderTests() && DeutschJozsaTests();
 	if (res) res = SimonTests() && BernsteinVaziraniTests() && GroverTests();
 	if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
 	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
 	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
 	if (res) res = CountingTests() && QMLTests() && IsingTests();
 	if (res) res = VQETests();
-	*/
 	if (res) res = MPSSimulatorTests();
 	
 	/*

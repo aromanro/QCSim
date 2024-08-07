@@ -36,6 +36,13 @@ bool StateSimulationTest()
 	std::cout << "After applying cnot gate:" << std::endl;
 	mps.print();
 
+	QC::Gates::ControlledYGate cygate;
+	mps.ApplyGate(hgate, 0);
+	mps.ApplyGate(cygate, 1, 0);
+	
+	std::cout << "After applying h and cy:" << std::endl;
+	mps.print();
+
 	return true;
 }
 

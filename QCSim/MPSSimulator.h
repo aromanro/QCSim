@@ -254,7 +254,7 @@ namespace QC {
 
 				//std::cout << "Theta matrix:\n" << thetaMatrix << std::endl;
 
-				Eigen::JacobiSVD<Eigen::MatrixXcd> SVD; 
+				Eigen::JacobiSVD<Eigen::MatrixXcd> SVD;
 
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
@@ -262,21 +262,28 @@ namespace QC {
 				SVD.compute(thetaMatrix, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
 
 				const Eigen::MatrixXcd& UmatrixFull = SVD.matrixU();
+				const Eigen::MatrixXcd& VmatrixFull = SVD.matrixV();
 
 				//std::cout << "U matrix:\n" << UmatrixFull << std::endl;
 
-				const int sz = limitSize ? std::min<size_t>(chi, UmatrixFull.cols()) : UmatrixFull.cols();
+				const Eigen::VectorXd& SvaluesFull = SVD.singularValues();
 
-				const int Dchi = 2 * sz;
+				long long szm = SvaluesFull.size();
+				while (szm > 0 && SvaluesFull(szm - 1) == 0.) --szm;
+				if (szm == 0) szm = 1;
 
-				const Eigen::MatrixXcd& Umatrix = UmatrixFull.topLeftCorner((qubit1 == 0) ? sz : Dchi, sz);
-				const Eigen::MatrixXcd& Vmatrix = SVD.matrixV().topLeftCorner((qubit2 == lambdas.size()) ? sz : Dchi, sz).adjoint();
+				const long long sz = limitSize ? std::min<long long>(chi, std::min<long long>(szm, UmatrixFull.cols())) : std::min<long long>(szm, UmatrixFull.cols());
 
-				const LambdaType Svalues = SVD.singularValues().head(sz);
+				const long long Dchi = 2 * sz;
+
+				const Eigen::MatrixXcd& Umatrix = UmatrixFull.topLeftCorner(std::min<long long>(Dchi, UmatrixFull.rows()), sz);
+				const Eigen::MatrixXcd& Vmatrix = VmatrixFull.topLeftCorner(std::min<long long>(Dchi, VmatrixFull.rows()), sz).adjoint();
+
+				const LambdaType Svalues = SvaluesFull.head(sz);
 				
 				// now set back lambdas and gammas
-				const int szl = (qubit1 == 0) ? 1 : sz;
-				const int szr = (qubit2 == lambdas.size()) ? 1 : sz;
+				const long long szl = (qubit1 == 0) ? 1 : sz;
+				const long long szr = (qubit2 == lambdas.size()) ? 1 : sz;
 
 				// this with lambdas is not optimal
 				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
@@ -372,27 +379,27 @@ namespace QC {
 				Eigen::Tensor<std::complex<double>, 4> result(2, 2, 2, 2);
 
 				if (reversed)
-					for (int q1 = 0; q1 < 2; ++q1)
+					for (int q0l = 0; q0l < 2; ++q0l) // ctrl qubit
 					{
-						const int m1 = q1 << 1;
-						for (int q2 = 0; q2 < 2; ++q2)
+						const int l0 = q0l << 1;
+						for (int q0c = 0; q0c < 2; ++q0c) // ctrl qubit
 						{
-							const int m2 = q2 << 1;
-							for (int q3 = 0; q3 < 2; ++q3)
-								for (int q4 = 0; q4 < 2; ++q4)
-									result(q3, q1, q4, q2) = gate.getRawOperatorMatrix()(m1 | q3, m2 | q4);
+							const int c0 = q0c << 1;
+							for (int q1l = 0; q1l < 2; ++q1l)
+								for (int q1c = 0; q1c < 2; ++q1c)
+									result(q1l, q0l, q1c, q0c) = gate.getRawOperatorMatrix()(l0 | q1l, c0 | q1c);
 						}
 					}
 				else
-					for (int q1 = 0; q1 < 2; ++q1)
+					for (int q0l = 0; q0l < 2; ++q0l) // ctrl qubit
 					{
-						const int m1 = q1 << 1;
-						for (int q2 = 0; q2 < 2; ++q2)
+						const int l0 = q0l << 1;
+						for (int q0c = 0; q0c < 2; ++q0c) // ctrl qubit
 						{
-							const int m2 = q2 << 1;
-							for (int q3 = 0; q3 < 2; ++q3)
-								for (int q4 = 0; q4 < 2; ++q4)
-									result(q1, q3, q2, q4) = gate.getRawOperatorMatrix()(m1 | q3, m2 | q4);
+							const int c0 = q0c << 1;
+							for (int q1l = 0; q1l < 2; ++q1l)
+								for (int q1c = 0; q1c < 2; ++q1c)
+									result(q0l, q1l, q0c, q1c) = gate.getRawOperatorMatrix()(l0 | q1l, c0 | q1c);
 						}
 					}
 
