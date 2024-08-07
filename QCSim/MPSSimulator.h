@@ -268,9 +268,8 @@ namespace QC {
 
 				const Eigen::VectorXd& SvaluesFull = SVD.singularValues();
 
-				long long szm = SvaluesFull.size();
-				while (szm > 0 && SvaluesFull(szm - 1) == 0.) --szm;
-				if (szm == 0) szm = 1;
+				long long szm = SVD.nonzeroSingularValues();
+				if (szm == 0) szm = 1; // should not happen
 
 				const long long sz = limitSize ? std::min<long long>(chi, std::min<long long>(szm, UmatrixFull.cols())) : std::min<long long>(szm, UmatrixFull.cols());
 
@@ -279,7 +278,7 @@ namespace QC {
 				const Eigen::MatrixXcd& Umatrix = UmatrixFull.topLeftCorner(std::min<long long>(Dchi, UmatrixFull.rows()), sz);
 				const Eigen::MatrixXcd& Vmatrix = VmatrixFull.topLeftCorner(std::min<long long>(Dchi, VmatrixFull.rows()), sz).adjoint();
 
-				const LambdaType Svalues = SvaluesFull.head(sz);
+				const LambdaType Svalues = SvaluesFull.head(szm);
 				
 				// now set back lambdas and gammas
 				const long long szl = (qubit1 == 0) ? 1 : sz;
