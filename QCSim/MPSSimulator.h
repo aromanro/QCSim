@@ -243,9 +243,16 @@ namespace QC {
 				}
 
 				const Eigen::Tensor<std::complex<double>, 4> U = GetTwoQubitsGateTensor(gate, reversed);
+
+				//std::cout << "U:\n" << U << " Dims: " << U.dimensions() << std::endl;
+
 				const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructTheta(qubit1, U);
 
+				//std::cout << "Theta:\n" << thetabar << " Dims: " << thetabar.dimensions() << std::endl;
+
 				const Eigen::MatrixXcd thetaMatrix = ReshapeTheta(thetabar);
+
+				//std::cout << "Theta matrix:\n" << thetaMatrix << std::endl;
 
 				Eigen::JacobiSVD<Eigen::MatrixXcd> SVD; 
 
@@ -256,34 +263,60 @@ namespace QC {
 
 				const Eigen::MatrixXcd& UmatrixFull = SVD.matrixU();
 
+				//std::cout << "U matrix:\n" << UmatrixFull << std::endl;
+
 				const int sz = limitSize ? std::min<size_t>(chi, UmatrixFull.cols()) : UmatrixFull.cols();
 
 				const int Dchi = 2 * sz;
-				const Eigen::MatrixXcd& Umatrix = UmatrixFull.topLeftCorner(Dchi, sz);
-				const Eigen::MatrixXcd& Vmatrix = SVD.matrixV().topLeftCorner(Dchi, sz).adjoint();
+
+				const Eigen::MatrixXcd& Umatrix = UmatrixFull.topLeftCorner((qubit1 == 0) ? sz : Dchi, sz);
+				const Eigen::MatrixXcd& Vmatrix = SVD.matrixV().topLeftCorner((qubit2 == lambdas.size()) ? sz : Dchi, sz).adjoint();
 
 				const LambdaType Svalues = SVD.singularValues().head(sz);
 				
 				// now set back lambdas and gammas
+				const int szl = (qubit1 == 0) ? 1 : sz;
+				const int szr = (qubit2 == lambdas.size()) ? 1 : sz;
 
 				// this with lambdas is not optimal
-				Eigen::Tensor<std::complex<double>, 3> Utensor(sz, 2, sz);
-				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, sz);
+				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
+				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, szr);
 
-				for (Eigen::Index i = 0; i < sz; ++i)
-					for (Eigen::Index j = 0; j < 2; ++j)
-						for (Eigen::Index k = 0; k < sz; ++k)
-						{
-							const Eigen::Index jchi = j * sz;
-							Utensor(i, j, k) = Umatrix(jchi + i, k);
-							Vtensor(i, j, k) = Vmatrix(i, jchi + k);
-						}
+				if (sz != szl || sz != szr)
+				{
+					for (Eigen::Index i = 0; i < szl; ++i)
+						for (Eigen::Index j = 0; j < 2; ++j)
+							for (Eigen::Index k = 0; k < sz; ++k)
+							{
+								const Eigen::Index jchi = j * szl;
+								Utensor(i, j, k) = Umatrix(jchi + i, k);
+							}
+
+					for (Eigen::Index i = 0; i < sz; ++i)
+						for (Eigen::Index j = 0; j < 2; ++j)
+							for (Eigen::Index k = 0; k < szr; ++k)
+							{
+								const Eigen::Index jchi = j * szr;
+								Vtensor(i, j, k) = Vmatrix(i, jchi + k);
+							}
+				}
+				else
+				{
+					for (Eigen::Index i = 0; i < sz; ++i)
+						for (Eigen::Index j = 0; j < 2; ++j)
+							for (Eigen::Index k = 0; k < sz; ++k)
+							{
+								const Eigen::Index jchi = j * sz;
+								Utensor(i, j, k) = Umatrix(jchi + i, k);
+								Vtensor(i, j, k) = Vmatrix(i, jchi + k);
+							}
+				}
 
 				if (qubit1 == 0)
 					gammas[qubit1] = Utensor;
 				else
 				{
-					Eigen::Tensor<std::complex<double>, 2> lambdaLeftInv = GetInverseLambdaTensor(qubit1 - 1);
+					Eigen::Tensor<std::complex<double>, 2> lambdaLeftInv = GetInverseLambdaTensor(qubit1 - 1, Utensor.dimension(0), Utensor.dimension(0));
 
 					static const Eigen::array<Eigen::IndexPair<int>, 1> product_dims{ Eigen::IndexPair<int>(1, 0) };
 					gammas[qubit1] = lambdaLeftInv.contract(Utensor, product_dims);
@@ -296,7 +329,7 @@ namespace QC {
 					gammas[qubit2] = Vtensor;
 				else
 				{
-					Eigen::Tensor<std::complex<double>, 2> lambdaRightInv = GetInverseLambdaTensor(qubit2);
+					Eigen::Tensor<std::complex<double>, 2> lambdaRightInv = GetInverseLambdaTensor(qubit2, Vtensor.dimension(2), Vtensor.dimension(2));
 
 					static const Eigen::array<Eigen::IndexPair<int>, 1> product_dims{ Eigen::IndexPair<int>(2, 0) };
 					gammas[qubit2] = Vtensor.contract(lambdaRightInv, product_dims);
@@ -304,27 +337,27 @@ namespace QC {
 			}
 
 
-			Eigen::Tensor<std::complex<double>, 2> GetLambdaTensor(size_t pos) const
+			Eigen::Tensor<std::complex<double>, 2> GetLambdaTensor(size_t pos, size_t dim1, size_t dim2) const
 			{
 				assert(pos < lambdas.size());
 
-				Eigen::Tensor<std::complex<double>, 2> res(lambdas[pos].size(), lambdas[pos].size());
+				Eigen::Tensor<std::complex<double>, 2> res(dim1, dim2);
 				res.setZero();
 				
-				for (size_t i = 0; i < lambdas[pos].size(); ++i)
+				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), std::min(dim1, dim2)); ++i)
 					res(i, i) = lambdas[pos](i);
 
 				return res;
 			}
 
-			Eigen::Tensor<std::complex<double>, 2> GetInverseLambdaTensor(size_t pos) const
+			Eigen::Tensor<std::complex<double>, 2> GetInverseLambdaTensor(size_t pos, size_t dim1, size_t dim2) const
 			{
 				assert(pos < lambdas.size());
 
-				Eigen::Tensor<std::complex<double>, 2> res(lambdas[pos].size(), lambdas[pos].size());
+				Eigen::Tensor<std::complex<double>, 2> res(dim1, dim2);
 				res.setZero();
 
-				for (size_t i = 0; i < lambdas[pos].size(); ++i)
+				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), std::min(dim1, dim2)); ++i)
 				{
 					if (abs(lambdas[pos](i)) > 1E-17)
 						res(i, i) = 1. / lambdas[pos](i);
@@ -374,7 +407,7 @@ namespace QC {
 				static const Indexes product_dims_int{ IntIndexPair(2, 0) };
 				static const Indexes product_dims4{ IntIndexPair(3, 0) };
 
-				const Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1);
+				const Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1, gammas[qubit1].dimension(2), gammas[qubit2].dimension(0));
 
 				if (qubit1 == 0 && qubit2 == lambdas.size())
 				{
@@ -382,19 +415,19 @@ namespace QC {
 				}
 				else if (qubit1 == 0 && qubit2 < lambdas.size())
 				{
-					const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2);
+					const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), gammas[qubit2].dimension(0));
 
 					return gammas[qubit1].contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
 				}
 				else if (qubit1 > 0 && qubit2 == lambdas.size())
 				{
-					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1);
+					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, gammas[qubit1].dimension(0), gammas[qubit1].dimension(0));
 
 					return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
 				}
 
-				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1);
-				const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2);
+				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, gammas[qubit1].dimension(0), gammas[qubit1].dimension(0));
+				const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), gammas[qubit2].dimension(0));
 
 				return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
 			}
@@ -442,7 +475,7 @@ namespace QC {
 				
 			bool limitSize = false;
 			bool limitEntanglement = false;
-			size_t chi = 0; // if limitSize is true
+			size_t chi = 10; // if limitSize is true
 			double singularValueThreshold = 0.; // if limitEntanglement is true
 
 			std::vector<LambdaType> lambdas;
