@@ -8,7 +8,7 @@
 
 bool StateSimulationTest()
 {
-	QC::TensorNetworks::MPSSimulator mps(3);
+	QC::TensorNetworks::MPSSimulator mps(2);
 
 	mps.print();
 
@@ -38,7 +38,7 @@ bool StateSimulationTest()
 
 	QC::Gates::ControlledYGate cygate;
 	mps.ApplyGate(hgate, 0);
-	mps.ApplyGate(cygate, 1, 0);
+	mps.ApplyGate(cygate, 0, 1);
 	
 	std::cout << "After applying h and cy:" << std::endl;
 	mps.print();
@@ -62,7 +62,7 @@ bool StateSimulationTest()
 			mpsl.ApplyGate(ygate, shift);
 			mpsl.ApplyGate(cnotgate, shift + 1, shift);
 			mpsl.ApplyGate(hgate, shift);
-			mpsl.ApplyGate(cygate, shift + 1, shift);
+			mpsl.ApplyGate(cygate, shift, shift + 1);
 
 			if (mpsl.Measure(shift))
 				++cnt;
