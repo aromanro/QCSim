@@ -8,7 +8,7 @@
 
 bool StateSimulationTest()
 {
-	QC::TensorNetworks::MPSSimulator mps(2);
+	QC::TensorNetworks::MPSSimulator mps(3);
 
 	mps.print();
 
@@ -42,6 +42,34 @@ bool StateSimulationTest()
 	
 	std::cout << "After applying h and cy:" << std::endl;
 	mps.print();
+
+	std::cout << "Probability of getting 0 for qubit 0: " << mps.GetProbability0(0) << std::endl;
+
+	std::cout << "Measured 0: " << !mps.Measure(0) << std::endl;
+
+	
+
+	// it's the same circuit as above, but shifted, on a larger simulator
+	// should give 50% probability of measuring 1
+	for (int shift = 0; shift < 3; ++shift)
+	{
+		int cnt = 0;
+		for (int i = 0; i < 100; ++i)
+		{
+			QC::TensorNetworks::MPSSimulator mpsl(4);
+			mpsl.ApplyGate(xgate, shift);
+			mpsl.ApplyGate(hgate, shift);
+			mpsl.ApplyGate(ygate, shift);
+			mpsl.ApplyGate(cnotgate, shift + 1, shift);
+			mpsl.ApplyGate(hgate, shift);
+			mpsl.ApplyGate(cygate, shift + 1, shift);
+
+			if (mpsl.Measure(shift))
+				++cnt;
+		}
+
+		std::cout << "Measured 1 for 100 runs: " << cnt << std::endl;
+	}
 
 	return true;
 }

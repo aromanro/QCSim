@@ -23,14 +23,43 @@ namespace QC {
 			using IntIndexPair = Eigen::IndexPair<int>;
 			using Indexes = Eigen::array<IntIndexPair, 1>;
 
-			MPSSimulator(size_t N)
-				: lambdas(N - 1, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1))
+			template<class MatrixClass = Eigen::MatrixXcd> class ZeroProjection : public Gates::SingleQubitGate<MatrixClass>
+			{
+			public:
+				using BaseClass = Gates::SingleQubitGate<MatrixClass>;
+				using OpClass = typename BaseClass::BaseClass;
+
+				ZeroProjection()
+				{
+					OpClass::operatorMat(0, 0) = 1;
+				}
+			};
+
+			template<class MatrixClass = Eigen::MatrixXcd> class OneProjection : public Gates::SingleQubitGate<MatrixClass>
+			{
+			public:
+				using BaseClass = Gates::SingleQubitGate<MatrixClass>;
+				using OpClass = typename BaseClass::BaseClass;
+
+				OneProjection()
+				{
+					OpClass::operatorMat(1, 1) = 1;
+				}
+			};
+
+			MPSSimulator(size_t N, int addseed = 0)
+				: lambdas(N - 1, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1)),
+				uniformZeroOne(0, 1)
 			{
 				for (size_t i = 0; i < gammas.size(); ++i)
 				{
 					gammas[i](0, 0, 0) = 1.;
 					gammas[i](0, 1, 0) = 0.;
 				}
+
+				const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
+				std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
+				rng.seed(seed);
 			}
 
 			void Clear()
@@ -171,9 +200,42 @@ namespace QC {
 			// false if measured 0, true if measured 1
 			bool Measure(size_t qubit)
 			{
-				// TODO: Implement it
+				const double rndVal = uniformZeroOne(rng);
+				const double prob0 = GetProbability0(qubit);
 
-				return false; // for now
+				const bool zeroMeasured = rndVal < prob0;
+				Eigen::MatrixXcd projMat;
+				
+				if (zeroMeasured)
+				{
+					projMat = zeroProjection.getRawOperatorMatrix();
+					projMat *= 1. / sqrt(prob0);
+				}
+				else
+				{
+					projMat = oneProjection.getRawOperatorMatrix();
+					projMat *= 1. / sqrt(1. - prob0);
+				}
+
+				QC::Gates::SingleQubitGate<MatrixClass> projOp(projMat);
+
+				ApplySingleQubitGate(projOp, qubit);
+
+				// propagate to the other qubits to the left and right until the end or there is no entanglement with the next one
+
+				for (size_t q = qubit; q > 0; --q)
+				{
+					if (lambdas[q].size() == 1) break;
+					ApplyTwoQubitGate(projOp, q - 1, q, true);
+				}
+
+				for (size_t q = qubit; q < lambdas.size(); ++q)
+				{
+					if (lambdas[q].size() == 1) break;
+					ApplyTwoQubitGate(projOp, q, q + 1, true);
+				}
+
+				return !zeroMeasured;
 			}
 
 			// this is for 'compatibility' with the statevector simulator (QubitRegister)
@@ -190,6 +252,27 @@ namespace QC {
 				// the physical indices of the resulting tensor remain
 
 				return res;
+			}
+
+			double GetProbability0(size_t qubit) const
+			{
+				Eigen::MatrixXcd qubitMatrix = GetQubitMatrix(qubit, 0);
+
+				if (qubit > 0)
+				{
+					const size_t qbit1 = qubit - 1;
+					for (Eigen::Index col = 0; col < qubitMatrix.cols(); col++)
+						for (Eigen::Index row = 0; row < qubitMatrix.rows(); row++)
+							qubitMatrix(row, col) *= row < lambdas[qbit1].size() ? lambdas[qbit1][row] : 0;
+				}
+				if (qubit < lambdas.size())
+				{
+					for (Eigen::Index col = 0; col < qubitMatrix.cols(); col++)
+						for (Eigen::Index row = 0; row < qubitMatrix.rows(); row++)
+							qubitMatrix(row, col) *= row < lambdas[qubit].size() ? lambdas[qubit][col] : 0;
+				}
+
+				return qubitMatrix.cwiseProduct(qubitMatrix.conjugate()).sum().real();
 			}
 
 			void print() const
@@ -223,7 +306,7 @@ namespace QC {
 				gammas[qubit] = gammas[qubit].contract(opTensor, product_dims1).shuffle(permute);
 			}
 
-			void ApplyTwoQubitGate(const GateClass& gate, size_t qubit, size_t controllingQubit1)
+			void ApplyTwoQubitGate(const GateClass& gate, size_t qubit, size_t controllingQubit1, bool dontApplyGate = false)
 			{
 				// it's more complex than the single qubit gate
 				// very shortly:
@@ -242,15 +325,26 @@ namespace QC {
 					reversed = true;
 				}
 
-				const Eigen::Tensor<std::complex<double>, 4> U = GetTwoQubitsGateTensor(gate, reversed);
+				Eigen::MatrixXcd thetaMatrix;
 
-				//std::cout << "U:\n" << U << " Dims: " << U.dimensions() << std::endl;
+				if (dontApplyGate)
+				{
+					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
 
-				const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructTheta(qubit1, U);
+					thetaMatrix = ReshapeTheta(theta);
+				}
+				else
+				{
+					const Eigen::Tensor<std::complex<double>, 4> U = GetTwoQubitsGateTensor(gate, reversed);
 
-				//std::cout << "Theta:\n" << thetabar << " Dims: " << thetabar.dimensions() << std::endl;
+					//std::cout << "U:\n" << U << " Dims: " << U.dimensions() << std::endl;
 
-				const Eigen::MatrixXcd thetaMatrix = ReshapeTheta(thetabar);
+					const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructTheta(qubit1, U);
+
+					//std::cout << "Theta:\n" << thetabar << " Dims: " << thetabar.dimensions() << std::endl;
+
+					thetaMatrix = ReshapeThetaBar(thetabar);
+				}
 
 				//std::cout << "Theta matrix:\n" << thetaMatrix << std::endl;
 
@@ -271,16 +365,17 @@ namespace QC {
 				long long szm = SVD.nonzeroSingularValues();
 				if (szm == 0) szm = 1; // should not happen
 
-				const long long sz = limitSize ? std::min<long long>(chi, std::min<long long>(szm, UmatrixFull.cols())) : std::min<long long>(szm, UmatrixFull.cols());
+				szm = std::min<long long>(szm, UmatrixFull.cols());
+				const long long sz = limitSize ? std::min<long long>(chi, szm) : szm;
 
-				const long long Dchi = 2 * sz;
-
+				long long Dchi = 2 * sz;
 				const Eigen::MatrixXcd& Umatrix = UmatrixFull.topLeftCorner(std::min<long long>(Dchi, UmatrixFull.rows()), sz);
 				const Eigen::MatrixXcd& Vmatrix = VmatrixFull.topLeftCorner(std::min<long long>(Dchi, VmatrixFull.rows()), sz).adjoint();
 
 				const LambdaType Svalues = SvaluesFull.head(szm);
 				
 				// now set back lambdas and gammas
+
 				const long long szl = (qubit1 == 0) ? 1 : sz;
 				const long long szr = (qubit2 == lambdas.size()) ? 1 : sz;
 
@@ -295,7 +390,8 @@ namespace QC {
 							for (Eigen::Index k = 0; k < sz; ++k)
 							{
 								const Eigen::Index jchi = j * szl;
-								Utensor(i, j, k) = Umatrix(jchi + i, k);
+								const Eigen::Index jind = jchi + i;
+								Utensor(i, j, k) = jind < Umatrix.rows() ? Umatrix(jind, k) : 0;
 							}
 
 					for (Eigen::Index i = 0; i < sz; ++i)
@@ -303,7 +399,8 @@ namespace QC {
 							for (Eigen::Index k = 0; k < szr; ++k)
 							{
 								const Eigen::Index jchi = j * szr;
-								Vtensor(i, j, k) = Vmatrix(i, jchi + k);
+								const Eigen::Index jind = jchi + k;
+								Vtensor(i, j, k) = jind < Vmatrix.cols() ? Vmatrix(i, jind) : 0;
 							}
 				}
 				else
@@ -313,8 +410,11 @@ namespace QC {
 							for (Eigen::Index k = 0; k < sz; ++k)
 							{
 								const Eigen::Index jchi = j * sz;
-								Utensor(i, j, k) = Umatrix(jchi + i, k);
-								Vtensor(i, j, k) = Vmatrix(i, jchi + k);
+								Eigen::Index jind = jchi + i;
+								Utensor(i, j, k) = jind < Umatrix.rows() ? Umatrix(jind, k) : 0;
+
+								jind = jchi + k;
+								Vtensor(i, j, k) = jind < Vmatrix.cols() ? Vmatrix(i, jind) : 0;
 							}
 				}
 
@@ -449,34 +549,68 @@ namespace QC {
 				// from theta the physical indexes are contracted out
 				// the last two become the physical indexes
 
-				//static const Eigen::array<DimPair, 2> product_dim{ DimPair(1, 0), DimPair(2, 1) };
-				// hmmm... I'm unsure at this moment, I'm too tired, I'll check it tomorrow after I'll finish all of the 2-qubit gate apply code
 				static const Eigen::array<DimPair, 2> product_dim{ DimPair(1, 2), DimPair(2, 3) };
 
 				// this applies the time evolution operator U
 				return theta.contract(U, product_dim);
 			}
 
+			Eigen::MatrixXcd ReshapeThetaBar(const Eigen::Tensor<std::complex<double>, 4>& theta)
+			{
+				// get it into a matrix for SVD - use JacobiSVD
+
+				int sz0 = static_cast<int>(theta.dimension(0));
+				int sz1 = static_cast<int>(theta.dimension(1));
+
+				assert(2 == theta.dimension(2));
+				assert(2 == theta.dimension(3));
+
+				Eigen::MatrixXcd thetaMatrix(2 * sz0, 2 * sz1);
+
+				for (Eigen::Index i = 0; i < sz0; ++i)
+					for (Eigen::Index j = 0; j < sz1; ++j)
+						for (Eigen::Index k = 0; k < 2; ++k)
+							for (Eigen::Index l = 0; l < 2; ++l)
+								// 2, 0, 3, 1 - k & l from theta are the physical indexes
+								thetaMatrix(k * sz0 + i, l * sz1 + j) = theta(i, j, k, l);
+
+				return thetaMatrix;
+			}
+
 			Eigen::MatrixXcd ReshapeTheta(const Eigen::Tensor<std::complex<double>, 4>& theta)
 			{
 				// get it into a matrix for SVD - use JacobiSVD
 
-				int sz = static_cast<int>(theta.dimension(0));
-				assert(sz == theta.dimension(1));
+				int sz0 = static_cast<int>(theta.dimension(0));
+				assert(2 == theta.dimension(1));
 				assert(2 == theta.dimension(2));
-				assert(2 == theta.dimension(3));
+				int sz3 = theta.dimension(3);
 
-				const int Dchi = 2 * sz;
-				Eigen::MatrixXcd thetaMatrix(Dchi, Dchi);
+				Eigen::MatrixXcd thetaMatrix(2 * sz0, 2 * sz3);
 
-				for (Eigen::Index i = 0; i < sz; ++i)
-					for (Eigen::Index j = 0; j < sz; ++j)
+				for (Eigen::Index i = 0; i < sz0; ++i)
+					for (Eigen::Index j = 0; j < 2; ++j)
 						for (Eigen::Index k = 0; k < 2; ++k)
-							for (Eigen::Index l = 0; l < 2; ++l)
-								// 2, 0, 3, 1 - k & l from theta are the physical indexes
-								thetaMatrix(k * sz + i, l * sz + j) = theta(i, j, k, l);
+							for (Eigen::Index l = 0; l < sz3; ++l)
+								// j & k from theta are the physical indexes
+								thetaMatrix(j * sz0 + i, k * sz3 + l) = theta(i, j, k, l);
 
 				return thetaMatrix;
+			}
+
+			Eigen::MatrixXcd GetQubitMatrix(size_t qubit, unsigned short outcome) const
+			{
+				assert(qubit < gammas.size());
+				assert(outcome < 2);
+				
+				const GammaType& qubitTensor = gammas[qubit];
+				Eigen::MatrixXcd res(qubitTensor.dimension(0), qubitTensor.dimension(2));
+
+				for (Eigen::Index j = 0; j < res.cols(); ++j)
+					for (Eigen::Index i = 0; i < res.rows(); ++i)
+						res(i, j) = qubitTensor(i, outcome, j);
+
+				return res;
 			}
 				
 			bool limitSize = false;
@@ -486,6 +620,12 @@ namespace QC {
 
 			std::vector<LambdaType> lambdas;
 			std::vector<GammaType> gammas;
+
+			std::mt19937_64 rng;
+			std::uniform_real_distribution<double> uniformZeroOne;
+
+			const ZeroProjection<MatrixClass> zeroProjection;
+			const OneProjection<MatrixClass> oneProjection;
 		};
 
 	}
