@@ -65,7 +65,7 @@ namespace QC {
 
 			void Clear()
 			{
-				const size_t szm1 = gammas.size() - 1;
+				const size_t szm1 = lambdas.size();
 				for (size_t i = 0; i < szm1; ++i)
 				{
 					gammas[i].resize(1, 2, 1);
@@ -83,7 +83,7 @@ namespace QC {
 
 			void InitOnesState()
 			{
-				const size_t szm1 = gammas.size() - 1;
+				const size_t szm1 = lambdas.size();
 				for (size_t i = 0; i < szm1; ++i)
 				{
 					gammas[i].resize(1, 2, 1);
@@ -201,7 +201,8 @@ namespace QC {
 			// false if measured 0, true if measured 1
 			bool Measure(size_t qubit)
 			{
-				const double rndVal = uniformZeroOne(rng);
+				const double rndVal = 1. - uniformZeroOne(rng);
+				
 				const double prob0 = GetProbability0(qubit);
 
 				const bool zeroMeasured = rndVal < prob0;
@@ -218,7 +219,7 @@ namespace QC {
 					projMat *= 1. / sqrt(1. - prob0);
 				}
 
-				QC::Gates::SingleQubitGate<MatrixClass> projOp(projMat);
+				const QC::Gates::SingleQubitGate projOp(projMat);
 
 				ApplySingleQubitGate(projOp, qubit);
 
@@ -246,15 +247,22 @@ namespace QC {
 			VectorClass getRegisterStorage() const
 			{
 				if (gammas.size() > sizeof(size_t) * 8) throw std::runtime_error("Too many qubits to compute the state vector");
-				const size_t NrBasisStates = 1ULL << gammas.size();
 
-				VectorClass res = VectorClass::Zero(NrBasisStates);
+				if (gammas.size() == 1)
+					return GenerateStatevector<1>(gammas[0]);
+				else if (gammas.size() == 2)
+					return GenerateStatevector<2>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]));
+				else if (gammas.size() == 3)
+					return GenerateStatevector<3>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]));
+				else if (gammas.size() == 4)
+					return GenerateStatevector<4>(ContractNQubits<4>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]), lambdas[2], gammas[3]));
 
-				// TODO: need to contract all the qubit tensors (gammas and lambdas corresponding to each qubit) into a single tensor
-				// the physical indices of the resulting tensor remain
+				throw std::runtime_error("Not implemented yet");
 
-				return res;
+				return {};
 			}
+
+			
 
 			double GetProbability0(size_t qubit) const
 			{
@@ -265,13 +273,14 @@ namespace QC {
 					const size_t qbit1 = qubit - 1;
 					for (IndexType col = 0; col < qubitMatrix.cols(); col++)
 						for (IndexType row = 0; row < qubitMatrix.rows(); row++)
-							qubitMatrix(row, col) *= row < lambdas[qbit1].size() ? lambdas[qbit1][row] : 0;
+							qubitMatrix(row, col) *= (row < lambdas[qbit1].size()) ? lambdas[qbit1][row] : 0;
 				}
+
 				if (qubit < lambdas.size())
 				{
 					for (IndexType col = 0; col < qubitMatrix.cols(); col++)
 						for (IndexType row = 0; row < qubitMatrix.rows(); row++)
-							qubitMatrix(row, col) *= row < lambdas[qubit].size() ? lambdas[qubit][col] : 0;
+							qubitMatrix(row, col) *= (row < lambdas[qubit].size()) ? lambdas[qubit][col] : 0;
 				}
 
 				return qubitMatrix.cwiseProduct(qubitMatrix.conjugate()).sum().real();
@@ -356,7 +365,8 @@ namespace QC {
 				const Eigen::VectorXd& SvaluesFull = SVD.singularValues();
 
 				long long szm = SVD.nonzeroSingularValues();
-				//if (szm == 0) szm = 1; // should not happen
+
+				//if (szm == 0) szm = 1; // Shouldn't happen!
 
 				//szm = std::min<long long>(szm, UmatrixFull.cols());
 				const long long sz = limitSize ? std::min<long long>(chi, szm) : szm;
@@ -414,7 +424,7 @@ namespace QC {
 					gammas[qubit1] = Utensor;
 				else
 				{
-					Eigen::Tensor<std::complex<double>, 2> lambdaLeftInv = GetInverseLambdaTensor(qubit1 - 1, Utensor.dimension(0), Utensor.dimension(0));
+					const Eigen::Tensor<std::complex<double>, 2> lambdaLeftInv = GetInverseLambdaTensor(qubit1 - 1, Utensor.dimension(0), Utensor.dimension(0));
 
 					static const Eigen::array<Eigen::IndexPair<int>, 1> product_dims{ Eigen::IndexPair<int>(1, 0) };
 					gammas[qubit1] = lambdaLeftInv.contract(Utensor, product_dims);
@@ -427,7 +437,7 @@ namespace QC {
 					gammas[qubit2] = Vtensor;
 				else
 				{
-					Eigen::Tensor<std::complex<double>, 2> lambdaRightInv = GetInverseLambdaTensor(qubit2, Vtensor.dimension(2), Vtensor.dimension(2));
+					const Eigen::Tensor<std::complex<double>, 2> lambdaRightInv = GetInverseLambdaTensor(qubit2, Vtensor.dimension(2), Vtensor.dimension(2));
 
 					static const Eigen::array<Eigen::IndexPair<int>, 1> product_dims{ Eigen::IndexPair<int>(2, 0) };
 					gammas[qubit2] = Vtensor.contract(lambdaRightInv, product_dims);
@@ -494,6 +504,7 @@ namespace QC {
 						}
 					}
 
+
 				return result;
 			}
 
@@ -505,7 +516,7 @@ namespace QC {
 				static const Indexes product_dims_int{ IntIndexPair(2, 0) };
 				static const Indexes product_dims4{ IntIndexPair(3, 0) };
 
-				const Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1, gammas[qubit1].dimension(2), gammas[qubit2].dimension(0));
+				const Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1, gammas[qubit1].dimension(2), gammas[qubit2].dimension(0) );
 
 				if (qubit1 == 0 && qubit2 == lambdas.size())
 				{
@@ -513,19 +524,19 @@ namespace QC {
 				}
 				else if (qubit1 == 0 && qubit2 < lambdas.size())
 				{
-					const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), gammas[qubit2].dimension(0));
+					const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), lambdas[qubit2].size());
 
 					return gammas[qubit1].contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
 				}
 				else if (qubit1 > 0 && qubit2 == lambdas.size())
 				{
-					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, gammas[qubit1].dimension(0), gammas[qubit1].dimension(0));
+					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, lambdas[qubit1].size(), gammas[qubit1].dimension(0));
 
 					return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
 				}
 
-				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, gammas[qubit1].dimension(0), gammas[qubit1].dimension(0));
-				const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), gammas[qubit2].dimension(0));
+				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, lambdas[qubit1 - 1].size(), gammas[qubit1].dimension(0));
+				const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), lambdas[qubit2].size());
 
 				return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
 			}
@@ -558,6 +569,7 @@ namespace QC {
 				assert(2 == theta.dimension(3));
 
 				MatrixClass thetaMatrix(2 * sz0, 2 * sz1);
+
 
 				for (IndexType l = 0; l < 2; ++l)
 					for (IndexType j = 0; j < sz1; ++j)
@@ -601,6 +613,48 @@ namespace QC {
 				for (IndexType j = 0; j < res.cols(); ++j)
 					for (IndexType i = 0; i < res.rows(); ++i)
 						res(i, j) = qubitTensor(i, outcome, j);
+
+				return res;
+			}
+
+			template<int N> static Eigen::Tensor<std::complex<double>, N + 2> ContractNQubits(const Eigen::Tensor<std::complex<double>, N + 1>& left, const LambdaType& lambdaVal, const GammaType& nextQubit)
+			{
+				const IndexType dim1 = left.dimension(N);
+				const IndexType dim2 = nextQubit.dimension(0);
+
+				Eigen::Tensor<std::complex<double>, 2> lambdaTensor(dim1, dim2);
+				lambdaTensor.setZero();
+
+				for (size_t i = 0; i < std::min<size_t>(lambdaVal.size(), std::min(dim1, dim2)); ++i)
+					lambdaTensor(i, i) = lambdaVal(i);
+
+				static const Indexes productDim{ IntIndexPair(N, 0) };
+
+				return left.contract(lambdaTensor, productDim).contract(nextQubit, productDim);
+			}
+
+			template<int N> static VectorClass GenerateStatevector(const Eigen::Tensor<std::complex<double>, N + 2>& tensor)
+			{
+				const size_t NrBasisStates = 1ULL << N;
+				VectorClass res(NrBasisStates);
+
+				for (size_t state = 0; state < NrBasisStates; ++state)
+				{
+					// index for tensor
+					std::array<IndexType, N + 2> indices;
+
+					size_t tmp = state;
+
+					indices[0] = 0;
+					indices[N + 1] = 0;
+					for (size_t q = 1; q < N + 1; ++q)
+					{
+						indices[q] = tmp & 1;
+						tmp >>= 1;
+					}
+
+					res(state) = tensor(indices);
+				}
 
 				return res;
 			}
