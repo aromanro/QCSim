@@ -188,7 +188,7 @@ namespace QC {
 				if (gate.getQubitsNumber() > 2) throw std::runtime_error("Three qubit gates not supported");
 				else if (gate.getQubitsNumber() == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
 					throw std::runtime_error("Two qubit gates need to act on adjacent qubits");
-				else if (qubit >= gammas.size() || controllingQubit1 >= gammas.size())
+				else if (qubit >= gammas.size() || (gate.getQubitsNumber() == 2 && controllingQubit1 >= gammas.size()))
 					throw std::runtime_error("Qubit index out of bounds");
 
 
@@ -248,6 +248,7 @@ namespace QC {
 			{
 				if (gammas.size() > sizeof(size_t) * 8) throw std::runtime_error("Too many qubits to compute the state vector");
 
+				// TODO: implement this with variadic templates, perhaps
 				if (gammas.size() == 1)
 					return GenerateStatevector<1>(gammas[0]);
 				else if (gammas.size() == 2)
@@ -256,8 +257,12 @@ namespace QC {
 					return GenerateStatevector<3>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]));
 				else if (gammas.size() == 4)
 					return GenerateStatevector<4>(ContractNQubits<4>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]), lambdas[2], gammas[3]));
-
-				throw std::runtime_error("Not implemented yet");
+				else if (gammas.size() == 5)
+					return GenerateStatevector<5>(ContractNQubits<5>(ContractNQubits<4>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]), lambdas[2], gammas[3]), lambdas[3], gammas[4]));
+				else if (gammas.size() == 6)
+					return GenerateStatevector<6>(ContractNQubits<6>(ContractNQubits<5>(ContractNQubits<4>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]), lambdas[2], gammas[3]), lambdas[3], gammas[4]), lambdas[4], gammas[5]));
+				else
+					throw std::runtime_error("Not implemented yet");
 
 				return {};
 			}
@@ -359,6 +364,7 @@ namespace QC {
 
 				SVD.compute(thetaMatrix, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
 
+
 				const MatrixClass& UmatrixFull = SVD.matrixU();
 				const MatrixClass& VmatrixFull = SVD.matrixV();
 
@@ -366,7 +372,7 @@ namespace QC {
 
 				long long szm = SVD.nonzeroSingularValues();
 
-				//if (szm == 0) szm = 1; // Shouldn't happen!
+				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
 				//szm = std::min<long long>(szm, UmatrixFull.cols());
 				const long long sz = limitSize ? std::min<long long>(chi, szm) : szm;
@@ -432,6 +438,7 @@ namespace QC {
 
 				lambdas[qubit1] = Svalues;
 				lambdas[qubit1].normalize();
+				//if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1;
 
 				if (qubit2 == lambdas.size())
 					gammas[qubit2] = Vtensor;
