@@ -20,8 +20,6 @@ void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 	gates.emplace_back(std::make_shared<QC::Gates::PauliXGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::PauliYGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::PauliZGate<>>());
-	gates.emplace_back(std::make_shared<QC::Gates::SigmaPlusGate<>>());
-	gates.emplace_back(std::make_shared<QC::Gates::SigmaMinusGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTDagGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SplitterGate<>>());
@@ -112,7 +110,7 @@ bool OneAndTwoQubitGatesTest()
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
 
-	for (int nrQubits = 2; nrQubits < 7; ++nrQubits)
+	for (int nrQubits = 2; nrQubits < 3 /*7*/; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
@@ -151,6 +149,8 @@ bool OneAndTwoQubitGatesTest()
 				std::cout << "State simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 
 				std::cout << "Reg state:\n" << regState << std::endl;
+				std::cout << "Reg state normalization: " << (regState.adjoint() * regState)(0).real() << std::endl;
+
 				std::cout << "MPS state:\n" << mpsState << std::endl;
 
 				std::cout << "MPS state normalization: " << (mpsState.adjoint() * mpsState)(0).real() << std::endl;
@@ -166,7 +166,7 @@ bool OneAndTwoQubitGatesTest()
 
 bool StateSimulationTest()
 {
-	return OneQubitGatesTest() /* && OneAndTwoQubitGatesTest()*/;
+	return OneQubitGatesTest() && OneAndTwoQubitGatesTest();
 }
 
 bool MPSSimulatorTests()

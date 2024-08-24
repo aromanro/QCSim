@@ -432,6 +432,7 @@ namespace QC {
 			}
 		};
 
+		// WARNING: 'Fake' gate, it's not unitary!
 		template<class MatrixClass = Eigen::MatrixXcd> class SigmaPlusGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
@@ -449,6 +450,7 @@ namespace QC {
 			}
 		};
 
+		// WARNING: 'Fake' gate, it's not unitary!
 		template<class MatrixClass = Eigen::MatrixXcd> class SigmaMinusGate : public SingleQubitGate<MatrixClass>
 		{
 		public:

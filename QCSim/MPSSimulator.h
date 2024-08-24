@@ -430,7 +430,7 @@ namespace QC {
 					gammas[qubit1] = Utensor;
 				else
 				{
-					const Eigen::Tensor<std::complex<double>, 2> lambdaLeftInv = GetInverseLambdaTensor(qubit1 - 1, Utensor.dimension(0), Utensor.dimension(0));
+					const Eigen::Tensor<std::complex<double>, 2> lambdaLeftInv = GetInverseLambdaTensor(qubit1 - 1, Utensor.dimension(0));
 
 					static const Eigen::array<Eigen::IndexPair<int>, 1> product_dims{ Eigen::IndexPair<int>(1, 0) };
 					gammas[qubit1] = lambdaLeftInv.contract(Utensor, product_dims);
@@ -444,7 +444,7 @@ namespace QC {
 					gammas[qubit2] = Vtensor;
 				else
 				{
-					const Eigen::Tensor<std::complex<double>, 2> lambdaRightInv = GetInverseLambdaTensor(qubit2, Vtensor.dimension(2), Vtensor.dimension(2));
+					const Eigen::Tensor<std::complex<double>, 2> lambdaRightInv = GetInverseLambdaTensor(qubit2, Vtensor.dimension(2));
 
 					static const Eigen::array<Eigen::IndexPair<int>, 1> product_dims{ Eigen::IndexPair<int>(2, 0) };
 					gammas[qubit2] = Vtensor.contract(lambdaRightInv, product_dims);
@@ -465,14 +465,14 @@ namespace QC {
 				return res;
 			}
 
-			Eigen::Tensor<std::complex<double>, 2> GetInverseLambdaTensor(size_t pos, size_t dim1, size_t dim2) const
+			Eigen::Tensor<std::complex<double>, 2> GetInverseLambdaTensor(size_t pos, size_t dim) const
 			{
 				assert(pos < lambdas.size());
 
-				Eigen::Tensor<std::complex<double>, 2> res(dim1, dim2);
+				Eigen::Tensor<std::complex<double>, 2> res(dim, dim);
 				res.setZero();
 
-				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), std::min(dim1, dim2)); ++i)
+				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), dim); ++i)
 				{
 					if (abs(lambdas[pos](i)) > 1E-17)
 						res(i, i) = 1. / lambdas[pos](i);
