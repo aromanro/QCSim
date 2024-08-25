@@ -357,11 +357,12 @@ namespace QC {
 					thetaMatrix = ReshapeThetaBar(thetabar);
 				}
 
-				Eigen::JacobiSVD<MatrixClass> SVD;
+				Eigen::JacobiSVD<MatrixClass/*, Eigen::FullPivHouseholderQRPreconditioner*/> SVD;
 
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
 
+				//std::cout << "Theta matrix size: " << thetaMatrix.rows() << " x " << thetaMatrix.cols() << std::endl;
 				SVD.compute(thetaMatrix, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
 
 
@@ -370,7 +371,8 @@ namespace QC {
 
 				const Eigen::VectorXd& SvaluesFull = SVD.singularValues();
 
-				long long szm = SVD.nonzeroSingularValues();
+				//long long szm = SvaluesFull.size();
+				long long szm = SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
 
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
@@ -378,15 +380,19 @@ namespace QC {
 				const long long sz = limitSize ? std::min<long long>(chi, szm) : szm;
 
 				long long Dchi = 2 * sz;
+				const long long szl = (qubit1 == 0) ? 1 : sz;
+				const long long szr = (qubit2 == lambdas.size()) ? 1 : sz;
+
+
+				//const MatrixClass& Umatrix = UmatrixFull;
+				//const MatrixClass& Vmatrix = VmatrixFull.adjoint();
+
 				const MatrixClass& Umatrix = UmatrixFull.topLeftCorner(std::min<long long>(Dchi, UmatrixFull.rows()), sz);
 				const MatrixClass& Vmatrix = VmatrixFull.topLeftCorner(std::min<long long>(Dchi, VmatrixFull.rows()), sz).adjoint();
 
-				const LambdaType Svalues = SvaluesFull.head(szm);
+				const LambdaType Svalues = SvaluesFull.head(sz);
 				
 				// now set back lambdas and gammas
-
-				const long long szl = (qubit1 == 0) ? 1 : sz;
-				const long long szr = (qubit2 == lambdas.size()) ? 1 : sz;
 
 				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
 				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, szr);
@@ -399,7 +405,7 @@ namespace QC {
 							{
 								const IndexType jchi = j * szl;
 								const IndexType jind = jchi + i;
-								Utensor(i, j, k) = jind < Umatrix.rows() ? Umatrix(jind, k) : 0;
+								Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
 							}
 
 					for (IndexType k = 0; k < szr; ++k)
@@ -408,7 +414,7 @@ namespace QC {
 							{
 								const IndexType jchi = j * szr;
 								const IndexType jind = jchi + k;
-								Vtensor(i, j, k) = jind < Vmatrix.cols() ? Vmatrix(i, jind) : 0;
+								Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
 							}
 				}
 				else
@@ -419,10 +425,10 @@ namespace QC {
 							{
 								const IndexType jchi = j * sz;
 								IndexType jind = jchi + i;
-								Utensor(i, j, k) = jind < Umatrix.rows() ? Umatrix(jind, k) : 0;
+								Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
 
 								jind = jchi + k;
-								Vtensor(i, j, k) = jind < Vmatrix.cols() ? Vmatrix(i, jind) : 0;
+								Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
 							}
 				}
 
@@ -437,8 +443,9 @@ namespace QC {
 				}
 
 				lambdas[qubit1] = Svalues;
+				if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1; // this should not happen
 				lambdas[qubit1].normalize();
-				//if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1;
+				
 
 				if (qubit2 == lambdas.size())
 					gammas[qubit2] = Vtensor;
@@ -474,7 +481,7 @@ namespace QC {
 
 				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), dim); ++i)
 				{
-					if (abs(lambdas[pos](i)) > 1E-17)
+					if (abs(lambdas[pos](i)) > 1E-19)
 						res(i, i) = 1. / lambdas[pos](i);
 				}
 
@@ -537,12 +544,12 @@ namespace QC {
 				}
 				else if (qubit1 > 0 && qubit2 == lambdas.size())
 				{
-					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, lambdas[qubit1].size(), gammas[qubit1].dimension(0));
+					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1, lambdas[qubit1 - 1].size(), gammas[qubit1].dimension(0));
 
 					return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
 				}
 
-				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1 - 1, lambdas[qubit1 - 1].size(), gammas[qubit1].dimension(0));
+				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1, lambdas[qubit1 - 1].size(), gammas[qubit1].dimension(0));
 				const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), lambdas[qubit2].size());
 
 				return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
@@ -568,7 +575,6 @@ namespace QC {
 			MatrixClass ReshapeThetaBar(const Eigen::Tensor<std::complex<double>, 4>& theta)
 			{
 				// get it into a matrix for SVD - use JacobiSVD
-
 				int sz0 = static_cast<int>(theta.dimension(0));
 				int sz1 = static_cast<int>(theta.dimension(1));
 
@@ -595,7 +601,7 @@ namespace QC {
 				int sz0 = static_cast<int>(theta.dimension(0));
 				assert(2 == theta.dimension(1));
 				assert(2 == theta.dimension(2));
-				int sz3 = theta.dimension(3);
+				int sz3 = static_cast<int>(theta.dimension(3));
 
 				MatrixClass thetaMatrix(2 * sz0, 2 * sz3);
 

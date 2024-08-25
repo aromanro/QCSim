@@ -1,5 +1,6 @@
 #include <iostream>
 #include <iterator>
+#include <memory>
 
 
 #include "Tests.h"
@@ -63,32 +64,35 @@ bool OneQubitGatesTest()
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 
-		QC::TensorNetworks::MPSSimulator mps(nrQubits);
-		QC::QubitRegister reg(nrQubits);
-
-		const int lim = nrGatesDistr(gen);
-
-		for (int i = 0; i < lim; ++i)
+		for (int t = 0; t < 10; ++t)
 		{
-			const int gate = gateDistr(gen);
-			const int qubit = qubitDistr(gen);
+			QC::TensorNetworks::MPSSimulator mps(nrQubits);
+			QC::QubitRegister reg(nrQubits);
 
-			mps.ApplyGate(*gates[gate], qubit);
-			reg.ApplyGate(*gates[gate], qubit);
-		}
+			const int lim = nrGatesDistr(gen);
 
-		// now check the results, they should be the same
-		const auto& regState = reg.getRegisterStorage();
-		const auto mpsState = mps.getRegisterStorage(); // this one is computed, returns value, not reference, not stored elsewhere
-
-		for (int i = 0; i < regState.size(); ++i)
-		{
-			if (!approxEqual(regState[i], mpsState[i]))
+			for (int i = 0; i < lim; ++i)
 			{
-				std::cout << "State simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
-				std::cout << "Reg state:\n" << regState << std::endl;
-				std::cout << "MPS state:\n" << mpsState << std::endl;
-				return false;
+				const int gate = gateDistr(gen);
+				const int qubit = qubitDistr(gen);
+
+				mps.ApplyGate(*gates[gate], qubit);
+				reg.ApplyGate(*gates[gate], qubit);
+			}
+
+			// now check the results, they should be the same
+			const auto& regState = reg.getRegisterStorage();
+			const auto mpsState = mps.getRegisterStorage(); // this one is computed, returns value, not reference, not stored elsewhere
+
+			for (int i = 0; i < regState.size(); ++i)
+			{
+				if (!approxEqual(regState[i], mpsState[i]))
+				{
+					std::cout << "State simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
+					std::cout << "Reg state:\n" << regState << std::endl;
+					std::cout << "MPS state:\n" << mpsState << std::endl;
+					return false;
+				}
 			}
 		}
 	}
@@ -106,55 +110,61 @@ bool OneAndTwoQubitGatesTest()
 	FillOneQubitGates(gates);
 	FillTwoQubitGates(gates);
 
-	std::uniform_int_distribution nrGatesDistr(25, 50);
+	std::uniform_int_distribution nrGatesDistr(50, 100);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
 
-	for (int nrQubits = 2; nrQubits < 3 /*7*/; ++nrQubits)
+	for (int nrQubits = 2; nrQubits < 3/*7*/; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
 
-		QC::TensorNetworks::MPSSimulator mps(nrQubits);
-		QC::QubitRegister reg(nrQubits);
-
-		const int lim = nrGatesDistr(gen);
-
-		for (int i = 0; i < lim; ++i)
+		for (int t = 0; t < 10; ++t)
 		{
-			const int gate = gateDistr(gen);
-			int qubit1 = gates[gate]->getQubitsNumber() == 2 ? qubitDistr2(gen) : qubitDistr(gen);
-			int qubit2 = qubit1 + 1;
+			QC::TensorNetworks::MPSSimulator mps(nrQubits);
+			QC::QubitRegister reg(nrQubits);
 
-			if (gates[gate]->getQubitsNumber() == 2 && dist_bool(gen)) std::swap(qubit1, qubit2);
+			const int lim = nrGatesDistr(gen);
 
-			//if (gates[gate]->getQubitsNumber() == 2) std::cout << "Applying two qubit gate on qubits " << qubit1 << " and " << qubit2 << std::endl;
-
-			mps.ApplyGate(*gates[gate], qubit1, qubit2);
-			reg.ApplyGate(*gates[gate], qubit1, qubit2);
-		}
-
-		// now check the results, they should be the same
-		const auto& regState = reg.getRegisterStorage();
-		auto mpsState = mps.getRegisterStorage(); // this one is computed, returns value, not reference, not stored elsewhere
-
-		//QC::QubitRegister regNorm(nrQubits);
-		//regNorm.setRegisterStorage(mpsState);
-		//mpsState = regNorm.getRegisterStorage();
-
-		for (int i = 0; i < regState.size(); ++i)
-		{
-			if (!approxEqual(regState[i], mpsState[i]))
+			for (int i = 0; i < lim; ++i)
 			{
-				std::cout << "State simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = qubit1 + 1;
 
-				std::cout << "Reg state:\n" << regState << std::endl;
-				std::cout << "Reg state normalization: " << (regState.adjoint() * regState)(0).real() << std::endl;
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
 
-				std::cout << "MPS state:\n" << mpsState << std::endl;
+				//if (twoQubitsGate) std::cout << "Applying two qubit gate on qubits " << qubit1 << " and " << qubit2 << std::endl;
 
-				std::cout << "MPS state normalization: " << (mpsState.adjoint() * mpsState)(0).real() << std::endl;
-				return false;
+				mps.ApplyGate(*gates[gate], qubit1, qubit2);
+				reg.ApplyGate(*gates[gate], qubit1, qubit2);
+			}
+
+			// now check the results, they should be the same
+			const auto& regState = reg.getRegisterStorage();
+			auto mpsState = mps.getRegisterStorage(); // this one is computed, returns value, not reference, not stored elsewhere
+
+			//QC::QubitRegister regNorm(nrQubits);
+			//regNorm.setRegisterStorage(mpsState);
+			//mpsState = regNorm.getRegisterStorage();
+
+			for (int i = 0; i < regState.size(); ++i)
+			{
+				if (!approxEqual(regState[i], mpsState[i]))
+				{
+					std::cout << "State simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
+
+					std::cout << "Probability for different state: " << std::norm(regState[i]) << " vs " << std::norm(mpsState[i]) << std::endl;
+
+					std::cout << "Reg state:\n" << regState << std::endl;
+					std::cout << "Reg state normalization: " << (regState.adjoint() * regState)(0).real() << std::endl;
+
+					std::cout << "MPS state:\n" << mpsState << std::endl;
+
+					std::cout << "MPS state normalization: " << (mpsState.adjoint() * mpsState)(0).real() << std::endl;
+					return false;
+				}
 			}
 		}
 	}
