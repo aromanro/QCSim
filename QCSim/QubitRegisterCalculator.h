@@ -56,7 +56,7 @@ namespace QC {
 					const size_t row = state & qubitBit ? 1 : 0;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & notQubitBit) +
-							gateMatrix(row, 1) * registerStorage(state | qubitBit);
+						gateMatrix(row, 1) * registerStorage(state | qubitBit);
 				}
 			}
 		}
@@ -87,7 +87,7 @@ namespace QC {
 					const size_t row = state & qubitBit ? 1 : 0;
 
 					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(state & notQubitBit) +
-							gateMatrix(row, 1) * registerStorage(state | qubitBit);
+						gateMatrix(row, 1) * registerStorage(state | qubitBit);
 				}
 			}
 		}
@@ -135,7 +135,7 @@ namespace QC {
 			const size_t notCtrlQubitBit = ~ctrlQubitBit;
 			const size_t orqubits = qubitBit | ctrlQubitBit;
 			const auto processor_count = GetNumberOfThreads();
-			
+
 			if (gate.isControlled())
 			{
 				for (size_t state = 0; state < ctrlQubitBit; ++state)
@@ -286,20 +286,20 @@ namespace QC {
 			}
 		}
 
-//*****************************************************************************************************************************************************************************************
-// 
-//  Measurements
-// 
-//*****************************************************************************************************************************************************************************************
+		//*****************************************************************************************************************************************************************************************
+		// 
+		//  Measurements
+		// 
+		//*****************************************************************************************************************************************************************************************
 
 		static inline size_t MeasureQubit(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
 		{
 			double accum = 0;
 
 			const size_t measuredQubitMask = 1ULL << qubit;
-			
+
 			for (size_t state = measuredQubitMask; state < NrBasisStates; ++state)
-			{	
+			{
 				if (state & measuredQubitMask)
 					accum += std::norm(registerStorage[state]);
 			}
@@ -322,7 +322,7 @@ namespace QC {
 			const double norm = 1. / sqrt(accum);
 
 			// collapse
-			
+
 			for (size_t state = 0; state < NrBasisStates; ++state)
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
 
@@ -410,6 +410,37 @@ namespace QC {
 			return measuredState;
 		}
 
+		static inline double GetQubitProbability(size_t NrBasisStates, const VectorClass& registerStorage, size_t qubit)
+		{
+			double accum = 0;
+
+			const size_t measuredQubitMask = 1ULL << qubit;
+
+			for (size_t state = measuredQubitMask; state < NrBasisStates; ++state)
+			{
+				if (state & measuredQubitMask)
+					accum += std::norm(registerStorage[state]);
+			}
+
+			return accum;
+		}
+
+		static inline double GetQubitProbabilityOmp(size_t NrBasisStates, const VectorClass& registerStorage, size_t qubit)
+		{
+			double accum = 0;
+			const auto processor_count = GetNumberOfThreads();
+
+			const size_t measuredQubitMask = 1ULL << qubit;
+
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
+			{
+				if (state & measuredQubitMask)
+					accum += std::norm(registerStorage[state]);
+			}
+
+			return accum;
+		}
 
 		// TODO: the following are awful, there might be a better way to optimize this based on cache locality
 		// see the above that implement a single qubit measurement

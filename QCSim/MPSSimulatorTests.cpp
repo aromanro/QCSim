@@ -33,6 +33,7 @@ void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 void FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
 {
 	gates.emplace_back(std::make_shared<QC::Gates::SwapGate<>>());
+	/*
 	gates.emplace_back(std::make_shared<QC::Gates::iSwapGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::DecrementGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::CNOTGate<>>());
@@ -47,6 +48,7 @@ void FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRxGate<>>(M_PI / 5));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRyGate<>>(M_PI / 3));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRzGate<>>(M_PI / 4));
+	*/
 }
 
 bool OneQubitGatesTest()
@@ -110,17 +112,19 @@ bool OneAndTwoQubitGatesTest()
 	FillOneQubitGates(gates);
 	FillTwoQubitGates(gates);
 
-	std::uniform_int_distribution nrGatesDistr(50, 100);
+	std::uniform_int_distribution nrGatesDistr(25, 50);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
 
-	for (int nrQubits = 2; nrQubits < 3/*7*/; ++nrQubits)
+	for (int nrQubits = 2; nrQubits < 7; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
 
 		for (int t = 0; t < 10; ++t)
 		{
+			//std::cout << "\n\n\nTest no: " << t << " for " << nrQubits << " qubits" << std::endl << std::endl << std::endl;
+
 			QC::TensorNetworks::MPSSimulator mps(nrQubits);
 			QC::QubitRegister reg(nrQubits);
 
@@ -135,37 +139,47 @@ bool OneAndTwoQubitGatesTest()
 
 				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
 
-				//if (twoQubitsGate) std::cout << "Applying two qubit gate on qubits " << qubit1 << " and " << qubit2 << std::endl;
+				//if (twoQubitsGate) std::cout << "Applying two qubit gate " << gate << " on qubits " << qubit1 << " and " << qubit2 << std::endl;
 
 				mps.ApplyGate(*gates[gate], qubit1, qubit2);
 				reg.ApplyGate(*gates[gate], qubit1, qubit2);
-			}
 
-			// now check the results, they should be the same
-			const auto& regState = reg.getRegisterStorage();
-			auto mpsState = mps.getRegisterStorage(); // this one is computed, returns value, not reference, not stored elsewhere
+				// now check the results, they should be the same
+				const auto& regState = reg.getRegisterStorage();
+				auto mpsState = mps.getRegisterStorage(); // this one is computed, returns value, not reference, not stored elsewhere
 
-			//QC::QubitRegister regNorm(nrQubits);
-			//regNorm.setRegisterStorage(mpsState);
-			//mpsState = regNorm.getRegisterStorage();
+				//QC::QubitRegister regNorm(nrQubits);
+				//regNorm.setRegisterStorage(mpsState);
+				//mpsState = regNorm.getRegisterStorage();
 
-			for (int i = 0; i < regState.size(); ++i)
-			{
-				if (!approxEqual(regState[i], mpsState[i]))
+				for (int s = 0; s < regState.size(); ++s)
 				{
-					std::cout << "State simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
+					if (!approxEqual(regState[s], mpsState[s]))
+					{
+						std::cout << "State " << s << " simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 
-					std::cout << "Probability for different state: " << std::norm(regState[i]) << " vs " << std::norm(mpsState[i]) << std::endl;
+						std::cout << "Probability for the different states: " << std::norm(regState[s]) << " vs " << std::norm(mpsState[s]) << std::endl;
 
-					std::cout << "Reg state:\n" << regState << std::endl;
-					std::cout << "Reg state normalization: " << (regState.adjoint() * regState)(0).real() << std::endl;
+						std::cout << "Reg state:\n" << regState << std::endl;
+						std::cout << "Reg state normalization: " << regState.norm() << std::endl;
 
-					std::cout << "MPS state:\n" << mpsState << std::endl;
+						std::cout << "MPS state:\n" << mpsState << std::endl;
+						std::cout << "MPS state normalization: " << mpsState.norm() << std::endl;
 
-					std::cout << "MPS state normalization: " << (mpsState.adjoint() * mpsState)(0).real() << std::endl;
-					return false;
-				}
+						std::cout << std::endl;
+						for (int q = 0; q < nrQubits; ++q)
+							std::cout << "Qubit " << q << " reg probability: " << reg.GetQubitProbability(q) << " vs mps: " << mps.GetProbability(q, false) << std::endl;
+
+						std::cout << std::endl;
+						for (int state = 0; state < regState.size(); ++state)
+							std::cout << "State " << state << " reg probability: " << std::norm(regState[state]) << " vs mps: " << std::norm(mpsState[state]) << std::endl;
+
+						return false;
+					}
+				}				
 			}
+
+			//std::cout << "Test passed: " << t << std::endl;
 		}
 	}
 

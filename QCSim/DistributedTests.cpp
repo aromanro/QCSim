@@ -12,7 +12,6 @@ bool distributedCNOTTest()
 {
 	std::cout << "\nTesting distributed CNOT..." << std::endl;
 
-
 	Distributed::DistributedCNOT distCnot;
 
 	// for non-distributed CNOT
@@ -35,7 +34,7 @@ bool distributedCNOTTest()
 			// now check them to have the same results
 			for (int i = 0; i < 4; ++i)
 			{
-				if (!approxEqual(distStorage((i & 2) << 2 | measurements | (i & 1)), res(i)))
+				if (!approxEqual(distStorage((i & 2ULL) << 2ULL | measurements | (i & 1ULL)), res(i)))
 				{
 					std::cout << "Error: distributed CNOT failed for ctrl = " << ctrlQubit << ", target = " << targetQubit << ", results were different than for the local CNOT" << std::endl;
 
@@ -46,11 +45,11 @@ bool distributedCNOTTest()
 				for (int q1 = 0; q1 < 2; ++q1)
 					for (int q2 = 0; q2 < 2; ++q2)
 					{
-						const size_t state = ((q2 << 1) | q1) << 1;
+						const size_t state = ((q2 << 1ULL) | q1) << 1ULL;
 						if (state == measurements)
 							continue;
 
-						if (!approxEqual(distStorage(((i & 2) << 2) | state | (i & 1)), 0.0))
+						if (!approxEqual(distStorage(((i & 2ULL) << 2ULL) | state | (i & 1ULL)), 0.0))
 						{
 							std::cout << "Error: distributed CNOT failed for ctrl = " << ctrlQubit << ", target = " << targetQubit << ", amplitude that should be zero is not" << std::endl;
 							return false;
@@ -72,7 +71,7 @@ bool distributedCNOTTest()
 		distCnot.setRawAmplitude(0x8, gamma);
 		distCnot.setRawAmplitude(0x9, delta);
 		distCnot.Normalize();
-		const size_t measurements = distCnot.Execute() << 1;
+		const size_t measurements = distCnot.Execute() << 1ULL;
 
 		reg.Clear();
 		reg.setRawAmplitude(0, alpha);
@@ -83,9 +82,9 @@ bool distributedCNOTTest()
 		reg.ApplyGate(cnot, 1, 0);
 
 		const std::complex<double> v1 = distCnot.getBasisStateAmplitude(measurements);
-		const std::complex<double> v2 = distCnot.getBasisStateAmplitude(measurements | 1);
+		const std::complex<double> v2 = distCnot.getBasisStateAmplitude(measurements | 1ULL);
 		const std::complex<double> v3 = distCnot.getBasisStateAmplitude(0x8 | measurements);
-		const std::complex<double> v4 = distCnot.getBasisStateAmplitude(0x8 | measurements | 1);
+		const std::complex<double> v4 = distCnot.getBasisStateAmplitude(0x8 | measurements | 1ULL);
 
 		if (!approxEqual(v1, reg.getBasisStateAmplitude(0)) || !approxEqual(v2, reg.getBasisStateAmplitude(1)) ||
 			!approxEqual(v3, reg.getBasisStateAmplitude(2)) || !approxEqual(v4, reg.getBasisStateAmplitude(3)))

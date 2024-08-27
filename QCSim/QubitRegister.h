@@ -104,10 +104,10 @@ namespace QC {
 
 		void Normalize()
 		{
-			const double accum = (registerStorage.adjoint() * registerStorage)(0).real();
-			if (accum < 1E-20) return;
+			const double norm = registerStorage.norm();
+			if (norm < 1E-20) return;
 
-			registerStorage *= 1. / sqrt(accum);
+			registerStorage *= 1. / norm;
 		}
 
 		// to be able to compare different results
@@ -454,6 +454,14 @@ namespace QC {
 			}
 
 			recordGates = recordSave;
+		}
+
+		double GetQubitProbability(size_t qubit) const
+		{
+			if (NrBasisStates < BaseClass::OneQubitOmpLimit)
+				return BaseClass::GetQubitProbability(NrBasisStates, registerStorage, qubit);
+
+			return BaseClass::GetQubitProbabilityOmp(NrBasisStates, registerStorage, qubit);
 		}
 
 	protected:
