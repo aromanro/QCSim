@@ -423,10 +423,66 @@ namespace QC {
 				//if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1; // this should not happen
 				lambdas[qubit1].normalize();
 
+
+				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
+
 #ifdef _DEBUG
 				std::cout << "Normalized: " << lambdas[qubit1] << std::endl;
 #endif
+			}
 
+
+			Eigen::Tensor<std::complex<double>, 2> GetLambdaTensor(size_t pos, size_t dim1, size_t dim2) const
+			{
+				assert(pos < lambdas.size());
+
+				Eigen::Tensor<std::complex<double>, 2> res(dim1, dim2);
+				res.setZero();
+				
+				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), std::min(dim1, dim2)); ++i)
+					res(i, i) = lambdas[pos](i);
+
+				return res;
+			}
+
+
+			Eigen::Tensor<std::complex<double>, 4> GetTwoQubitsGateTensor(const GateClass& gate, bool reversed) const
+			{
+				Eigen::Tensor<std::complex<double>, 4> result(2, 2, 2, 2);
+
+				const auto& gateMat = gate.getRawOperatorMatrix();
+
+				if (reversed)
+					for (int q0l = 0; q0l < 2; ++q0l)
+					{
+						const int l0 = q0l << 1;
+						for (int q0c = 0; q0c < 2; ++q0c)
+						{
+							const int c0 = q0c << 1;
+							for (int q1l = 0; q1l < 2; ++q1l)
+								for (int q1c = 0; q1c < 2; ++q1c)
+									result(q1l, q0l, q1c, q0c) = gateMat(l0 | q1l, c0 | q1c);
+						}
+					}
+				else
+					for (int q0l = 0; q0l < 2; ++q0l) // ctrl qubit
+					{
+						const int l0 = q0l << 1;
+						for (int q0c = 0; q0c < 2; ++q0c) // ctrl qubit
+						{
+							const int c0 = q0c << 1;
+							for (int q1l = 0; q1l < 2; ++q1l)
+								for (int q1c = 0; q1c < 2; ++q1c)
+									result(q0l, q1l, q0c, q1c) = gateMat(l0 | q1l, c0 | q1c);
+						}
+					}
+
+
+				return result;
+			}
+
+			inline void SetNewGammas(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
+			{
 				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
 				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, szr);
 
@@ -497,54 +553,6 @@ namespace QC {
 								if (lambdas[qubit2][k] > std::numeric_limits<double>::epsilon()) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
 								else break;
 				}
-			}
-
-
-			Eigen::Tensor<std::complex<double>, 2> GetLambdaTensor(size_t pos, size_t dim1, size_t dim2) const
-			{
-				assert(pos < lambdas.size());
-
-				Eigen::Tensor<std::complex<double>, 2> res(dim1, dim2);
-				res.setZero();
-				
-				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), std::min(dim1, dim2)); ++i)
-					res(i, i) = lambdas[pos](i);
-
-				return res;
-			}
-
-
-			Eigen::Tensor<std::complex<double>, 4> GetTwoQubitsGateTensor(const GateClass& gate, bool reversed) const
-			{
-				Eigen::Tensor<std::complex<double>, 4> result(2, 2, 2, 2);
-
-				if (reversed)
-					for (int q0l = 0; q0l < 2; ++q0l)
-					{
-						const int l0 = q0l << 1;
-						for (int q0c = 0; q0c < 2; ++q0c)
-						{
-							const int c0 = q0c << 1;
-							for (int q1l = 0; q1l < 2; ++q1l)
-								for (int q1c = 0; q1c < 2; ++q1c)
-									result(q1l, q0l, q1c, q0c) = gate.getRawOperatorMatrix()(l0 | q1l, c0 | q1c);
-						}
-					}
-				else
-					for (int q0l = 0; q0l < 2; ++q0l) // ctrl qubit
-					{
-						const int l0 = q0l << 1;
-						for (int q0c = 0; q0c < 2; ++q0c) // ctrl qubit
-						{
-							const int c0 = q0c << 1;
-							for (int q1l = 0; q1l < 2; ++q1l)
-								for (int q1c = 0; q1c < 2; ++q1c)
-									result(q0l, q1l, q0c, q1c) = gate.getRawOperatorMatrix()(l0 | q1l, c0 | q1c);
-						}
-					}
-
-
-				return result;
 			}
 
 			Eigen::Tensor<std::complex<double>, 4> ContractTwoQubits(IndexType qubit1)
