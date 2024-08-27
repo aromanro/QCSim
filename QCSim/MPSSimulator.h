@@ -364,10 +364,12 @@ namespace QC {
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
 
-				//std::cout << "Gamma1 dims: " << gammas[qubit1].dimension(0) << " x " << gammas[qubit1].dimension(1) << " x " << gammas[qubit1].dimension(2) << std::endl;
-				//std::cout << "Gamma2 dims: " << gammas[qubit2].dimension(0) << " x " << gammas[qubit2].dimension(1) << " x " << gammas[qubit2].dimension(2) << std::endl;
-				//std::cout << "Lambda size: " << lambdas[qubit1].size() << std::endl;
-				//std::cout << "Theta matrix size: " << thetaMatrix.rows() << " x " << thetaMatrix.cols() << std::endl;
+#ifdef _DEBUG
+				std::cout << "Gamma1 dims: " << gammas[qubit1].dimension(0) << " x " << gammas[qubit1].dimension(1) << " x " << gammas[qubit1].dimension(2) << std::endl;
+				std::cout << "Gamma2 dims: " << gammas[qubit2].dimension(0) << " x " << gammas[qubit2].dimension(1) << " x " << gammas[qubit2].dimension(2) << std::endl;
+				std::cout << "Lambda size: " << lambdas[qubit1].size() << std::endl;
+				std::cout << "Theta matrix size: " << thetaMatrix.rows() << " x " << thetaMatrix.cols() << std::endl;
+#endif
 
 				SVD.compute(thetaMatrix, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
 
@@ -376,11 +378,13 @@ namespace QC {
 				const MatrixClass& VmatrixFull = SVD.matrixV();
 				const LambdaType& SvaluesFull = SVD.singularValues();
 
-				//std::cout << "U matrix size: " << UmatrixFull.rows() << " x " << UmatrixFull.cols() << std::endl;
-				//std::cout << UmatrixFull << std::endl;
-				//std::cout << "V matrix size: " << VmatrixFull.rows() << " x " << VmatrixFull.cols() << std::endl;
-				//std::cout << VmatrixFull << std::endl;
-				//std::cout << "Singular values: " << SvaluesFull << std::endl;
+#ifdef _DEBUG
+				std::cout << "U matrix size: " << UmatrixFull.rows() << " x " << UmatrixFull.cols() << std::endl;
+				std::cout << UmatrixFull << std::endl;
+				std::cout << "V matrix size: " << VmatrixFull.rows() << " x " << VmatrixFull.cols() << std::endl;
+				std::cout << VmatrixFull << std::endl;
+				std::cout << "Singular values: " << SvaluesFull << std::endl;
+#endif
 
 				//IndexType szm = SvaluesFull.size();
 				IndexType szm = SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
@@ -407,8 +411,10 @@ namespace QC {
 				const MatrixClass Umatrix = UmatrixFull.topLeftCorner(std::min<IndexType>(2 * szl, UmatrixFull.rows()), sz);
 				const MatrixClass Vmatrix = VmatrixFull.topLeftCorner(std::min<IndexType>(2 * szr, VmatrixFull.rows()), sz).adjoint();
 
-				//std::cout << "Trunc U matrix size: " << Umatrix.rows() << " x " << Umatrix.cols() << std::endl;
-				//std::cout << "Trunc V matrix size: " << Vmatrix.rows() << " x " << Vmatrix.cols() << std::endl;
+#ifdef _DEBUG
+				std::cout << "Trunc U matrix size: " << Umatrix.rows() << " x " << Umatrix.cols() << std::endl;
+				std::cout << "Trunc V matrix size: " << Vmatrix.rows() << " x " << Vmatrix.cols() << std::endl;
+#endif
 
 				// now set back lambdas and gammas
 
@@ -417,14 +423,18 @@ namespace QC {
 				//if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1; // this should not happen
 				lambdas[qubit1].normalize();
 
-				//std::cout << "Normalized: " << lambdas[qubit1] << std::endl;
+#ifdef _DEBUG
+				std::cout << "Normalized: " << lambdas[qubit1] << std::endl;
+#endif
 
 				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
 				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, szr);
 
 				if (sz != szl || sz != szr)
 				{
-					//std::cout << "Different sizes, szl=" << szl << " sz=" << sz << " szr=" << szr << std::endl;
+#ifdef _DEBUG
+					std::cout << "Different sizes, szl=" << szl << " sz=" << sz << " szr=" << szr << std::endl;
+#endif
 
 					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
@@ -444,7 +454,9 @@ namespace QC {
 				}
 				else
 				{
-					//std::cout << "Same sizes, sz=" << sz << std::endl;
+#ifdef _DEBUG
+					std::cout << "Same sizes, sz=" << sz << std::endl;
+#endif
 
 					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
@@ -474,6 +486,7 @@ namespace QC {
 						for (IndexType j = 0; j < 2; ++j)
 							for (IndexType i = 0; i < szl; ++i)
 								if (lambdas[prev][i] > std::numeric_limits<double>::epsilon()) gammas[qubit1](i, j, k) /= lambdas[prev][i];
+								else break;
 				}
 
 				if (qubit2 != lambdas.size())
@@ -482,6 +495,7 @@ namespace QC {
 						for (IndexType i = 0; i < sz; ++i)
 							for (IndexType k = 0; k < szr; ++k)
 								if (lambdas[qubit2][k] > std::numeric_limits<double>::epsilon()) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
+								else break;
 				}
 			}
 
@@ -533,120 +547,50 @@ namespace QC {
 				return result;
 			}
 
-			Eigen::Tensor<std::complex<double>, 4> ContractTwoQubits(IndexType qubit1) const
+			Eigen::Tensor<std::complex<double>, 4> ContractTwoQubits(IndexType qubit1)
 			{
 				const IndexType qubit2 = qubit1 + 1;
 
-				static const Indexes product_dims1{ IntIndexPair(1, 0) };
 				static const Indexes product_dims_int{ IntIndexPair(2, 0) };
-				static const Indexes product_dims4{ IntIndexPair(3, 0) };
 
+				assert(gammas[qubit1].dimension(2) == gammas[qubit2].dimension(0));
+				
 				const Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1, gammas[qubit1].dimension(2), gammas[qubit2].dimension(0) );
 
-				if (qubit1 == 0 && qubit2 == lambdas.size())
+				const IndexType szl = gammas[qubit1].dimension(0);
+				const IndexType sz = gammas[qubit1].dimension(2);
+				const IndexType szr = gammas[qubit2].dimension(2);
+
+				if (qubit1 != 0)
 				{
-					// this is a two qubits simulator case
-					
-					// contract first gamma with the lambda in the middle
-					// the resulting tensor has three legs, 1 is the physical one
-
-					// then
-
-					// contract the result with the next gamma
-					// the resulting tensor has four legs, 1 and 2 are the physical ones
-
-					// first and last dimensions stay 1
-
-					const Eigen::Tensor<std::complex<double>, 4> result = gammas[qubit1].contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
-
-					assert(result.dimension(0) == 1);
-					assert(result.dimension(3) == 1);
-
-					return result;
-				}
-				else if (qubit1 == 0 && qubit2 < lambdas.size())
-				{
-					// we're on the left side of the chain of qubits
-					
-					// contract first gamma with the lambda in the middle
-					// the resulting tensor has three legs, 1 is the physical one
-
-					// then
-
-					// contract the result with the next gamma
-					// the resulting tensor has four legs, 1 and 2 are the physical ones
-
-					// then
-
-					// contract the result with the lambda on the right
-					// the resulting tensor has four legs, 1 and 2 are the physical ones
-
-					// the first dimension stays 1
-
-					const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), lambdas[qubit2].size());
-
-					const Eigen::Tensor<std::complex<double>, 4> result = gammas[qubit1].contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
-
-					assert(result.dimension(0) == 1);
-
-					return result;
-				}
-				else if (qubit1 > 0 && qubit2 == lambdas.size())
-				{
-					// we're on the right side of the chain of qubits
-					
-					// contract lambda on the left with the first gamma
-					// the resulting tensor has three legs, 1 is the physical one
-
-					// then
-
-					// contract the result with the lambda in the middle
-					// the resulting tensor has three legs, 1 is the physical one
-
-					// then
-
-					// contract the result with the next gamma
-					// the resulting tensor has four legs, 1 and 2 are the physical ones
-
-					// the last dimension stays 1
-
-					const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1, lambdas[qubit1 - 1].size(), gammas[qubit1].dimension(0));
-
-					const Eigen::Tensor<std::complex<double>, 4> result = lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
-
-					assert(result.dimension(3) == 1);
-
-					return result;
+					const IndexType prev = qubit1 - 1;
+					for (IndexType k = 0; k < sz; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < szl; ++i)
+								gammas[qubit1](i, j, k) *= lambdas[prev][i];
 				}
 
-				// we're somewhere in the middle of the chain of qubits, that is, not on the left or right extremities, those are dealt above
+				if (qubit2 != lambdas.size())
+				{
+					for (IndexType j = 0; j < 2; ++j)
+						for (IndexType i = 0; i < sz; ++i)
+							for (IndexType k = 0; k < szr; ++k)
+								gammas[qubit2](i, j, k) *= lambdas[qubit2][k];
+				}
 
-				const Eigen::Tensor<std::complex<double>, 2> lambdaLeft = GetLambdaTensor(qubit1, lambdas[qubit1 - 1].size(), gammas[qubit1].dimension(0));
-				const Eigen::Tensor<std::complex<double>, 2> lambdaRight = GetLambdaTensor(qubit2, gammas[qubit2].dimension(2), lambdas[qubit2].size());
-
-				// contract lambda on the left with the first gamma
-		        // the resulting tensor has three legs, 1 is the physical one
-
-				// then
-
-				// contract the result with the lambda in the middle
-		        // the resulting tensor has three legs, 1 is the physical one
+				// contract first gamma with the lambda in the middle
+				// the resulting tensor has three legs, 1 is the physical one
 
 				// then
 
 				// contract the result with the next gamma
-		        // the resulting tensor has four legs, 1 and 2 are the physical ones
-
-				// then
-
-				// contract the result with the lambda on the right
 				// the resulting tensor has four legs, 1 and 2 are the physical ones
 
-				return lambdaLeft.contract(gammas[qubit1], product_dims1).contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int).contract(lambdaRight, product_dims4);
+				return gammas[qubit1].contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
 			}
 
 			// for the two qubit gate - U is the gate tensor
-			Eigen::Tensor<std::complex<double>, 4> ConstructThetaBar(IndexType qubit1, const Eigen::Tensor<std::complex<double>, 4>& U) const
+			Eigen::Tensor<std::complex<double>, 4> ConstructThetaBar(IndexType qubit1, const Eigen::Tensor<std::complex<double>, 4>& U)
 			{
 				const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
 

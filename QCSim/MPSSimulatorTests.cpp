@@ -33,7 +33,6 @@ void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 void FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
 {
 	gates.emplace_back(std::make_shared<QC::Gates::SwapGate<>>());
-	/*
 	gates.emplace_back(std::make_shared<QC::Gates::iSwapGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::DecrementGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::CNOTGate<>>());
@@ -48,7 +47,6 @@ void FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRxGate<>>(M_PI / 5));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRyGate<>>(M_PI / 3));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRzGate<>>(M_PI / 4));
-	*/
 }
 
 bool OneQubitGatesTest()
@@ -58,9 +56,8 @@ bool OneQubitGatesTest()
 	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
 	FillOneQubitGates(gates);
 
-	std::uniform_int_distribution nrGatesDistr(25, 50);
+	std::uniform_int_distribution nrGatesDistr(50, 100);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
-
 
 	for (int nrQubits = 1; nrQubits < 7; ++nrQubits)
 	{
@@ -123,7 +120,9 @@ bool OneAndTwoQubitGatesTest()
 
 		for (int t = 0; t < 10; ++t)
 		{
-			//std::cout << "\n\n\nTest no: " << t << " for " << nrQubits << " qubits" << std::endl << std::endl << std::endl;
+#ifdef _DEBUG
+			std::cout << "\n\n\nTest no: " << t << " for " << nrQubits << " qubits" << std::endl << std::endl << std::endl;
+#endif
 
 			QC::TensorNetworks::MPSSimulator mps(nrQubits);
 			QC::QubitRegister reg(nrQubits);
@@ -139,7 +138,9 @@ bool OneAndTwoQubitGatesTest()
 
 				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
 
-				//if (twoQubitsGate) std::cout << "Applying two qubit gate " << gate << " on qubits " << qubit1 << " and " << qubit2 << std::endl;
+#ifdef _DEBUG
+				if (twoQubitsGate) std::cout << "Applying two qubit gate " << gate << " on qubits " << qubit1 << " and " << qubit2 << std::endl;
+#endif
 
 				mps.ApplyGate(*gates[gate], qubit1, qubit2);
 				reg.ApplyGate(*gates[gate], qubit1, qubit2);
@@ -179,7 +180,9 @@ bool OneAndTwoQubitGatesTest()
 				}				
 			}
 
-			//std::cout << "Test passed: " << t << std::endl;
+#ifdef _DEBUG
+			std::cout << "Test passed: " << t << std::endl;
+#endif
 		}
 	}
 
