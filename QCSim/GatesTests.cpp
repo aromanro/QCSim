@@ -83,7 +83,7 @@ bool checkSingleQubitGates()
 	return true;
 }
 
-bool checkDoubleQubitGates()
+bool checkDoubleQubitGates1()
 {
 	if (QC::Gates::SwapGate swap; !checkUnitary(swap.getRawOperatorMatrix())) {
 		std::cout << "The Swap gate is not unitary!" << std::endl;
@@ -125,6 +125,11 @@ bool checkDoubleQubitGates()
 		return false;
 	}
 
+	return true;
+}
+
+bool checkDoubleQubitGates2()
+{
 	if (QC::Gates::ControlledHadamardGate ch; !checkUnitary(ch.getRawOperatorMatrix())) {
 		std::cout << "The Controlled Hadamard gate is not unitary!" << std::endl;
 		return false;
@@ -176,6 +181,11 @@ bool checkTripleQubitGates()
 	}
 
 	return true;
+}
+
+bool checkDoubleQubitGates()
+{
+	return checkDoubleQubitGates1() && checkDoubleQubitGates2();
 }
 
 bool checkGates()

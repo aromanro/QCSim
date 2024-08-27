@@ -530,6 +530,11 @@ namespace QC {
 				gammas[qubit1] = Utensor;
 				gammas[qubit2] = Vtensor;
 
+				DivideGammasWithLambdas(qubit1, qubit2, szl, sz, szr);
+			}
+
+			inline void DivideGammasWithLambdas(IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
+			{
 				assert(gammas[qubit1].dimension(0) == szl);
 				assert(gammas[qubit1].dimension(2) == sz);
 				assert(gammas[qubit2].dimension(0) == sz);
