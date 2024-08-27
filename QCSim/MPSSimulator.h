@@ -423,12 +423,11 @@ namespace QC {
 				//if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1; // this should not happen
 				lambdas[qubit1].normalize();
 
-
-				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
-
 #ifdef _DEBUG
 				std::cout << "Normalized: " << lambdas[qubit1] << std::endl;
 #endif
+
+				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
 			}
 
 
