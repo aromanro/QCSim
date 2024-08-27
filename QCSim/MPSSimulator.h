@@ -483,54 +483,66 @@ namespace QC {
 
 			inline void SetNewGammas(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
 			{
+				if (sz != szl || sz != szr)
+					SetNewGammasDif(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
+				else
+					SetNewGammasSame(Umatrix, Vmatrix, qubit1, qubit2, sz);
+
+				DivideGammasWithLambdas(qubit1, qubit2, szl, sz, szr);
+			}
+
+			inline void SetNewGammasDif(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
+			{
 				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
 				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, szr);
 
-				if (sz != szl || sz != szr)
-				{
 #ifdef _DEBUG
-					std::cout << "Different sizes, szl=" << szl << " sz=" << sz << " szr=" << szr << std::endl;
+				std::cout << "Different sizes, szl=" << szl << " sz=" << sz << " szr=" << szr << std::endl;
 #endif
 
-					for (IndexType k = 0; k < sz; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
-							{
-								const IndexType jind = j * szl + i;
-								Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
-							}
+				for (IndexType k = 0; k < sz; ++k)
+					for (IndexType j = 0; j < 2; ++j)
+						for (IndexType i = 0; i < szl; ++i)
+						{
+							const IndexType jind = j * szl + i;
+							Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
+						}
 
-					for (IndexType k = 0; k < szr; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-							{
-								const IndexType jind = j * szr + k;
-								Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
-							}
-				}
-				else
-				{
-#ifdef _DEBUG
-					std::cout << "Same sizes, sz=" << sz << std::endl;
-#endif
-
-					for (IndexType k = 0; k < sz; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-							{
-								const IndexType jchi = j * sz;
-								IndexType jind = jchi + i;
-								Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
-
-								jind = jchi + k;
-								Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
-							}
-				}
+				for (IndexType k = 0; k < szr; ++k)
+					for (IndexType j = 0; j < 2; ++j)
+						for (IndexType i = 0; i < sz; ++i)
+						{
+							const IndexType jind = j * szr + k;
+							Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
+						}
 
 				gammas[qubit1] = Utensor;
 				gammas[qubit2] = Vtensor;
+			}
 
-				DivideGammasWithLambdas(qubit1, qubit2, szl, sz, szr);
+			inline void SetNewGammasSame(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType sz)
+			{
+				Eigen::Tensor<std::complex<double>, 3> Utensor(sz, 2, sz);
+				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, sz);
+
+#ifdef _DEBUG
+				std::cout << "Same sizes, sz=" << sz << std::endl;
+#endif
+
+				for (IndexType k = 0; k < sz; ++k)
+					for (IndexType j = 0; j < 2; ++j)
+						for (IndexType i = 0; i < sz; ++i)
+						{
+							const IndexType jchi = j * sz;
+							IndexType jind = jchi + i;
+							Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
+
+							jind = jchi + k;
+							Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
+						}
+
+				gammas[qubit1] = Utensor;
+				gammas[qubit2] = Vtensor;
 			}
 
 			inline void DivideGammasWithLambdas(IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
