@@ -191,15 +191,15 @@ bool OneAndTwoQubitGatesTest()
 	return true;
 }
 
-std::vector<std::shared_ptr<QC::Gates::AppliedGate<>>> GenerateRandomCircuitWithGates(const std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates, size_t minGates, size_t maxGates, size_t nrQubits)
+std::vector<std::shared_ptr<QC::Gates::AppliedGate<>>> GenerateRandomCircuitWithGates(const std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates, int minGates, int maxGates, int nrQubits)
 {
 	std::vector<std::shared_ptr<QC::Gates::AppliedGate<>>> circuit;
 
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 	std::uniform_int_distribution nrGatesDistr(minGates, maxGates);
 
-	std::uniform_int_distribution qubitDistr(0ULL, nrQubits - 1);
-	std::uniform_int_distribution qubitDistr2(0ULL, nrQubits - 2);
+	std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+	std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
 
 	const size_t lim = nrGatesDistr(gen);
 
