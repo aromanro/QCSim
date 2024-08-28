@@ -198,7 +198,7 @@ namespace QC {
 			}
 
 			// false if measured 0, true if measured 1
-			bool Measure(IndexType qubit)
+			bool MeasureQubit(IndexType qubit)
 			{
 				const double rndVal = 1. - uniformZeroOne(rng);
 				
@@ -557,7 +557,7 @@ namespace QC {
 					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
 							for (IndexType i = 0; i < szl; ++i)
-								if (lambdas[prev][i] > std::numeric_limits<double>::epsilon()) gammas[qubit1](i, j, k) /= lambdas[prev][i];
+								if (lambdas[prev][i] > std::numeric_limits<double>::denorm_min()) gammas[qubit1](i, j, k) /= lambdas[prev][i];
 								else break;
 				}
 
@@ -566,7 +566,7 @@ namespace QC {
 					for (IndexType j = 0; j < 2; ++j)
 						for (IndexType i = 0; i < sz; ++i)
 							for (IndexType k = 0; k < szr; ++k)
-								if (lambdas[qubit2][k] > std::numeric_limits<double>::epsilon()) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
+								if (lambdas[qubit2][k] > std::numeric_limits<double>::denorm_min()) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
 								else break;
 				}
 			}
