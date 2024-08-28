@@ -101,7 +101,7 @@ namespace QC {
 			void setToQubitState(IndexType q)
 			{
 				Clear();
-				if (q >= gammas.size())
+				if (q >= static_cast<IndexType>(gammas.size()))
 					return;
 
 				gammas[q](0, 0, 0) = 0.;
@@ -187,7 +187,7 @@ namespace QC {
 				if (gate.getQubitsNumber() > 2) throw std::runtime_error("Three qubit gates not supported");
 				else if (gate.getQubitsNumber() == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
 					throw std::runtime_error("Two qubit gates need to act on adjacent qubits");
-				else if (qubit >= gammas.size() || (gate.getQubitsNumber() == 2 && controllingQubit1 >= gammas.size()))
+				else if (qubit >= static_cast<IndexType>(gammas.size()) || (gate.getQubitsNumber() == 2 && controllingQubit1 >= static_cast<IndexType>(gammas.size())))
 					throw std::runtime_error("Qubit index out of bounds");
 
 
@@ -231,7 +231,7 @@ namespace QC {
 					ApplyTwoQubitGate(projOp, q1, q, true);
 				}
 
-				for (IndexType q = qubit; q < lambdas.size(); ++q)
+				for (IndexType q = qubit; q < static_cast<IndexType>(lambdas.size()); ++q)
 				{
 					if (lambdas[q].size() == 1) break;
 					ApplyTwoQubitGate(projOp, q, q + 1, true);
@@ -280,7 +280,7 @@ namespace QC {
 							qubitMatrix(row, col) *= (row < lambdas[qbit1].size()) ? lambdas[qbit1][row] : 0;
 				}
 
-				if (qubit < lambdas.size())
+				if (qubit < static_cast<IndexType>(lambdas.size()))
 				{
 					for (IndexType col = 0; col < qubitMatrix.cols(); col++)
 						for (IndexType row = 0; row < qubitMatrix.rows(); row++)
@@ -399,8 +399,8 @@ namespace QC {
 				const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
 
 
-				const IndexType szl = (qubit1 == 0) ? 1 : lambdas[qubit1 - 1].size();
-				const IndexType szr = (qubit2 == lambdas.size()) ? 1 : lambdas[qubit2].size();
+				const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
+				const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
 
 				assert(UmatrixFull.cols() == VmatrixFull.cols()); // for 'thin'
 				assert(sz <= UmatrixFull.cols());
@@ -561,7 +561,7 @@ namespace QC {
 								else break;
 				}
 
-				if (qubit2 != lambdas.size())
+				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
 					for (IndexType j = 0; j < 2; ++j)
 						for (IndexType i = 0; i < sz; ++i)
@@ -594,7 +594,7 @@ namespace QC {
 								gammas[qubit1](i, j, k) *= lambdas[prev][i];
 				}
 
-				if (qubit2 != lambdas.size())
+				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
 					for (IndexType j = 0; j < 2; ++j)
 						for (IndexType i = 0; i < sz; ++i)
@@ -702,7 +702,7 @@ namespace QC {
 				Eigen::Tensor<std::complex<double>, 2> lambdaTensor(dim1, dim2);
 				lambdaTensor.setZero();
 
-				for (size_t i = 0; i < std::min(lambdaVal.size(), std::min(dim1, dim2)); ++i)
+				for (IndexType i = 0; i < std::min(static_cast<IndexType>(lambdaVal.size()), std::min(dim1, dim2)); ++i)
 					lambdaTensor(i, i) = lambdaVal(i);
 
 				static const Indexes productDim{ IntIndexPair(N, 0) };

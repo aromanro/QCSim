@@ -228,7 +228,7 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
 	FillOneQubitGates(gates);
 
-	const size_t nrMeasurements = 10000;
+	const int nrMeasurements = 10000;
 
 	for (int nrQubits = 1; nrQubits < 7; ++nrQubits)
 	{
@@ -306,7 +306,7 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 	FillOneQubitGates(gates);
 	FillTwoQubitGates(gates);
 
-	const size_t nrMeasurements = 10000;
+	const int nrMeasurements = 10000;
 
 	for (int nrQubits = 2; nrQubits < 7; ++nrQubits)
 	{
