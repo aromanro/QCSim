@@ -241,32 +241,88 @@ namespace QC {
 			}
 
 			// this is for 'compatibility' with the statevector simulator (QubitRegister)
-			// it's not stored as this and it's costly to compute, it will throw an exception for more than 64 qubits
+			// it's not stored as this and it's costly to compute, it will throw an exception for more than 32 qubits
 			// but don't call it for such a large number of qubits
 			VectorClass getRegisterStorage() const
 			{
-				if (gammas.size() > sizeof(size_t) * 8) throw std::runtime_error("Too many qubits to compute the state vector");
+				if (gammas.size() > sizeof(size_t) * 4) throw std::runtime_error("Too many qubits to compute the state vector");
 
 				// TODO: implement this with variadic templates, perhaps
-				if (gammas.size() == 1)
-					return GenerateStatevector<1>(gammas[0]);
-				else if (gammas.size() == 2)
-					return GenerateStatevector<2>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]));
-				else if (gammas.size() == 3)
-					return GenerateStatevector<3>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]));
-				else if (gammas.size() == 4)
-					return GenerateStatevector<4>(ContractNQubits<4>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]), lambdas[2], gammas[3]));
-				else if (gammas.size() == 5)
-					return GenerateStatevector<5>(ContractNQubits<5>(ContractNQubits<4>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]), lambdas[2], gammas[3]), lambdas[3], gammas[4]));
-				else if (gammas.size() == 6)
-					return GenerateStatevector<6>(ContractNQubits<6>(ContractNQubits<5>(ContractNQubits<4>(ContractNQubits<3>(ContractNQubits<2>(gammas[0], lambdas[0], gammas[1]), lambdas[1], gammas[2]), lambdas[2], gammas[3]), lambdas[3], gammas[4]), lambdas[4], gammas[5]));
-				else
+
+				switch (gammas.size())
+				{
+				case 0:
+					return {};
+				case 1:
+					return GenerateStatevector<1>(GetContractedTensor<1>());
+				case 2:
+					return GenerateStatevector<2>(GetContractedTensor<2>());
+				case 3:
+					return GenerateStatevector<3>(GetContractedTensor<3>());
+				case 4:
+					return GenerateStatevector<4>(GetContractedTensor<4>());
+				case 5:
+					return GenerateStatevector<5>(GetContractedTensor<5>());
+				case 6:
+					return GenerateStatevector<6>(GetContractedTensor<6>());
+				case 7:
+					return GenerateStatevector<7>(GetContractedTensor<7>());
+				case 8:
+					return GenerateStatevector<8>(GetContractedTensor<8>());
+				case 9:
+					return GenerateStatevector<9>(GetContractedTensor<9>());
+				case 10:
+					return GenerateStatevector<10>(GetContractedTensor<10>());
+				case 11:
+					return GenerateStatevector<11>(GetContractedTensor<11>());
+				case 12:
+					return GenerateStatevector<12>(GetContractedTensor<12>());
+				case 13:
+					return GenerateStatevector<13>(GetContractedTensor<13>());
+				case 14:
+					return GenerateStatevector<14>(GetContractedTensor<14>());
+				case 15:
+					return GenerateStatevector<15>(GetContractedTensor<15>());
+				case 16:
+					return GenerateStatevector<16>(GetContractedTensor<16>());
+				case 17:
+					return GenerateStatevector<17>(GetContractedTensor<17>());
+				case 18:
+					return GenerateStatevector<18>(GetContractedTensor<18>());
+				case 19:
+					return GenerateStatevector<19>(GetContractedTensor<19>());
+				case 20:
+					return GenerateStatevector<20>(GetContractedTensor<20>());
+				case 21:
+					return GenerateStatevector<21>(GetContractedTensor<21>());
+				case 22:
+					return GenerateStatevector<22>(GetContractedTensor<22>());
+				case 23:
+					return GenerateStatevector<23>(GetContractedTensor<23>());
+				case 24:
+					return GenerateStatevector<24>(GetContractedTensor<24>());
+				case 25:
+					return GenerateStatevector<25>(GetContractedTensor<25>());
+				case 26:
+					return GenerateStatevector<26>(GetContractedTensor<26>());
+				case 27:
+					return GenerateStatevector<27>(GetContractedTensor<27>());
+				case 28:
+					return GenerateStatevector<28>(GetContractedTensor<28>());
+				case 29:
+					return GenerateStatevector<29>(GetContractedTensor<29>());
+				case 30:
+					return GenerateStatevector<30>(GetContractedTensor<30>());
+				case 31:
+					return GenerateStatevector<31>(GetContractedTensor<31>());
+				case 32:
+					return GenerateStatevector<32>(GetContractedTensor<32>());
+				default:
 					throw std::runtime_error("Not implemented yet");
+				}
 
 				return {};
 			}
-
-			
 
 			double GetProbability(IndexType qubit, bool zeroVal = true) const
 			{
@@ -557,8 +613,9 @@ namespace QC {
 					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
 							for (IndexType i = 0; i < szl; ++i)
-								if (lambdas[prev][i] > std::numeric_limits<double>::denorm_min()) gammas[qubit1](i, j, k) /= lambdas[prev][i];
-								else break;
+								if (lambdas[prev][i] > std::numeric_limits<double>::epsilon() * 1E-10) gammas[qubit1](i, j, k) /= lambdas[prev][i];
+								else gammas[qubit1](i, j, k) = 0;
+								//else break;
 				}
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
@@ -566,8 +623,9 @@ namespace QC {
 					for (IndexType j = 0; j < 2; ++j)
 						for (IndexType i = 0; i < sz; ++i)
 							for (IndexType k = 0; k < szr; ++k)
-								if (lambdas[qubit2][k] > std::numeric_limits<double>::denorm_min()) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
-								else break;
+								if (lambdas[qubit2][k] > std::numeric_limits<double>::epsilon() * 1E-10) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
+								else gammas[qubit2](i, j, k) = 0;
+								//else break;
 				}
 			}
 
@@ -709,6 +767,17 @@ namespace QC {
 
 				return left.contract(lambdaTensor, productDim).contract(nextQubit, productDim);
 			}
+
+			template<int N> Eigen::Tensor<std::complex<double>, N + 2> GetContractedTensor() const
+			{
+				return ContractNQubits<N>(GetContractedTensor<N - 1>(), lambdas[N - 2], gammas[N - 1]);
+			}
+
+			template<> Eigen::Tensor<std::complex<double>, 3> GetContractedTensor<1>() const
+			{
+				return gammas[0];
+			}
+
 
 			template<int N> static VectorClass GenerateStatevector(const Eigen::Tensor<std::complex<double>, N + 2>& tensor)
 			{

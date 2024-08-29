@@ -59,7 +59,7 @@ bool OneQubitGatesTest()
 	std::uniform_int_distribution nrGatesDistr(50, 100);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
-	for (int nrQubits = 1; nrQubits < 7; ++nrQubits)
+	for (int nrQubits = 1; nrQubits < 9; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 
@@ -113,7 +113,7 @@ bool OneAndTwoQubitGatesTest()
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
 
-	for (int nrQubits = 2; nrQubits < 7; ++nrQubits)
+	for (int nrQubits = 2; nrQubits < 9; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
@@ -155,7 +155,7 @@ bool OneAndTwoQubitGatesTest()
 
 				for (int s = 0; s < regState.size(); ++s)
 				{
-					if (!approxEqual(regState[s], mpsState[s], 1E-5))
+					if (!approxEqual(regState[s], mpsState[s], 1E-7))
 					{
 						std::cout << "State " << s << " simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 
@@ -230,7 +230,7 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 
 	const int nrMeasurements = 10000;
 
-	for (int nrQubits = 1; nrQubits < 7; ++nrQubits)
+	for (int nrQubits = 1; nrQubits < 9; ++nrQubits)
 	{
 		const auto circuit = GenerateRandomCircuitWithGates(gates, 5, 10, nrQubits);
 		for (int c = 0; c < 3; ++c)
@@ -308,7 +308,7 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 	const int nrMeasurements = 10000;
 
-	for (int nrQubits = 2; nrQubits < 7; ++nrQubits)
+	for (int nrQubits = 2; nrQubits < 9; ++nrQubits)
 	{
 		const auto circuit = GenerateRandomCircuitWithGates(gates, 25, 50, nrQubits);
 		for (int c = 0; c < 5; ++c)
