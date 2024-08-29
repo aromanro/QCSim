@@ -245,78 +245,18 @@ namespace QC {
 			// but don't call it for such a large number of qubits
 			VectorClass getRegisterStorage() const
 			{
-				if (gammas.size() > sizeof(size_t) * 4) throw std::runtime_error("Too many qubits to compute the state vector");
+				const size_t sz = gammas.size();
+				if (sz > sizeof(size_t) * 4) throw std::runtime_error("Too many qubits to compute the state vector");
 
-				switch (gammas.size())
-				{
-				case 0:
-					return {};
-				case 1:
-					return GenerateStatevector<1>();
-				case 2:
-					return GenerateStatevector<2>();
-				case 3:
-					return GenerateStatevector<3>();
-				case 4:
-					return GenerateStatevector<4>();
-				case 5:
-					return GenerateStatevector<5>();
-				case 6:
-					return GenerateStatevector<6>();
-				case 7:
-					return GenerateStatevector<7>();
-				case 8:
-					return GenerateStatevector<8>();
-				case 9:
-					return GenerateStatevector<9>();
-				case 10:
-					return GenerateStatevector<10>();
-				case 11:
-					return GenerateStatevector<11>();
-				case 12:
-					return GenerateStatevector<12>();
-				case 13:
-					return GenerateStatevector<13>();
-				case 14:
-					return GenerateStatevector<14>();
-				case 15:
-					return GenerateStatevector<15>();
-				case 16:
-					return GenerateStatevector<16>();
-				case 17:
-					return GenerateStatevector<17>();
-				case 18:
-					return GenerateStatevector<18>();
-				case 19:
-					return GenerateStatevector<19>();
-				case 20:
-					return GenerateStatevector<20>();
-				case 21:
-					return GenerateStatevector<21>();
-				case 22:
-					return GenerateStatevector<22>();
-				case 23:
-					return GenerateStatevector<23>();
-				case 24:
-					return GenerateStatevector<24>();
-				case 25:
-					return GenerateStatevector<25>();
-				case 26:
-					return GenerateStatevector<26>();
-				case 27:
-					return GenerateStatevector<27>();
-				case 28:
-					return GenerateStatevector<28>();
-				case 29:
-					return GenerateStatevector<29>();
-				case 30:
-					return GenerateStatevector<30>();
-				case 31:
-					return GenerateStatevector<31>();
-				case 32:
-					return GenerateStatevector<32>();
-				}
-
+				if (sz < 8)
+					return getRegisterStorage8(sz);
+				else if (sz < 16)
+					return getRegisterStorage16(sz);
+				else if (sz < 24)
+					return getRegisterStorage24(sz);
+				else if (sz < 32)
+					return getRegisterStorage32(sz);
+	
 				return {};
 			}
 
@@ -798,6 +738,108 @@ namespace QC {
 			template<int N> VectorClass GenerateStatevector() const
 			{
 				return GenerateStatevector<N>(GetContractedTensor<N>());
+			}
+
+			inline VectorClass getRegisterStorage8(size_t sz) const
+			{
+				switch (sz)
+				{
+				case 0:
+					return {};
+				case 1:
+					return GenerateStatevector<1>();
+				case 2:
+					return GenerateStatevector<2>();
+				case 3:
+					return GenerateStatevector<3>();
+				case 4:
+					return GenerateStatevector<4>();
+				case 5:
+					return GenerateStatevector<5>();
+				case 6:
+					return GenerateStatevector<6>();
+				case 7:
+					return GenerateStatevector<7>();
+				}
+
+				return {};
+			}
+
+			inline VectorClass getRegisterStorage16(size_t sz) const
+			{
+				switch (sz)
+				{
+				case 8:
+					return GenerateStatevector<8>();
+				case 9:
+					return GenerateStatevector<9>();
+				case 10:
+					return GenerateStatevector<10>();
+				case 11:
+					return GenerateStatevector<11>();
+				case 12:
+					return GenerateStatevector<12>();
+				case 13:
+					return GenerateStatevector<13>();
+				case 14:
+					return GenerateStatevector<14>();
+				case 15:
+					return GenerateStatevector<15>();
+				}
+
+				return {};
+			}
+
+			inline VectorClass getRegisterStorage24(size_t sz) const
+			{
+				switch (sz)
+				{
+				case 16:
+					return GenerateStatevector<16>();
+				case 17:
+					return GenerateStatevector<17>();
+				case 18:
+					return GenerateStatevector<18>();
+				case 19:
+					return GenerateStatevector<19>();
+				case 20:
+					return GenerateStatevector<20>();
+				case 21:
+					return GenerateStatevector<21>();
+				case 22:
+					return GenerateStatevector<22>();
+				case 23:
+					return GenerateStatevector<23>();
+				}
+
+				return {};
+			}
+
+			inline VectorClass getRegisterStorage32(size_t sz) const
+			{
+				switch (sz)
+				{
+				case 24:
+					return GenerateStatevector<24>();
+				case 25:
+					return GenerateStatevector<25>();
+				case 26:
+					return GenerateStatevector<26>();
+				case 27:
+					return GenerateStatevector<27>();
+				case 28:
+					return GenerateStatevector<28>();
+				case 29:
+					return GenerateStatevector<29>();
+				case 30:
+					return GenerateStatevector<30>();
+				case 31:
+					return GenerateStatevector<31>();
+				case 32:
+					return GenerateStatevector<32>();
+				}
+
+				return {};
 			}
 		
 			bool limitSize = false;
