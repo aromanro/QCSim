@@ -813,8 +813,6 @@ namespace QC {
 
 			const ZeroProjection<MatrixClass> zeroProjection;
 			const OneProjection<MatrixClass> oneProjection;
-			
-			
 		};
 
 		template<> MPSSimulator::GammaType MPSSimulator::GetContractedTensor<1>() const
