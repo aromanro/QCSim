@@ -769,12 +769,6 @@ namespace QC {
 				return ContractNQubits<N>(GetContractedTensor<N - 1>(), lambdas[N - 2], gammas[N - 1]);
 			}
 
-			template<> Eigen::Tensor<std::complex<double>, 3> GetContractedTensor<1>() const
-			{
-				return gammas[0];
-			}
-
-
 			template<int N> static VectorClass GenerateStatevector(const Eigen::Tensor<std::complex<double>, N + 2>& tensor)
 			{
 				const size_t NrBasisStates = 1ULL << N;
@@ -805,8 +799,7 @@ namespace QC {
 			{
 				return GenerateStatevector<N>(GetContractedTensor<N>());
 			}
-
-				
+		
 			bool limitSize = false;
 			bool limitEntanglement = false;
 			IndexType chi = 10; // if limitSize is true
@@ -820,7 +813,13 @@ namespace QC {
 
 			const ZeroProjection<MatrixClass> zeroProjection;
 			const OneProjection<MatrixClass> oneProjection;
+			
+			
 		};
 
+		template<> MPSSimulator::GammaType MPSSimulator::GetContractedTensor<1>() const
+		{
+			return gammas[0];
+		}
 	}
 }
