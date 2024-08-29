@@ -4,9 +4,7 @@
 
 #include <unsupported/Eigen/CXX11/Tensor>
 
-#include <Eigen/Eigen>
-
-#include "QuantumGate.h"
+#include "Operators.h"
 
 namespace QC {
 
@@ -23,30 +21,6 @@ namespace QC {
 			using IndexType = Eigen::Index;
 			using IntIndexPair = Eigen::IndexPair<int>;
 			using Indexes = Eigen::array<IntIndexPair, 1>;
-
-			template<class MatrixClass = Eigen::MatrixXcd> class ZeroProjection : public Gates::SingleQubitGate<MatrixClass>
-			{
-			public:
-				using BaseClass = Gates::SingleQubitGate<MatrixClass>;
-				using OpClass = typename BaseClass::BaseClass;
-
-				ZeroProjection()
-				{
-					OpClass::operatorMat(0, 0) = 1;
-				}
-			};
-
-			template<class MatrixClass = Eigen::MatrixXcd> class OneProjection : public Gates::SingleQubitGate<MatrixClass>
-			{
-			public:
-				using BaseClass = Gates::SingleQubitGate<MatrixClass>;
-				using OpClass = typename BaseClass::BaseClass;
-
-				OneProjection()
-				{
-					OpClass::operatorMat(1, 1) = 1;
-				}
-			};
 
 			MPSSimulator(size_t N, int addseed = 0)
 				: lambdas(N - 1, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1))
@@ -853,8 +827,8 @@ namespace QC {
 			std::mt19937_64 rng;
 			std::uniform_real_distribution<double> uniformZeroOne{ 0, 1 };
 
-			const ZeroProjection<MatrixClass> zeroProjection;
-			const OneProjection<MatrixClass> oneProjection;
+			const Operators::ZeroProjection<MatrixClass> zeroProjection;
+			const Operators::OneProjection<MatrixClass> oneProjection;
 		};
 
 		template<> MPSSimulator::GammaType MPSSimulator::GetContractedTensor<1>() const

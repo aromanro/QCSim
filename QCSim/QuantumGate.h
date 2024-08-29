@@ -432,42 +432,6 @@ namespace QC {
 			}
 		};
 
-		// WARNING: 'Fake' gate, it's not unitary!
-		template<class MatrixClass = Eigen::MatrixXcd> class SigmaPlusGate : public SingleQubitGate<MatrixClass>
-		{
-		public:
-			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
-
-			SigmaPlusGate()
-			{
-				OpClass::operatorMat(0, 1) = 1;
-			}
-
-			bool isAntidiagonal() const override
-			{
-				return true;
-			}
-		};
-
-		// WARNING: 'Fake' gate, it's not unitary!
-		template<class MatrixClass = Eigen::MatrixXcd> class SigmaMinusGate : public SingleQubitGate<MatrixClass>
-		{
-		public:
-			using BaseClass = SingleQubitGate<MatrixClass>;
-			using OpClass = typename BaseClass::BaseClass;
-
-			SigmaMinusGate()
-			{
-				OpClass::operatorMat(1, 0) = 1;
-			}
-
-			bool isAntidiagonal() const override
-			{
-				return true;
-			}
-		};
-
 		// sx gate, also known as the square root of x gate
 		template<class MatrixClass = Eigen::MatrixXcd> class SquareRootNOTGate : public SingleQubitGate<MatrixClass>
 		{

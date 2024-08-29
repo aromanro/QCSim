@@ -325,6 +325,7 @@
     <ClInclude Include="QCSim\NControlledNotWithAncilla.h" />
     <ClInclude Include="QCSim\NQubitsControlledQuantumGate.h" />
     <ClInclude Include="QCSim\NQubitsQuantumGate.h" />
+    <ClInclude Include="QCSim\Operators.h" />
     <ClInclude Include="QCSim\Oracle.h" />
     <ClInclude Include="QCSim\PauliString.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />
