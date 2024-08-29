@@ -247,78 +247,74 @@ namespace QC {
 			{
 				if (gammas.size() > sizeof(size_t) * 4) throw std::runtime_error("Too many qubits to compute the state vector");
 
-				// TODO: implement this with variadic templates, perhaps
-
 				switch (gammas.size())
 				{
 				case 0:
 					return {};
 				case 1:
-					return GenerateStatevector<1>(GetContractedTensor<1>());
+					return GenerateStatevector<1>();
 				case 2:
-					return GenerateStatevector<2>(GetContractedTensor<2>());
+					return GenerateStatevector<2>();
 				case 3:
-					return GenerateStatevector<3>(GetContractedTensor<3>());
+					return GenerateStatevector<3>();
 				case 4:
-					return GenerateStatevector<4>(GetContractedTensor<4>());
+					return GenerateStatevector<4>();
 				case 5:
-					return GenerateStatevector<5>(GetContractedTensor<5>());
+					return GenerateStatevector<5>();
 				case 6:
-					return GenerateStatevector<6>(GetContractedTensor<6>());
+					return GenerateStatevector<6>();
 				case 7:
-					return GenerateStatevector<7>(GetContractedTensor<7>());
+					return GenerateStatevector<7>();
 				case 8:
-					return GenerateStatevector<8>(GetContractedTensor<8>());
+					return GenerateStatevector<8>();
 				case 9:
-					return GenerateStatevector<9>(GetContractedTensor<9>());
+					return GenerateStatevector<9>();
 				case 10:
-					return GenerateStatevector<10>(GetContractedTensor<10>());
+					return GenerateStatevector<10>();
 				case 11:
-					return GenerateStatevector<11>(GetContractedTensor<11>());
+					return GenerateStatevector<11>();
 				case 12:
-					return GenerateStatevector<12>(GetContractedTensor<12>());
+					return GenerateStatevector<12>();
 				case 13:
-					return GenerateStatevector<13>(GetContractedTensor<13>());
+					return GenerateStatevector<13>();
 				case 14:
-					return GenerateStatevector<14>(GetContractedTensor<14>());
+					return GenerateStatevector<14>();
 				case 15:
-					return GenerateStatevector<15>(GetContractedTensor<15>());
+					return GenerateStatevector<15>();
 				case 16:
-					return GenerateStatevector<16>(GetContractedTensor<16>());
+					return GenerateStatevector<16>();
 				case 17:
-					return GenerateStatevector<17>(GetContractedTensor<17>());
+					return GenerateStatevector<17>();
 				case 18:
-					return GenerateStatevector<18>(GetContractedTensor<18>());
+					return GenerateStatevector<18>();
 				case 19:
-					return GenerateStatevector<19>(GetContractedTensor<19>());
+					return GenerateStatevector<19>();
 				case 20:
-					return GenerateStatevector<20>(GetContractedTensor<20>());
+					return GenerateStatevector<20>();
 				case 21:
-					return GenerateStatevector<21>(GetContractedTensor<21>());
+					return GenerateStatevector<21>();
 				case 22:
-					return GenerateStatevector<22>(GetContractedTensor<22>());
+					return GenerateStatevector<22>();
 				case 23:
-					return GenerateStatevector<23>(GetContractedTensor<23>());
+					return GenerateStatevector<23>();
 				case 24:
-					return GenerateStatevector<24>(GetContractedTensor<24>());
+					return GenerateStatevector<24>();
 				case 25:
-					return GenerateStatevector<25>(GetContractedTensor<25>());
+					return GenerateStatevector<25>();
 				case 26:
-					return GenerateStatevector<26>(GetContractedTensor<26>());
+					return GenerateStatevector<26>();
 				case 27:
-					return GenerateStatevector<27>(GetContractedTensor<27>());
+					return GenerateStatevector<27>();
 				case 28:
-					return GenerateStatevector<28>(GetContractedTensor<28>());
+					return GenerateStatevector<28>();
 				case 29:
-					return GenerateStatevector<29>(GetContractedTensor<29>());
+					return GenerateStatevector<29>();
 				case 30:
-					return GenerateStatevector<30>(GetContractedTensor<30>());
+					return GenerateStatevector<30>();
 				case 31:
-					return GenerateStatevector<31>(GetContractedTensor<31>());
+					return GenerateStatevector<31>();
 				case 32:
-					return GenerateStatevector<32>(GetContractedTensor<32>());
-				default:
-					throw std::runtime_error("Not implemented yet");
+					return GenerateStatevector<32>();
 				}
 
 				return {};
@@ -804,6 +800,12 @@ namespace QC {
 
 				return res;
 			}
+
+			template<int N> VectorClass GenerateStatevector() const
+			{
+				return GenerateStatevector<N>(GetContractedTensor<N>());
+			}
+
 				
 			bool limitSize = false;
 			bool limitEntanglement = false;
