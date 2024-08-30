@@ -809,8 +809,6 @@ namespace QC {
 					return GenerateStatevector<30>();
 				case 31:
 					return GenerateStatevector<31>();
-				case 32:
-					return GenerateStatevector<32>();
 				}
 
 				return {};
