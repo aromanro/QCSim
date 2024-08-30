@@ -6,10 +6,10 @@ namespace QC {
 
 	namespace TensorNetworks {
 
-		class MPSSimulator : public MPSSimulatorBase
+		class MPSSimulatorImpl : public MPSSimulatorBase
 		{
 		public:
-			MPSSimulator(size_t N, int addseed = 0)
+			MPSSimulatorImpl(size_t N, int addseed = 0)
 				: MPSSimulatorBase(N, addseed)
 			{
 			}

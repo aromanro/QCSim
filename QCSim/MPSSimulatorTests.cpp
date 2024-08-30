@@ -65,7 +65,7 @@ bool OneQubitGatesTest()
 
 		for (int t = 0; t < 10; ++t)
 		{
-			QC::TensorNetworks::MPSSimulator mps(nrQubits);
+			QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
 			QC::QubitRegister reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
@@ -124,7 +124,7 @@ bool OneAndTwoQubitGatesTest()
 			std::cout << "\n\n\nTest no: " << t << " for " << nrQubits << " qubits" << std::endl << std::endl << std::endl;
 #endif
 
-			QC::TensorNetworks::MPSSimulator mps(nrQubits);
+			QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
 			QC::QubitRegister reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
@@ -240,7 +240,7 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 
 			for (int t = 0; t < nrMeasurements; ++t)
 			{
-				QC::TensorNetworks::MPSSimulator mps(nrQubits);
+				QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
 				QC::QubitRegister reg(nrQubits);
 
 				for (const auto& gate : circuit)
@@ -320,7 +320,7 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 			for (int t = 0; t < nrMeasurements; ++t)
 			{
-				QC::TensorNetworks::MPSSimulator mps(nrQubits);
+				QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
 				QC::QubitRegister reg(nrQubits);
 
 				for (const auto& gate : circuit)
