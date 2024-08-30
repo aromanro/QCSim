@@ -262,6 +262,8 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 				}
 			}
 
+			std::cout << ".";
+
 			for (const auto& [key, value] : measurementsRegMap)
 			{
 				const double dif = abs((static_cast<double>(measurementsMPSMap[key] - value)) / nrMeasurements);
@@ -339,6 +341,8 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 					measurementsMPSMap[measurementsMPS]++;
 				}
 			}
+
+			std::cout << ".";
 
 			for (const auto& [key, value] : measurementsRegMap)
 			{
