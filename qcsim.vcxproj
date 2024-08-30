@@ -321,6 +321,7 @@
     <ClInclude Include="QCSim\IsingModel.h" />
     <ClInclude Include="QCSim\MagicSquare.h" />
     <ClInclude Include="QCSim\MPSSimulator.h" />
+    <ClInclude Include="QCSim\MPSSimulatorBase.h" />
     <ClInclude Include="QCSim\NControlledGateWithAncilla.h" />
     <ClInclude Include="QCSim\NControlledNotWithAncilla.h" />
     <ClInclude Include="QCSim\NQubitsControlledQuantumGate.h" />
