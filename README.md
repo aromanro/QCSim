@@ -17,7 +17,7 @@ Implemented algorithms:
 *   Quantum Fourier Transform
 *   Phase estimation
 *   Shor
-*   Bernstein–Vazirani
+*   Bernsteinâ€“Vazirani
 *   Quantum counting
 *   Quantum teleportation
 *   Entanglement swapping
@@ -87,7 +87,7 @@ This is the statevector simulator, which is used in all examples so far. The pro
 
 You should compile it with c++ 17 (at least).
 Of course, if one wants to use some other stuff in there, more headers might need to be included.
-The 'test' cpp files are intended for both tests and examples, not necesarily for usage in some other app, including the headers should usually be enough.
+The 'test' cpp files are intended for both tests and examples, not necessarily for usage in some other app, including the headers should usually be enough.
 
 I would recommend trying to use the cmake file for compiling on linux or mac (or something similar), turning on openmp increases the speed a lot (as in several times faster, depending on the processor) and on top of that turning on AVX2 (not available for apple 'metal') reduces the execution time again (something like 35 seconds instead of over 50 on my computer for all examples/tests).
 
