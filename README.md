@@ -83,11 +83,15 @@ int main()
     return 0;
 }
 ```
-This is the statevector simulator, which is used in all examples so far. The project also has a Matrix Product States (the simplest Tensor Network, the 1D variant that has qubit sites on a chain, see the TEBD project for more details) simulator implementation, but it's work in progress started five days ago (when writing this), I still have to do some proper tests and fix the issues. If you try it and it doesn't work, it's not my fault, it's yours :)
+This is the statevector simulator, which is used in all examples so far. 
+
+The project also has a Matrix Product States (the simplest Tensor Network, the 1D variant that has qubit sites on a chain, see the TEBD project for more details) simulator implementation.
+There is not much going on in the project with it yet, but some tests I added pass. I'm going to add a proxy class that will take care of qubits mapping and will apply swap gates for qubits that are not in proximity to allow applying gates for such qubits, then maybe I'll use it for some examples. 
+
 
 You should compile it with c++ 17 (at least).
 Of course, if one wants to use some other stuff in there, more headers might need to be included.
-The 'test' cpp files are intended for both tests and examples, not necesarily for usage in some other app, including the headers should usually be enough.
+The 'test' cpp files are intended for both tests and examples, not necessarily for usage in some other app, including the headers should usually be enough.
 
 I would recommend trying to use the cmake file for compiling on linux or mac (or something similar), turning on openmp increases the speed a lot (as in several times faster, depending on the processor) and on top of that turning on AVX2 (not available for apple 'metal') reduces the execution time again (something like 35 seconds instead of over 50 on my computer for all examples/tests).
 
