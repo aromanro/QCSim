@@ -5,6 +5,7 @@
 
 #include <unsupported/Eigen/CXX11/Tensor>
 
+#include "MPSSimulatorInterface.h"
 #include "Operators.h"
 
 namespace QC {
@@ -14,17 +15,11 @@ namespace QC {
 		// this is separated from the actual simulator to reduce the class complexity
 		// here there are the types definitions, the data structures used and some functions that are simpler and/or not so important for the implementation
 		// for example, the code that converts the MPS to a state vector is here, but it wouldn't be needed for a simulation, it's needed just for comparing the results against the statevector simulator
-		class MPSSimulatorBase
+		// also the initialization functions are here
+		class MPSSimulatorBase : public MPSSimulatorInterface
 		{
 		public:
-			using LambdaType = Eigen::VectorXd;
-			using GammaType = Eigen::Tensor<std::complex<double>, 3>;
-			using MatrixClass = Eigen::MatrixXcd;
-			using VectorClass = Eigen::VectorXcd;
-			using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
-			using IndexType = Eigen::Index;
-			using IntIndexPair = Eigen::IndexPair<int>;
-			using Indexes = Eigen::array<IntIndexPair, 1>;
+			MPSSimulatorBase() = delete;
 
 			MPSSimulatorBase(size_t N, int addseed = 0)
 				: lambdas(N - 1, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1))
@@ -40,7 +35,12 @@ namespace QC {
 				rng.seed(seed);
 			}
 
-			void Clear()
+			MPSSimulatorBase(const MPSSimulatorBase&) = default;
+			MPSSimulatorBase(MPSSimulatorBase&&) = default;
+			MPSSimulatorBase& operator=(const MPSSimulatorBase&) = default;
+			MPSSimulatorBase& operator=(MPSSimulatorBase&&) = default;
+
+			void Clear() override
 			{
 				const size_t szm1 = lambdas.size();
 				for (size_t i = 0; i < szm1; ++i)
@@ -58,7 +58,7 @@ namespace QC {
 				gammas[szm1](0, 1, 0) = 0.;
 			}
 
-			void InitOnesState()
+			void InitOnesState() override
 			{
 				const size_t szm1 = lambdas.size();
 				for (size_t i = 0; i < szm1; ++i)
@@ -76,7 +76,7 @@ namespace QC {
 				gammas[szm1](0, 1, 0) = 1.;
 			}
 
-			void setToQubitState(IndexType q)
+			void setToQubitState(IndexType q) override
 			{
 				Clear();
 				if (q >= static_cast<IndexType>(gammas.size()))
@@ -86,7 +86,7 @@ namespace QC {
 				gammas[q](0, 1, 0) = 1.;
 			}
 
-			void setToBasisState(size_t State)
+			void setToBasisState(size_t State) override
 			{
 				const size_t NrBasisStates = gammas.size() > sizeof(size_t) * 8 ? 64 : (1ULL << gammas.size());
 				if (State >= NrBasisStates) return;
@@ -106,7 +106,7 @@ namespace QC {
 				}
 			}
 
-			void setToBasisState(const std::vector<bool>& State)
+			void setToBasisState(const std::vector<bool>& State) override
 			{
 				if (State.size() > gammas.size()) return;
 
@@ -122,24 +122,24 @@ namespace QC {
 				}
 			}
 
-			void setLimitBondDimension(IndexType chival)
+			void setLimitBondDimension(IndexType chival) override
 			{
 				limitSize = true;
 				chi = chival;
 			}
 
-			void setLimitEntanglement(double svdThreshold)
+			void setLimitEntanglement(double svdThreshold) override
 			{
 				limitEntanglement = true;
 				singularValueThreshold = svdThreshold;
 			}
 
-			void dontLimitBondDimension()
+			void dontLimitBondDimension() override
 			{
 				limitSize = false;
 			}
 
-			void dontLimitEntanglement()
+			void dontLimitEntanglement() override
 			{
 				limitEntanglement = false;
 			}
@@ -164,7 +164,7 @@ namespace QC {
 				return {};
 			}
 
-			void print() const
+			void print() const override
 			{
 				for (size_t i = 0; i < gammas.size() - 1; ++i)
 				{

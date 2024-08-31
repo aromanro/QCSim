@@ -221,5 +221,11 @@
     <ClInclude Include="QCSim\MPSSimulatorBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\MPSSimulatorImpl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPSSimulatorInterface.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
