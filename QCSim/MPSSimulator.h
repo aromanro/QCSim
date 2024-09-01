@@ -216,7 +216,7 @@ namespace QC
 					movingQubitReal = toQubitReal;
 				} while (movingQubitReal != targetQubitReal);
 
-				//swapDown = !swapDown;
+				swapDown = !swapDown;
 			}
 
 			MPSSimulatorImpl impl;
