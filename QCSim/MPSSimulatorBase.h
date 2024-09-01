@@ -40,6 +40,11 @@ namespace QC {
 			MPSSimulatorBase& operator=(const MPSSimulatorBase&) = default;
 			MPSSimulatorBase& operator=(MPSSimulatorBase&&) = default;
 
+			size_t getNrQubits() const override
+			{
+				return gammas.size();
+			}
+
 			void Clear() override
 			{
 				const size_t szm1 = lambdas.size();
@@ -211,7 +216,7 @@ namespace QC {
 				{
 					size_t tmp = state;
 
-					for (size_t q = 1; q < N + 1; ++q)
+					for (size_t q = 1; q <= N; ++q)
 					{
 						indices[q] = tmp & 1;
 						tmp >>= 1;

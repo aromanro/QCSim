@@ -27,10 +27,10 @@ namespace QC {
 			void ApplyGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
 				if (gate.getQubitsNumber() > 2) throw std::runtime_error("Three qubit gates not supported");
+				else if ((qubit < 0 || qubit >= static_cast<IndexType>(gammas.size())) || (gate.getQubitsNumber() == 2 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(gammas.size()))))
+					throw std::runtime_error("Qubit index out of bounds");
 				else if (gate.getQubitsNumber() == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
 					throw std::runtime_error("Two qubit gates need to act on adjacent qubits");
-				else if (qubit >= static_cast<IndexType>(gammas.size()) || (gate.getQubitsNumber() == 2 && controllingQubit1 >= static_cast<IndexType>(gammas.size())))
-					throw std::runtime_error("Qubit index out of bounds");
 
 
 				if (gate.getQubitsNumber() == 1)
@@ -48,6 +48,9 @@ namespace QC {
 			// false if measured 0, true if measured 1
 			bool MeasureQubit(IndexType qubit) override
 			{
+				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+					throw std::runtime_error("Qubit index out of bounds");
+
 				const double rndVal = 1. - uniformZeroOne(rng);
 
 				const double prob0 = GetProbability(qubit);
@@ -90,6 +93,9 @@ namespace QC {
 
 			double GetProbability(IndexType qubit, bool zeroVal = true) const
 			{
+				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+					throw std::runtime_error("Qubit index out of bounds");
+
 				MatrixClass qubitMatrix = GetQubitMatrix(qubit, zeroVal ? 0 : 1);
 
 				if (qubit > 0)

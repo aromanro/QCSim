@@ -19,6 +19,7 @@ namespace QC {
 			MPSSimulatorInterface() = default;
 			virtual ~MPSSimulatorInterface() = default;
 
+			virtual size_t getNrQubits() const = 0;
 			virtual void Clear() = 0;
 			virtual void InitOnesState() = 0;
 			virtual void setToQubitState(IndexType q) = 0;
