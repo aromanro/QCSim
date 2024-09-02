@@ -91,12 +91,12 @@ namespace QC
 				// the correspondence is in the qubitsMap
 				// they need to be translated from the internal state to the external state
 				
-				for (size_t state = 0; state < res.size(); ++state)
+				for (IndexType state = 0; state < res.size(); ++state)
 				{
 					size_t tmp = state;
 
 					size_t mappedState = 0;
-					for (IndexType i = 0; i < getNrQubits(); ++i)
+					for (IndexType i = 0; i < static_cast<IndexType>(getNrQubits()); ++i)
 					{
 						if (tmp & 1ULL)
 						{
@@ -180,7 +180,7 @@ namespace QC
 				qubitsMap.clear();
 				qubitsMapInv.clear();
 
-				for (IndexType i = 0; i < getNrQubits(); ++i)
+				for (IndexType i = 0; i < static_cast<IndexType>(getNrQubits()); ++i)
 					qubitsMapInv[i] = qubitsMap[i] = i;
 			}
 
