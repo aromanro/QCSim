@@ -122,7 +122,7 @@ namespace Models {
 		{
 			for (size_t pos = 0; pos < spins.size(); ++pos)
 			{
-				spins[pos] = (state & 1) ? true : false;
+				spins[pos] = (state & 1) == 1;
 				state >>= 1;
 			}
 		}

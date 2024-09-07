@@ -152,7 +152,7 @@ namespace QC {
 			// this is for 'compatibility' with the statevector simulator (QubitRegister)
 			// it's not stored as this and it's costly to compute, it will throw an exception for more than 32 qubits
 			// but don't call it for such a large number of qubits
-			VectorClass getRegisterStorage() const
+			VectorClass getRegisterStorage() const override
 			{
 				const size_t sz = gammas.size();
 				if (sz > sizeof(size_t) * 4) throw std::runtime_error("Too many qubits to compute the state vector");
@@ -167,6 +167,54 @@ namespace QC {
 					return getRegisterStorage32(sz);
 
 				return {};
+			}
+
+			std::complex<double> getBasisStateAmplitude(size_t State) const override
+			{
+				std::vector<bool> state(getNrQubits());
+
+				for (size_t i = 0; i < state.size(); ++i)
+				{
+					state[i] = (State & 1) == 1;
+					State >>= 1;
+				}
+
+				return getBasisStateAmplitude(state);
+			}
+
+			std::complex<double> getBasisStateAmplitude(std::vector<bool>& State) const override
+			{
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits == 0) return 0.;
+				State.resize(nrQubits, false);
+
+				static const Indexes product_dims{ IntIndexPair(1, 0) };
+				MatrixTensorType res = gammas[0].chip(State[0] ? 1 : 0, 1);
+
+				for (size_t q = 1; q < nrQubits; ++q)
+				{
+					const size_t q1 = q - 1;
+
+					for (IndexType c = 0; c < res.dimension(1); ++c)
+						for (IndexType r = 0; r < res.dimension(0); ++r)
+							res(r, c) *= lambdas[q1][c];
+
+					// why? Needs this intermediary variable here, not even calling eval() works if assigning directly to res
+					MatrixTensorType tmp = res.contract(gammas[q].chip(State[q] ? 1 : 0, 1), product_dims);
+					res = std::move(tmp);
+				}
+
+				return res(0, 0);
+			}
+
+			double getBasisStateProbability(size_t State) const override
+			{
+				return std::norm(getBasisStateAmplitude(State));
+			}
+
+			double getBasisStateProbability(std::vector<bool>& State) const override
+			{
+				return std::norm(getBasisStateAmplitude(State));
 			}
 
 			void print() const override

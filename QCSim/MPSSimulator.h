@@ -174,6 +174,39 @@ namespace QC
 				return impl.GetProbability(qubitsMap.at(qubit), zeroVal);
 			}
 
+			std::complex<double> getBasisStateAmplitude(size_t State) const override
+			{
+				std::vector<bool> state(getNrQubits());
+
+				for (size_t i = 0; i < state.size(); ++i)
+				{
+					state[i] = (State & 1) == 1;
+					State >>= 1;
+				}
+
+				return getBasisStateAmplitude(state);
+			}
+
+			std::complex<double> getBasisStateAmplitude(std::vector<bool>& State) const override
+			{
+				std::vector<bool> state(getNrQubits(), false);
+
+				for (size_t q = 0; q < State.size(); ++q)
+					state[qubitsMap.at(q)] = State[q];
+
+				return impl.getBasisStateAmplitude(state);
+			}
+
+			double getBasisStateProbability(size_t State) const override
+			{
+				return std::norm(getBasisStateAmplitude(State));
+			}
+
+			double getBasisStateProbability(std::vector<bool>& State) const override
+			{
+				return std::norm(getBasisStateAmplitude(State));
+			}
+
 		private:
 			void InitQubitsMap()
 			{

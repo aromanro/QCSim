@@ -9,6 +9,7 @@ namespace QC {
 		public:
 			using LambdaType = Eigen::VectorXd;
 			using GammaType = Eigen::Tensor<std::complex<double>, 3>;
+			using MatrixTensorType = Eigen::Tensor<std::complex<double>, 2>;
 			using MatrixClass = Eigen::MatrixXcd;
 			using VectorClass = Eigen::VectorXcd;
 			using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
@@ -36,6 +37,10 @@ namespace QC {
 			virtual void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) = 0;
 			virtual bool MeasureQubit(IndexType qubit) = 0;
 			virtual double GetProbability(IndexType qubit, bool zeroVal = true) const = 0;
+			virtual std::complex<double> getBasisStateAmplitude(size_t State) const = 0;
+			virtual std::complex<double> getBasisStateAmplitude(std::vector<bool>& State) const = 0;
+			virtual double getBasisStateProbability(size_t State) const = 0;
+			virtual double getBasisStateProbability(std::vector<bool>& State) const = 0;
 		};
 
 	}
