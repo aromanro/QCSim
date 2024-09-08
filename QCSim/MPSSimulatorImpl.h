@@ -122,7 +122,7 @@ namespace QC {
 			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
 			{
 				// easy: shape the gate into a tensor and contract it with the qubit tensor
-				Eigen::Tensor<std::complex<double>, 2> opTensor(2, 2);
+				OneQubitGateTensor opTensor;
 
 				const MatrixClass& opMat = gate.getRawOperatorMatrix();
 
@@ -169,7 +169,7 @@ namespace QC {
 				}
 				else
 				{
-					const Eigen::Tensor<std::complex<double>, 4> U = GetTwoQubitsGateTensor(gate, reversed);
+					const Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2,2,2,2>> U = GetTwoQubitsGateTensor(gate, reversed);
 					const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructThetaBar(qubit1, U);
 
 					thetaMatrix = ReshapeThetaBar(thetabar);
@@ -262,9 +262,9 @@ namespace QC {
 			}
 
 
-			Eigen::Tensor<std::complex<double>, 4> GetTwoQubitsGateTensor(const GateClass& gate, bool reversed) const
+			TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass& gate, bool reversed) const
 			{
-				Eigen::Tensor<std::complex<double>, 4> result(2, 2, 2, 2);
+				TwoQubitsGateTensor result;
 
 				const auto& gateMat = gate.getRawOperatorMatrix();
 
@@ -431,7 +431,7 @@ namespace QC {
 			}
 
 			// for the two qubit gate - U is the gate tensor
-			Eigen::Tensor<std::complex<double>, 4> ConstructThetaBar(IndexType qubit1, const Eigen::Tensor<std::complex<double>, 4>& U)
+			Eigen::Tensor<std::complex<double>, 4> ConstructThetaBar(IndexType qubit1, const TwoQubitsGateTensor& U)
 			{
 				const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
 

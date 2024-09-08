@@ -16,6 +16,8 @@ namespace QC {
 			using IndexType = Eigen::Index;
 			using IntIndexPair = Eigen::IndexPair<int>;
 			using Indexes = Eigen::array<IntIndexPair, 1>;
+			using OneQubitGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2>>;
+			using TwoQubitsGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>>;
 
 			MPSSimulatorInterface() = default;
 			virtual ~MPSSimulatorInterface() = default;
