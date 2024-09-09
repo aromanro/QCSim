@@ -12,6 +12,20 @@ namespace QC {
 
 	namespace TensorNetworks {
 
+		class MPSSimulatorBaseState : public MPSSimulatorStateInterface
+		{
+		public:
+			MPSSimulatorBaseState() = default;
+			MPSSimulatorBaseState(const MPSSimulatorBaseState&) = default;
+			MPSSimulatorBaseState(MPSSimulatorBaseState&&) = default;
+			MPSSimulatorBaseState& operator=(const MPSSimulatorBaseState&) = default;
+			MPSSimulatorBaseState& operator=(MPSSimulatorBaseState&&) = default;
+			virtual ~MPSSimulatorBaseState() = default;
+			
+			std::vector<MPSSimulatorInterface::LambdaType> lambdas;
+			std::vector<MPSSimulatorInterface::GammaType> gammas;
+		};
+
 		// this is separated from the actual simulator to reduce the class complexity
 		// here there are the types definitions, the data structures used and some functions that are simpler and/or not so important for the implementation
 		// for example, the code that converts the MPS to a state vector is here, but it wouldn't be needed for a simulation, it's needed just for comparing the results against the statevector simulator
@@ -215,6 +229,22 @@ namespace QC {
 			double getBasisStateProbability(std::vector<bool>& State) const override
 			{
 				return std::norm(getBasisStateAmplitude(State));
+			}
+
+			std::shared_ptr<MPSSimulatorStateInterface> getState() const override
+			{
+				auto state = std::make_shared<MPSSimulatorBaseState>();
+				state->lambdas = lambdas;
+				state->gammas = gammas;
+
+				return state;
+			}
+
+			void setState(const std::shared_ptr<MPSSimulatorStateInterface>& state) override
+			{
+				auto stateRef = std::static_pointer_cast<MPSSimulatorBaseState>(state);
+				lambdas = stateRef->lambdas;
+				gammas = stateRef->gammas;
 			}
 
 			void print() const override

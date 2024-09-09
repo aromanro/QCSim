@@ -4,6 +4,12 @@ namespace QC {
 
 	namespace TensorNetworks {
 
+		class MPSSimulatorStateInterface
+		{
+		public:
+			virtual ~MPSSimulatorStateInterface() = default;
+		};
+
 		class MPSSimulatorInterface
 		{
 		public:
@@ -43,6 +49,8 @@ namespace QC {
 			virtual std::complex<double> getBasisStateAmplitude(std::vector<bool>& State) const = 0;
 			virtual double getBasisStateProbability(size_t State) const = 0;
 			virtual double getBasisStateProbability(std::vector<bool>& State) const = 0;
+			virtual std::shared_ptr<MPSSimulatorStateInterface> getState() const = 0;
+			virtual void setState(const std::shared_ptr<MPSSimulatorStateInterface>& state) = 0;
 		};
 
 	}

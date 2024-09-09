@@ -9,6 +9,21 @@ namespace QC
 
 	namespace TensorNetworks
 	{
+		class MPSSimulatorState : public MPSSimulatorBaseState
+		{
+		public:
+			MPSSimulatorState() = default;
+
+			MPSSimulatorState(const MPSSimulatorState&) = default;
+			MPSSimulatorState(MPSSimulatorState&&) = default;
+
+			MPSSimulatorState& operator=(const MPSSimulatorState&) = default;
+			MPSSimulatorState& operator=(MPSSimulatorState&&) = default;
+
+			std::unordered_map<MPSSimulatorInterface::IndexType, MPSSimulatorInterface::IndexType> qubitsMap;
+			std::unordered_map<MPSSimulatorInterface::IndexType, MPSSimulatorInterface::IndexType> qubitsMapInv;
+		};
+
 
 		// this is going to allow two qubit gates to be applied on qubits that are not adjacent
 		class MPSSimulator : public MPSSimulatorInterface
@@ -205,6 +220,27 @@ namespace QC
 			double getBasisStateProbability(std::vector<bool>& State) const override
 			{
 				return std::norm(getBasisStateAmplitude(State));
+			}
+
+			std::shared_ptr<MPSSimulatorStateInterface> getState() const override
+			{
+				auto baseState = std::static_pointer_cast<MPSSimulatorBaseState>(impl.getState());
+				auto state = std::make_shared<MPSSimulatorState>();
+				state->gammas.swap(baseState->gammas);
+				state->lambdas.swap(baseState->lambdas);
+				state->qubitsMap = qubitsMap;
+				state->qubitsMapInv = qubitsMapInv;
+				return state;
+			}
+
+			void setState(const std::shared_ptr<MPSSimulatorStateInterface>& state) override
+			{
+				auto baseState = std::static_pointer_cast<MPSSimulatorBaseState>(state);
+				impl.setState(baseState);
+
+				auto simState = std::static_pointer_cast<MPSSimulatorState>(state);
+				qubitsMap = simState->qubitsMap;
+				qubitsMapInv = simState->qubitsMapInv;
 			}
 
 		private:
