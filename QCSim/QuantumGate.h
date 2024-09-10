@@ -970,6 +970,28 @@ namespace QC {
 			}
 		};
 
+		template<class MatrixClass = Eigen::MatrixXcd> class CCZGate : public ThreeQubitsControlledGate<MatrixClass>
+		{
+		public:
+			using BaseClass = ThreeQubitsControlledGate<MatrixClass>;
+			using OpClass = typename BaseClass::BaseClass::BaseClass;
+
+			CCZGate()
+			{
+				OpClass::operatorMat(7, 7) = -1;
+			}
+
+			bool isControlQubit(size_t qubit) const override
+			{
+				return qubit <= 1;
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
+		};
+
 	}
 }
 
