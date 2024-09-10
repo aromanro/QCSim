@@ -248,20 +248,6 @@ namespace QC {
 			}
 
 
-			Eigen::Tensor<std::complex<double>, 2> GetLambdaTensor(size_t pos, size_t dim1, size_t dim2) const
-			{
-				assert(pos < lambdas.size());
-
-				Eigen::Tensor<std::complex<double>, 2> res(dim1, dim2);
-				res.setZero();
-
-				for (size_t i = 0; i < std::min<size_t>(lambdas[pos].size(), std::min(dim1, dim2)); ++i)
-					res(i, i) = lambdas[pos](i);
-
-				return res;
-			}
-
-
 			TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass& gate, bool reversed) const
 			{
 				TwoQubitsGateTensor result;
@@ -318,19 +304,24 @@ namespace QC {
 
 				for (IndexType k = 0; k < sz; ++k)
 					for (IndexType j = 0; j < 2; ++j)
+					{
+						const IndexType jszl = j * szl;
 						for (IndexType i = 0; i < szl; ++i)
 						{
-							const IndexType jind = j * szl + i;
+							const IndexType jind = jszl + i;
 							Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
 						}
+					}
 
 				for (IndexType k = 0; k < szr; ++k)
 					for (IndexType j = 0; j < 2; ++j)
+					{
+						const IndexType jind = j * szr + k;
 						for (IndexType i = 0; i < sz; ++i)
-						{
-							const IndexType jind = j * szr + k;
+						{	
 							Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
 						}
+					}
 
 				gammas[qubit1] = Utensor;
 				gammas[qubit2] = Vtensor;
@@ -347,15 +338,17 @@ namespace QC {
 
 				for (IndexType k = 0; k < sz; ++k)
 					for (IndexType j = 0; j < 2; ++j)
+					{
+						const IndexType jchi = j * sz;
+						const IndexType jchik = jchi + k;
 						for (IndexType i = 0; i < sz; ++i)
 						{
-							const IndexType jchi = j * sz;
-							IndexType jind = jchi + i;
+							const IndexType jind = jchi + i;
 							Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
 
-							jind = jchi + k;
-							Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
+							Vtensor(i, j, k) = (jchik < Vmatrix.cols()) ? Vmatrix(i, jchik) : 0;
 						}
+					}
 
 				gammas[qubit1] = Utensor;
 				gammas[qubit2] = Vtensor;
@@ -380,9 +373,9 @@ namespace QC {
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
-					for (IndexType j = 0; j < 2; ++j)
-						for (IndexType i = 0; i < sz; ++i)
-							for (IndexType k = 0; k < szr; ++k)
+					for (IndexType k = 0; k < szr; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < sz; ++i)
 								if (lambdas[qubit2][k] > std::numeric_limits<double>::epsilon() * 1E-10) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
 								else gammas[qubit2](i, j, k) = 0;
 				}
@@ -396,8 +389,6 @@ namespace QC {
 
 				assert(gammas[qubit1].dimension(2) == gammas[qubit2].dimension(0));
 
-				const Eigen::Tensor<std::complex<double>, 2> lambdaMiddle = GetLambdaTensor(qubit1, gammas[qubit1].dimension(2), gammas[qubit2].dimension(0));
-				
 				const IndexType szl = gammas[qubit1].dimension(0);
 				const IndexType sz = gammas[qubit1].dimension(2);
 				const IndexType szr = gammas[qubit2].dimension(2);
@@ -408,14 +399,21 @@ namespace QC {
 					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
 							for (IndexType i = 0; i < szl; ++i)
-								gammas[qubit1](i, j, k) *= lambdas[prev][i];
+								gammas[qubit1](i, j, k) *= lambdas[prev][i] * lambdas[qubit1][k];
+				}
+				else
+				{
+					for (IndexType k = 0; k < sz; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < szl; ++i)
+								gammas[qubit1](i, j, k) *= lambdas[qubit1][k];
 				}
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
-					for (IndexType j = 0; j < 2; ++j)
-						for (IndexType i = 0; i < sz; ++i)
-							for (IndexType k = 0; k < szr; ++k)
+					for (IndexType k = 0; k < szr; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < sz; ++i)
 								gammas[qubit2](i, j, k) *= lambdas[qubit2][k];
 				}
 
@@ -427,7 +425,7 @@ namespace QC {
 				// contract the result with the next gamma
 				// the resulting tensor has four legs, 1 and 2 are the physical ones
 
-				return gammas[qubit1].contract(lambdaMiddle, product_dims_int).contract(gammas[qubit2], product_dims_int);
+				return gammas[qubit1].contract(gammas[qubit2], product_dims_int);
 			}
 
 			// for the two qubit gate - U is the gate tensor
@@ -462,11 +460,20 @@ namespace QC {
 				MatrixClass thetaMatrix(2 * sz0, 2 * sz1);
 
 				for (IndexType l = 0; l < 2; ++l)
-					for (IndexType j = 0; j < sz1; ++j)
-						for (IndexType k = 0; k < 2; ++k)
+				{
+					const IndexType lsz1 = l * sz1;
+					for (IndexType k = 0; k < 2; ++k)
+					{
+						const IndexType ksz0 = k * sz0;
+						for (IndexType j = 0; j < sz1; ++j)
+						{
+							const IndexType lsz1j = lsz1 + j;
 							for (IndexType i = 0; i < sz0; ++i)
 								// 2, 0, 3, 1 - k & l from theta are the physical indexes
-								thetaMatrix(k * sz0 + i, l * sz1 + j) = theta(i, j, k, l);
+								thetaMatrix(ksz0 + i, lsz1j) = theta(i, j, k, l);
+						}
+					}
+				}
 
 				return thetaMatrix;
 			}
@@ -486,12 +493,18 @@ namespace QC {
 
 				MatrixClass thetaMatrix(2 * sz0, 2 * sz3);
 
-				for (IndexType k = 0; k < 2; ++k)
-					for (IndexType l = 0; l < sz3; ++l)
+				for (IndexType l = 0; l < sz3; ++l)
+					for (IndexType k = 0; k < 2; ++k)
+					{
+						const IndexType ksz3l = k * sz3 + l;
 						for (IndexType j = 0; j < 2; ++j)
+						{
+							const IndexType jsz0 = j * sz0;
 							for (IndexType i = 0; i < sz0; ++i)
 								// j & k from theta are the physical indexes
-								thetaMatrix(j * sz0 + i, k * sz3 + l) = theta(i, j, k, l);
+								thetaMatrix(jsz0 + i, ksz3l) = theta(i, j, k, l);
+						}
+					}
 
 				return thetaMatrix;
 			}
