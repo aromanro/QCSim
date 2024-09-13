@@ -8,8 +8,11 @@
 #include "QubitRegister.h"
 #include "MPSSimulator.h"
 
+#include <vector>
+
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <future>
 
 
 void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
@@ -527,28 +530,57 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 				std::unordered_map<std::vector<bool>, int> measurementsRegMap;
 				std::unordered_map<std::vector<bool>, int> measurementsMPSMap;
 
-				for (int t = 0; t < nrMeasurements; ++t)
+				size_t remainingCounts = nrMeasurements;
+				size_t nrThreads = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+				nrThreads = std::min(nrThreads, std::max<size_t>(remainingCounts, 1ULL));
+
+				std::vector<std::future<void>> tasks(nrThreads);
+
+				const size_t cntPerThread = static_cast<size_t>(ceil(static_cast<double>(remainingCounts) / nrThreads));
+				
+				std::mutex resultsMutex;
+
+				for (size_t i = 0; i < nrThreads; ++i)
 				{
-					QC::TensorNetworks::MPSSimulator mps(nrQubits);
-					QC::QubitRegister reg(nrQubits);
+					const size_t curCnt = std::min(cntPerThread, remainingCounts);
+					remainingCounts -= curCnt;
 
-					for (const auto& gate : circuit)
-					{
-						mps.ApplyGate(*gate);
-						reg.ApplyGate(*gate);
-					}
+					tasks[i] = std::async(std::launch::async, [&circuit, &measurementsRegMap, &measurementsMPSMap, curCnt, nrQubits, &resultsMutex]()
+						{
+							QC::TensorNetworks::MPSSimulator mps(nrQubits);
+							QC::QubitRegister reg(nrQubits);
 
-					std::vector<bool> measurementsReg(nrQubits);
-					std::vector<bool> measurementsMPS(nrQubits);
+							std::vector<bool> measurementsReg(nrQubits);
+							std::vector<bool> measurementsMPS(nrQubits);
 
-					for (int q = 0; q < nrQubits; ++q)
-					{
-						measurementsReg[q] = reg.MeasureQubit(q);
-						measurementsMPS[q] = mps.MeasureQubit(q);
-					}
-					++measurementsRegMap[measurementsReg];
-					++measurementsMPSMap[measurementsMPS];
+							for (size_t i = 0; i < curCnt; ++i)
+							{
+								for (const auto& gate : circuit)
+								{
+									mps.ApplyGate(*gate);
+									reg.ApplyGate(*gate);
+								}
+
+								for (int q = 0; q < nrQubits; ++q)
+								{
+									measurementsReg[q] = reg.MeasureQubit(q);
+									measurementsMPS[q] = mps.MeasureQubit(q);
+								}
+
+								{
+									const std::lock_guard lock(resultsMutex);
+									++measurementsRegMap[measurementsReg];
+									++measurementsMPSMap[measurementsMPS];
+								}
+
+								reg.setToBasisState(0);
+								mps.setToBasisState(0);
+							}
+						});
 				}
+
+				for (size_t i = 0; i < nrThreads; ++i)
+					tasks[i].get();
 
 				std::cout << ".";
 

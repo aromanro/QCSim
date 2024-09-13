@@ -227,10 +227,8 @@ namespace QC {
 		void ApplyGate(const GateClass& gate, size_t qubit, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0)
 		{
 			const size_t gateQubits = gate.getQubitsNumber();
-			if (qubit >= NrQubits ||
-				(gateQubits > 1 && controllingQubit1 >= NrQubits) ||
-				(gateQubits > 2 && controllingQubit2 >= NrQubits))
-				throw std::invalid_argument("Qubit number is too large");
+
+			CheckQubits(gate, qubit, controllingQubit1, controllingQubit2, gateQubits);
 
 #define OPTIMIZED_TENSOR_PRODUCT 1
 #ifdef OPTIMIZED_TENSOR_PRODUCT
@@ -468,6 +466,11 @@ namespace QC {
 		}
 
 	protected:
+		inline void CheckQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
+		{
+			if (NrQubits == 0) throw std::invalid_argument("Qubit number is zero");
+		}
+
 		// the following ones should be used for 'repeated measurements' that avoid reexecuting the circuit each time
 		size_t MeasureNoCollapse()
 		{
