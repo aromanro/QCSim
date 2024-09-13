@@ -146,9 +146,9 @@ namespace QC
 			void ApplyGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::runtime_error("Qubit index out of bounds");
+					throw std::invalid_argument("Qubit index out of bounds");
 				else if (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::runtime_error("Qubit index out of bounds");
+					throw std::invalid_argument("Qubit index out of bounds");
 
 				IndexType qubit1 = qubitsMap[qubit];
 				IndexType qubit2 = qubitsMap[controllingQubit1];

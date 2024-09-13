@@ -226,11 +226,14 @@ namespace QC {
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 		void ApplyGate(const GateClass& gate, size_t qubit, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0)
 		{
+			const size_t gateQubits = gate.getQubitsNumber();
+			if (qubit >= NrQubits ||
+				(gateQubits > 1 && controllingQubit1 >= NrQubits) ||
+				(gateQubits > 2 && controllingQubit2 >= NrQubits))
+				throw std::invalid_argument("Qubit number is too large");
+
 #define OPTIMIZED_TENSOR_PRODUCT 1
 #ifdef OPTIMIZED_TENSOR_PRODUCT
-
-			const size_t gateQubits = gate.getQubitsNumber();
-
 			assert(gateQubits > 0 && gateQubits <= 3);
 
 			const size_t qubitBit = 1ULL << qubit;
