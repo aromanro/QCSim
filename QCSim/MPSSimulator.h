@@ -176,7 +176,7 @@ namespace QC
 			bool MeasureQubit(IndexType qubit) override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::runtime_error("Qubit index out of bounds");
+					throw std::invalid_argument("Qubit index out of bounds");
 
 				return impl.MeasureQubit(qubitsMap[qubit]);
 			}
@@ -184,7 +184,7 @@ namespace QC
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::runtime_error("Qubit index out of bounds");
+					throw std::invalid_argument("Qubit index out of bounds");
 
 				return impl.GetProbability(qubitsMap.at(qubit), zeroVal);
 			}

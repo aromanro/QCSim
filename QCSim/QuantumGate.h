@@ -41,6 +41,11 @@ namespace QC {
 			{
 				return false;
 			}
+
+			virtual bool isSwapGate() const
+			{
+				return false;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
@@ -48,9 +53,48 @@ namespace QC {
 		public:
 			using BaseClass = QuantumGate<MatrixClass>;
 
+			QuantumGateWithOp(const QuantumGateWithOp& other)
+				: operatorMat(other.operatorMat)
+			{
+			}
+
+			QuantumGateWithOp(QuantumGateWithOp&& other)
+				: operatorMat(std::move(other.operatorMat))
+			{
+			}
+
 			QuantumGateWithOp(const MatrixClass& U)
 				: operatorMat(U)
 			{
+			}
+
+			QuantumGateWithOp(MatrixClass&& U)
+				: operatorMat(std::move(U))
+			{
+			}
+
+			QuantumGateWithOp& operator=(const QuantumGateWithOp& other)
+			{
+				operatorMat = other.operatorMat;
+				return *this;
+			}
+
+			QuantumGateWithOp& operator=(QuantumGateWithOp&& other)
+			{
+				operatorMat = std::move(other.operatorMat);
+				return *this;
+			}
+
+			QuantumGateWithOp& operator=(const MatrixClass& U)
+			{
+				operatorMat = U;
+				return *this;
+			}
+
+			QuantumGateWithOp& operator=(MatrixClass&& U)
+			{
+				operatorMat = std::move(U);
+				return *this;
 			}
 
 			const MatrixClass& getRawOperatorMatrix() const
@@ -94,11 +138,60 @@ namespace QC {
 			{
 			}
 
+			SingleQubitGate(const SingleQubitGate& other)
+				: BaseClass(other.operatorMat)
+			{
+			}
+
+			SingleQubitGate(SingleQubitGate&& other)
+				: BaseClass(std::move(other.operatorMat))
+			{
+			}
+
 			SingleQubitGate(const MatrixClass& U)
 				: BaseClass(U)
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 2);
+			}
+
+			SingleQubitGate(MatrixClass&& U)
+				: BaseClass(std::move(U))
+			{
+				assert(operatorMat.rows() == operatorMat.cols());
+				assert(operatorMat.rows() == 2);
+			}
+
+			SingleQubitGate& operator=(const SingleQubitGate& other)
+			{
+				assert(other.operatorMat.rows() == 2);
+				assert(other.operatorMat.cols() == 2);
+				BaseClass::operator=(other.operatorMat);
+				return *this;
+			}
+
+			SingleQubitGate& operator=(SingleQubitGate&& other)
+			{
+				assert(other.operatorMat.rows() == 2);
+				assert(other.operatorMat.cols() == 2);
+				BaseClass::operator=(std::move(other.operatorMat));
+				return *this;
+			}
+
+			SingleQubitGate& operator=(const MatrixClass& U)
+			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 2);
+				BaseClass::operator=(U);
+				return *this;
+			}
+
+			SingleQubitGate& operator=(MatrixClass&& U)
+			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 2);
+				BaseClass::operator=(std::move(U));
+				return *this;
 			}
 
 			size_t getQubitsNumber() const override
@@ -145,11 +238,60 @@ namespace QC {
 			{
 			}
 
+			TwoQubitsGate(const TwoQubitsGate& other)
+				: BaseClass(other.operatorMat)
+			{
+			}
+
+			TwoQubitsGate(TwoQubitsGate&& other)
+				: BaseClass(std::move(other.operatorMat))
+			{
+			}
+
 			TwoQubitsGate(const MatrixClass& U)
 				: BaseClass(U)
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 4);
+			}
+
+			TwoQubitsGate(MatrixClass&& U)
+				: BaseClass(std::move(U))
+			{
+				assert(BaseClass::operatorMat.rows() == BaseClass::operatorMat.cols());
+				assert(BaseClass::operatorMat.rows() == 4);
+			}
+
+			TwoQubitsGate& operator=(const TwoQubitsGate& other)
+			{
+				assert(other.operatorMat.rows() == 4);
+				assert(other.operatorMat.cols() == 4);
+				BaseClass::operator=(other.operatorMat);
+				return *this;
+			}
+
+			TwoQubitsGate& operator=(TwoQubitsGate&& other)
+			{
+				assert(other.operatorMat.rows() == 4);
+				assert(other.operatorMat.cols() == 4);
+				BaseClass::operator=(std::move(other.operatorMat));
+				return *this;
+			}
+
+			TwoQubitsGate& operator=(const MatrixClass& U)
+			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 4);
+				BaseClass::operator=(U);
+				return *this;
+			}
+
+			TwoQubitsGate& operator=(MatrixClass&& U)
+			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 4);
+				BaseClass::operator=(std::move(U));
+				return *this;
 			}
 
 			size_t getQubitsNumber() const override
@@ -197,11 +339,60 @@ namespace QC {
 			{
 			}
 
+			ThreeQubitsGate(const ThreeQubitsGate& other)
+				: BaseClass(other.operatorMat)
+			{
+			}
+
+			ThreeQubitsGate(ThreeQubitsGate&& other)
+				: BaseClass(std::move(other.operatorMat))
+			{
+			}
+
 			ThreeQubitsGate(const MatrixClass& U)
 				: BaseClass(U)
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 8);
+			}
+
+			ThreeQubitsGate(MatrixClass&& U)
+				: BaseClass(std::move(U))
+			{
+				assert(BaseClass::operatorMat.rows() == BaseClass::operatorMat.cols());
+				assert(BaseClass::operatorMat.rows() == 8);
+			}
+
+			ThreeQubitsGate& operator=(const ThreeQubitsGate& other)
+			{
+				assert(other.operatorMat.rows() == 8);
+				assert(other.operatorMat.cols() == 8);
+				BaseClass::operator=(other.operatorMat);
+				return *this;
+			}
+
+			ThreeQubitsGate& operator=(ThreeQubitsGate&& other)
+			{
+				assert(other.operatorMat.rows() == 8);
+				assert(other.operatorMat.cols() == 8);
+				BaseClass::operator=(std::move(other.operatorMat));
+				return *this;
+			}
+
+			ThreeQubitsGate& operator=(const MatrixClass& U)
+			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 8);
+				BaseClass::operator=(U);
+				return *this;
+			}
+
+			ThreeQubitsGate& operator=(MatrixClass&& U)
+			{
+				assert(U.rows() == U.cols());
+				assert(U.rows() == 8);
+				BaseClass::operator=(std::move(U));
+				return *this;
 			}
 
 			size_t getQubitsNumber() const override
@@ -251,9 +442,42 @@ namespace QC {
 			{
 			}
 
+			AppliedGate(const AppliedGate& other)
+				: Gates::QuantumGateWithOp<MatrixClass>(other.operatorMat), q1(other.q1), q2(other.q2), q3(other.q3)
+			{
+			}
+
+			AppliedGate(AppliedGate&& other)
+				: Gates::QuantumGateWithOp<MatrixClass>(std::move(other.operatorMat)), q1(other.q1), q2(other.q2), q3(other.q3)
+			{
+			}
+
 			AppliedGate(const MatrixClass& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
 				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
 			{
+			}
+
+			AppliedGate(MatrixClass&& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
+				: Gates::QuantumGateWithOp<MatrixClass>(std::move(op)), q1(q1), q2(q2), q3(q3)
+			{
+			}
+
+			AppliedGate& operator=(const AppliedGate& other)
+			{
+				BaseClass::operator=(other.operatorMat);
+				q1 = other.q1;
+				q2 = other.q2;
+				q3 = other.q3;
+				return *this;
+			}
+
+			AppliedGate& operator=(AppliedGate&& other)
+			{
+				BaseClass::operator=(std::move(other.operatorMat));
+				q1 = other.q1;
+				q2 = other.q2;
+				q3 = other.q3;
+				return *this;
 			}
 
 			size_t getQubit1() const { return q1; }
@@ -596,6 +820,11 @@ namespace QC {
 				OpClass::operatorMat(2, 2) = 0;
 				OpClass::operatorMat(1, 2) = 1;
 				OpClass::operatorMat(2, 1) = 1;
+			}
+
+			bool isSwapGate() const override
+			{
+				return true;
 			}
 		};
 

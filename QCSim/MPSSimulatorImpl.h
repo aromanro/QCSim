@@ -2,6 +2,8 @@
 
 #include "MPSSimulatorBase.h"
 
+#include <future>
+
 namespace QC {
 
 	namespace TensorNetworks {
@@ -26,11 +28,11 @@ namespace QC {
 			// maybe wrap this up into a higher level simulator that swaps the qubits for you and maps them to minimize swaps
 			void ApplyGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
-				if (gate.getQubitsNumber() > 2) throw std::runtime_error("Three qubit gates not supported");
+				if (gate.getQubitsNumber() > 2) throw std::invalid_argument("Three qubit gates not supported");
 				else if ((qubit < 0 || qubit >= static_cast<IndexType>(gammas.size())) || (gate.getQubitsNumber() == 2 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(gammas.size()))))
-					throw std::runtime_error("Qubit index out of bounds");
+					throw std::invalid_argument("Qubit index out of bounds");
 				else if (gate.getQubitsNumber() == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
-					throw std::runtime_error("Two qubit gates need to act on adjacent qubits");
+					throw std::invalid_argument("Two qubit gates need to act on adjacent qubits");
 
 
 				if (gate.getQubitsNumber() == 1)
@@ -49,31 +51,26 @@ namespace QC {
 			bool MeasureQubit(IndexType qubit) override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
-					throw std::runtime_error("Qubit index out of bounds");
+					throw std::invalid_argument("Qubit index out of bounds");
 
 				const double rndVal = 1. - uniformZeroOne(rng);
 
 				const double prob0 = GetProbability(qubit);
 
 				const bool zeroMeasured = rndVal < prob0;
-				MatrixClass projMat;
-
-				if (zeroMeasured)
-				{
-					projMat = zeroProjection.getRawOperatorMatrix();
-					projMat *= 1. / sqrt(prob0);
-				}
-				else
-				{
-					projMat = oneProjection.getRawOperatorMatrix();
-					projMat *= 1. / sqrt(1. - prob0);
-				}
+				MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
 
 				const QC::Gates::SingleQubitGate projOp(projMat);
 
 				ApplySingleQubitGate(projOp, qubit);
 
-				// propagate to the other qubits to the left and right until the end or there is no entanglement with the next one
+				// propagate to the other qubits to the right and left until the end or there is no entanglement with the next one
+
+				for (IndexType q = qubit; q < static_cast<IndexType>(lambdas.size()); ++q)
+				{
+					if (lambdas[q].size() == 1) break;
+					ApplyTwoQubitGate(projOp, q, q + 1, true);
+				}
 
 				for (IndexType q = qubit; q > 0; --q)
 				{
@@ -82,19 +79,13 @@ namespace QC {
 					ApplyTwoQubitGate(projOp, q1, q, true);
 				}
 
-				for (IndexType q = qubit; q < static_cast<IndexType>(lambdas.size()); ++q)
-				{
-					if (lambdas[q].size() == 1) break;
-					ApplyTwoQubitGate(projOp, q, q + 1, true);
-				}
-
 				return !zeroMeasured;
 			}
 
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
-					throw std::runtime_error("Qubit index out of bounds");
+					throw std::invalid_argument("Qubit index out of bounds");
 
 				MatrixTensorType qubitMatrix = gammas[qubit].chip(zeroVal ? 0 : 1, 1);
 
@@ -169,10 +160,25 @@ namespace QC {
 				}
 				else
 				{
-					const Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2,2,2,2>> U = GetTwoQubitsGateTensor(gate, reversed);
-					const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructThetaBar(qubit1, U);
+					// TODO: optimize for some gates? The most important would be the swap gate, as it's applied a lot to move qubits near each other before applying other two qubit gates
+					// something like:
+					if (gate.isSwapGate())
+					{
+						Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+						// apply the swap gate, optimized
+						for (IndexType j = 0; j < theta.dimension(3); ++j)
+							for (IndexType i = 0; i < theta.dimension(0); ++i)
+								std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
 
-					thetaMatrix = ReshapeThetaBar(thetabar);
+						thetaMatrix = ReshapeTheta(theta);
+					}
+					else
+					{
+						const Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>> U = GetTwoQubitsGateTensor(gate, reversed);
+						const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructThetaBar(qubit1, U);
+
+						thetaMatrix = ReshapeThetaBar(thetabar);
+					}
 				}
 
 				Eigen::JacobiSVD<MatrixClass/*, Eigen::FullPivHouseholderQRPreconditioner*/> SVD;
@@ -181,27 +187,11 @@ namespace QC {
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
 
-#ifdef _DEBUG
-				std::cout << "Gamma1 dims: " << gammas[qubit1].dimension(0) << " x " << gammas[qubit1].dimension(1) << " x " << gammas[qubit1].dimension(2) << std::endl;
-				std::cout << "Gamma2 dims: " << gammas[qubit2].dimension(0) << " x " << gammas[qubit2].dimension(1) << " x " << gammas[qubit2].dimension(2) << std::endl;
-				std::cout << "Lambda size: " << lambdas[qubit1].size() << std::endl;
-				std::cout << "Theta matrix size: " << thetaMatrix.rows() << " x " << thetaMatrix.cols() << std::endl;
-#endif
-
 				SVD.compute(thetaMatrix, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
-
 
 				const MatrixClass& UmatrixFull = SVD.matrixU();
 				const MatrixClass& VmatrixFull = SVD.matrixV();
 				const LambdaType& SvaluesFull = SVD.singularValues();
-
-#ifdef _DEBUG
-				std::cout << "U matrix size: " << UmatrixFull.rows() << " x " << UmatrixFull.cols() << std::endl;
-				std::cout << UmatrixFull << std::endl;
-				std::cout << "V matrix size: " << VmatrixFull.rows() << " x " << VmatrixFull.cols() << std::endl;
-				std::cout << VmatrixFull << std::endl;
-				std::cout << "Singular values: " << SvaluesFull << std::endl;
-#endif
 
 				//IndexType szm = SvaluesFull.size();
 				IndexType szm = SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
@@ -228,21 +218,12 @@ namespace QC {
 				const MatrixClass Umatrix = UmatrixFull.topLeftCorner(std::min<IndexType>(2 * szl, UmatrixFull.rows()), sz);
 				const MatrixClass Vmatrix = VmatrixFull.topLeftCorner(std::min<IndexType>(2 * szr, VmatrixFull.rows()), sz).adjoint();
 
-#ifdef _DEBUG
-				std::cout << "Trunc U matrix size: " << Umatrix.rows() << " x " << Umatrix.cols() << std::endl;
-				std::cout << "Trunc V matrix size: " << Vmatrix.rows() << " x " << Vmatrix.cols() << std::endl;
-#endif
-
 				// now set back lambdas and gammas
 
 				lambdas[qubit1] = SvaluesFull.head(sz);
 				assert(lambdas[qubit1][0] != 0.);
 				//if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1; // this should not happen
 				lambdas[qubit1].normalize();
-
-#ifdef _DEBUG
-				std::cout << "Normalized: " << lambdas[qubit1] << std::endl;
-#endif
 
 				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
 			}
@@ -298,10 +279,6 @@ namespace QC {
 				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
 				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, szr);
 
-#ifdef _DEBUG
-				std::cout << "Different sizes, szl=" << szl << " sz=" << sz << " szr=" << szr << std::endl;
-#endif
-
 				for (IndexType k = 0; k < sz; ++k)
 					for (IndexType j = 0; j < 2; ++j)
 					{
@@ -331,10 +308,6 @@ namespace QC {
 			{
 				Eigen::Tensor<std::complex<double>, 3> Utensor(sz, 2, sz);
 				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, sz);
-
-#ifdef _DEBUG
-				std::cout << "Same sizes, sz=" << sz << std::endl;
-#endif
 
 				for (IndexType k = 0; k < sz; ++k)
 					for (IndexType j = 0; j < 2; ++j)
@@ -481,7 +454,6 @@ namespace QC {
 			MatrixClass ReshapeTheta(const Eigen::Tensor<std::complex<double>, 4>& theta)
 			{
 				// get it into a matrix for SVD - use JacobiSVD
-
 				IndexType sz0 = theta.dimension(0);
 				assert(sz0 > 0);
 
