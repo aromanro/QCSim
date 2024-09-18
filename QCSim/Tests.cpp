@@ -672,19 +672,26 @@ bool basicTests()
 	return res;
 }
 
-bool tests()
+bool tests(int option)
 {
 	std::cout << "\nTests\n";
 
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 	
-	bool res = basicTests() && quantumAdderTests() && DeutschJozsaTests();
-	if (res) res = SimonTests() && BernsteinVaziraniTests() && GroverTests();
-	if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
-	if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
-	if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
-	if (res) res = CountingTests() && QMLTests() && IsingTests();
-	if (res) res = VQETests() && MPSSimulatorTests();
+	bool res = true;
+	if (option == 0 || option == 2)
+	{
+		res = basicTests() && quantumAdderTests() && DeutschJozsaTests();
+		if (res) res = SimonTests() && BernsteinVaziraniTests() && GroverTests();
+		if (res) res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
+		if (res) res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
+		if (res) res = ParadoxesTests() && GamesTests() && distributedTests();
+		if (res) res = CountingTests() && QMLTests() && IsingTests();
+		if (res) res = VQETests();
+	}
+
+	if (option == 1 || option == 2)
+		if (res) res = MPSSimulatorTests();
 	
 	/*
 	bool res = true;

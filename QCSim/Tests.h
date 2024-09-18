@@ -36,7 +36,7 @@ bool VQETests();
 
 bool MPSSimulatorTests();
 
-bool tests();
+bool tests(int option);
 
 #ifndef TESTS_CPP_
 
