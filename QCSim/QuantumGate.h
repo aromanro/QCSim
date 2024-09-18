@@ -158,8 +158,8 @@ namespace QC {
 			SingleQubitGate(MatrixClass&& U)
 				: BaseClass(std::move(U))
 			{
-				assert(operatorMat.rows() == operatorMat.cols());
-				assert(operatorMat.rows() == 2);
+				assert(BaseClass::operatorMat.rows() == BaseClass::operatorMat.cols());
+				assert(BaseClass::operatorMat.rows() == 2);
 			}
 
 			SingleQubitGate& operator=(const SingleQubitGate& other)
