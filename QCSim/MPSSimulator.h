@@ -115,14 +115,14 @@ namespace QC
 					{
 						if (tmp & 1ULL)
 						{
-							const IndexType mappedQubit = qubitsMapInv.at(i);
+							const IndexType mappedQubit = qubitsMap.at(i);
 							mappedState |= (1ULL << mappedQubit);
 						}
 
 						tmp >>= 1;
 					}
 
-					res[mappedState] = statev[state];
+					res[state] = statev[mappedState];
 				}
 
 				return res;
