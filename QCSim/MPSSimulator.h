@@ -2,7 +2,7 @@
 
 #include "MPSSimulatorImpl.h"
 
-#include <unordered_map>
+#include <vector>
 
 namespace QC
 {
@@ -20,8 +20,8 @@ namespace QC
 			MPSSimulatorState& operator=(const MPSSimulatorState&) = default;
 			MPSSimulatorState& operator=(MPSSimulatorState&&) = default;
 
-			std::unordered_map<MPSSimulatorInterface::IndexType, MPSSimulatorInterface::IndexType> qubitsMap;
-			std::unordered_map<MPSSimulatorInterface::IndexType, MPSSimulatorInterface::IndexType> qubitsMapInv;
+			std::vector<MPSSimulatorInterface::IndexType> qubitsMap;
+			std::vector<MPSSimulatorInterface::IndexType> qubitsMapInv;
 		};
 
 
@@ -133,8 +133,8 @@ namespace QC
 				impl.print();
 
 				std::cout << "Qubits map: ";
-				for (const auto [q1, q2] : qubitsMap)
-					std::cout << q1 << "->" << q2 << " ";
+				for (int q = 0; q < qubitsMap.size(); ++q)
+					std::cout << q << "->" << qubitsMap[q] << " ";
 				std::cout << std::endl;
 			}
 
@@ -246,8 +246,8 @@ namespace QC
 		private:
 			void InitQubitsMap()
 			{
-				qubitsMap.clear();
-				qubitsMapInv.clear();
+				qubitsMap.resize(getNrQubits());
+				qubitsMapInv.resize(getNrQubits());
 
 				for (IndexType i = 0; i < static_cast<IndexType>(getNrQubits()); ++i)
 					qubitsMapInv[i] = qubitsMap[i] = i;
@@ -289,8 +289,8 @@ namespace QC
 			}
 
 			MPSSimulatorImpl impl;
-			std::unordered_map<IndexType, IndexType> qubitsMap;
-			std::unordered_map<IndexType, IndexType> qubitsMapInv;
+			std::vector<IndexType> qubitsMap;
+			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
 			bool swapDown = false;
 		};
