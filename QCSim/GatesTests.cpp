@@ -8,7 +8,7 @@
 #include "Tests.h"
 #include "QuantumGate.h"
 
-bool checkSingleQubitGates()
+bool checkSingleQubitGates1()
 {
 	if (QC::Gates::HadamardGate hadamard; !checkUnitary(hadamard.getRawOperatorMatrix())) {
 		std::cout << "The Hadamard gate is not unitary!" << std::endl;
@@ -55,6 +55,11 @@ bool checkSingleQubitGates()
 		return false;
 	}
 
+	return true;
+}
+
+bool checkSingleQubitGates2()
+{
 	if (QC::Gates::PauliZGate z; !checkUnitary(z.getRawOperatorMatrix())) {
 		std::cout << "The Pauli Z gate is not unitary!" << std::endl;
 		return false;
@@ -74,7 +79,7 @@ bool checkSingleQubitGates()
 		std::cout << "The Splitter gate is not unitary!" << std::endl;
 		return false;
 	}
-	
+
 	if (QC::Gates::RxGate rx(M_PI / 4); !checkUnitary(rx.getRawOperatorMatrix())) {
 		std::cout << "The Rx gate is not unitary!" << std::endl;
 		return false;
@@ -201,6 +206,11 @@ bool checkTripleQubitGates()
 bool checkDoubleQubitGates()
 {
 	return checkDoubleQubitGates1() && checkDoubleQubitGates2();
+}
+
+bool checkSingleQubitGates()
+{
+	return checkSingleQubitGates1() && checkSingleQubitGates2();
 }
 
 bool checkGates()

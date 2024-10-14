@@ -348,6 +348,7 @@
     <ClInclude Include="QCSim\ShorAlgorithm.h" />
     <ClInclude Include="QCSim\ShorCode.h" />
     <ClInclude Include="QCSim\SimonAlgorithm.h" />
+    <ClInclude Include="QCSim\SimpleGates.h" />
     <ClInclude Include="QCSim\SuperdenseCoding.h" />
     <ClInclude Include="QCSim\Teleportation.h" />
     <ClInclude Include="QCSim\TeleportedCNOT.h" />
