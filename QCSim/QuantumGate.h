@@ -558,17 +558,35 @@ namespace QC {
 			}
 		};
 
-		// also known as the V gate
-		template<class MatrixClass = Eigen::MatrixXcd> class PhaseGate : public SingleQubitGate<MatrixClass>
+		// also known as the V gate or Phase gate
+		template<class MatrixClass = Eigen::MatrixXcd> class SGate : public SingleQubitGate<MatrixClass>
 		{
 		public:
 			using BaseClass = SingleQubitGate<MatrixClass>;
 			using OpClass = typename BaseClass::BaseClass;
 
-			PhaseGate()
+			SGate()
 			{
 				OpClass::operatorMat(0, 0) = 1;
 				OpClass::operatorMat(1, 1) = std::complex<double>(0, 1);
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class SDGGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = typename BaseClass::BaseClass;
+
+			SDGGate()
+			{
+				OpClass::operatorMat(0, 0) = 1;
+				OpClass::operatorMat(1, 1) = std::complex<double>(0, -1);
 			}
 
 			bool isDiagonal() const override

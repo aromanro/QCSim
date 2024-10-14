@@ -20,8 +20,13 @@ bool checkSingleQubitGates()
 		return false;
 	}
 
-	if (QC::Gates::PhaseGate phase; !checkUnitary(phase.getRawOperatorMatrix())) {
-		std::cout << "The Phase gate is not unitary!" << std::endl;
+	if (QC::Gates::SGate phase; !checkUnitary(phase.getRawOperatorMatrix())) {
+		std::cout << "The Phase/S gate is not unitary!" << std::endl;
+		return false;
+	}
+
+	if (QC::Gates::SDGGate sdg; !checkUnitary(sdg.getRawOperatorMatrix())) {
+		std::cout << "The SDG gate is not unitary!" << std::endl;
 		return false;
 	}
 

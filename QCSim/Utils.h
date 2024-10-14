@@ -211,7 +211,7 @@ namespace QC {
 		QC::Gates::HadamardGate<MatrixClass> hadamard;
 		QC::Gates::HyGate<MatrixClass> hy;
 		QC::Gates::CNOTGate<MatrixClass> cnot;
-		//QC::Gates::PhaseGate<MatrixClass> s;
+		//QC::Gates::SGate<MatrixClass> s;
 	};
 
 }
