@@ -30,6 +30,16 @@ bool checkSingleQubitGates()
 		return false;
 	}
 
+	if (QC::Gates::TGate t; !checkUnitary(t.getRawOperatorMatrix())) {
+		std::cout << "The T gate is not unitary!" << std::endl;
+		return false;
+	}
+
+	if (QC::Gates::TDGGate tdg; !checkUnitary(tdg.getRawOperatorMatrix())) {
+		std::cout << "The TDG gate is not unitary!" << std::endl;
+		return false;
+	}
+
 	if (QC::Gates::PhaseShiftGate phaseShift(M_PI / 4); !checkUnitary(phaseShift.getRawOperatorMatrix())) {
 		std::cout << "The Phase Shift gate is not unitary!" << std::endl;
 		return false;

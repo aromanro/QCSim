@@ -21,6 +21,8 @@ void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 	gates.emplace_back(std::make_shared<QC::Gates::HyGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SDGGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::TGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::TDGGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::PhaseShiftGate<>>(0.5 * M_PI));
 	gates.emplace_back(std::make_shared<QC::Gates::PauliXGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::PauliYGate<>>());

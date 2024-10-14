@@ -1,5 +1,7 @@
 #pragma once
 
+#define _USE_MATH_DEFINES
+#include <math.h>
 #include <Eigen/Eigen>
 
 // Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
@@ -587,6 +589,43 @@ namespace QC {
 			{
 				OpClass::operatorMat(0, 0) = 1;
 				OpClass::operatorMat(1, 1) = std::complex<double>(0, -1);
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
+		};
+
+
+		template<class MatrixClass = Eigen::MatrixXcd> class TGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = typename BaseClass::BaseClass;
+
+			TGate()
+			{
+				OpClass::operatorMat(0, 0) = 1;
+				OpClass::operatorMat(1, 1) = std::polar<double>(1, M_PI / 4.);
+			}
+
+			bool isDiagonal() const override
+			{
+				return true;
+			}
+		};
+
+		template<class MatrixClass = Eigen::MatrixXcd> class TDGGate : public SingleQubitGate<MatrixClass>
+		{
+		public:
+			using BaseClass = SingleQubitGate<MatrixClass>;
+			using OpClass = typename BaseClass::BaseClass;
+
+			TDGGate()
+			{
+				OpClass::operatorMat(0, 0) = 1;
+				OpClass::operatorMat(1, 1) = std::polar<double>(1, -M_PI / 4.);
 			}
 
 			bool isDiagonal() const override

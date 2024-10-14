@@ -7,6 +7,7 @@
 #undef max
 #endif // _WIN32
 
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <Eigen/Eigen>
 
