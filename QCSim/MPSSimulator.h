@@ -133,7 +133,7 @@ namespace QC
 				impl.print();
 
 				std::cout << "Qubits map: ";
-				for (int q = 0; q < qubitsMap.size(); ++q)
+				for (int q = 0; q < static_cast<int>(qubitsMap.size()); ++q)
 					std::cout << q << "->" << qubitsMap[q] << " ";
 				std::cout << std::endl;
 			}
