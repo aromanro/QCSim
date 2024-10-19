@@ -469,6 +469,16 @@ namespace QC {
 		inline void CheckQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
 		{
 			if (NrQubits == 0) throw std::invalid_argument("Qubit number is zero");
+			else if (NrQubits <= qubit) throw std::invalid_argument("Qubit number is too high");
+			else if (gateQubits == 2) {
+				if (NrQubits <= controllingQubit1) throw std::invalid_argument("Controlling qubit number is too high");
+				else if (qubit == controllingQubit1) throw std::invalid_argument("Qubit and controlling qubit are the same");
+			} 
+			else if (gateQubits == 3)
+			{
+				if (NrQubits <= controllingQubit1 || NrQubits <= controllingQubit2) throw std::invalid_argument("Controlling qubit number is too high");
+				else if (qubit == controllingQubit1 || qubit == controllingQubit2 || controllingQubit1 == controllingQubit2) throw std::invalid_argument("Qubits must be different");
+			}
 		}
 
 		// the following ones should be used for 'repeated measurements' that avoid reexecuting the circuit each time

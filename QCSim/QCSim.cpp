@@ -19,7 +19,8 @@ int main()
 		std::cout << "0 to exit" << std::endl;
 		std::cout << "1 to run statevector tests" << std::endl;
 		std::cout << "2 to run MPS simulator tests" << std::endl;
-		std::cout << "3 to run all tests" << std::endl;
+		std::cout << "3 to run Clifford simulator tests" << std::endl;
+		std::cout << "4 to run all tests" << std::endl;
 		std::cout << "Command: ";
 		std::string dummy;
 		getline(std::cin, dummy);
@@ -27,7 +28,7 @@ int main()
 		const char c = dummy.size() == 1 ? dummy[0] : 'x';
 
 		if (c == '0') break;
-		else if (c >= '1' && c <= '3') tests(c - '1');
+		else if (c >= '1' && c <= '4') tests(c - '1');
 		else
 			std::cout << "Sorry, unknown command" << std::endl;
 	}

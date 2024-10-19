@@ -55,6 +55,9 @@
     <ClCompile Include="QCSim\MPSSimulatorTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QCSim\CliffordTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -230,5 +233,6 @@
     <ClInclude Include="QCSim\SimpleGates.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\Clifford.h" />
   </ItemGroup>
 </Project>

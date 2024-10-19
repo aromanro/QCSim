@@ -679,7 +679,7 @@ bool tests(int option)
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 	
 	bool res = true;
-	if (option == 0 || option == 2)
+	if (option == 0 || option == 3)
 	{
 		res = basicTests() && quantumAdderTests() && DeutschJozsaTests();
 		if (res) res = SimonTests() && BernsteinVaziraniTests() && GroverTests();
@@ -690,8 +690,11 @@ bool tests(int option)
 		if (res) res = VQETests();
 	}
 
-	if (option == 1 || option == 2)
+	if (option == 1 || option == 3)
 		if (res) res = MPSSimulatorTests();
+
+	if (option == 2 || option == 3)
+		if (res) res = CliffordSimulatorTests();
 	
 	/*
 	bool res = true;

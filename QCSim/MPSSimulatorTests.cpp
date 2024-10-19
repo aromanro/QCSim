@@ -102,7 +102,7 @@ bool OneQubitGatesTest()
 		}
 	}
 
-	std::cout << "Success" << std::endl;
+	std::cout << "\nSuccess" << std::endl;
 
 	return true;
 }
@@ -192,7 +192,7 @@ bool OneAndTwoQubitGatesTest()
 		}
 	}
 
-	std::cout << "Success" << std::endl;
+	std::cout << "\nSuccess" << std::endl;
 
 	return true;
 }
@@ -337,7 +337,7 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 		}
 	}
 
-	std::cout << "Success" << std::endl;
+	std::cout << "\nSuccess" << std::endl;
 
 	return true;
 }
@@ -419,7 +419,7 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 		}
 	}
 
-	std::cout << "Success" << std::endl;
+	std::cout << "\nSuccess" << std::endl;
 
 	return true;
 }
@@ -508,7 +508,7 @@ bool OneAndTwoQubitGatesTestMapped()
 		}
 	}
 
-	std::cout << "Success" << std::endl;
+	std::cout << "\nSuccess" << std::endl;
 
 	return true;
 }
@@ -619,7 +619,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 		}
 	}
 
-	std::cout << "Success" << std::endl;
+	std::cout << "\nSuccess" << std::endl;
 
 	return true;
 }
@@ -717,7 +717,7 @@ bool OneAndTwoQubitGatesTestMappedRandomAmplitudes()
 		}
 	}
 
-	std::cout << "Success" << std::endl;
+	std::cout << "\nSuccess" << std::endl;
 
 	return true;
 }
