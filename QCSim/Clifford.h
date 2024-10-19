@@ -5,6 +5,8 @@
 #include <random>
 #include <cassert>
 
+#include "QubitRegisterCalculator.h"
+
 namespace QC {
 	namespace Clifford {
 
@@ -80,104 +82,263 @@ namespace QC {
 
 			void ApplyH(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					ApplyH(qubit, q);
+				if (stabilizerGenerators.size() < 2048)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+						ApplyH(qubit, q);
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+						ApplyH(qubit, q);
+				}
 			}
 
 			void ApplyS(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					ApplyS(qubit, q);
+				if (stabilizerGenerators.size() < 2048)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+						ApplyS(qubit, q);
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+						ApplyS(qubit, q);
+				}
 			}
 
 			void ApplySdg(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				if (stabilizerGenerators.size() < 1024)
 				{
-					ApplyZ(qubit, q);
-					ApplyS(qubit, q);
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+					}
 				}
 			}
 
 			void ApplySx(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				if (stabilizerGenerators.size() < 512)
 				{
-					ApplyZ(qubit, q);
-					ApplyS(qubit, q);
-					ApplyH(qubit, q);
-					ApplyZ(qubit, q);
-					ApplyS(qubit, q);
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+						ApplyH(qubit, q);
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 128)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+						ApplyH(qubit, q);
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+					}
 				}
 			}
 
 			void ApplySxDag(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				if (stabilizerGenerators.size() < 1024)
 				{
-					ApplyS(qubit, q);
-					ApplyH(qubit, q);
-					ApplyS(qubit, q);
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyS(qubit, q);
+						ApplyH(qubit, q);
+						ApplyS(qubit, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyS(qubit, q);
+						ApplyH(qubit, q);
+						ApplyS(qubit, q);
+					}
 				}
 			}
 
 			void ApplyX(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					ApplyX(qubit, q);
+				if (stabilizerGenerators.size() < 2048)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+						ApplyX(qubit, q);
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+						ApplyX(qubit, q);
+				}
 			}
 
 			void ApplyY(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					ApplyY(qubit, q);
+				if (stabilizerGenerators.size() < 2048)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+						ApplyY(qubit, q);
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+						ApplyY(qubit, q);
+				}
 			}
 
 			void ApplyZ(size_t qubit)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					ApplyZ(qubit, q);	
+				if (stabilizerGenerators.size() < 2048)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+						ApplyZ(qubit, q);
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+						ApplyZ(qubit, q);
+				}
 			}
 
 			void ApplyCX(size_t target, size_t control)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					ApplyCX(target, control, q);
+				if (stabilizerGenerators.size() < 1024)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+						ApplyCX(target, control, q);
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+						ApplyCX(target, control, q);
+				}
 			}
 
 			void ApplyCY(size_t target, size_t control)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				if (stabilizerGenerators.size() < 256)
 				{
-					ApplyZ(target);
-					ApplyS(target);
-					ApplyCX(target, control);
-					ApplyS(target);
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyZ(target);
+						ApplyS(target);
+						ApplyCX(target, control);
+						ApplyS(target);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 64)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyZ(target);
+						ApplyS(target);
+						ApplyCX(target, control);
+						ApplyS(target);
+					}
 				}
 			}
 
 			void ApplyCZ(size_t target, size_t control)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				if (stabilizerGenerators.size() < 256)
 				{
-					ApplyH(target);
-					ApplyCX(target, control);
-					ApplyH(target);
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyH(target);
+						ApplyCX(target, control);
+						ApplyH(target);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 64)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyH(target);
+						ApplyCX(target, control);
+						ApplyH(target);
+					}
 				}
 			}
 
 			void ApplySwap(size_t qubit1, size_t qubit2)
 			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				if (stabilizerGenerators.size() < 256)
 				{
-					ApplyCX(qubit1, qubit2, q);
-					ApplyCX(qubit2, qubit1, q);
-					ApplyCX(qubit1, qubit2, q);
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyCX(qubit1, qubit2, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyCX(qubit1, qubit2, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 64)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyCX(qubit1, qubit2, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyCX(qubit1, qubit2, q);
+					}
 				}
 			}
 
 			bool MeasureZ(size_t qubit)
 			{
+				// TODO: parellelize this
 				bool case1 = false;
 				size_t p = 0;
 				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
@@ -196,9 +357,10 @@ namespace QC {
 					const bool outcome = rnd(gen);
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
-						if (destabilizerGenerators[q].X[qubit])
+						if (destabilizerGenerators[q].X[qubit]) 
 							rowsum(destabilizerGenerators[q], p);
-						if (stabilizerGenerators[q].X[qubit] && p != q) rowsum(stabilizerGenerators[q], destabilizerGenerators.size() + p);
+						if (stabilizerGenerators[q].X[qubit] && p != q) 
+							rowsum(stabilizerGenerators[q], destabilizerGenerators.size() + p);
 					}
 
 					destabilizerGenerators[p] = stabilizerGenerators[p];
