@@ -265,10 +265,10 @@ namespace QC {
 				{
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
-						ApplyZ(target);
-						ApplyS(target);
-						ApplyCX(target, control);
-						ApplyS(target);
+						ApplyZ(target, q);
+						ApplyS(target, q);
+						ApplyCX(target, control, q);
+						ApplyS(target, q);
 					}
 				}
 				else
@@ -278,10 +278,10 @@ namespace QC {
 #pragma omp parallel for num_threads(processor_count) schedule(static, 64)
 					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
 					{
-						ApplyZ(target);
-						ApplyS(target);
-						ApplyCX(target, control);
-						ApplyS(target);
+						ApplyZ(target, q);
+						ApplyS(target, q);
+						ApplyCX(target, control, q);
+						ApplyS(target, q);
 					}
 				}
 			}
@@ -292,9 +292,9 @@ namespace QC {
 				{
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
-						ApplyH(target);
-						ApplyCX(target, control);
-						ApplyH(target);
+						ApplyH(target, q);
+						ApplyCX(target, control, q);
+						ApplyH(target, q);
 					}
 				}
 				else
@@ -304,9 +304,9 @@ namespace QC {
 #pragma omp parallel for num_threads(processor_count) schedule(static, 64)
 					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
 					{
-						ApplyH(target);
-						ApplyCX(target, control);
-						ApplyH(target);
+						ApplyH(target, q);
+						ApplyCX(target, control, q);
+						ApplyH(target, q);
 					}
 				}
 			}
@@ -336,7 +336,7 @@ namespace QC {
 				}
 			}
 
-			bool MeasureZ(size_t qubit)
+			bool MeasureQubit(size_t qubit)
 			{
 				// TODO: parellelize this
 				bool case1 = false;
@@ -354,7 +354,6 @@ namespace QC {
 
 				if (case1)
 				{
-					const bool outcome = rnd(gen);
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
 						if (destabilizerGenerators[q].X[qubit]) 
@@ -367,16 +366,16 @@ namespace QC {
 					
 					stabilizerGenerators[p].Clear();
 					stabilizerGenerators[p].Z[qubit] = true;
-					stabilizerGenerators[p].Sign = outcome;
+					stabilizerGenerators[p].Sign = rnd(gen);
 
-					return outcome;
+					return stabilizerGenerators[p].Sign;
 				}
 				
 				// case 2 - Z (on measured qubit) commutes with all generators
 				Generator h(stabilizerGenerators.size());
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
 				{
-					if (stabilizerGenerators[q].X[qubit])
+					if (destabilizerGenerators[q].X[qubit])
 						rowsum(h, destabilizerGenerators.size() + q);
 				}
 
@@ -418,10 +417,12 @@ namespace QC {
 			{
 				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
 					destabilizerGenerators[q].Sign = !destabilizerGenerators[q].Sign;
+
 				destabilizerGenerators[q].Z[qubit] = XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]);
 
 				if (stabilizerGenerators[q].X[qubit] && stabilizerGenerators[q].Z[qubit])
 					stabilizerGenerators[q].Sign = !stabilizerGenerators[q].Sign;
+				
 				stabilizerGenerators[q].Z[qubit] = XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]);
 			}
 

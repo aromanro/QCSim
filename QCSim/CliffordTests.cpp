@@ -88,8 +88,8 @@ bool CliffordSimulatorTests()
 {
 	const size_t nrTests = 100;
 	const size_t nrShots = 50000;
-	const size_t nrGates = 100;
-	const size_t nrQubits = 5;
+	const size_t nrGates = 200;
+	const size_t nrQubits = 6;
 	const double errorThreshold = 0.02;
 
 	std::uniform_int_distribution gateDistr(0, 11);
@@ -162,11 +162,8 @@ bool CliffordSimulatorTests()
 							val1 <<= 1;
 							val2 <<= 1;
 
-							bool result1 = cliffordSim.MeasureZ(q);
-							size_t result2 = qubitRegister.MeasureQubit(q);
-
-							if (result1) val1 |= 1;
-							if (result2) val2 |= 1;
+							if (cliffordSim.MeasureQubit(q)) val1 |= 1;
+							if (qubitRegister.MeasureQubit(q)) val2 |= 1;
 						}
 
 						{
