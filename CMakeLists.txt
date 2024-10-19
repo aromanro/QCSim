@@ -30,7 +30,8 @@ set(SOURCES QCSim/QCSim.cpp
             QCSim/QMLTests.cpp
             QCSim/IsingTests.cpp
             QCSim/VQETests.cpp
-			QCSim/MPSSimulatorTests.cpp)
+			QCSim/MPSSimulatorTests.cpp
+			QCSim/CliffordTests.cppp)
  
 SET( EIGEN3_INCLUDE_DIR "$ENV{EIGEN3_INCLUDE_DIR}" )
 IF( NOT EIGEN3_INCLUDE_DIR )
