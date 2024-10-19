@@ -84,6 +84,79 @@ void ApplyGate(QC::Clifford::StabilizerSimulator& simulator, int code, int qubit
 	}
 }
 
+
+void ConstructCircuit(size_t nrQubits, std::vector<int>& gates, std::vector<size_t>& qubits1, std::vector<size_t>& qubits2, std::uniform_int_distribution<int>& gateDistr, std::uniform_int_distribution<int>& qubitDistr)
+{
+	for (int i = 0; i < static_cast<int>(gates.size()); ++i)
+	{
+		gates[i] = gateDistr(gen);
+
+		qubits1[i] = qubitDistr(gen);
+		qubits2[i] = qubitDistr(gen);
+
+		if (qubits2[i] == qubits1[i])
+			qubits2[i] = (qubits1[i] + 1) % static_cast<int>(nrQubits);
+
+		if (dist_bool(gen)) std::swap(qubits1[i], qubits2[i]);
+	}
+}
+
+void ExecuteCircuit(size_t nrShots, size_t nrQubits, const std::vector<int>& gates, const std::vector<size_t>& qubits1, const std::vector<size_t>& qubits2, std::unordered_map<size_t, int>& results1, std::unordered_map<size_t, int>& results2)
+{
+	size_t remainingCounts = nrShots;
+	size_t nrThreads = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+	nrThreads = std::min(nrThreads, std::max<size_t>(remainingCounts, 1ULL));
+
+	std::vector<std::future<void>> tasks(nrThreads);
+
+	const size_t cntPerThread = static_cast<size_t>(ceil(static_cast<double>(remainingCounts) / nrThreads));
+
+	std::mutex resultsMutex;
+
+	for (size_t th = 0; th < nrThreads; ++th)
+	{
+		const size_t curCnt = std::min(cntPerThread, remainingCounts);
+		remainingCounts -= curCnt;
+
+		tasks[th] = std::async(std::launch::async, [&gates, &qubits1, &qubits2, &results1, &results2, curCnt, nrQubits, &resultsMutex]()
+			{
+				for (int i = 0; i < static_cast<int>(curCnt); ++i)
+				{
+					QC::QubitRegister qubitRegister(nrQubits);
+					QC::Clifford::StabilizerSimulator cliffordSim(nrQubits);
+
+					for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+					{
+						ApplyGate(cliffordSim, gates[j], qubits1[j], qubits2[j]);
+						const auto gateptr = GetGate(gates[j]);
+						qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
+					}
+
+					// now do the measurements
+					size_t val1 = 0;
+					size_t val2 = 0;
+					for (int q = 0; q < static_cast<int>(nrQubits); ++q)
+					{
+						val1 <<= 1;
+						val2 <<= 1;
+
+						if (cliffordSim.MeasureQubit(q)) val1 |= 1;
+						if (qubitRegister.MeasureQubit(q)) val2 |= 1;
+					}
+
+					{
+						const std::lock_guard lock(resultsMutex);
+						++results1[val1];
+						++results2[val2];
+					}
+				}
+			});
+	}
+
+	for (size_t i = 0; i < nrThreads; ++i)
+		tasks[i].get();
+}
+
 bool CliffordSimulatorTests()
 {
 	const size_t nrTests = 100;
@@ -107,76 +180,9 @@ bool CliffordSimulatorTests()
 		std::vector<size_t> qubits1(nrGates);
 		std::vector<size_t> qubits2(nrGates);
 
-		for (int i = 0; i < nrGates; ++i)
-		{
-			gates[i] = gateDistr(gen);
+		ConstructCircuit(nrQubits, gates, qubits1, qubits2, gateDistr, qubitDistr);
 
-			qubits1[i] = qubitDistr(gen);
-			qubits2[i] = qubitDistr(gen);
-
-			if (qubits2[i] == qubits1[i])
-				qubits2[i] = (qubits1[i] + 1) % nrQubits;
-
-			if (dist_bool(gen)) std::swap(qubits1[i], qubits2[i]);
-		}
-
-
-		size_t remainingCounts = nrShots;
-		size_t nrThreads = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-		nrThreads = std::min(nrThreads, std::max<size_t>(remainingCounts, 1ULL));
-
-		std::vector<std::future<void>> tasks(nrThreads);
-
-		const size_t cntPerThread = static_cast<size_t>(ceil(static_cast<double>(remainingCounts) / nrThreads));
-
-		std::mutex resultsMutex;
-
-		for (size_t th = 0; th < nrThreads; ++th)
-		{
-			const size_t curCnt = std::min(cntPerThread, remainingCounts);
-			remainingCounts -= curCnt;
-
-			tasks[th] = std::async(std::launch::async, [&gates, &qubits1, &qubits2, &results1, &results2, curCnt, nrQubits, &resultsMutex]()
-				{
-					for (int i = 0; i < curCnt; ++i)
-					{
-						QC::QubitRegister qubitRegister(nrQubits);
-						QC::Clifford::StabilizerSimulator cliffordSim(nrQubits);
-
-						for (int j = 0; j < gates.size(); ++j)
-						{
-							auto gate = gates[j];
-							const auto qubit1 = qubits1[j];
-							const auto qubit2 = qubits2[j];
-
-							ApplyGate(cliffordSim, gate, qubit1, qubit2);
-							const auto gateptr = GetGate(gate);
-							qubitRegister.ApplyGate(*gateptr, qubit1, qubit2);
-						}
-
-						// now do the measurements
-						size_t val1 = 0;
-						size_t val2 = 0;
-						for (int q = 0; q < nrQubits; ++q)
-						{
-							val1 <<= 1;
-							val2 <<= 1;
-
-							if (cliffordSim.MeasureQubit(q)) val1 |= 1;
-							if (qubitRegister.MeasureQubit(q)) val2 |= 1;
-						}
-
-						{
-							const std::lock_guard lock(resultsMutex);
-							++results1[val1];
-							++results2[val2];
-						}
-					}
-				});
-		}
-
-		for (size_t i = 0; i < nrThreads; ++i)
-			tasks[i].get();
+		ExecuteCircuit(nrShots, nrQubits, gates, qubits1, qubits2, results1, results2);
 
 		// check to see if the results are close enough
 		for (const auto val : results1)
