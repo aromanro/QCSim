@@ -261,79 +261,24 @@ namespace QC {
 
 			void ApplyCY(size_t target, size_t control)
 			{
-				if (stabilizerGenerators.size() < 256)
-				{
-					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					{
-						ApplyZ(target, q);
-						ApplyS(target, q);
-						ApplyCX(target, control, q);
-						ApplyS(target, q);
-					}
-				}
-				else
-				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for num_threads(processor_count) schedule(static, 64)
-					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
-					{
-						ApplyZ(target, q);
-						ApplyS(target, q);
-						ApplyCX(target, control, q);
-						ApplyS(target, q);
-					}
-				}
+				ApplyZ(target);
+				ApplyS(target);
+				ApplyCX(target, control);
+				ApplyS(target);
 			}
 
 			void ApplyCZ(size_t target, size_t control)
 			{
-				if (stabilizerGenerators.size() < 256)
-				{
-					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					{
-						ApplyH(target, q);
-						ApplyCX(target, control, q);
-						ApplyH(target, q);
-					}
-				}
-				else
-				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for num_threads(processor_count) schedule(static, 64)
-					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
-					{
-						ApplyH(target, q);
-						ApplyCX(target, control, q);
-						ApplyH(target, q);
-					}
-				}
+				ApplyH(target);
+				ApplyCX(target, control);
+				ApplyH(target);
 			}
 
 			void ApplySwap(size_t qubit1, size_t qubit2)
 			{
-				if (stabilizerGenerators.size() < 256)
-				{
-					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					{
-						ApplyCX(qubit1, qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyCX(qubit1, qubit2, q);
-					}
-				}
-				else
-				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for num_threads(processor_count) schedule(static, 64)
-					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
-					{
-						ApplyCX(qubit1, qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyCX(qubit1, qubit2, q);
-					}
-				}
+				ApplyCX(qubit1, qubit2);
+				ApplyCX(qubit2, qubit1);
+				ApplyCX(qubit1, qubit2);
 			}
 
 			bool MeasureQubit(size_t qubit)

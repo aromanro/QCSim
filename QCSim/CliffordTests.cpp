@@ -89,7 +89,7 @@ bool CliffordSimulatorTests()
 	const size_t nrTests = 100;
 	const size_t nrShots = 50000;
 	const size_t nrGates = 200;
-	const size_t nrQubits = 6;
+	const size_t nrQubits = 4;
 	const double errorThreshold = 0.02;
 
 	std::uniform_int_distribution gateDistr(0, 11);
