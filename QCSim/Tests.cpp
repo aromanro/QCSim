@@ -672,6 +672,21 @@ bool basicTests()
 	return res;
 }
 
+bool SimulatorsTests(int option, bool res)
+{
+	if (!res) return false;
+
+	if (option == 1 || option == 3)
+		res = MPSSimulatorTests();
+
+	if (!res) return false;
+
+	if (option == 2 || option == 3)
+		res = CliffordSimulatorTests();
+
+	return res;
+}
+
 bool tests(int option)
 {
 	std::cout << "\nTests\n";
@@ -690,23 +705,9 @@ bool tests(int option)
 		if (res) res = VQETests();
 	}
 
-	if (option == 1 || option == 3)
-		if (res) res = MPSSimulatorTests();
-
-	if (option == 2 || option == 3)
-		if (res) res = CliffordSimulatorTests();
-	
-	/*
-	bool res = true;
-	for (int i = 0; i < 100; ++i)
-	{
-		res = IsingTests();
-		if (!res) break;
-	}
-	*/
+	res = SimulatorsTests(option, res);
 
 	auto dif = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t1).count();
-
 	std::cout << "\nTesting took: " << dif / 1000. << " seconds!" << std::endl << "\nTests " << (res ? "succeeded" : "failed") << std::endl;
 
 	return res;

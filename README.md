@@ -1,6 +1,8 @@
 # QCSim
 Quantum computation simulator
 
+Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator and a Clifford gates simulator (using the stabilizer formalism).
+
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://www.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=aromanro/QCSim&amp;utm_campaign=Badge_Grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)
 
@@ -86,8 +88,11 @@ int main()
 This is the statevector simulator, which is used in all examples so far. 
 
 The project also has a Matrix Product States (the simplest Tensor Network, the 1D variant that has qubit sites on a chain, see the TEBD project for more details) simulator implementation.
-There is not much going on in the project with it yet, but some tests I added pass. I'm going to add a proxy class that will take care of qubits mapping and will apply swap gates for qubits that are not in proximity to allow applying gates for such qubits, then maybe I'll use it for some examples. 
+There is not much going on in the project with it yet, but some tests I added pass.
 
+Also an implementation of a simulator able to execute Clifford gates - using the stabilizer formalism - is provided. Again, for this there is not much going on yet, only some tests that pass.
+
+Both can be improved (and hopefully will be) by using multithreading.
 
 You should compile it with c++ 17 (at least).
 Of course, if one wants to use some other stuff in there, more headers might need to be included.

@@ -316,40 +316,44 @@ namespace QC {
 				return x2 * (1 - 2 * z2);
 			}
 
-			void rowsum(Generator& h, size_t j)
+			inline void rowsumDestabilizers(Generator& h, size_t j, long long int& m)
+			{
+				m += destabilizerGenerators[j].Sign ? 2 : 0;
+
+				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
+				{
+					const int x = h.X[q] ? 1 : 0;
+					const int z = h.Z[q] ? 1 : 0;
+					m += g(destabilizerGenerators[j].X[q] ? 1 : 0, destabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+
+					h.X[q] = XOR(h.X[q], destabilizerGenerators[j].X[q]);
+					h.Z[q] = XOR(h.Z[q], destabilizerGenerators[j].Z[q]);
+				}
+			}
+
+			inline void rowsumStabilizers(Generator& h, size_t j, long long int& m)
+			{
+				m += stabilizerGenerators[j].Sign ? 2 : 0;
+
+				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				{
+					const int x = h.X[q] ? 1 : 0;
+					const int z = h.Z[q] ? 1 : 0;
+					m += g(stabilizerGenerators[j].X[q] ? 1 : 0, stabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+
+					h.X[q] = XOR(h.X[q], stabilizerGenerators[j].X[q]);
+					h.Z[q] = XOR(h.Z[q], stabilizerGenerators[j].Z[q]);
+				}
+			}
+
+			inline void rowsum(Generator& h, size_t j)
 			{
 				long long int m = h.Sign ? 2 : 0;
 
 				if (j >= destabilizerGenerators.size())
-				{
-					j -= destabilizerGenerators.size();
-
-					m += stabilizerGenerators[j].Sign ? 2 : 0;
-
-					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-					{
-						const int x = h.X[q] ? 1 : 0;
-						const int z = h.Z[q] ? 1 : 0;
-						m += g(stabilizerGenerators[j].X[q] ? 1 : 0, stabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
-
-						h.X[q] = XOR(h.X[q], stabilizerGenerators[j].X[q]);
-						h.Z[q] = XOR(h.Z[q], stabilizerGenerators[j].Z[q]);
-					}
-				}
+					rowsumStabilizers(h, j - destabilizerGenerators.size(), m);
 				else
-				{
-					m += destabilizerGenerators[j].Sign ? 2 : 0;
-
-					for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
-					{
-						const int x = h.X[q] ? 1 : 0;
-						const int z = h.Z[q] ? 1 : 0;
-						m += g(destabilizerGenerators[j].X[q] ? 1 : 0, destabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
-
-						h.X[q] = XOR(h.X[q], destabilizerGenerators[j].X[q]);
-						h.Z[q] = XOR(h.Z[q], destabilizerGenerators[j].Z[q]);
-					}
-				}
+					rowsumDestabilizers(h, j, m);
 
 				m %= 4;
 				assert(m == 0 || m == 2);
