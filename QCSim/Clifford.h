@@ -16,9 +16,9 @@ namespace QC {
 
 			Generator(size_t nQubits) : X(nQubits, false), Z(nQubits, false) { }
 
-			Generator(const Generator& other) : X(other.X), Z(other.Z), Sign(other.Sign) { }
+			Generator(const Generator& other) : X(other.X), Z(other.Z), PhaseSign(other.PhaseSign) { }
 
-			Generator(Generator&& other) noexcept : X(std::move(other.X)), Z(std::move(other.Z)), Sign(other.Sign) { }
+			Generator(Generator&& other) noexcept : X(std::move(other.X)), Z(std::move(other.Z)), PhaseSign(other.PhaseSign) { }
 
 			Generator& operator=(const Generator& other)
 			{
@@ -26,7 +26,7 @@ namespace QC {
 				{
 					X = other.X;
 					Z = other.Z;
-					Sign = other.Sign;
+					PhaseSign = other.PhaseSign;
 				}
 
 				return *this;
@@ -38,7 +38,7 @@ namespace QC {
 				{
 					X.swap(other.X);
 					Z.swap(other.Z);
-					Sign = other.Sign;
+					PhaseSign = other.PhaseSign;
 				}
 
 				return *this;
@@ -54,12 +54,12 @@ namespace QC {
 			{
 				std::fill(X.begin(), X.end(), false);
 				std::fill(Z.begin(), Z.end(), false);
-				Sign = false;
+				PhaseSign = false;
 			}
 
 			std::vector<bool> X;
 			std::vector<bool> Z;
-			bool Sign = false;
+			bool PhaseSign = false;
 		};
 
 		class StabilizerSimulator {
@@ -261,8 +261,7 @@ namespace QC {
 
 			void ApplyCY(size_t target, size_t control)
 			{
-				ApplyZ(target);
-				ApplyS(target);
+				ApplySdg(target);
 				ApplyCX(target, control);
 				ApplyS(target);
 			}
@@ -303,6 +302,7 @@ namespace QC {
 					{
 						if (destabilizerGenerators[q].X[qubit]) 
 							rowsum(destabilizerGenerators[q], p);
+
 						if (stabilizerGenerators[q].X[qubit] && p != q) 
 							rowsum(stabilizerGenerators[q], destabilizerGenerators.size() + p);
 					}
@@ -311,20 +311,22 @@ namespace QC {
 					
 					stabilizerGenerators[p].Clear();
 					stabilizerGenerators[p].Z[qubit] = true;
-					stabilizerGenerators[p].Sign = rnd(gen);
+					stabilizerGenerators[p].PhaseSign = rnd(gen);
 
-					return stabilizerGenerators[p].Sign;
+					return stabilizerGenerators[p].PhaseSign;
 				}
 				
 				// case 2 - Z (on measured qubit) commutes with all generators
+				// no change to generators, just need to compute the sign in order to get the measurement result
 				Generator h(stabilizerGenerators.size());
+
 				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
 				{
 					if (destabilizerGenerators[q].X[qubit])
 						rowsum(h, destabilizerGenerators.size() + q);
 				}
 
-				return h.Sign;
+				return h.PhaseSign;
 			}
 
 		private:
@@ -344,14 +346,14 @@ namespace QC {
 				// an Y is transformed to a -Y, so a singn change is needed
 				
 				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
-					destabilizerGenerators[q].Sign = !destabilizerGenerators[q].Sign;
+					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 				
 				bool t = destabilizerGenerators[q].X[qubit];
 				destabilizerGenerators[q].X[qubit] = destabilizerGenerators[q].Z[qubit];
 				destabilizerGenerators[q].Z[qubit] = t;
 
 				if (stabilizerGenerators[q].X[qubit] && stabilizerGenerators[q].Z[qubit])
-					stabilizerGenerators[q].Sign = !stabilizerGenerators[q].Sign;
+					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
 
 				t = stabilizerGenerators[q].X[qubit];
 				stabilizerGenerators[q].X[qubit] = stabilizerGenerators[q].Z[qubit];
@@ -361,12 +363,12 @@ namespace QC {
 			inline void ApplyS(size_t qubit, size_t q)
 			{
 				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
-					destabilizerGenerators[q].Sign = !destabilizerGenerators[q].Sign;
+					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 
 				destabilizerGenerators[q].Z[qubit] = XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]);
 
 				if (stabilizerGenerators[q].X[qubit] && stabilizerGenerators[q].Z[qubit])
-					stabilizerGenerators[q].Sign = !stabilizerGenerators[q].Sign;
+					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
 				
 				stabilizerGenerators[q].Z[qubit] = XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]);
 			}
@@ -374,37 +376,37 @@ namespace QC {
 			inline void ApplyX(size_t qubit, size_t q)
 			{
 				if (destabilizerGenerators[q].Z[qubit])
-					destabilizerGenerators[q].Sign = !destabilizerGenerators[q].Sign;
+					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 
 				if (stabilizerGenerators[q].Z[qubit])
-					stabilizerGenerators[q].Sign = !stabilizerGenerators[q].Sign;
+					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
 			}
 
 			inline void ApplyY(size_t qubit, size_t q)
 			{
 				// can be done with ifs, can be done with XORs
-				destabilizerGenerators[q].Sign = XOR(destabilizerGenerators[q].Sign, XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]));
-				stabilizerGenerators[q].Sign = XOR(stabilizerGenerators[q].Sign, XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]));
+				destabilizerGenerators[q].PhaseSign = XOR(destabilizerGenerators[q].PhaseSign, XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]));
+				stabilizerGenerators[q].PhaseSign = XOR(stabilizerGenerators[q].PhaseSign, XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]));
 			}
 
 			inline void ApplyZ(size_t qubit, size_t q)
 			{
 				if (destabilizerGenerators[q].X[qubit])
-					destabilizerGenerators[q].Sign = !destabilizerGenerators[q].Sign;
+					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 
 				if (stabilizerGenerators[q].X[qubit])
-					stabilizerGenerators[q].Sign = !stabilizerGenerators[q].Sign;
+					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
 			}
 
 			inline void ApplyCX(size_t target, size_t control, size_t q)
 			{
-				destabilizerGenerators[q].Sign = XOR(destabilizerGenerators[q].Sign, destabilizerGenerators[q].X[control] && destabilizerGenerators[q].Z[target] &&
+				destabilizerGenerators[q].PhaseSign = XOR(destabilizerGenerators[q].PhaseSign, destabilizerGenerators[q].X[control] && destabilizerGenerators[q].Z[target] &&
 					XOR(destabilizerGenerators[q].X[target], XOR(destabilizerGenerators[q].Z[control], true)));
 
 				destabilizerGenerators[q].X[target] = XOR(destabilizerGenerators[q].X[target], destabilizerGenerators[q].X[control]);
 				destabilizerGenerators[q].Z[control] = XOR(destabilizerGenerators[q].Z[control], destabilizerGenerators[q].Z[target]);
 
-				stabilizerGenerators[q].Sign = XOR(stabilizerGenerators[q].Sign, stabilizerGenerators[q].X[control] && stabilizerGenerators[q].Z[target] &&
+				stabilizerGenerators[q].PhaseSign = XOR(stabilizerGenerators[q].PhaseSign, stabilizerGenerators[q].X[control] && stabilizerGenerators[q].Z[target] &&
 					XOR(stabilizerGenerators[q].X[target], XOR(stabilizerGenerators[q].Z[control], true)));
 
 				stabilizerGenerators[q].X[target] = XOR(stabilizerGenerators[q].X[target], stabilizerGenerators[q].X[control]);
@@ -426,7 +428,7 @@ namespace QC {
 
 			inline void rowsumDestabilizers(Generator& h, size_t j, long long int& m)
 			{
-				m += destabilizerGenerators[j].Sign ? 2 : 0;
+				m += destabilizerGenerators[j].PhaseSign ? 2 : 0;
 
 				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
 				{
@@ -441,7 +443,7 @@ namespace QC {
 
 			inline void rowsumStabilizers(Generator& h, size_t j, long long int& m)
 			{
-				m += stabilizerGenerators[j].Sign ? 2 : 0;
+				m += stabilizerGenerators[j].PhaseSign ? 2 : 0;
 
 				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 				{
@@ -456,7 +458,7 @@ namespace QC {
 
 			inline void rowsum(Generator& h, size_t j)
 			{
-				long long int m = h.Sign ? 2 : 0;
+				long long int m = h.PhaseSign ? 2 : 0;
 
 				if (j >= destabilizerGenerators.size())
 					rowsumStabilizers(h, j - destabilizerGenerators.size(), m);
@@ -466,7 +468,7 @@ namespace QC {
 				m %= 4;
 				assert(m == 0 || m == 2);
 
-				h.Sign = m != 0;
+				h.PhaseSign = m != 0;
 			}
 
 			std::vector<Generator> destabilizerGenerators;
