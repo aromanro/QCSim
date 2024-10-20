@@ -161,12 +161,12 @@ bool CliffordSimulatorTests()
 {
 	const size_t nrTests = 100;
 	const size_t nrShots = 50000;
-	const size_t nrGates = 200;
 	const size_t nrQubits = 4;
 	const double errorThreshold = 0.02;
 
 	std::uniform_int_distribution gateDistr(0, 11);
 	std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
+	std::uniform_int_distribution nrGatesDistr(5, 20);
 
 	std::cout << "\nClifford gates simulator" << std::endl;
 
@@ -176,6 +176,7 @@ bool CliffordSimulatorTests()
 		std::unordered_map<size_t, int> results2;
 
 		// generate random gates, creating a circuit, then apply the random circuits on both simulators
+		const size_t nrGates = nrGatesDistr(gen);
 		std::vector<int> gates(nrGates);
 		std::vector<size_t> qubits1(nrGates);
 		std::vector<size_t> qubits2(nrGates);
