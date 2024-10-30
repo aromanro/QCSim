@@ -160,9 +160,9 @@ void ExecuteCircuit(size_t nrShots, size_t nrQubits, const std::vector<int>& gat
 bool CliffordSimulatorTests()
 {
 	const size_t nrTests = 100;
-	const size_t nrShots = 50000;
+	const size_t nrShots = 100000;
 	const size_t nrQubits = 4;
-	const double errorThreshold = 0.02;
+	const double errorThreshold = 0.01;
 
 	std::uniform_int_distribution gateDistr(0, 11);
 	std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
