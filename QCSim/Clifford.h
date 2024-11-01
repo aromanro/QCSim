@@ -66,7 +66,7 @@ namespace QC {
 		public:
 			StabilizerSimulator() = delete;
 
-			StabilizerSimulator(size_t nQubits)
+			explicit StabilizerSimulator(size_t nQubits)
 				: destabilizerGenerators(nQubits), stabilizerGenerators(nQubits), gen(std::random_device{}()), rnd(0.5)
 			{
 				// this puts it in the |0> state
@@ -282,7 +282,6 @@ namespace QC {
 
 			bool MeasureQubit(size_t qubit)
 			{
-				// TODO: parellelize this
 				bool case1 = false;
 				size_t p = 0;
 				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
@@ -298,13 +297,15 @@ namespace QC {
 
 				if (case1)
 				{
+					const size_t nPlusp = destabilizerGenerators.size() + p;
+
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
 						if (destabilizerGenerators[q].X[qubit]) 
 							rowsum(destabilizerGenerators[q], p);
 
-						if (stabilizerGenerators[q].X[qubit] && p != q) 
-							rowsum(stabilizerGenerators[q], destabilizerGenerators.size() + p);
+						if (p != q && stabilizerGenerators[q].X[qubit])
+							rowsum(stabilizerGenerators[q], nPlusp);
 					}
 
 					destabilizerGenerators[p] = stabilizerGenerators[p];
