@@ -430,14 +430,36 @@ namespace QC {
 			{
 				m += destabilizerGenerators[j].PhaseSign ? 2 : 0;
 
-				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
+				if (destabilizerGenerators.size() < 1024)
 				{
-					const int x = h.X[q] ? 1 : 0;
-					const int z = h.Z[q] ? 1 : 0;
-					m += g(destabilizerGenerators[j].X[q] ? 1 : 0, destabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+					for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
+					{
+						const int x = h.X[q] ? 1 : 0;
+						const int z = h.Z[q] ? 1 : 0;
+						m += g(destabilizerGenerators[j].X[q] ? 1 : 0, destabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
 
-					h.X[q] = XOR(h.X[q], destabilizerGenerators[j].X[q]);
-					h.Z[q] = XOR(h.Z[q], destabilizerGenerators[j].Z[q]);
+						h.X[q] = XOR(h.X[q], destabilizerGenerators[j].X[q]);
+						h.Z[q] = XOR(h.Z[q], destabilizerGenerators[j].Z[q]);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+				
+					long long int mloc = 0;
+
+#pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
+					for (long long int  q = 0; q < destabilizerGenerators.size(); ++q)
+					{
+						const int x = h.X[q] ? 1 : 0;
+						const int z = h.Z[q] ? 1 : 0;
+						mloc += g(destabilizerGenerators[j].X[q] ? 1 : 0, destabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+
+						h.X[q] = XOR(h.X[q], destabilizerGenerators[j].X[q]);
+						h.Z[q] = XOR(h.Z[q], destabilizerGenerators[j].Z[q]);
+					}
+
+					m += mloc;
 				}
 			}
 
@@ -445,14 +467,36 @@ namespace QC {
 			{
 				m += stabilizerGenerators[j].PhaseSign ? 2 : 0;
 
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				if (stabilizerGenerators.size() < 1024)
 				{
-					const int x = h.X[q] ? 1 : 0;
-					const int z = h.Z[q] ? 1 : 0;
-					m += g(stabilizerGenerators[j].X[q] ? 1 : 0, stabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						const int x = h.X[q] ? 1 : 0;
+						const int z = h.Z[q] ? 1 : 0;
+						m += g(stabilizerGenerators[j].X[q] ? 1 : 0, stabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
 
-					h.X[q] = XOR(h.X[q], stabilizerGenerators[j].X[q]);
-					h.Z[q] = XOR(h.Z[q], stabilizerGenerators[j].Z[q]);
+						h.X[q] = XOR(h.X[q], stabilizerGenerators[j].X[q]);
+						h.Z[q] = XOR(h.Z[q], stabilizerGenerators[j].Z[q]);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+					long long int mloc = 0;
+
+#pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
+					for (long long int q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						const int x = h.X[q] ? 1 : 0;
+						const int z = h.Z[q] ? 1 : 0;
+						mloc += g(stabilizerGenerators[j].X[q] ? 1 : 0, stabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+
+						h.X[q] = XOR(h.X[q], stabilizerGenerators[j].X[q]);
+						h.Z[q] = XOR(h.Z[q], stabilizerGenerators[j].Z[q]);
+					}
+
+					m += mloc;
 				}
 			}
 
