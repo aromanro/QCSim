@@ -280,6 +280,16 @@ namespace QC {
 				ApplyCX(qubit1, qubit2);
 			}
 
+			void ApplyISwap(size_t qubit1, size_t qubit2)
+			{
+				ApplyS(qubit1);
+				ApplyS(qubit2);
+				ApplyH(qubit1);
+				ApplyCX(qubit2, qubit1);
+				ApplyCX(qubit1, qubit2);
+				ApplyH(qubit2);
+			}
+
 			bool MeasureQubit(size_t qubit)
 			{
 				bool case1 = false;

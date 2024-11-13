@@ -35,6 +35,8 @@ std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code)
 		return std::make_shared<QC::Gates::ControlledZGate<>>();
 	case 11:
 		return std::make_shared<QC::Gates::SwapGate<>>();
+	case 12:
+		return std::make_shared<QC::Gates::iSwapGate<>>();
 	}
 
 	return nullptr;
@@ -80,6 +82,9 @@ void ApplyGate(QC::Clifford::StabilizerSimulator& simulator, int code, int qubit
 		break;
 	case 11:
 		simulator.ApplySwap(qubit1, qubit2);
+		break;
+	case 12:
+		simulator.ApplyISwap(qubit1, qubit2);
 		break;
 	}
 }
@@ -164,7 +169,7 @@ bool CliffordSimulatorTests()
 	const size_t nrQubits = 4;
 	const double errorThreshold = 0.01;
 
-	std::uniform_int_distribution gateDistr(0, 11);
+	std::uniform_int_distribution gateDistr(0, 12);
 	std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
 
