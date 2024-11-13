@@ -340,6 +340,24 @@ namespace QC {
 				return h.PhaseSign;
 			}
 
+			void SaveState()
+			{
+				savedDestabilizerGenerators = destabilizerGenerators;
+				savedStabilizerGenerators = stabilizerGenerators;
+			}
+
+			void RestoreSavedState()
+			{
+				destabilizerGenerators.swap(savedDestabilizerGenerators);
+				stabilizerGenerators.swap(savedStabilizerGenerators);
+			}
+
+			void ClearSavedState()
+			{
+				savedDestabilizerGenerators.clear();
+				savedStabilizerGenerators.clear();
+			}
+
 		private:
 			inline static bool XOR(bool a, bool b) 
 			{ 
@@ -528,6 +546,9 @@ namespace QC {
 
 			std::vector<Generator> destabilizerGenerators;
 			std::vector<Generator> stabilizerGenerators;
+
+			std::vector<Generator> savedDestabilizerGenerators;
+			std::vector<Generator> savedStabilizerGenerators;
 
 			std::default_random_engine gen;
 			std::bernoulli_distribution rnd;
