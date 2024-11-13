@@ -28,14 +28,16 @@ std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code)
 	case 7:
 		return std::make_shared<QC::Gates::SquareRootNOTDagGate<>>();
 	case 8:
-		return std::make_shared<QC::Gates::CNOTGate<>>();
+		return std::make_shared<QC::Gates::HyGate<>>();
 	case 9:
-		return std::make_shared<QC::Gates::ControlledYGate<>>();
+		return std::make_shared<QC::Gates::CNOTGate<>>();
 	case 10:
-		return std::make_shared<QC::Gates::ControlledZGate<>>();
+		return std::make_shared<QC::Gates::ControlledYGate<>>();
 	case 11:
-		return std::make_shared<QC::Gates::SwapGate<>>();
+		return std::make_shared<QC::Gates::ControlledZGate<>>();
 	case 12:
+		return std::make_shared<QC::Gates::SwapGate<>>();
+	case 13:
 		return std::make_shared<QC::Gates::iSwapGate<>>();
 	}
 
@@ -72,18 +74,21 @@ void ApplyGate(QC::Clifford::StabilizerSimulator& simulator, int code, int qubit
 		simulator.ApplySxDag(qubit1);
 		break;
 	case 8:
-		simulator.ApplyCX(qubit1, qubit2);
+		simulator.ApplyK(qubit1);
 		break;
 	case 9:
-		simulator.ApplyCY(qubit1, qubit2);
+		simulator.ApplyCX(qubit1, qubit2);
 		break;
 	case 10:
-		simulator.ApplyCZ(qubit1, qubit2);
+		simulator.ApplyCY(qubit1, qubit2);
 		break;
 	case 11:
-		simulator.ApplySwap(qubit1, qubit2);
+		simulator.ApplyCZ(qubit1, qubit2);
 		break;
 	case 12:
+		simulator.ApplySwap(qubit1, qubit2);
+		break;
+	case 13:
 		simulator.ApplyISwap(qubit1, qubit2);
 		break;
 	}
@@ -169,7 +174,7 @@ bool CliffordSimulatorTests()
 	const size_t nrQubits = 4;
 	const double errorThreshold = 0.01;
 
-	std::uniform_int_distribution gateDistr(0, 12);
+	std::uniform_int_distribution gateDistr(0, 13);
 	std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
 

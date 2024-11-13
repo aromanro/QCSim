@@ -97,6 +97,33 @@ namespace QC {
 				}
 			}
 
+			void ApplyK(size_t qubit)
+			{
+				if (stabilizerGenerators.size() < 2048)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+						ApplyH(qubit, q);
+						ApplyS(qubit, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyZ(qubit, q);
+						ApplyS(qubit, q);
+						ApplyH(qubit, q);
+						ApplyS(qubit, q);
+					}
+				}
+			}
+
 			void ApplyS(size_t qubit)
 			{
 				if (stabilizerGenerators.size() < 2048)
