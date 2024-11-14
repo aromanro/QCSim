@@ -172,7 +172,9 @@ bool CliffordSimulatorTests()
 	const size_t nrTests = 100;
 	const size_t nrShots = 100000;
 	const size_t nrQubits = 4;
+	const size_t nrStates = 1ULL << nrQubits;
 	const double errorThreshold = 0.01;
+	const double probThreshold = 1E-10;
 
 	std::uniform_int_distribution gateDistr(0, 13);
 	std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
@@ -192,6 +194,44 @@ bool CliffordSimulatorTests()
 		std::vector<size_t> qubits2(nrGates);
 
 		ConstructCircuit(nrQubits, gates, qubits1, qubits2, gateDistr, qubitDistr);
+		
+		QC::QubitRegister qubitRegister(nrQubits);
+		QC::Clifford::StabilizerSimulator cliffordSim(nrQubits);
+
+		for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+		{
+			ApplyGate(cliffordSim, gates[j], qubits1[j], qubits2[j]);
+			const auto gateptr = GetGate(gates[j]);
+			qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
+		}
+
+		for (size_t q = 0; q < nrQubits; ++q)
+		{
+			const double prob1 = cliffordSim.GetQubitProbability(q);
+			const double prob2 = qubitRegister.GetQubitProbability(q);
+
+			if (std::abs(prob1 - prob2) > probThreshold)
+			{
+				std::cout << "\nFailed qubits probabilities" << std::endl;
+				std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << std::endl;
+				return false;
+			}
+		}
+
+		// another way of testing is now available
+		for (size_t state = 0; state < nrStates; ++state)
+		{
+			const double prob1 = cliffordSim.getBasisStateProbability(state);
+			const double prob2 = qubitRegister.getBasisStateProbability(state);
+
+			if (std::abs(prob1 - prob2) > probThreshold)
+			{
+				std::cout << "\nFailed states probabilities" << std::endl;
+				std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << ", State: " << state << std::endl;
+				return false;
+			}
+		}
+		
 
 		ExecuteCircuit(nrShots, nrQubits, gates, qubits1, qubits2, results1, results2);
 

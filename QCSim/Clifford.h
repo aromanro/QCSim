@@ -12,7 +12,7 @@ namespace QC {
 
 		class Generator {
 		public:
-			Generator() {}
+			Generator() { }
 
 			Generator(size_t nQubits) : X(nQubits, false), Z(nQubits, false) { }
 
@@ -99,7 +99,7 @@ namespace QC {
 
 			void ApplyK(size_t qubit)
 			{
-				if (stabilizerGenerators.size() < 2048)
+				if (stabilizerGenerators.size() < 1024)
 				{
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
@@ -113,7 +113,7 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
 					{
 						ApplyZ(qubit, q);
@@ -288,84 +288,305 @@ namespace QC {
 
 			void ApplyCY(size_t target, size_t control)
 			{
-				ApplySdg(target);
-				ApplyCX(target, control);
-				ApplyS(target);
+				if (stabilizerGenerators.size() < 1024)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyZ(target, q);
+						ApplyS(target, q);
+						ApplyCX(target, control, q);
+						ApplyS(target, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyZ(target, q);
+						ApplyS(target, q);
+						ApplyCX(target, control, q);
+						ApplyS(target, q);
+					}
+				}
 			}
 
 			void ApplyCZ(size_t target, size_t control)
 			{
-				ApplyH(target);
-				ApplyCX(target, control);
-				ApplyH(target);
+				if (stabilizerGenerators.size() < 1024)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyH(target, q);
+						ApplyCX(target, control, q);
+						ApplyH(target, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyH(target, q);
+						ApplyCX(target, control, q);
+						ApplyH(target, q);
+					}
+				}
 			}
 
 			void ApplySwap(size_t qubit1, size_t qubit2)
 			{
-				ApplyCX(qubit1, qubit2);
-				ApplyCX(qubit2, qubit1);
-				ApplyCX(qubit1, qubit2);
+				if (stabilizerGenerators.size() < 1024)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyCX(qubit1, qubit2, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyCX(qubit1, qubit2, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyCX(qubit1, qubit2, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyCX(qubit1, qubit2, q);
+					}
+				}
 			}
 
 			void ApplyISwap(size_t qubit1, size_t qubit2)
 			{
-				ApplyS(qubit1);
-				ApplyS(qubit2);
-				ApplyH(qubit1);
-				ApplyCX(qubit2, qubit1);
-				ApplyCX(qubit1, qubit2);
-				ApplyH(qubit2);
+				if (stabilizerGenerators.size() < 512)
+				{
+					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					{
+						ApplyS(qubit1, q);
+						ApplyS(qubit2, q);
+						ApplyH(qubit1, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyCX(qubit1, qubit2, q);
+						ApplyH(qubit2, q);
+					}
+				}
+				else
+				{
+					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for num_threads(processor_count) schedule(static, 128)
+					for (long long int q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
+					{
+						ApplyS(qubit1, q);
+						ApplyS(qubit2, q);
+						ApplyH(qubit1, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyCX(qubit1, qubit2, q);
+						ApplyH(qubit2, q);
+					}
+				}
 			}
 
 			bool MeasureQubit(size_t qubit)
 			{
-				bool case1 = false;
-				size_t p = 0;
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				size_t p;
+				if (IsRandomResult(qubit, p))
 				{
-					// Z anticommutes with X
-					if (stabilizerGenerators[q].X[qubit])
-					{
-						p = q;
-						case1 = true;
-						break;
-					}
-				}
-
-				if (case1)
-				{
-					const size_t nPlusp = destabilizerGenerators.size() + p;
-
+					const size_t nPlusP = destabilizerGenerators.size() + p;
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
-						if (destabilizerGenerators[q].X[qubit]) 
-							rowsum(destabilizerGenerators[q], p);
+						if (destabilizerGenerators[q].X[qubit])
+							rowsum(destabilizerGenerators[q], stabilizerGenerators[p], true);
 
 						if (p != q && stabilizerGenerators[q].X[qubit])
-							rowsum(stabilizerGenerators[q], nPlusp);
+							rowsum(stabilizerGenerators[q], stabilizerGenerators[p]);
 					}
 
 					destabilizerGenerators[p] = stabilizerGenerators[p];
-					
+
 					stabilizerGenerators[p].Clear();
 					stabilizerGenerators[p].Z[qubit] = true;
 					stabilizerGenerators[p].PhaseSign = rnd(gen);
 
 					return stabilizerGenerators[p].PhaseSign;
 				}
-				
+
 				// case 2 - Z (on measured qubit) commutes with all generators
 				// no change to generators, just need to compute the sign in order to get the measurement result
-				Generator h(stabilizerGenerators.size());
+				return GetTheDeterministicOutcome(qubit);
+			}
 
-				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
+			double GetQubitProbability(size_t qubit)
+			{
+				size_t p;
+				if (IsRandomResult(qubit, p))
+					return 0.5;
+
+				return GetTheDeterministicOutcome(qubit) ? 1. : 0.;
+			}
+
+			double getBasisStateProbability(size_t State)
+			{
+				std::vector<bool> state(getNrQubits());
+
+				for (size_t i = 0; i < state.size(); ++i)
 				{
-					if (destabilizerGenerators[q].X[qubit])
-						rowsum(h, destabilizerGenerators.size() + q);
+					state[i] = (State & 1) == 1;
+					State >>= 1;
 				}
 
-				return h.PhaseSign;
+				return getBasisStateProbability(state);
 			}
+
+			double getBasisStateProbability(const std::vector<bool>& state)
+			{
+				const size_t nrQubits = getNrQubits();
+				size_t p;
+
+				std::vector<bool> handledQubits(nrQubits, false);
+
+				bool hasRandomResult = false;
+				size_t firstRandomQubit = 0;
+				size_t firstP = 0;
+
+				// first deal with the deterministic qubits, it might turn out that the probability is 0
+				// in that case, we can return immediately
+				size_t nrRandom = 0;
+				for (size_t qubit = 0; qubit < nrQubits; ++qubit)
+				{
+					if (IsRandomResult(qubit, p))
+					{
+						++nrRandom;
+						if (!hasRandomResult)
+						{
+							hasRandomResult = true;
+							firstRandomQubit = qubit;
+							firstP = p;
+						}
+					}
+					else 
+					{
+						const bool expectedQubitOutcome = state[qubit];
+						if (GetTheDeterministicOutcome(qubit) != expectedQubitOutcome)
+							return 0;
+
+						handledQubits[qubit] = true;
+					}
+				}
+				
+				// if there is no random result and we reached here, the probability will stay 1
+				double prob = 1.0;
+
+				if (hasRandomResult)
+				{
+					// we're going to modify the generators, so let's save the current state, to be restored at the end
+					auto saveDest = destabilizerGenerators;
+					auto saveStab = stabilizerGenerators;
+
+					do {
+						prob *= 0.5; // a random qubit has the 0.5 probability
+
+						//std::cout << "Dealing with the random qubit: " << firstRandomQubit << std::endl;
+
+						for (size_t q = 0; q < nrQubits; ++q)
+						{
+							if (destabilizerGenerators[q].X[firstRandomQubit])
+								rowsum(destabilizerGenerators[q], stabilizerGenerators[firstP], true);
+
+							if (firstP != q && stabilizerGenerators[q].X[firstRandomQubit])
+								rowsum(stabilizerGenerators[q], stabilizerGenerators[firstP]);
+						}
+
+						destabilizerGenerators[firstP] = stabilizerGenerators[firstP];
+
+						stabilizerGenerators[firstP].Clear();
+						stabilizerGenerators[firstP].Z[firstRandomQubit] = true;
+
+						// set the measured outcome to the expected value for this state
+						const bool expectedQubitOutcome = state[firstRandomQubit];
+						stabilizerGenerators[firstP].PhaseSign = expectedQubitOutcome;
+
+						handledQubits[firstRandomQubit] = true; // not really needed, we won't look back
+						hasRandomResult = false;
+
+						// this measurement might have been turned some not measured yet qubits to deterministic, so let's check them
+						// this also checks if we still have some non deterministic qubits left
+						
+						nrRandom = 0;
+
+						for (size_t qubit = firstRandomQubit + 1; qubit < nrQubits; ++qubit)
+						{
+							if (!handledQubits[qubit])
+							{
+								//std::cout << "Found non-handled qubit: " << qubit << std::endl;
+								if (IsRandomResult(qubit, p))
+								{
+									//std::cout << "It's random!" << std::endl;
+									// there is still at least one more random qubit
+									if (!hasRandomResult)
+									{
+										hasRandomResult = true;
+										firstRandomQubit = qubit;
+										firstP = p;
+									}
+									++nrRandom;
+								}
+								else 
+								{
+									//std::cout << "It's deterministic, with expected outcome " << state[qubit] << std::endl;
+
+									if (GetTheDeterministicOutcome(qubit) != state[qubit])
+									{
+										// restore the state before returning
+										destabilizerGenerators.swap(saveDest);
+										stabilizerGenerators.swap(saveStab);
+
+										//std::cout << "Deterministic qubit measurement has zero probability in stage two" << std::endl;
+
+										return 0;
+									}
+
+									//std::cout << "Got expected outcome" << std::endl;
+
+									handledQubits[qubit] = true;
+								}
+							}
+						}
+
+						//std::cout << "Now it has " << nrRandom << " random qubits" << std::endl;
+					} while (hasRandomResult);
+
+					// we're done, restore the state
+					destabilizerGenerators.swap(saveDest);
+					stabilizerGenerators.swap(saveStab);
+				}
+				//else std::cout << "No random qubits" << std::endl;
+				
+				return prob;
+			}
+
+			std::vector<double> AllProbabilities()
+			{
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits > 32) throw std::runtime_error("The simulator has too many qubits for computing all probabilities");
+
+				const size_t nrStates = 1ULL << nrQubits;
+				std::vector<double> probs(nrStates, 0);
+
+				for (size_t state = 0; state < nrStates; ++state)
+					probs[state] = getBasisStateProbability(state);
+
+				return probs;
+			}
+
+			size_t getNrQubits() const { return stabilizerGenerators.size(); }
 
 			void SaveState()
 			{
@@ -386,6 +607,32 @@ namespace QC {
 			}
 
 		private:
+			inline bool IsRandomResult(size_t qubit, size_t& p) const
+			{
+				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					if (stabilizerGenerators[q].X[qubit])
+					{
+						// Z anticommutes with X
+						p = q;
+						return true;
+					}
+
+				return false;
+			}
+
+			// call it only in the case 2, Z (on measured qubit) commutes with all generators
+			inline bool GetTheDeterministicOutcome(size_t qubit)
+			{
+				// no change to generators, just need to compute the sign in order to get the measurement result
+				Generator h(destabilizerGenerators.size());
+
+				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
+					if (destabilizerGenerators[q].X[qubit])
+						rowsum(h, stabilizerGenerators[q], true);
+
+				return h.PhaseSign;
+			}
+
 			inline static bool XOR(bool a, bool b) 
 			{ 
 				//return ((a ? 1 : 0) ^ (b ? 1 : 0)) == 1;
@@ -396,14 +643,15 @@ namespace QC {
 			{
 				// how does this work?
 				// looking at it might not reveal immediately what it does
-				// the swaps below just switches the X with Z, because HZH^t = X and HXH^t = Z
+				// the swaps below just switch the X with Z, because HZH^t = X and HXH^t = Z
 
 				// if we have both X and Z, then it's an Y (with some global phase, given by the sign, Y = iXZ)
-				// an Y is transformed to a -Y, so a singn change is needed
+				// an Y is transformed to a -Y, so a sign change is needed
 				
 				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
 					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 				
+				// swap X and Z
 				bool t = destabilizerGenerators[q].X[qubit];
 				destabilizerGenerators[q].X[qubit] = destabilizerGenerators[q].Z[qubit];
 				destabilizerGenerators[q].Z[qubit] = t;
@@ -411,6 +659,7 @@ namespace QC {
 				if (stabilizerGenerators[q].X[qubit] && stabilizerGenerators[q].Z[qubit])
 					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
 
+				// swap X and Z
 				t = stabilizerGenerators[q].X[qubit];
 				stabilizerGenerators[q].X[qubit] = stabilizerGenerators[q].Z[qubit];
 				stabilizerGenerators[q].Z[qubit] = t;
@@ -482,20 +731,23 @@ namespace QC {
 				return x2 * (1 - 2 * z2);
 			}
 
-			inline void rowsumDestabilizers(Generator& h, size_t j, long long int& m)
+			inline void rowsumDestabilizers(Generator& h, Generator& j, long long int& m)
 			{
-				m += destabilizerGenerators[j].PhaseSign ? 2 : 0;
+				m += j.PhaseSign ? 2 : 0;
 
 				if (destabilizerGenerators.size() < 1024)
 				{
 					for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
 					{
-						const int x = h.X[q] ? 1 : 0;
-						const int z = h.Z[q] ? 1 : 0;
-						m += g(destabilizerGenerators[j].X[q] ? 1 : 0, destabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+						const int x1 = j.X[q] ? 1 : 0;
+						const int z1 = j.Z[q] ? 1 : 0;
 
-						h.X[q] = XOR(h.X[q], destabilizerGenerators[j].X[q]);
-						h.Z[q] = XOR(h.Z[q], destabilizerGenerators[j].Z[q]);
+						const int x2 = h.X[q] ? 1 : 0;
+						const int z2 = h.Z[q] ? 1 : 0;
+						m += g(x1, z1, x2, z2);
+
+						h.X[q] = XOR(h.X[q], j.X[q]);
+						h.Z[q] = XOR(h.Z[q], j.Z[q]);
 					}
 				}
 				else
@@ -505,34 +757,40 @@ namespace QC {
 					long long int mloc = 0;
 
 #pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
-					for (long long int  q = 0; q < destabilizerGenerators.size(); ++q)
+					for (long long int q = 0; q < destabilizerGenerators.size(); ++q)
 					{
-						const int x = h.X[q] ? 1 : 0;
-						const int z = h.Z[q] ? 1 : 0;
-						mloc += g(destabilizerGenerators[j].X[q] ? 1 : 0, destabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+						const int x1 = j.X[q] ? 1 : 0;
+						const int z1 = j.Z[q] ? 1 : 0;
 
-						h.X[q] = XOR(h.X[q], destabilizerGenerators[j].X[q]);
-						h.Z[q] = XOR(h.Z[q], destabilizerGenerators[j].Z[q]);
+						const int x2 = h.X[q] ? 1 : 0;
+						const int z2 = h.Z[q] ? 1 : 0;
+						mloc += g(x1, z1, x2, z2);
+
+						h.X[q] = XOR(h.X[q], j.X[q]);
+						h.Z[q] = XOR(h.Z[q], j.Z[q]);
 					}
 
 					m += mloc;
 				}
 			}
 
-			inline void rowsumStabilizers(Generator& h, size_t j, long long int& m)
+			inline void rowsumStabilizers(Generator& h, Generator& j, long long int& m)
 			{
-				m += stabilizerGenerators[j].PhaseSign ? 2 : 0;
+				m += j.PhaseSign ? 2 : 0;
 
 				if (stabilizerGenerators.size() < 1024)
 				{
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
-						const int x = h.X[q] ? 1 : 0;
-						const int z = h.Z[q] ? 1 : 0;
-						m += g(stabilizerGenerators[j].X[q] ? 1 : 0, stabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
+						const int x1 = j.X[q] ? 1 : 0;
+						const int z1 = j.Z[q] ? 1 : 0;
 
-						h.X[q] = XOR(h.X[q], stabilizerGenerators[j].X[q]);
-						h.Z[q] = XOR(h.Z[q], stabilizerGenerators[j].Z[q]);
+						const int x2 = h.X[q] ? 1 : 0;
+						const int z2 = h.Z[q] ? 1 : 0;
+						m += g(x1, z1, x2, z2);
+
+						h.X[q] = XOR(h.X[q], j.X[q]);
+						h.Z[q] = XOR(h.Z[q], j.Z[q]);
 					}
 				}
 				else
@@ -544,30 +802,33 @@ namespace QC {
 #pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < stabilizerGenerators.size(); ++q)
 					{
-						const int x = h.X[q] ? 1 : 0;
-						const int z = h.Z[q] ? 1 : 0;
-						mloc += g(stabilizerGenerators[j].X[q] ? 1 : 0, stabilizerGenerators[j].Z[q] ? 1 : 0, x, z);
-
-						h.X[q] = XOR(h.X[q], stabilizerGenerators[j].X[q]);
-						h.Z[q] = XOR(h.Z[q], stabilizerGenerators[j].Z[q]);
+						const int x1 = j.X[q] ? 1 : 0;
+						const int z1 = j.Z[q] ? 1 : 0;
+						
+						const int x2 = h.X[q] ? 1 : 0;
+						const int z2 = h.Z[q] ? 1 : 0;
+						mloc += g(x1, z1, x2, z2);
+						
+						h.X[q] = XOR(h.X[q], j.X[q]);
+						h.Z[q] = XOR(h.Z[q], j.Z[q]);
 					}
 
 					m += mloc;
 				}
 			}
 
-			inline void rowsum(Generator& h, size_t j)
+			inline void rowsum(Generator& h, Generator& j, bool destabilizers = false)
 			{
 				long long int m = h.PhaseSign ? 2 : 0;
 
-				if (j >= destabilizerGenerators.size())
-					rowsumStabilizers(h, j - destabilizerGenerators.size(), m);
-				else
+				if (destabilizers)
 					rowsumDestabilizers(h, j, m);
+				else
+					rowsumStabilizers(h, j, m);
 
 				m %= 4;
-				assert(m == 0 || m == 2);
-
+				assert(m == 0 || m == 2 || m == -2);
+				
 				h.PhaseSign = m != 0;
 			}
 
