@@ -1,66 +1,13 @@
 #pragma once
 
-#include <vector>
-#include <algorithm>
 #include <random>
 #include <cassert>
 
 #include "QubitRegisterCalculator.h"
+#include "Generator.h"
 
 namespace QC {
 	namespace Clifford {
-
-		class Generator {
-		public:
-			Generator() { }
-
-			Generator(size_t nQubits) : X(nQubits, false), Z(nQubits, false) { }
-
-			Generator(const Generator& other) : X(other.X), Z(other.Z), PhaseSign(other.PhaseSign) { }
-
-			Generator(Generator&& other) noexcept : X(std::move(other.X)), Z(std::move(other.Z)), PhaseSign(other.PhaseSign) { }
-
-			Generator& operator=(const Generator& other)
-			{
-				if (this != &other)
-				{
-					X = other.X;
-					Z = other.Z;
-					PhaseSign = other.PhaseSign;
-				}
-
-				return *this;
-			}
-
-			Generator& operator=(Generator&& other) noexcept
-			{
-				if (this != &other)
-				{
-					X.swap(other.X);
-					Z.swap(other.Z);
-					PhaseSign = other.PhaseSign;
-				}
-
-				return *this;
-			}
-
-			void Resize(size_t nQubits) 
-			{
-				X.resize(nQubits, false);
-				Z.resize(nQubits, false);
-			}
-
-			void Clear()
-			{
-				std::fill(X.begin(), X.end(), false);
-				std::fill(Z.begin(), Z.end(), false);
-				PhaseSign = false;
-			}
-
-			std::vector<bool> X;
-			std::vector<bool> Z;
-			bool PhaseSign = false;
-		};
 
 		class StabilizerSimulator {
 		public:
@@ -406,7 +353,7 @@ namespace QC {
 							rowsum(destabilizerGenerators[q], stabilizerGenerators[p], true);
 
 						if (p != q && stabilizerGenerators[q].X[qubit])
-							rowsum(stabilizerGenerators[q], stabilizerGenerators[p]);
+							rowsum(stabilizerGenerators[q], stabilizerGenerators[p], false);
 					}
 
 					destabilizerGenerators[p] = stabilizerGenerators[p];
@@ -501,7 +448,7 @@ namespace QC {
 								rowsum(destabilizerGenerators[q], stabilizerGenerators[firstP], true);
 
 							if (firstP != q && stabilizerGenerators[q].X[firstRandomQubit])
-								rowsum(stabilizerGenerators[q], stabilizerGenerators[firstP]);
+								rowsum(stabilizerGenerators[q], stabilizerGenerators[firstP], false);
 						}
 
 						destabilizerGenerators[firstP] = stabilizerGenerators[firstP];
@@ -741,7 +688,6 @@ namespace QC {
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
-
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
 						m += g(x1, z1, x2, z2);
@@ -761,7 +707,6 @@ namespace QC {
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
-
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
 						mloc += g(x1, z1, x2, z2);
@@ -784,7 +729,6 @@ namespace QC {
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
-
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
 						m += g(x1, z1, x2, z2);
@@ -804,7 +748,6 @@ namespace QC {
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
-						
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
 						mloc += g(x1, z1, x2, z2);
@@ -827,8 +770,8 @@ namespace QC {
 					rowsumStabilizers(h, j, m);
 
 				m %= 4;
-				assert(m == 0 || m == 2 || m == -2);
-				
+				assert(m == 0 || m == 2);
+
 				h.PhaseSign = m != 0;
 			}
 

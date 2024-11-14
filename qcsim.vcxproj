@@ -317,6 +317,7 @@
     <ClInclude Include="QCSim\Function.h" />
     <ClInclude Include="QCSim\GeneralElitzurVaidmanBomb.h" />
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h" />
+    <ClInclude Include="QCSim\Generator.h" />
     <ClInclude Include="QCSim\GroverAlgorithm.h" />
     <ClInclude Include="QCSim\HadamardTransform.h" />
     <ClInclude Include="QCSim\HardyParadox.h" />
