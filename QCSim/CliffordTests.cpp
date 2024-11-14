@@ -6,6 +6,25 @@
 #include <cstdlib>
 #include <future>
 
+std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetTwoQubitsGate(int code)
+{
+	switch (code)
+	{
+	case 9:
+		return std::make_shared<QC::Gates::CNOTGate<>>();
+	case 10:
+		return std::make_shared<QC::Gates::ControlledYGate<>>();
+	case 11:
+		return std::make_shared<QC::Gates::ControlledZGate<>>();
+	case 12:
+		return std::make_shared<QC::Gates::SwapGate<>>();
+	case 13:
+		return std::make_shared<QC::Gates::iSwapGate<>>();
+	}
+
+	return nullptr;
+}
+
 
 std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code)
 {
@@ -29,19 +48,33 @@ std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code)
 		return std::make_shared<QC::Gates::SquareRootNOTDagGate<>>();
 	case 8:
 		return std::make_shared<QC::Gates::HyGate<>>();
-	case 9:
-		return std::make_shared<QC::Gates::CNOTGate<>>();
-	case 10:
-		return std::make_shared<QC::Gates::ControlledYGate<>>();
-	case 11:
-		return std::make_shared<QC::Gates::ControlledZGate<>>();
-	case 12:
-		return std::make_shared<QC::Gates::SwapGate<>>();
-	case 13:
-		return std::make_shared<QC::Gates::iSwapGate<>>();
+	default:
+		return GetTwoQubitsGate(code);
 	}
 
 	return nullptr;
+}
+
+void ApplyTwoQubitsGate(QC::Clifford::StabilizerSimulator& simulator, int code, int qubit1, int qubit2)
+{
+	switch (code)
+	{
+	case 9:
+		simulator.ApplyCX(qubit1, qubit2);
+		break;
+	case 10:
+		simulator.ApplyCY(qubit1, qubit2);
+		break;
+	case 11:
+		simulator.ApplyCZ(qubit1, qubit2);
+		break;
+	case 12:
+		simulator.ApplySwap(qubit1, qubit2);
+		break;
+	case 13:
+		simulator.ApplyISwap(qubit1, qubit2);
+		break;
+	}
 }
 
 
@@ -76,20 +109,8 @@ void ApplyGate(QC::Clifford::StabilizerSimulator& simulator, int code, int qubit
 	case 8:
 		simulator.ApplyK(qubit1);
 		break;
-	case 9:
-		simulator.ApplyCX(qubit1, qubit2);
-		break;
-	case 10:
-		simulator.ApplyCY(qubit1, qubit2);
-		break;
-	case 11:
-		simulator.ApplyCZ(qubit1, qubit2);
-		break;
-	case 12:
-		simulator.ApplySwap(qubit1, qubit2);
-		break;
-	case 13:
-		simulator.ApplyISwap(qubit1, qubit2);
+	default:
+		ApplyTwoQubitsGate(simulator, code, qubit1, qubit2);
 		break;
 	}
 }
