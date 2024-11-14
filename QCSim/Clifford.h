@@ -346,7 +346,6 @@ namespace QC {
 				size_t p;
 				if (IsRandomResult(qubit, p))
 				{
-					const size_t nPlusP = destabilizerGenerators.size() + p;
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
 						if (destabilizerGenerators[q].X[qubit])
@@ -703,7 +702,7 @@ namespace QC {
 					long long int mloc = 0;
 
 #pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < destabilizerGenerators.size(); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(destabilizerGenerators.size()); ++q)
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
@@ -725,7 +724,7 @@ namespace QC {
 
 				if (stabilizerGenerators.size() < 1024)
 				{
-					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+					for (size_t q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
