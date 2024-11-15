@@ -439,8 +439,6 @@ namespace QC {
 					do {
 						prob *= 0.5; // a random qubit has the 0.5 probability
 
-						//std::cout << "Dealing with the random qubit: " << firstRandomQubit << std::endl;
-
 						for (size_t q = 0; q < nrQubits; ++q)
 						{
 							if (destabilizerGenerators[q].X[firstRandomQubit])
@@ -471,10 +469,8 @@ namespace QC {
 						{
 							if (!handledQubits[qubit])
 							{
-								//std::cout << "Found non-handled qubit: " << qubit << std::endl;
 								if (IsRandomResult(qubit, p))
 								{
-									//std::cout << "It's random!" << std::endl;
 									// there is still at least one more random qubit
 									if (!hasRandomResult)
 									{
@@ -486,34 +482,25 @@ namespace QC {
 								}
 								else 
 								{
-									//std::cout << "It's deterministic, with expected outcome " << state[qubit] << std::endl;
-
 									if (GetTheDeterministicOutcome(qubit) != state[qubit])
 									{
 										// restore the state before returning
 										destabilizerGenerators.swap(saveDest);
 										stabilizerGenerators.swap(saveStab);
 
-										//std::cout << "Deterministic qubit measurement has zero probability in stage two" << std::endl;
-
 										return 0;
 									}
-
-									//std::cout << "Got expected outcome" << std::endl;
 
 									handledQubits[qubit] = true;
 								}
 							}
 						}
-
-						//std::cout << "Now it has " << nrRandom << " random qubits" << std::endl;
 					} while (hasRandomResult);
 
 					// we're done, restore the state
 					destabilizerGenerators.swap(saveDest);
 					stabilizerGenerators.swap(saveStab);
 				}
-				//else std::cout << "No random qubits" << std::endl;
 				
 				return prob;
 			}

@@ -252,8 +252,19 @@ bool CliffordSimulatorTests()
 				return false;
 			}
 		}
-		
 
+		for (size_t q = 0; q < nrQubits; ++q)
+		{
+			const bool res1 = cliffordSim.MeasureQubit(q);
+			const bool res2 = cliffordSim.MeasureQubit(q);
+			if (res1 != res2)
+			{
+				std::cout << "\nFailed qubits measurements" << std::endl;
+				std::cout << "Measurement 1: " << res2 << ", Measurement 2: " << res1 << ", for qubit: " << q << std::endl;
+				return false;
+			}
+		}
+		
 		ExecuteCircuit(nrShots, nrQubits, gates, qubits1, qubits2, results1, results2);
 
 		// check to see if the results are close enough

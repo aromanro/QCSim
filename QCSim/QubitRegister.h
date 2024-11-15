@@ -2,6 +2,8 @@
 
 #include "QubitRegisterCalculator.h"
 
+#include <unordered_map>
+
 // Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
 
 namespace QC {
@@ -211,6 +213,32 @@ namespace QC {
 		std::map<size_t, size_t> RepeatedMeasure(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
 		{
 			std::map<size_t, size_t> measurements;
+
+			for (size_t i = 0; i < nrTimes; ++i)
+			{
+				const size_t res = MeasureNoCollapse(firstQubit, secondQubit);
+				++measurements[res];
+			}
+
+			return measurements;
+		}
+
+		std::unordered_map<size_t, size_t> RepeatedMeasureUnordered(size_t nrTimes = 1000)
+		{
+			std::unordered_map<size_t, size_t> measurements;
+
+			for (size_t i = 0; i < nrTimes; ++i)
+			{
+				const size_t res = MeasureNoCollapse();
+				++measurements[res];
+			}
+
+			return measurements;
+		}
+
+		std::unordered_map<size_t, size_t> RepeatedMeasureUnordered(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
+		{
+			std::unordered_map<size_t, size_t> measurements;
 
 			for (size_t i = 0; i < nrTimes; ++i)
 			{
