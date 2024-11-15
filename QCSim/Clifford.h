@@ -404,12 +404,10 @@ namespace QC {
 
 				// first deal with the deterministic qubits, it might turn out that the probability is 0
 				// in that case, we can return immediately
-				size_t nrRandom = 0;
 				for (size_t qubit = 0; qubit < nrQubits; ++qubit)
 				{
 					if (IsRandomResult(qubit, p))
 					{
-						++nrRandom;
 						if (!hasRandomResult)
 						{
 							hasRandomResult = true;
@@ -419,8 +417,7 @@ namespace QC {
 					}
 					else 
 					{
-						const bool expectedQubitOutcome = state[qubit];
-						if (GetTheDeterministicOutcome(qubit) != expectedQubitOutcome)
+						if (GetTheDeterministicOutcome(qubit) != state[qubit])
 							return 0;
 
 						handledQubits[qubit] = true;
@@ -461,10 +458,7 @@ namespace QC {
 						hasRandomResult = false;
 
 						// this measurement might have been turned some not measured yet qubits to deterministic, so let's check them
-						// this also checks if we still have some non deterministic qubits left
-						
-						nrRandom = 0;
-
+						// this also checks if we still have some non deterministic qubits left			
 						for (size_t qubit = firstRandomQubit + 1; qubit < nrQubits; ++qubit)
 						{
 							if (!handledQubits[qubit])
@@ -478,7 +472,6 @@ namespace QC {
 										firstRandomQubit = qubit;
 										firstP = p;
 									}
-									++nrRandom;
 								}
 								else 
 								{
