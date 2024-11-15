@@ -531,6 +531,13 @@ namespace QC {
 				stabilizerGenerators = savedStabilizerGenerators;
 			}
 
+			void RestoreSavedStateDestructive()
+			{
+				destabilizerGenerators.swap(savedDestabilizerGenerators);
+				stabilizerGenerators.swap(savedStabilizerGenerators);
+				ClearSavedState();
+			}
+
 			void ClearSavedState()
 			{
 				savedDestabilizerGenerators.clear();
