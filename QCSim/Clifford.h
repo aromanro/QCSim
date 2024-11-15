@@ -424,12 +424,11 @@ namespace QC {
 					}
 				}
 
-				if (countRandomQubits == 0)
+				if (countRandomQubits == 0) // if there is no random result and we reached here, the probability will stay 1
 					return 1.;
 				else if (countRandomQubits == 1)
 					return 0.5;
 
-				// if there is no random result and we reached here, the probability will stay 1
 				double prob = 1.0;
 
 				// we're going to modify the generators, so let's save the current state, to be restored at the end
@@ -761,7 +760,6 @@ namespace QC {
 					rowsumStabilizers(h, j, m);
 
 				m %= 4;
-				assert(m == 0 || m == 2);
 
 				h.PhaseSign = m != 0;
 			}
