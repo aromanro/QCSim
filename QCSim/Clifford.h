@@ -17,6 +17,10 @@ namespace QC {
 				: destabilizerGenerators(nQubits), stabilizerGenerators(nQubits), gen(std::random_device{}()), rnd(0.5)
 			{
 				// this puts it in the |0> state
+				// for each stabilizer generator there is a corresponding destabilizer generator
+				// a stabilizer generator anticommutes with the corresponding destabilizer generator
+				// but commutes with all the other destabilizer generators
+				// this is preserved during the simulation
 				for (size_t q = 0; q < nQubits; ++q)
 				{
 					destabilizerGenerators[q].Resize(nQubits);
@@ -29,9 +33,10 @@ namespace QC {
 
 			void ApplyH(size_t qubit)
 			{
-				if (getNrQubits() < 2048)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 2048)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyH(qubit, q);
 				}
 				else
@@ -39,16 +44,17 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyH(qubit, q);
 				}
 			}
 
 			void ApplyK(size_t qubit)
 			{
-				if (getNrQubits() < 1024)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyZ(qubit, q);
 						ApplyS(qubit, q);
@@ -61,7 +67,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(qubit, q);
 						ApplyS(qubit, q);
@@ -73,9 +79,10 @@ namespace QC {
 
 			void ApplyS(size_t qubit)
 			{
-				if (getNrQubits() < 2048)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 2048)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyS(qubit, q);
 				}
 				else
@@ -83,16 +90,17 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyS(qubit, q);
 				}
 			}
 
 			void ApplySdg(size_t qubit)
 			{
-				if (getNrQubits() < 1024)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyZ(qubit, q);
 						ApplyS(qubit, q);
@@ -103,7 +111,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(qubit, q);
 						ApplyS(qubit, q);
@@ -113,9 +121,10 @@ namespace QC {
 
 			void ApplySx(size_t qubit)
 			{
-				if (getNrQubits() < 512)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 512)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyZ(qubit, q);
 						ApplyS(qubit, q);
@@ -129,7 +138,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 128)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(qubit, q);
 						ApplyS(qubit, q);
@@ -142,9 +151,10 @@ namespace QC {
 
 			void ApplySxDag(size_t qubit)
 			{
-				if (getNrQubits() < 1024)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyS(qubit, q);
 						ApplyH(qubit, q);
@@ -156,7 +166,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyS(qubit, q);
 						ApplyH(qubit, q);
@@ -167,9 +177,10 @@ namespace QC {
 
 			void ApplyX(size_t qubit)
 			{
-				if (getNrQubits() < 2048)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 2048)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyX(qubit, q);
 				}
 				else
@@ -177,16 +188,17 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyX(qubit, q);
 				}
 			}
 
 			void ApplyY(size_t qubit)
 			{
-				if (getNrQubits() < 2048)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 2048)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyY(qubit, q);
 				}
 				else
@@ -194,16 +206,17 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyY(qubit, q);
 				}
 			}
 
 			void ApplyZ(size_t qubit)
 			{
-				if (getNrQubits() < 2048)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 2048)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyZ(qubit, q);
 				}
 				else
@@ -211,16 +224,17 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyZ(qubit, q);
 				}
 			}
 
 			void ApplyCX(size_t target, size_t control)
 			{
-				if (getNrQubits() < 1024)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyCX(target, control, q);
 				}
 				else
@@ -228,16 +242,17 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyCX(target, control, q);
 				}
 			}
 
 			void ApplyCY(size_t target, size_t control)
 			{
-				if (getNrQubits() < 1024)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyZ(target, q);
 						ApplyS(target, q);
@@ -250,7 +265,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(target, q);
 						ApplyS(target, q);
@@ -262,9 +277,10 @@ namespace QC {
 
 			void ApplyCZ(size_t target, size_t control)
 			{
-				if (getNrQubits() < 1024)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyH(target, q);
 						ApplyCX(target, control, q);
@@ -276,7 +292,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyH(target, q);
 						ApplyCX(target, control, q);
@@ -287,9 +303,10 @@ namespace QC {
 
 			void ApplySwap(size_t qubit1, size_t qubit2)
 			{
-				if (getNrQubits() < 1024)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyCX(qubit1, qubit2, q);
 						ApplyCX(qubit2, qubit1, q);
@@ -301,7 +318,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyCX(qubit1, qubit2, q);
 						ApplyCX(qubit2, qubit1, q);
@@ -312,9 +329,10 @@ namespace QC {
 
 			void ApplyISwap(size_t qubit1, size_t qubit2)
 			{
-				if (getNrQubits() < 512)
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits < 512)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyS(qubit1, q);
 						ApplyS(qubit2, q);
@@ -329,7 +347,7 @@ namespace QC {
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for num_threads(processor_count) schedule(static, 128)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyS(qubit1, q);
 						ApplyS(qubit2, q);
@@ -346,13 +364,17 @@ namespace QC {
 				size_t p;
 				if (IsRandomResult(qubit, p))
 				{
+					// grab the first anticommuting generator
 					Generator& h = stabilizerGenerators[p];
+					// then multiply each other anticommuting one (stabilizer or destabilizer) with it 
 					for (size_t q = 0; q < getNrQubits(); ++q)
 					{
+						if (p == q) continue;
+
 						if (destabilizerGenerators[q].X[qubit])
 							rowsum(destabilizerGenerators[q], h);
 
-						if (p != q && stabilizerGenerators[q].X[qubit])
+						if (stabilizerGenerators[q].X[qubit])
 							rowsum(stabilizerGenerators[q], h);
 					}
 
@@ -381,9 +403,10 @@ namespace QC {
 
 			double getBasisStateProbability(size_t State)
 			{
-				std::vector<bool> state(getNrQubits());
+				const size_t nrQubits = getNrQubits();
+				std::vector<bool> state(nrQubits);
 
-				for (size_t i = 0; i < state.size(); ++i)
+				for (size_t i = 0; i < nrQubits; ++i)
 				{
 					state[i] = (State & 1) == 1;
 					State >>= 1;
@@ -443,10 +466,12 @@ namespace QC {
 
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
+						if (firstP == q) continue;
+
 						if (destabilizerGenerators[q].X[firstRandomQubit])
 							rowsum(destabilizerGenerators[q], h);
 
-						if (firstP != q && stabilizerGenerators[q].X[firstRandomQubit])
+						if (stabilizerGenerators[q].X[firstRandomQubit])
 							rowsum(stabilizerGenerators[q], h);
 					}
 
@@ -562,10 +587,14 @@ namespace QC {
 			// call it only in the case 2, Z (on measured qubit) commutes with all generators
 			inline bool GetTheDeterministicOutcome(size_t qubit)
 			{
-				// no change to generators, just need to compute the sign in order to get the measurement result
-				Generator h(getNrQubits());
+				const size_t nrQubits = getNrQubits();
 
-				for (size_t q = 0; q < getNrQubits(); ++q)
+				// no change to generators, just need to compute the sign in order to get the measurement result
+				Generator h(nrQubits);
+
+				// all the stabilizer generators for which the corresponding destabilizer anticommuntes with Z are multiplied together
+				// if this is called, all stabilizer generators commute with Z, by the way
+				for (size_t q = 0; q < nrQubits; ++q)
 					if (destabilizerGenerators[q].X[qubit])
 						rowsum(h, stabilizerGenerators[q]);
 
@@ -574,7 +603,6 @@ namespace QC {
 
 			inline static bool XOR(bool a, bool b)
 			{
-				//return ((a ? 1 : 0) ^ (b ? 1 : 0)) == 1;
 				return a != b;
 			}
 
@@ -585,7 +613,7 @@ namespace QC {
 				// the swaps below just switch the X with Z, because HZH^t = X and HXH^t = Z
 
 				// if we have both X and Z, then it's an Y (with some global phase, given by the sign, Y = iXZ)
-				// an Y is transformed to a -Y, so a sign change is needed
+				// a Y is transformed to a -Y, so a sign change is needed
 
 				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
 					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
@@ -657,9 +685,15 @@ namespace QC {
 				stabilizerGenerators[q].Z[control] = XOR(stabilizerGenerators[q].Z[control], stabilizerGenerators[q].Z[target]);
 			}
 
+			// returns the exponent of the i that multiplies the product of the two corresponding Pauli matrices
+			// 0, 1 or -1
+			// for example for x1 = 1, z1 = 0, x2 = 0, z2 = 1
+			// we have X * Z = -i Y so the result should be -1
+			// for x1 = 1, z1 = 0, x2 = 1, z2 = 0
+			// we have X * X = I so the result should be 0
 			static inline int g(int x1, int z1, int x2, int z2)
 			{
-				if (0 == x1 && 0 == z1) return 0;
+				if (0 == x1 && 0 == z1) return 0; // I for the 1st generator, 0 exponent no matter what the second generator is
 				else if (1 == x1)
 				{
 					if (1 == z1) return z2 - x2;
@@ -670,22 +704,29 @@ namespace QC {
 				return x2 * (1 - 2 * z2);
 			}
 
-			inline void rowsum(Generator& h, Generator& j)
+			// multiplies the two generators and stores the result in the first one
+			static inline void rowsum(Generator& h, Generator& j)
 			{
+				const size_t nrQubits = h.X.size();
+				// phase sign is negative when 'PhaseSign' is true
+				// 2 because i^2 = -1
 				long long int m = (h.PhaseSign ? 2 : 0) + (j.PhaseSign ? 2 : 0);
 
-				if (getNrQubits() < 1024)
+				if (nrQubits < 1024)
 				{
-					for (size_t q = 0; q < getNrQubits(); ++q)
+					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
+
+						// add up all the exponents of i that contribute to the sign of the product
 						m += g(x1, z1, x2, z2);
 
-						h.X[q] = XOR(h.X[q], j.X[q]);
-						h.Z[q] = XOR(h.Z[q], j.Z[q]);
+						// X * X = I, Z * Z = I, so the value is set when there is only one of them
+						h.X[q] = (x1 ^ x2) == 1;
+						h.Z[q] = (z1 ^ z2) == 1;
 					}
 				}
 				else
@@ -695,25 +736,27 @@ namespace QC {
 					long long int mloc = 0;
 
 #pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
 
+						// add up all the exponents of i that contribute to the sign of the product
 						mloc += g(x1, z1, x2, z2);
 
-						h.X[q] = XOR(h.X[q], j.X[q]);
-						h.Z[q] = XOR(h.Z[q], j.Z[q]);
+						// X * X = I, Z * Z = I, so the value is set when there is only one of them
+						h.X[q] = (x1 ^ x2) == 1;
+						h.Z[q] = (z1 ^ z2) == 1;
 					}
 
 					m += mloc;
 				}
-
-				m %= 4;
 				
-				h.PhaseSign = m != 0;
+				assert(m % 4 == 0 || m % 4 == 2 || m % 4 == -2);
+;
+				h.PhaseSign = m % 4 != 0;
 			}
 
 			std::vector<Generator> destabilizerGenerators;

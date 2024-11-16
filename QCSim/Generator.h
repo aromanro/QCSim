@@ -8,9 +8,9 @@ namespace QC {
 
 		class Generator {
 		public:
-			Generator() {}
+			Generator() : PhaseSign(false) {}
 
-			Generator(size_t nQubits) : X(nQubits, false), Z(nQubits, false) {}
+			Generator(size_t nQubits) : X(nQubits, false), Z(nQubits, false), PhaseSign(false) {}
 
 			Generator(const Generator& other) : X(other.X), Z(other.Z), PhaseSign(other.PhaseSign) {}
 
@@ -55,7 +55,7 @@ namespace QC {
 
 			std::vector<bool> X;
 			std::vector<bool> Z;
-			bool PhaseSign = false;
+			bool PhaseSign; // true means negative phase
 		};
 
 	}
