@@ -346,22 +346,23 @@ namespace QC {
 				size_t p;
 				if (IsRandomResult(qubit, p))
 				{
+					Generator& h = stabilizerGenerators[p];
 					for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
 					{
 						if (destabilizerGenerators[q].X[qubit])
-							rowsum(destabilizerGenerators[q], stabilizerGenerators[p], true);
+							rowsum(destabilizerGenerators[q], h);
 
 						if (p != q && stabilizerGenerators[q].X[qubit])
-							rowsum(stabilizerGenerators[q], stabilizerGenerators[p], false);
+							rowsum(stabilizerGenerators[q], h);
 					}
 
-					destabilizerGenerators[p] = stabilizerGenerators[p];
+					destabilizerGenerators[p] = h;
 
-					stabilizerGenerators[p].Clear();
-					stabilizerGenerators[p].Z[qubit] = true;
-					stabilizerGenerators[p].PhaseSign = rnd(gen);
+					h.Clear();
+					h.Z[qubit] = true;
+					h.PhaseSign = rnd(gen);
 
-					return stabilizerGenerators[p].PhaseSign;
+					return h.PhaseSign;
 				}
 
 				// case 2 - Z (on measured qubit) commutes with all generators
@@ -438,23 +439,25 @@ namespace QC {
 				do {
 					prob *= 0.5; // a random qubit has the 0.5 probability
 
+					Generator& h = stabilizerGenerators[firstP];
+
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						if (destabilizerGenerators[q].X[firstRandomQubit])
-							rowsum(destabilizerGenerators[q], stabilizerGenerators[firstP], true);
+							rowsum(destabilizerGenerators[q], h);
 
 						if (firstP != q && stabilizerGenerators[q].X[firstRandomQubit])
-							rowsum(stabilizerGenerators[q], stabilizerGenerators[firstP], false);
+							rowsum(stabilizerGenerators[q], h);
 					}
 
-					destabilizerGenerators[firstP] = stabilizerGenerators[firstP];
+					destabilizerGenerators[firstP] = h;
 
-					stabilizerGenerators[firstP].Clear();
-					stabilizerGenerators[firstP].Z[firstRandomQubit] = true;
+					h.Clear();
+					h.Z[firstRandomQubit] = true;
 
 					// set the measured outcome to the expected value for this state
 					const bool expectedQubitOutcome = state[firstRandomQubit];
-					stabilizerGenerators[firstP].PhaseSign = expectedQubitOutcome;
+					h.PhaseSign = expectedQubitOutcome;
 
 					handledQubits[firstRandomQubit] = true; // not really needed, we won't look back
 					countRandomQubits = 0;
@@ -565,7 +568,7 @@ namespace QC {
 
 				for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
 					if (destabilizerGenerators[q].X[qubit])
-						rowsum(h, stabilizerGenerators[q], true);
+						rowsum(h, stabilizerGenerators[q]);
 
 				return h.PhaseSign;
 			}
@@ -668,18 +671,19 @@ namespace QC {
 				return x2 * (1 - 2 * z2);
 			}
 
-			inline void rowsumDestabilizers(Generator& h, Generator& j, long long int& m)
+			inline void rowsum(Generator& h, Generator& j)
 			{
-				m += j.PhaseSign ? 2 : 0;
+				long long int m = (h.PhaseSign ? 2 : 0) + (j.PhaseSign ? 2 : 0);
 
-				if (destabilizerGenerators.size() < 1024)
+				if (getNrQubits() < 1024)
 				{
-					for (size_t q = 0; q < destabilizerGenerators.size(); ++q)
+					for (size_t q = 0; q < getNrQubits(); ++q)
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
+
 						m += g(x1, z1, x2, z2);
 
 						h.X[q] = XOR(h.X[q], j.X[q]);
@@ -693,12 +697,13 @@ namespace QC {
 					long long int mloc = 0;
 
 #pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(destabilizerGenerators.size()); ++q)
+					for (long long int q = 0; q < static_cast<long long int>(getNrQubits()); ++q)
 					{
 						const int x1 = j.X[q] ? 1 : 0;
 						const int z1 = j.Z[q] ? 1 : 0;
 						const int x2 = h.X[q] ? 1 : 0;
 						const int z2 = h.Z[q] ? 1 : 0;
+
 						mloc += g(x1, z1, x2, z2);
 
 						h.X[q] = XOR(h.X[q], j.X[q]);
@@ -707,60 +712,9 @@ namespace QC {
 
 					m += mloc;
 				}
-			}
-
-			inline void rowsumStabilizers(Generator& h, Generator& j, long long int& m)
-			{
-				m += j.PhaseSign ? 2 : 0;
-
-				if (stabilizerGenerators.size() < 1024)
-				{
-					for (size_t q = 0; q < static_cast<long long int>(stabilizerGenerators.size()); ++q)
-					{
-						const int x1 = j.X[q] ? 1 : 0;
-						const int z1 = j.Z[q] ? 1 : 0;
-						const int x2 = h.X[q] ? 1 : 0;
-						const int z2 = h.Z[q] ? 1 : 0;
-						m += g(x1, z1, x2, z2);
-
-						h.X[q] = XOR(h.X[q], j.X[q]);
-						h.Z[q] = XOR(h.Z[q], j.Z[q]);
-					}
-				}
-				else
-				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-					long long int mloc = 0;
-
-#pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < stabilizerGenerators.size(); ++q)
-					{
-						const int x1 = j.X[q] ? 1 : 0;
-						const int z1 = j.Z[q] ? 1 : 0;
-						const int x2 = h.X[q] ? 1 : 0;
-						const int z2 = h.Z[q] ? 1 : 0;
-						mloc += g(x1, z1, x2, z2);
-
-						h.X[q] = XOR(h.X[q], j.X[q]);
-						h.Z[q] = XOR(h.Z[q], j.Z[q]);
-					}
-
-					m += mloc;
-				}
-			}
-
-			inline void rowsum(Generator& h, Generator& j, bool destabilizers = false)
-			{
-				long long int m = h.PhaseSign ? 2 : 0;
-
-				if (destabilizers)
-					rowsumDestabilizers(h, j, m);
-				else
-					rowsumStabilizers(h, j, m);
 
 				m %= 4;
-
+				
 				h.PhaseSign = m != 0;
 			}
 
