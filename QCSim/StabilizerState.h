@@ -90,8 +90,6 @@ namespace QC {
 			double getBasisStateProbability(const std::vector<bool>& state)
 			{
 				const size_t nrQubits = getNrQubits();
-				size_t p;
-
 				std::vector<bool> handledQubits(nrQubits, false);
 
 				size_t firstRandomQubit = 0;
