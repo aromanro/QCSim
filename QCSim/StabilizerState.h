@@ -97,35 +97,10 @@ namespace QC {
 				size_t firstRandomQubit = 0;
 				size_t firstP = 0;
 
-				// first deal with the deterministic qubits, it might turn out that the probability is 0
-				// in that case, we can return immediately
-				size_t countRandomQubits = 0;
-				for (size_t qubit = 0; qubit < nrQubits; ++qubit)
-				{
-					if (IsRandomResult(qubit, p))
-					{
-						if (0 == countRandomQubits)
-						{
-							firstRandomQubit = qubit;
-							firstP = p;
-						}
-						++countRandomQubits;
-					}
-					else
-					{
-						if (GetTheDeterministicOutcome(qubit) != state[qubit])
-							return 0.;
-
-						handledQubits[qubit] = true;
-					}
-				}
-
-				if (countRandomQubits == 0) // if there is no random result and we reached here, the probability will stay 1
-					return 1.;
-				else if (countRandomQubits == 1)
-					return 0.5;
-
 				double prob = 1.0;
+				size_t countRandomQubits = DealWithDeterministicQubits(state, handledQubits, firstRandomQubit, firstP, prob);
+				if (countRandomQubits == 0)
+					return prob;
 
 				// we're going to modify the generators, so let's save the current state, to be restored at the end
 				auto saveDest = destabilizerGenerators;
@@ -135,7 +110,6 @@ namespace QC {
 					prob *= 0.5; // a random qubit has the 0.5 probability
 
 					Generator& h = stabilizerGenerators[firstP];
-
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						if (firstP == q) continue;
@@ -156,43 +130,9 @@ namespace QC {
 					h.PhaseSign = state[firstRandomQubit];
 
 					handledQubits[firstRandomQubit] = true; // not really needed, we won't look back
-					countRandomQubits = 0;
 
-					// this measurement might have been turned some not measured yet qubits to deterministic, so let's check them
-					// this also checks if we still have some non deterministic qubits left			
-					for (size_t qubit = firstRandomQubit + 1; qubit < nrQubits; ++qubit)
-					{
-						if (!handledQubits[qubit])
-						{
-							if (IsRandomResult(qubit, p))
-							{
-								// there is still at least one more random qubit
-								if (0 == countRandomQubits)
-								{
-									firstRandomQubit = qubit;
-									firstP = p;
-								}
-								++countRandomQubits;
-							}
-							else
-							{
-								if (GetTheDeterministicOutcome(qubit) != state[qubit])
-								{
-									// restore the state before returning
-									destabilizerGenerators.swap(saveDest);
-									stabilizerGenerators.swap(saveStab);
-
-									return 0;
-								}
-
-								handledQubits[qubit] = true;
-							}
-						}
-					}
-
-					if (countRandomQubits == 1)
-						prob *= 0.5;
-				} while (countRandomQubits > 1);
+					countRandomQubits = DealWithDeterministicQubits(state, handledQubits, firstRandomQubit, firstP, prob);
+				} while (countRandomQubits > 0);
 
 				// we're done, restore the state
 				destabilizerGenerators.swap(saveDest);
@@ -243,6 +183,48 @@ namespace QC {
 			}
 
 		protected:
+			inline size_t DealWithDeterministicQubits(const std::vector<bool>& state, std::vector<bool>& handledQubits, size_t& firstRandomQubit, size_t& firstP, double& prob)
+			{
+				const size_t nrQubits = getNrQubits();
+				size_t p;
+				size_t countRandomQubits = 0;
+
+				// first deal with the deterministic qubits, it might turn out that the probability is 0
+				// in that case, we can return immediately
+				for (size_t qubit = firstRandomQubit; qubit < nrQubits; ++qubit)
+				{
+					if (handledQubits[qubit]) continue;
+					
+					if (IsRandomResult(qubit, p))
+					{
+						if (0 == countRandomQubits)
+						{
+							firstRandomQubit = qubit;
+							firstP = p;
+						}
+						++countRandomQubits;
+					}
+					else
+					{
+						if (GetTheDeterministicOutcome(qubit) != state[qubit])
+						{
+							prob = 0.;
+							return 0;
+						}
+
+						handledQubits[qubit] = true;
+					}
+				}
+
+				if (countRandomQubits == 1)
+				{
+					prob *= 0.5;
+					countRandomQubits = 0;
+				}
+
+				return countRandomQubits;
+			}
+
 			inline bool IsRandomResult(size_t qubit, size_t& p) const
 			{
 				for (size_t q = 0; q < getNrQubits(); ++q)
