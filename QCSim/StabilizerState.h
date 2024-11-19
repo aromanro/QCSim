@@ -180,6 +180,16 @@ namespace QC {
 				savedStabilizerGenerators.clear();
 			}
 
+			void SetMultithreading(bool enable = true)
+			{
+				enableMultithreading = enable;
+			}
+
+			bool GetMultithreading() const
+			{
+				return enableMultithreading;
+			}
+
 		protected:
 			inline size_t DealWithDeterministicQubits(const std::vector<bool>& state, std::vector<bool>& handledQubits, size_t& firstRandomQubit, size_t& firstP, double& prob)
 			{
@@ -278,14 +288,14 @@ namespace QC {
 			}
 
 			// multiplies the two generators and stores the result in the first one
-			static inline void rowsum(Generator& h, Generator& j)
+			inline void rowsum(Generator& h, Generator& j)
 			{
 				const size_t nrQubits = h.X.size();
 				// phase sign is negative when 'PhaseSign' is true
 				// 2 because i^2 = -1
 				long long int m = (h.PhaseSign ? 2 : 0) + (j.PhaseSign ? 2 : 0);
 
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -329,7 +339,7 @@ namespace QC {
 
 				// the mod 4 that appears here is because the values for the powers of i keep repeating
 				assert(m % 4 == 0 || m % 4 == 2 || m % 4 == -2);
-				;
+
 				h.PhaseSign = m % 4 != 0;
 			}
 
@@ -341,6 +351,8 @@ namespace QC {
 
 			std::default_random_engine gen;
 			std::bernoulli_distribution rnd;
+
+			bool enableMultithreading = true;
 		};
 	}
 }

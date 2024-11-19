@@ -17,7 +17,7 @@ namespace QC {
 			void ApplyH(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 2048)
+				if (!enableMultithreading || nrQubits < 2048)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyH(qubit, q);
@@ -35,7 +35,7 @@ namespace QC {
 			void ApplyK(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -63,7 +63,7 @@ namespace QC {
 			void ApplyS(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 2048)
+				if (!enableMultithreading || nrQubits < 2048)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyS(qubit, q);
@@ -81,7 +81,7 @@ namespace QC {
 			void ApplySdg(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -105,7 +105,7 @@ namespace QC {
 			void ApplySx(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 512)
+				if (!enableMultithreading || nrQubits < 512)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -135,7 +135,7 @@ namespace QC {
 			void ApplySxDag(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -161,7 +161,7 @@ namespace QC {
 			void ApplyX(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 2048)
+				if (!enableMultithreading || nrQubits < 2048)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyX(qubit, q);
@@ -179,7 +179,7 @@ namespace QC {
 			void ApplyY(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 2048)
+				if (!enableMultithreading || nrQubits < 2048)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyY(qubit, q);
@@ -197,7 +197,7 @@ namespace QC {
 			void ApplyZ(size_t qubit)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 2048)
+				if (!enableMultithreading || nrQubits < 2048)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyZ(qubit, q);
@@ -215,7 +215,7 @@ namespace QC {
 			void ApplyCX(size_t target, size_t control)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 						ApplyCX(target, control, q);
@@ -233,7 +233,7 @@ namespace QC {
 			void ApplyCY(size_t target, size_t control)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -261,7 +261,7 @@ namespace QC {
 			void ApplyCZ(size_t target, size_t control)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -287,7 +287,7 @@ namespace QC {
 			void ApplySwap(size_t qubit1, size_t qubit2)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 1024)
+				if (!enableMultithreading || nrQubits < 1024)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
@@ -313,7 +313,7 @@ namespace QC {
 			void ApplyISwap(size_t qubit1, size_t qubit2)
 			{
 				const size_t nrQubits = getNrQubits();
-				if (nrQubits < 512)
+				if (!enableMultithreading || nrQubits < 512)
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{

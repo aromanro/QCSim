@@ -187,7 +187,7 @@ namespace QC {
 
 			if (firstQubit == secondQubit)
 			{
-				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
+				if (!enableMultithreading || NrBasisStates < BaseClass::OneQubitOmpLimit)
 					return BaseClass::MeasureQubit(NrBasisStates, registerStorage, firstQubit, prob);
 
 				return BaseClass::MeasureQubitOmp(NrBasisStates, registerStorage, firstQubit, prob);
@@ -272,7 +272,7 @@ namespace QC {
 			bool swapStorage = true;
 			if (gateQubits == 1)
 			{
-				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
+				if (!enableMultithreading || NrBasisStates < BaseClass::OneQubitOmpLimit)
 					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates, swapStorage);
 				else
 					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates, swapStorage);
@@ -281,7 +281,7 @@ namespace QC {
 			{
 				const size_t ctrlQubitBit = 1ULL << controllingQubit1;
 
-				if (NrBasisStates < BaseClass::TwoQubitOmpLimit)
+				if (!enableMultithreading || NrBasisStates < BaseClass::TwoQubitOmpLimit)
 					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
@@ -291,7 +291,7 @@ namespace QC {
 				const size_t qubitBit2 = 1ULL << controllingQubit1;
 				const size_t ctrlQubitBit = 1ULL << controllingQubit2;
 
-				if (NrBasisStates < BaseClass::ThreeQubitOmpLimit)
+				if (!enableMultithreading || NrBasisStates < BaseClass::ThreeQubitOmpLimit)
 					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
 				else
 					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
@@ -487,10 +487,20 @@ namespace QC {
 
 		double GetQubitProbability(size_t qubit) const
 		{
-			if (NrBasisStates < BaseClass::OneQubitOmpLimit)
+			if (!enableMultithreading || NrBasisStates < BaseClass::OneQubitOmpLimit)
 				return BaseClass::GetQubitProbability(NrBasisStates, registerStorage, qubit);
 
 			return BaseClass::GetQubitProbabilityOmp(NrBasisStates, registerStorage, qubit);
+		}
+
+		void SetMultithreading(bool enable = true)
+		{
+			enableMultithreading = enable;
+		}
+
+		bool GetMultithreading() const
+		{
+			return enableMultithreading;
 		}
 
 	protected:
@@ -545,7 +555,7 @@ namespace QC {
 
 			if (firstQubit == secondQubit)
 			{
-				if (NrBasisStates < BaseClass::OneQubitOmpLimit)
+				if (!enableMultithreading || NrBasisStates < BaseClass::OneQubitOmpLimit)
 					return BaseClass::MeasureQubitNoCollapse(NrBasisStates, registerStorage, firstQubit, prob);
 
 				return BaseClass::MeasureQubitNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, prob);
@@ -565,6 +575,8 @@ namespace QC {
 
 		std::vector<Gates::AppliedGate<MatrixClass>> computeGates;
 		bool recordGates;
+
+		bool enableMultithreading = true;
 	};
 
 }
