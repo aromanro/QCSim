@@ -554,6 +554,17 @@ namespace QC {
 			return static_cast<int>(threads ? threads : GetCpuInfoNrThreads());
 		}
 
+
+		void SetMultithreading(bool enable = true)
+		{
+			enableMultithreading = enable;
+		}
+
+		bool GetMultithreading() const
+		{
+			return enableMultithreading;
+		}
+
 		//constexpr static auto cone = std::complex<double>(1.0, 0.0);
 
 		constexpr static int divSchedule = 4;
@@ -574,6 +585,8 @@ namespace QC {
 			return std::count(std::istream_iterator<std::string>(cpuinfo), std::istream_iterator<std::string>(), std::string("processor"));
 #endif
 		}
+
+		bool enableMultithreading = true;
 	};
 
 }

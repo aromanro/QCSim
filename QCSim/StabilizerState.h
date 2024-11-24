@@ -299,10 +299,10 @@ namespace QC {
 				{
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
-						const int x1 = j.X[q] ? 1 : 0;
-						const int z1 = j.Z[q] ? 1 : 0;
-						const int x2 = h.X[q] ? 1 : 0;
-						const int z2 = h.Z[q] ? 1 : 0;
+						const int x1 = BoolToInt(j.X[q]);
+						const int z1 = BoolToInt(j.Z[q]);
+						const int x2 = BoolToInt(h.X[q]);
+						const int z2 = BoolToInt(h.Z[q]);
 
 						// add up all the exponents of i that contribute to the sign of the product
 						m += g(x1, z1, x2, z2);
@@ -321,10 +321,10 @@ namespace QC {
 #pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
-						const int x1 = j.X[q] ? 1 : 0;
-						const int z1 = j.Z[q] ? 1 : 0;
-						const int x2 = h.X[q] ? 1 : 0;
-						const int z2 = h.Z[q] ? 1 : 0;
+						const int x1 = BoolToInt(j.X[q]);
+						const int z1 = BoolToInt(j.Z[q]);
+						const int x2 = BoolToInt(h.X[q]);
+						const int z2 = BoolToInt(h.Z[q]);
 
 						// add up all the exponents of i that contribute to the sign of the product
 						mloc += g(x1, z1, x2, z2);
@@ -341,6 +341,11 @@ namespace QC {
 				assert(m % 4 == 0 || m % 4 == 2 || m % 4 == -2);
 
 				h.PhaseSign = m % 4 != 0;
+			}
+
+			static inline int BoolToInt(bool b)
+			{
+				return b ? 1 : 0;
 			}
 
 			std::vector<Generator> destabilizerGenerators;
