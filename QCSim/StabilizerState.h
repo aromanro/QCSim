@@ -161,7 +161,7 @@ namespace QC {
 				savedStabilizerGenerators = stabilizerGenerators;
 			}
 
-			void RestoreSavedState()
+			void RestoreState()
 			{
 				destabilizerGenerators = savedDestabilizerGenerators;
 				stabilizerGenerators = savedStabilizerGenerators;
