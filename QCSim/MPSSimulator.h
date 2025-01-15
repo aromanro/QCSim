@@ -243,6 +243,16 @@ namespace QC
 				qubitsMapInv = simState->qubitsMapInv;
 			}
 
+			void SaveState()
+			{
+				savedState = getState();
+			}
+
+			void RestoreState()
+			{
+				setState(savedState);
+			}
+
 		private:
 			void InitQubitsMap()
 			{
@@ -293,6 +303,8 @@ namespace QC
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
 			bool swapDown = false;
+
+			std::shared_ptr<MPSSimulatorStateInterface> savedState;
 		};
 
 	}

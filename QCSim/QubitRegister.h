@@ -493,6 +493,16 @@ namespace QC {
 			return BaseClass::GetQubitProbabilityOmp(NrBasisStates, registerStorage, qubit);
 		}
 
+		void SaveState()
+		{
+			savedSatateStorage = registerStorage;
+		}
+
+		void RestoreState()
+		{
+			registerStorage = savedSatateStorage;
+		}
+
 	protected:
 		inline void CheckQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
 		{
@@ -559,6 +569,8 @@ namespace QC {
 
 		VectorClass registerStorage;
 		VectorClass resultsStorage;
+
+		VectorClass savedSatateStorage;
 
 		std::mt19937_64 rng;
 		std::uniform_real_distribution<double> uniformZeroOne;
