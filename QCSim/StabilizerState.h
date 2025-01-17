@@ -31,6 +31,29 @@ namespace QC {
 				}
 			}
 
+			void Reset()
+			{
+				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
+				{
+					for (size_t p = 0; p < stabilizerGenerators.size(); ++p)
+					{
+						if (p == q)
+						{
+							destabilizerGenerators[q].X[q] = true;
+							stabilizerGenerators[q].Z[q] = true;
+						}
+						else
+						{
+							destabilizerGenerators[q].X[p] = false;
+							stabilizerGenerators[q].Z[p] = false;
+						}
+
+						destabilizerGenerators[q].PhaseSign = false;
+						stabilizerGenerators[q].PhaseSign = false;
+					}
+				}
+			}
+
 			bool MeasureQubit(size_t qubit)
 			{
 				size_t p;

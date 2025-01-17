@@ -85,6 +85,11 @@ namespace QC {
 			registerStorage(NrBasisStates - 1) = OneOverSqrt2;
 		}
 
+		void Reset()
+		{
+			setToBasisState(0);
+		}	
+
 		// all states have equal amplitude, so measurement should give any state with equal probability
 		void setToEqualSuperposition()
 		{
