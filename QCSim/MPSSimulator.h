@@ -31,7 +31,7 @@ namespace QC
 		public:
 			MPSSimulator() = delete;
 
-			MPSSimulator(size_t N, int addseed = 0)
+			MPSSimulator(size_t N, unsigned int addseed = 0)
 				: impl(N, addseed)
 			{
 				InitQubitsMap();

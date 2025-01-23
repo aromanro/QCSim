@@ -15,7 +15,7 @@ namespace Paradoxes {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		QuantumEraser(int addseed = 0)
+		QuantumEraser(unsigned int addseed = 0)
 			: BaseClass(2, addseed), eraser(false)
 		{
 		}

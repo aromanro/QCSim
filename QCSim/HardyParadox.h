@@ -18,7 +18,7 @@ namespace Paradoxes {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		HardyParadox(int addseed = 0)
+		HardyParadox(unsigned int addseed = 0)
 			: BaseClass(3, addseed)
 		{
 			const double theta = 0.575 * M_PI;

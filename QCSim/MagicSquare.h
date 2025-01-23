@@ -21,7 +21,7 @@ namespace Games {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		MagicSquare(int addseed = 0)
+		MagicSquare(unsigned int addseed = 0)
 			: BaseClass(4, addseed), distInd(1, 3), nrPlays(100)
 		{
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;

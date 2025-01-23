@@ -150,7 +150,7 @@ namespace Simon {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		SimonAlgorithm(size_t N = 3, int addseed = 0)
+		SimonAlgorithm(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(2 * N, addseed)
 		{
 			assert(N >= 2);
@@ -254,7 +254,7 @@ namespace Simon {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		SimonAlgorithmWithGatesOracle(size_t N = 3, int addseed = 0)
+		SimonAlgorithmWithGatesOracle(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(3 * N - 1, addseed), // 2 * N qubits for the algorithm, N - 1 for the oracle
 			oracle(3 * N - 1, 0, N - 1, N, 2 * N)
 		{

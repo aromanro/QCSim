@@ -14,7 +14,7 @@ namespace QC {
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 		using BaseClass = QubitRegisterCalculator<VectorClass, MatrixClass>;
 
-		QubitRegister(size_t N = 3, int addseed = 0)
+		QubitRegister(size_t N = 3, unsigned int addseed = 0)
 			: NrQubits(N), NrBasisStates(1ULL << NrQubits), 
 			registerStorage(VectorClass::Zero(NrBasisStates)),
 			uniformZeroOne(0, 1), recordGates(false)
@@ -22,6 +22,12 @@ namespace QC {
 			assert(N > 0);
 
 			resultsStorage.resize(NrBasisStates);
+
+			if (addseed == 0)
+			{
+				std::random_device rd;
+				addseed = rd();
+			}
 
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
 			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
@@ -31,13 +37,19 @@ namespace QC {
 		}
 
 		// this is a special constructor, I need it for something in a derived work (closed source)
-		QubitRegister(size_t N, VectorClass& v, int addseed = 0)
+		QubitRegister(size_t N, VectorClass& v, unsigned int addseed = 0)
 			: NrQubits(N), NrBasisStates(1ULL << NrQubits),
 			uniformZeroOne(0, 1), recordGates(false)
 		{
 			assert(N > 0);
 			resultsStorage.resize(NrBasisStates);
 			registerStorage.swap(v);
+
+			if (addseed == 0)
+			{
+				std::random_device rd;
+				addseed = rd();
+			}
 
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
 			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
@@ -508,22 +520,6 @@ namespace QC {
 			registerStorage = savedSatateStorage;
 		}
 
-	protected:
-		inline void CheckQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
-		{
-			if (NrQubits == 0) throw std::invalid_argument("Qubit number is zero");
-			else if (NrQubits <= qubit) throw std::invalid_argument("Qubit number is too high");
-			else if (gateQubits == 2) {
-				if (NrQubits <= controllingQubit1) throw std::invalid_argument("Controlling qubit number is too high");
-				else if (qubit == controllingQubit1) throw std::invalid_argument("Qubit and controlling qubit are the same");
-			} 
-			else if (gateQubits == 3)
-			{
-				if (NrQubits <= controllingQubit1 || NrQubits <= controllingQubit2) throw std::invalid_argument("Controlling qubit number is too high");
-				else if (qubit == controllingQubit1 || qubit == controllingQubit2 || controllingQubit1 == controllingQubit2) throw std::invalid_argument("Qubits must be different");
-			}
-		}
-
 		// the following ones should be used for 'repeated measurements' that avoid reexecuting the circuit each time
 		size_t MeasureNoCollapse()
 		{
@@ -542,6 +538,24 @@ namespace QC {
 
 			return state;
 		}
+
+	protected:
+		inline void CheckQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
+		{
+			if (NrQubits == 0) throw std::invalid_argument("Qubit number is zero");
+			else if (NrQubits <= qubit) throw std::invalid_argument("Qubit number is too high");
+			else if (gateQubits == 2) {
+				if (NrQubits <= controllingQubit1) throw std::invalid_argument("Controlling qubit number is too high");
+				else if (qubit == controllingQubit1) throw std::invalid_argument("Qubit and controlling qubit are the same");
+			} 
+			else if (gateQubits == 3)
+			{
+				if (NrQubits <= controllingQubit1 || NrQubits <= controllingQubit2) throw std::invalid_argument("Controlling qubit number is too high");
+				else if (qubit == controllingQubit1 || qubit == controllingQubit2 || controllingQubit1 == controllingQubit2) throw std::invalid_argument("Qubits must be different");
+			}
+		}
+
+
 
 		// shortcut for measuring a single qubit
 		size_t MeasureNoCollapse(size_t qubit)

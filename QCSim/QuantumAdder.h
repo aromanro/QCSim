@@ -84,7 +84,7 @@ namespace Adders {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		NQubitsAdderAlgorithm(size_t N = 3, int addseed = 0)
+		NQubitsAdderAlgorithm(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(3*N + 1, addseed) // the qubits for the two N inputs, N outputs and one for carry
 		{
 			BaseClass::setToBasisState(0);

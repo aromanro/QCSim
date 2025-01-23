@@ -45,7 +45,7 @@ namespace Grover {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		GroverAlgorithm(size_t N = 3, int addseed = 0)
+		GroverAlgorithm(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(N, addseed)
 		{
 			assert(N >= 1);
@@ -131,7 +131,7 @@ namespace Grover {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		GroverAlgorithmWithGatesOracle(size_t N = 3, int addseed = 0)
+		GroverAlgorithmWithGatesOracle(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(2 * N - 1, addseed), nControlledNOT(INT_MAX), correctQuestionState(0)
 		{
 			assert(N >= 1);

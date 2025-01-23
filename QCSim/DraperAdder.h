@@ -13,7 +13,7 @@ namespace Adders {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DraperAdder(size_t N = 3, int addseed = 0)
+		DraperAdder(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(2 * N, addseed), n(N), fourier(2 * N, N)
 		{
 			BaseClass::setToBasisState(0);
@@ -64,7 +64,7 @@ namespace Adders {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DraperAdderWithCarry(size_t N = 3, int addseed = 0)
+		DraperAdderWithCarry(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(2 * N + 1, addseed), n(N), fourier(2 * N + 1, N)
 		{
 			BaseClass::setToBasisState(0);

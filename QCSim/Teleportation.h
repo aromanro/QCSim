@@ -13,7 +13,7 @@ namespace Teleportation
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		QuantumTeleportation(size_t N = 3, int addseed = 0)
+		QuantumTeleportation(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(N, addseed)
 		{
 			BaseClass::setToBasisState(0);
@@ -110,7 +110,7 @@ namespace Teleportation
 		using BaseClass = QuantumTeleportation<VectorClass, MatrixClass>;
 		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		QuantumTeleportationRealization(int addseed = 0)
+		QuantumTeleportationRealization(unsigned int addseed = 0)
 			: BaseClass(3, addseed)
 		{
 		}

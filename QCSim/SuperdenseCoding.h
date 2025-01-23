@@ -18,7 +18,7 @@ namespace Coding
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		SuperdenseCoding(int addseed = 0)
+		SuperdenseCoding(unsigned int addseed = 0)
 			: BaseClass(2, addseed), b1(false), b2(false)
 		{
 		}

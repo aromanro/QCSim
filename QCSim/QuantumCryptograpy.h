@@ -18,7 +18,7 @@ namespace QuantumCryptograpy {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		explicit BB84Protocol(int addseed = 0)
+		explicit BB84Protocol(unsigned int addseed = 0)
 			: BaseClass(1, addseed),
 			eavesdropping(false), randomEavesdropping(false)
 		{

@@ -11,7 +11,7 @@ namespace ErrorCorrection {
 		using BaseClass = ErrorCorrectionBase<VectorClass, MatrixClass>;
 		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ShorCode(int addseed = 0)
+		ShorCode(unsigned int addseed = 0)
 			: BaseClass(9, addseed), errorType(Flip), iy(std::complex<double>(0., 1.) * y.getRawOperatorMatrix())
 		{
 		}

@@ -115,7 +115,7 @@ namespace Shor {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ShorAlgorithmBase(size_t C = 15, size_t N = 7, size_t L = 3, size_t M = 4, int addseed = 0)
+		ShorAlgorithmBase(size_t C = 15, size_t N = 7, size_t L = 3, size_t M = 4, unsigned int addseed = 0)
 			: BaseClass(N, addseed),
 			Number(C), fx(L, M, C)
 		{
@@ -293,7 +293,7 @@ namespace Shor {
 	public:
 		using BaseClass = ShorAlgorithmBase<ShorAlgorithm<VectorClass, MatrixClass, ShorFunction>, VectorClass, MatrixClass>;
 
-		ShorAlgorithm(size_t C = 15, size_t N = 7, size_t L = 3, int addseed = 0)
+		ShorAlgorithm(size_t C = 15, size_t N = 7, size_t L = 3, unsigned int addseed = 0)
 			: BaseClass(C, N, L, N - L, addseed),
 			phaseEstimation(BaseClass::fx, N, L)
 		{
@@ -402,7 +402,7 @@ namespace Shor {
 	public:
 		using BaseClass = ShorAlgorithmBase<ShorAlgorithmWithoutTensorProduct<VectorClass, MatrixClass, ShorFunction>, VectorClass, MatrixClass, ShorFunction>;
 
-		ShorAlgorithmWithoutTensorProduct(size_t C = 15, size_t L = 3, int M = 4, int addseed = 0)
+		ShorAlgorithmWithoutTensorProduct(size_t C = 15, size_t L = 3, int M = 4, unsigned int addseed = 0)
 			: BaseClass(C, 2 * L + M - 1, L, M, addseed),
 			fourier(2 * L + M - 1, 0, L - 1)
 		{

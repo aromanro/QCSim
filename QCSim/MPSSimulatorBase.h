@@ -35,7 +35,7 @@ namespace QC {
 		public:
 			MPSSimulatorBase() = delete;
 
-			MPSSimulatorBase(size_t N, int addseed = 0)
+			MPSSimulatorBase(size_t N, unsigned int addseed = 0)
 				: lambdas(N - 1, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1))
 			{
 				for (auto& gamma : gammas)

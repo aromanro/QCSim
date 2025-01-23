@@ -11,7 +11,7 @@ namespace ErrorCorrection {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ErrorCorrectionBase(size_t N, int addseed = 0)
+		ErrorCorrectionBase(size_t N, unsigned int addseed = 0)
 			: BaseClass(N, addseed), errorQubit(N)
 		{
 			BaseClass::setToBasisState(0);

@@ -27,7 +27,7 @@ namespace Teleportation {
 		using BaseClass = QuantumTeleportation<VectorClass, MatrixClass>;
 		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		EntanglementSwapping(int addseed = 0)
+		EntanglementSwapping(unsigned int addseed = 0)
 			: BaseClass(6, addseed)
 		{
 		}

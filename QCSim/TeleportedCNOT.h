@@ -23,7 +23,7 @@ namespace Distributed {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		TeleportedCNOT(int addseed = 0)
+		TeleportedCNOT(unsigned int addseed = 0)
 			: BaseClass(6, addseed)
 		{
 			BaseClass::setToBasisState(0);

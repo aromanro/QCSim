@@ -22,7 +22,7 @@ namespace Distributed {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DistributedCU(size_t nrQubits = 4, size_t ctrlq = 0, size_t targetq = 3, size_t entq1 = 1, size_t entq2 = 2, int addseed = 0)
+		DistributedCU(size_t nrQubits = 4, size_t ctrlq = 0, size_t targetq = 3, size_t entq1 = 1, size_t entq2 = 2, unsigned int addseed = 0)
 			: BaseClass(nrQubits, addseed), ctrlQubit(ctrlq), targetQubit(targetq), entQubit1(entq1), entQubit2(entq2)
 		{
 			BaseClass::setToBasisState(0);
@@ -76,7 +76,7 @@ namespace Distributed {
 	public:
 		using BaseClass = DistributedCU<VectorClass, MatrixClass>;
 
-		DistributedCNOT(int addseed = 0)
+		DistributedCNOT(unsigned int addseed = 0)
 			: BaseClass(4, 0, 3, 1, 2, addseed)
 		{
 		}

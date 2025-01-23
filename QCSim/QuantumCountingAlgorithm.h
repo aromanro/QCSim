@@ -29,7 +29,7 @@ namespace QuantumCounting {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		QuantumCountingAlgorithm(size_t PrecisionQubits = 6, size_t GroverQubits = 4, int addseed = 0)
+		QuantumCountingAlgorithm(size_t PrecisionQubits = 6, size_t GroverQubits = 4, unsigned int addseed = 0)
 			: BaseClass(PrecisionQubits + 2 * GroverQubits, addseed), precisionQubits(PrecisionQubits), groverQubits(GroverQubits), fourier(PrecisionQubits, 0, PrecisionQubits - 1)
 		{
 			assert(PrecisionQubits >= 3);

@@ -19,7 +19,7 @@ namespace DeutschJozsa {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DeutschJozsaAlgorithm(size_t N = 2, int addseed = 0)
+		DeutschJozsaAlgorithm(size_t N = 2, unsigned int addseed = 0)
 			: BaseClass(N, addseed),
 			functionType(FunctionType::constantZero)
 		{
@@ -155,7 +155,7 @@ namespace DeutschJozsa {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		DeutschJozsaAlgorithmWithGatesOracle(size_t N = 2, int addseed = 0)
+		DeutschJozsaAlgorithmWithGatesOracle(size_t N = 2, unsigned int addseed = 0)
 			: BaseClass(N == 2 ? 2 : 2 * N - 3, addseed), oracle(N == 2 ? 2 : 2 * N - 3, 0, N - 2, N - 1, N)
 			
 		{

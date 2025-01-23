@@ -25,7 +25,7 @@ namespace Paradoxes {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		GeneralElitzurVaidmanBomb(size_t maxStages, int addseed = 0)
+		GeneralElitzurVaidmanBomb(size_t maxStages, unsigned int addseed = 0)
 			: BaseClass(maxStages + 1, addseed), stages(maxStages), theta(M_PI / (maxStages + 1.))
 		{
 			assert((BaseClass::getNrQubits() >= 2));

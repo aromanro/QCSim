@@ -12,7 +12,7 @@ namespace ErrorCorrection {
 		using BaseClass = ErrorCorrectionBase<VectorClass, MatrixClass>;
 		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ErrorCorrection3Qubits(int addseed = 0)
+		ErrorCorrection3Qubits(unsigned int addseed = 0)
 			: BaseClass(3, addseed)
 		{
 		}
@@ -39,7 +39,7 @@ namespace ErrorCorrection {
 		using BaseClass = ErrorCorrection3Qubits<VectorClass, MatrixClass>;
 		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ErrorCorrection3QubitsFlip(int addseed = 0)
+		ErrorCorrection3QubitsFlip(unsigned int addseed = 0)
 			: BaseClass(addseed)
 		{
 		}
@@ -72,7 +72,7 @@ namespace ErrorCorrection {
 		using BaseClass = ErrorCorrection3Qubits<VectorClass, MatrixClass>;
 		using AlgorithmClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		ErrorCorrection3QubitsSign(int addseed = 0)
+		ErrorCorrection3QubitsSign(unsigned int addseed = 0)
 			: BaseClass(addseed)
 		{
 		}

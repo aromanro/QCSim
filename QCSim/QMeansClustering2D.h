@@ -29,7 +29,7 @@ namespace MachineLearning {
 			int cluster = 0;
 		};
 
-		QMeansClustering2D(int addseed = 0)
+		QMeansClustering2D(unsigned int addseed = 0)
 		: BaseClass(3, addseed)
 		{
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;

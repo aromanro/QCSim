@@ -63,7 +63,7 @@ namespace BernsteinVazirani {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		BernsteinVaziraniAlgorithm(size_t N = 3, int addseed = 0)
+		BernsteinVaziraniAlgorithm(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(N, addseed)
 		{
 			assert(N >= 1);
@@ -149,7 +149,7 @@ namespace BernsteinVazirani {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		BernsteinVaziraniAlgorithmWithGatesOracle(size_t N = 3, int addseed = 0)
+		BernsteinVaziraniAlgorithmWithGatesOracle(size_t N = 3, unsigned int addseed = 0)
 			: BaseClass(2 * N - 1, addseed),
 			oracle(2 * N - 1, 0, N - 1, N, N + 1)
 		{

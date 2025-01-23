@@ -16,7 +16,7 @@ namespace Games {
 	public:
 		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		CoinFlipping(int addseed = 0)
+		CoinFlipping(unsigned int addseed = 0)
 			: BaseClass(1, addseed)
 		{
 			BaseClass::setToBasisState(0);
