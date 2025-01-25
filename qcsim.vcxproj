@@ -346,6 +346,7 @@
     <ClInclude Include="QCSim\QuantumGate.h" />
     <ClInclude Include="QCSim\QubitRegister.h" />
     <ClInclude Include="QCSim\QubitRegisterCalculator.h" />
+    <ClInclude Include="QCSim\QubitRegisterDebug.h" />
     <ClInclude Include="QCSim\QubitsSwapper.h" />
     <ClInclude Include="QCSim\Schrodinger.h" />
     <ClInclude Include="QCSim\ShorAlgorithm.h" />

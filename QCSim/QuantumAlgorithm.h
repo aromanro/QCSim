@@ -1,13 +1,13 @@
 #pragma once
 
-#include "QubitRegister.h"
+#include "QubitRegisterDebug.h"
 
 namespace QC {
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QuantumAlgorithm
 	{
 	public:
-		using RegisterClass = QubitRegister<VectorClass, MatrixClass>;
+		using RegisterClass = QubitRegisterDebug<VectorClass, MatrixClass>;
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
 
 		QuantumAlgorithm(size_t N = 3, unsigned int addseed = 0)

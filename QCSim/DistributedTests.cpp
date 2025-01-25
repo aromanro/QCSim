@@ -16,7 +16,7 @@ bool distributedCNOTTest()
 
 	// for non-distributed CNOT
 	QC::Gates::CNOTGate cnot;
-	QC::QubitRegister reg(2);
+	QC::QubitRegisterDebug reg(2);
 
 	for (size_t ctrlQubit = 0; ctrlQubit <= 1; ++ctrlQubit)
 		for (size_t targetQubit = 0; targetQubit <= 1; ++targetQubit)
@@ -42,8 +42,8 @@ bool distributedCNOTTest()
 				}
 
 				// this should not happen, but just in case... to catch bugs
-				for (int q1 = 0; q1 < 2; ++q1)
-					for (int q2 = 0; q2 < 2; ++q2)
+				for (unsigned long long q1 = 0; q1 < 2; ++q1)
+					for (unsigned long long q2 = 0; q2 < 2; ++q2)
 					{
 						const size_t state = ((q2 << 1ULL) | q1) << 1ULL;
 						if (state == measurements)
@@ -114,7 +114,7 @@ bool teleportedCNOTTest()
 
 	// for non-distributed CNOT
 	QC::Gates::CNOTGate cnot;
-	QC::QubitRegister reg(2);
+	QC::QubitRegisterDebug reg(2);
 
 	for (size_t ctrlQubit = 0; ctrlQubit <= 1; ++ctrlQubit)
 		for (size_t targetQubit = 0; targetQubit <= 1; ++targetQubit)
@@ -130,9 +130,9 @@ bool teleportedCNOTTest()
 			const Eigen::VectorXcd res = reg.getRegisterStorage();
 
 			// now check them to have the same results
-			for (int i = 0; i < 4; ++i)
+			for (unsigned long long i = 0; i < 4; ++i)
 			{
-				if (!approxEqual(distStorage((i << 2) | measurements), res(i)))
+				if (!approxEqual(distStorage((i << 2ULL) | measurements), res(i)))
 				{
 					std::cout << "Error: teleported CNOT failed for ctrl = " << ctrlQubit << ", target = " << targetQubit << ", results were different than for the local CNOT" << std::endl;
 
