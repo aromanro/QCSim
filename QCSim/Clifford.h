@@ -421,6 +421,19 @@ namespace QC {
 				stabilizerGenerators[q].X[target] = XOR(stabilizerGenerators[q].X[target], stabilizerGenerators[q].X[control]);
 				stabilizerGenerators[q].Z[control] = XOR(stabilizerGenerators[q].Z[control], stabilizerGenerators[q].Z[target]);
 			}
+
+			std::unique_ptr<StabilizerSimulator> Clone() const
+			{
+				auto sim = std::make_unique<StabilizerSimulator>(1);
+
+				sim->destabilizerGenerators = destabilizerGenerators;
+				sim->stabilizerGenerators = stabilizerGenerators;
+
+				sim->savedDestabilizerGenerators = savedDestabilizerGenerators;
+				sim->savedStabilizerGenerators = savedStabilizerGenerators;
+
+				sim->enableMultithreading = enableMultithreading;
+			}
 		};
 	}
 }

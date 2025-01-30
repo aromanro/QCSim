@@ -11,6 +11,8 @@ namespace QC {
 		class MPSSimulatorImpl : public MPSSimulatorBase
 		{
 		public:
+			friend class MPSSimulator;
+
 			MPSSimulatorImpl(size_t N, unsigned int addseed = 0)
 				: MPSSimulatorBase(N, addseed)
 			{

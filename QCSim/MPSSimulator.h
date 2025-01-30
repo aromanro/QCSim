@@ -253,6 +253,23 @@ namespace QC
 				setState(savedState);
 			}
 
+			std::unique_ptr<MPSSimulator> Clone() const
+			{
+				auto sim = std::make_unique<MPSSimulator>(1);
+
+				sim->qubitsMap = qubitsMap;
+				sim->qubitsMapInv = qubitsMapInv;
+				sim->impl.limitSize = impl.limitSize;
+				sim->impl.limitEntanglement = impl.limitEntanglement;
+				sim->impl.chi = impl.chi;
+				sim->impl.singularValueThreshold = impl.singularValueThreshold;
+
+				sim->impl.lambdas = impl.lambdas;
+				sim->impl.gammas = impl.gammas;
+
+				if (savedState) sim->savedState = std::dynamic_pointer_cast<MPSSimulatorInterface>(savedState)->getState();
+			}
+
 		private:
 			void InitQubitsMap()
 			{

@@ -464,6 +464,20 @@ namespace QC {
 			return state;
 		}
 
+		std::unique_ptr<QubitRegister<VectorClass, MatrixClass>> Clone() const
+		{
+			auto qr = std::make_unique<QubitRegister<VectorClass, MatrixClass>>(1);
+			qr->NrQubits = NrQubits;
+			qr->NrBasisStates = NrBasisStates;
+			qr->registerStorage = registerStorage;
+			qr->resultsStorage = resultsStorage;
+			qr->savedSatateStorage = savedSatateStorage;
+			qr->computeGates = computeGates;
+			qr->recordGates = recordGates;
+			
+			return qr;
+		}
+
 	protected:
 		inline void CheckQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
 		{
