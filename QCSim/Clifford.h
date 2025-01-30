@@ -353,6 +353,8 @@ namespace QC {
 				sim->savedStabilizerGenerators = savedStabilizerGenerators;
 
 				sim->enableMultithreading = enableMultithreading;
+
+				return sim;
 			}
 
 		private:

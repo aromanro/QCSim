@@ -268,6 +268,8 @@ namespace QC
 				sim->impl.gammas = impl.gammas;
 
 				if (savedState) sim->savedState = std::dynamic_pointer_cast<MPSSimulatorInterface>(savedState)->getState();
+
+				return sim;
 			}
 
 		private:
