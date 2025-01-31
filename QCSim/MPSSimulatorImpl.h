@@ -56,13 +56,11 @@ namespace QC {
 					throw std::invalid_argument("Qubit index out of bounds");
 
 				const double rndVal = 1. - uniformZeroOne(rng);
-
 				const double prob0 = GetProbability(qubit);
-
 				const bool zeroMeasured = rndVal < prob0;
+				
 				MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
-
-				const QC::Gates::SingleQubitGate projOp(projMat);
+				const QC::Gates::SingleQubitGate projOp(std::move(projMat));
 
 				ApplySingleQubitGate(projOp, qubit);
 
@@ -82,6 +80,57 @@ namespace QC {
 				}
 
 				return !zeroMeasured;
+			}
+
+			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
+			{
+				if (qubits.empty()) return {};
+
+				std::unordered_map<IndexType, bool> res;
+				if (qubits.size() == 1)
+				{
+					const IndexType qubit = *qubits.begin();
+					res[qubit] = MeasureQubit(qubit);
+					return res;
+				}
+
+				const auto lastIt = --qubits.end();
+
+				for (auto it = qubits.begin(); it != lastIt; )
+				{
+					const auto qubit = *it;
+					++it;
+					const auto nextQubit = *it;
+
+					const double rndVal = 1. - uniformZeroOne(rng);
+					const double prob0 = GetProbability(qubit);
+					const bool zeroMeasured = rndVal < prob0;
+
+					res[qubit] = !zeroMeasured;
+					
+					MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
+					const QC::Gates::SingleQubitGate projOp(std::move(projMat));
+
+					ApplySingleQubitGate(projOp, qubit);
+					
+					for (IndexType q = qubit; q < nextQubit; ++q)
+					{
+						if (lambdas[q].size() == 1) break;
+						ApplyTwoQubitGate(projOp, q, q + 1, true);
+					}
+
+					for (IndexType q = qubit; q > 0; --q)
+					{
+						const IndexType q1 = q - 1;
+						if (lambdas[q1].size() == 1) break;
+						ApplyTwoQubitGate(projOp, q1, q, true);
+					}
+				}
+
+				const auto lastQubit = *lastIt;
+				res[lastQubit] = MeasureQubit(lastQubit);
+
+				return res;
 			}
 
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
@@ -183,8 +232,7 @@ namespace QC {
 					}
 				}
 
-				Eigen::JacobiSVD<MatrixClass/*, Eigen::FullPivHouseholderQRPreconditioner*/> SVD;
-				//Eigen::BDCSVD<MatrixClass> SVD;
+				Eigen::JacobiSVD<MatrixClass> SVD;
 
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
@@ -195,14 +243,7 @@ namespace QC {
 				const MatrixClass& VmatrixFull = SVD.matrixV();
 				const LambdaType& SvaluesFull = SVD.singularValues();
 
-				//IndexType szm = SvaluesFull.size();
 				IndexType szm = SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
-
-				//if (szm < SvaluesFull.size())
-				//	std::cout << "Singular values truncated" << std::endl;
-
-				//assert(szm > 0);
-
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
 				const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
@@ -214,8 +255,6 @@ namespace QC {
 				assert(UmatrixFull.cols() == VmatrixFull.cols()); // for 'thin'
 				assert(sz <= UmatrixFull.cols());
 
-				//const MatrixClass Umatrix = UmatrixFull;
-				//const MatrixClass Vmatrix = VmatrixFull.adjoint();
 
 				const MatrixClass Umatrix = UmatrixFull.topLeftCorner(std::min<IndexType>(2 * szl, UmatrixFull.rows()), sz);
 				const MatrixClass Vmatrix = VmatrixFull.topLeftCorner(std::min<IndexType>(2 * szr, VmatrixFull.rows()), sz).adjoint();
@@ -224,7 +263,6 @@ namespace QC {
 
 				lambdas[qubit1] = SvaluesFull.head(sz);
 				assert(lambdas[qubit1][0] != 0.);
-				//if (lambdas[qubit1][0] == 0.) lambdas[qubit1][0] = 1; // this should not happen
 				lambdas[qubit1].normalize();
 
 				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);

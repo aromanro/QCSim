@@ -26,6 +26,8 @@ namespace QC
 
 
 		// this is going to allow two qubit gates to be applied on qubits that are not adjacent
+		// it's a sort of decorator pattern, contains the simulator inside and exposes the same interface
+		// adding on top of the implementation the qubits mapping
 		class MPSSimulator : public MPSSimulatorInterface
 		{
 		public:
@@ -179,6 +181,22 @@ namespace QC
 					throw std::invalid_argument("Qubit index out of bounds");
 
 				return impl.MeasureQubit(qubitsMap[qubit]);
+			}
+
+			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
+			{
+				std::set<IndexType> mappedQubits;
+				for (const auto qubit : qubits)
+					mappedQubits.insert(qubitsMap[qubit]);
+				
+				auto measuredQubits = impl.MeasureQubits(mappedQubits);
+
+				std::unordered_map<IndexType, bool> res;
+
+				for (const auto& [qubit, val] : measuredQubits)
+					res[qubitsMapInv[qubit]] = val;
+
+				return res;
 			}
 
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override

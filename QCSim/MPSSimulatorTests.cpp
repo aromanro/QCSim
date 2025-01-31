@@ -532,6 +532,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 			{
 				std::unordered_map<std::vector<bool>, int> measurementsRegMap;
 				std::unordered_map<std::vector<bool>, int> measurementsMPSMap;
+				std::unordered_map<std::vector<bool>, int> measurementsMPSMapOpt;
 
 				size_t remainingCounts = nrMeasurements;
 				size_t nrThreads = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
@@ -548,36 +549,48 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 					const size_t curCnt = std::min(cntPerThread, remainingCounts);
 					remainingCounts -= curCnt;
 
-					tasks[i] = std::async(std::launch::async, [&circuit, &measurementsRegMap, &measurementsMPSMap, curCnt, nrQubits, &resultsMutex]()
+					tasks[i] = std::async(std::launch::async, [&circuit, &measurementsRegMap, &measurementsMPSMap, &measurementsMPSMapOpt, curCnt, nrQubits, &resultsMutex]()
 						{
 							QC::TensorNetworks::MPSSimulator mps(nrQubits);
+							QC::TensorNetworks::MPSSimulator mpsOpt(nrQubits);
+
 							QC::QubitRegister reg(nrQubits);
 
 							std::vector<bool> measurementsReg(nrQubits);
 							std::vector<bool> measurementsMPS(nrQubits);
+							std::vector<bool> measurementsMPSOpt(nrQubits);
+
+							std::set<Eigen::Index> qubits;
+							for (int q = 0; q < nrQubits; ++q)
+								qubits.insert(q);
 
 							for (size_t i = 0; i < curCnt; ++i)
 							{
 								for (const auto& gate : circuit)
 								{
 									mps.ApplyGate(*gate);
+									mpsOpt.ApplyGate(*gate);
 									reg.ApplyGate(*gate);
 								}
 
+								auto measRes = mpsOpt.MeasureQubits(qubits);
 								for (int q = 0; q < nrQubits; ++q)
 								{
 									measurementsReg[q] = reg.MeasureQubit(q);
 									measurementsMPS[q] = mps.MeasureQubit(q);
+									measurementsMPSOpt[q] = measRes[q];
 								}
-
+								
 								{
 									const std::lock_guard lock(resultsMutex);
 									++measurementsRegMap[measurementsReg];
 									++measurementsMPSMap[measurementsMPS];
+									++measurementsMPSMapOpt[measurementsMPSOpt];
 								}
 
 								reg.setToBasisState(0);
 								mps.setToBasisState(0);
+								mpsOpt.setToBasisState(0);
 							}
 						});
 				}
@@ -589,12 +602,13 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 				for (const auto& [key, value] : measurementsRegMap)
 				{
-					const double dif = abs((static_cast<double>(measurementsMPSMap[key] - value)) / nrMeasurements);
-					if (dif > 0.05)
+					const double dif1 = abs((static_cast<double>(measurementsMPSMap[key] - value)) / nrMeasurements);
+					const double dif2 = abs((static_cast<double>(measurementsMPSMapOpt[key] - value)) / nrMeasurements);
+					if (dif1 > 0.05 || dif2 > 0.05)
 					{
 						std::cout << "Measurements test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 						std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
-						std::cout << "Difference: " << dif << std::endl;
+						std::cout << "Difference 1: " << dif1 << " Difference 2: " << dif2 << std::endl;
 
 						std::cout << "Reg measurements:\n";
 						for (const auto& [k, v] : measurementsRegMap)
@@ -606,6 +620,14 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 						std::cout << "MPS measurements:\n";
 						for (const auto& [k, v] : measurementsMPSMap)
+						{
+							for (const auto& b : key)
+								std::cout << b << " ";
+							std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+						}
+
+						std::cout << "MPS optimized measurements:\n";
+						for (const auto& [k, v] : measurementsMPSMapOpt)
 						{
 							for (const auto& b : key)
 								std::cout << b << " ";
