@@ -189,10 +189,9 @@ namespace QC
 				for (const auto qubit : qubits)
 					mappedQubits.insert(qubitsMap[qubit]);
 				
-				auto measuredQubits = impl.MeasureQubits(mappedQubits);
+				const auto measuredQubits = impl.MeasureQubits(mappedQubits);
 
 				std::unordered_map<IndexType, bool> res;
-
 				for (const auto& [qubit, val] : measuredQubits)
 					res[qubitsMapInv[qubit]] = val;
 
