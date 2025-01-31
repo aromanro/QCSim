@@ -513,6 +513,49 @@ bool OneAndTwoQubitGatesTestMapped()
 	return true;
 }
 
+bool CheckMeasurements(int nrQubits, int nrMeasurements, std::unordered_map<std::vector<bool>, int>& measurementsRegMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMapOpt)
+{
+	for (const auto& [key, value] : measurementsRegMap)
+	{
+		const double dif1 = abs((static_cast<double>(measurementsMPSMap[key] - value)) / nrMeasurements);
+		const double dif2 = abs((static_cast<double>(measurementsMPSMapOpt[key] - value)) / nrMeasurements);
+		if (dif1 > 0.05 || dif2 > 0.05)
+		{
+			std::cout << "Measurements test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
+			std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
+			std::cout << "Difference 1: " << dif1 << " Difference 2: " << dif2 << std::endl;
+
+			std::cout << "Reg measurements:\n";
+			for (const auto& [k, v] : measurementsRegMap)
+			{
+				for (const auto& b : k)
+					std::cout << b << " ";
+				std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+			}
+
+			std::cout << "MPS measurements:\n";
+			for (const auto& [k, v] : measurementsMPSMap)
+			{
+				for (const auto& b : key)
+					std::cout << b << " ";
+				std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+			}
+
+			std::cout << "MPS optimized measurements:\n";
+			for (const auto& [k, v] : measurementsMPSMapOpt)
+			{
+				for (const auto& b : key)
+					std::cout << b << " ";
+				std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+			}
+
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 {
 	std::cout << "\nMPS swapping/mapped simulator measurements test with circuits with both one and two qubit gates" << std::endl;
@@ -600,43 +643,10 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 				std::cout << ".";
 
-				for (const auto& [key, value] : measurementsRegMap)
-				{
-					const double dif1 = abs((static_cast<double>(measurementsMPSMap[key] - value)) / nrMeasurements);
-					const double dif2 = abs((static_cast<double>(measurementsMPSMapOpt[key] - value)) / nrMeasurements);
-					if (dif1 > 0.05 || dif2 > 0.05)
-					{
-						std::cout << "Measurements test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
-						std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
-						std::cout << "Difference 1: " << dif1 << " Difference 2: " << dif2 << std::endl;
+				const bool res = CheckMeasurements(nrQubits, nrMeasurements, measurementsRegMap, measurementsMPSMap, measurementsMPSMapOpt);
 
-						std::cout << "Reg measurements:\n";
-						for (const auto& [k, v] : measurementsRegMap)
-						{
-							for (const auto& b : k)
-								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
-						}
-
-						std::cout << "MPS measurements:\n";
-						for (const auto& [k, v] : measurementsMPSMap)
-						{
-							for (const auto& b : key)
-								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
-						}
-
-						std::cout << "MPS optimized measurements:\n";
-						for (const auto& [k, v] : measurementsMPSMapOpt)
-						{
-							for (const auto& b : key)
-								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
-						}
-
-						return false;
-					}
-				}
+				if (!res)
+					return false;
 			}
 		}
 	}
