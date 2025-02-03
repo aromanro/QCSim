@@ -284,7 +284,17 @@ namespace QC
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
 
-				if (savedState) sim->savedState = std::dynamic_pointer_cast<MPSSimulatorInterface>(savedState)->getState();
+				if (savedState) {
+					auto simState = std::static_pointer_cast<MPSSimulatorState>(savedState);
+					auto clonedSavedState = std::make_shared<MPSSimulatorState>();
+					
+					clonedSavedState->gammas = simState->gammas;
+					clonedSavedState->lambdas = simState->lambdas;
+					clonedSavedState->qubitsMap = simState->qubitsMap;
+					clonedSavedState->qubitsMapInv = simState->qubitsMapInv;
+					
+					sim->savedState = clonedSavedState;
+				}
 
 				return sim;
 			}
