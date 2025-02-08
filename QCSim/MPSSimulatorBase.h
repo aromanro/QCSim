@@ -160,6 +160,33 @@ namespace QC {
 				gammas[qubit] = gammas[qubit].contract(opTensor, product_dims1).shuffle(permute);
 			}
 
+			double GetProbability(IndexType qubit, bool zeroVal = true) const override
+			{
+				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+					throw std::invalid_argument("Qubit index out of bounds");
+
+				MatrixTensorType qubitMatrix = gammas[qubit].chip(zeroVal ? 0 : 1, 1);
+
+				if (qubit > 0)
+				{
+					const IndexType qbit1 = qubit - 1;
+					for (IndexType col = 0; col < qubitMatrix.dimension(1); ++col)
+						for (IndexType row = 0; row < qubitMatrix.dimension(0); ++row)
+							qubitMatrix(row, col) *= row < lambdas[qbit1].size() ? lambdas[qbit1][row] : 0.;
+				}
+
+				if (qubit < static_cast<IndexType>(lambdas.size()))
+				{
+					for (IndexType col = 0; col < qubitMatrix.dimension(1); ++col)
+						for (IndexType row = 0; row < qubitMatrix.dimension(0); ++row)
+							qubitMatrix(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+				}
+
+				const Eigen::Tensor<std::complex<double>, 0> res = (qubitMatrix * qubitMatrix.conjugate()).sum();
+
+				return res(0).real();
+			}
+
 			void setLimitBondDimension(IndexType chival) override
 			{
 				limitSize = true;
