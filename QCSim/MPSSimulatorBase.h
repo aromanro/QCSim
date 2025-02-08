@@ -141,6 +141,25 @@ namespace QC {
 				}
 			}
 
+			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
+			{
+				// easy: shape the gate into a tensor and contract it with the qubit tensor
+				OneQubitGateTensor opTensor;
+
+				const MatrixClass& opMat = gate.getRawOperatorMatrix();
+
+				opTensor(0, 0) = opMat(0, 0);
+				opTensor(0, 1) = opMat(0, 1);
+				opTensor(1, 0) = opMat(1, 0);
+				opTensor(1, 1) = opMat(1, 1);
+
+				// contract the gate tensor with the qubit tensor
+
+				static const Indexes product_dims1{ IntIndexPair(1, 1) };
+				static const std::array<int, 3> permute{ 0, 2, 1 };
+				gammas[qubit] = gammas[qubit].contract(opTensor, product_dims1).shuffle(permute);
+			}
+
 			void setLimitBondDimension(IndexType chival) override
 			{
 				limitSize = true;
