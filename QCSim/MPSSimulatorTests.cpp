@@ -280,7 +280,7 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 				std::unordered_map<std::vector<bool>, int> measurementsRegMap;
 				std::unordered_map<std::vector<bool>, int> measurementsMPSMap;
 
-				for (int t = 0; t < nrMeasurements; ++t)
+				for (int i = 0; i < nrMeasurements; ++i)
 				{
 					QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
 					QC::QubitRegister reg(nrQubits);
@@ -620,13 +620,13 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 							for (int q = 0; q < nrQubits; ++q)
 								qubits.insert(q);
 
-							for (size_t i = 0; i < curCnt; ++i)
+							for (size_t j = 0; j < curCnt; ++j)
 							{
 								for (const auto& gate : circuit)
 								{
 									mps.ApplyGate(*gate);
 									mpsOpt.ApplyGate(*gate);
-									mpsAll.ApplyGate(*gate);
+									if (j == 0) mpsAll.ApplyGate(*gate); // apply it only the first iteration, measure no-collapse is used
 									reg.ApplyGate(*gate);
 								}
 
@@ -650,7 +650,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 								reg.setToBasisState(0);
 								mps.setToBasisState(0);
 								mpsOpt.setToBasisState(0);
-								mpsAll.setToBasisState(0);
+								//mpsAll.setToBasisState(0); // no need to reset if only no-collapse measurements are used and the gates are applied only the first iteration
 							}
 						});
 				}
