@@ -206,16 +206,6 @@ namespace QC {
 			}
 
 		private:
-			void MultiplyMatrixWithLambda(IndexType qubit, MatrixClass& mat) const
-			{
-				const size_t nrQubits = gammas.size();
-
-				if (qubit != static_cast<IndexType>(nrQubits) - 1)
-					for (IndexType col = 0; col < mat.cols(); ++col)
-						for (IndexType row = 0; row < mat.rows(); ++row)
-							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
-			}
-
 			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
 			{
 				// easy: shape the gate into a tensor and contract it with the qubit tensor

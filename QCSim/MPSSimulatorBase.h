@@ -258,6 +258,17 @@ namespace QC {
 				std::cout << "Gamma " << gammas.size() - 1 << ":\n" << gammas[gammas.size() - 1] << std::endl;
 			}
 
+		protected:
+			void MultiplyMatrixWithLambda(IndexType qubit, MatrixClass& mat) const
+			{
+				const size_t nrQubits = gammas.size();
+
+				if (qubit != static_cast<IndexType>(nrQubits) - 1)
+					for (IndexType col = 0; col < mat.cols(); ++col)
+						for (IndexType row = 0; row < mat.rows(); ++row)
+							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+			}
+
 		private:
 			template<int N> static Eigen::Tensor<std::complex<double>, N + 2> ContractNQubits(const Eigen::Tensor<std::complex<double>, N + 1>& left, const LambdaType& lambdaVal, const GammaType& nextQubit)
 			{
