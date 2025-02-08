@@ -513,6 +513,16 @@ bool OneAndTwoQubitGatesTestMapped()
 	return true;
 }
 
+void PrintMeasurements(int nrMeasurements, const std::unordered_map<std::vector<bool>, int>& measurements)
+{
+	for (const auto& [k, v] : measurements)
+	{
+		for (const auto& b : k)
+			std::cout << b << " ";
+		std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+	}
+}
+
 bool CheckMeasurements(int nrQubits, int nrMeasurements, std::unordered_map<std::vector<bool>, int>& measurementsRegMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMapOpt, std::unordered_map<std::vector<bool>, int>& measurementsMPSMapAll)
 {
 	static const double threshold = 0.05;
@@ -529,44 +539,24 @@ bool CheckMeasurements(int nrQubits, int nrMeasurements, std::unordered_map<std:
 			std::cout << "Difference 1: " << dif1 << " Difference 2: " << dif2 << " Difference 3: " << dif3 << std::endl;
 
 			std::cout << "Reg measurements:\n";
-			for (const auto& [k, v] : measurementsRegMap)
-			{
-				for (const auto& b : k)
-					std::cout << b << " ";
-				std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
-			}
+			PrintMeasurements(nrMeasurements, measurementsRegMap);
 
 			if (dif1 > threshold)
 			{
 				std::cout << "MPS measurements:\n";
-				for (const auto& [k, v] : measurementsMPSMap)
-				{
-					for (const auto& b : key)
-						std::cout << b << " ";
-					std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
-				}
+				PrintMeasurements(nrMeasurements, measurementsMPSMap);
 			}
 
 			if (dif2 > threshold)
 			{
 				std::cout << "MPS optimized measurements:\n";
-				for (const auto& [k, v] : measurementsMPSMapOpt)
-				{
-					for (const auto& b : key)
-						std::cout << b << " ";
-					std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
-				}
+				PrintMeasurements(nrMeasurements, measurementsMPSMapOpt);
 			}
 
 			if (dif3 > threshold)
 			{
 				std::cout << "MPS 'no collapse' measurements:\n";
-				for (const auto& [k, v] : measurementsMPSMapAll)
-				{
-					for (const auto& b : key)
-						std::cout << b << " ";
-					std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
-				}
+				PrintMeasurements(nrMeasurements, measurementsMPSMapAll);
 			}
 
 			return false;

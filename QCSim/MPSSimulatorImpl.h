@@ -152,12 +152,9 @@ namespace QC {
 					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
 					if (qubit != 0)
 						mq = mat * mq;
-					if (qubit < static_cast<IndexType>(nrQubits) - 1)
-					{
-						for (IndexType col = 0; col < mq.cols(); ++col)
-							for (IndexType row = 0; row < mq.rows(); ++row)
-								mq(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
-					}
+
+					MultiplyMatrixWithLambda(qubit, mq);
+
 					const double prob0 = mq.cwiseProduct(mq.conjugate()).sum().real() / totalProb;
 					
 					// 2. use that probability to measure the qubit
@@ -175,13 +172,7 @@ namespace QC {
 					else
 						mat = mat * mq;
 
-					if (qubit != static_cast<IndexType>(nrQubits) - 1)
-					{
-						for (IndexType col = 0; col < mat.cols(); ++col)
-							for (IndexType row = 0; row < mat.rows(); ++row)
-								mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
-					}
-
+					MultiplyMatrixWithLambda(qubit, mat);
 				}
 				
 				return res;
@@ -215,6 +206,16 @@ namespace QC {
 			}
 
 		private:
+			void MultiplyMatrixWithLambda(IndexType qubit, MatrixClass& mat) const
+			{
+				const size_t nrQubits = gammas.size();
+
+				if (qubit != static_cast<IndexType>(nrQubits) - 1)
+					for (IndexType col = 0; col < mat.cols(); ++col)
+						for (IndexType row = 0; row < mat.rows(); ++row)
+							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+			}
+
 			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
 			{
 				// easy: shape the gate into a tensor and contract it with the qubit tensor
