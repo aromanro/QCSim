@@ -160,13 +160,14 @@ namespace QC {
 					}
 					const double prob0 = mq.cwiseProduct(mq.conjugate()).sum().real() / totalProb;
 					
-					// use that probability to measure the qubit
+					// 2. use that probability to measure the qubit
 					const double rndVal = 1. - uniformZeroOne(rng);
 					const bool zeroMeasured = rndVal < prob0;
 					res[qubit] = !zeroMeasured;
 
 					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
 
+					// now update the matrix
 					qubitMat = gammas[qubit].chip(zeroMeasured ? 0 : 1, 1);
 					mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
 					if (qubit == 0)
