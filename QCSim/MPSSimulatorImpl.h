@@ -165,14 +165,19 @@ namespace QC {
 					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
 
 					// now update the matrix
-					qubitMat = gammas[qubit].chip(zeroMeasured ? 0 : 1, 1);
-					mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
-					if (qubit == 0)
+					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
 						mat = mq;
 					else
-						mat = mat * mq;
+					{
+						qubitMat = gammas[qubit].chip(1, 1);
+						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
+						if (qubit == 0)
+							mat = mq;
+						else
+							mat = mat * mq;
 
-					MultiplyMatrixWithLambda(qubit, mat);
+						MultiplyMatrixWithLambda(qubit, mat);
+					}
 				}
 				
 				return res;
