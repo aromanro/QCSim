@@ -198,6 +198,18 @@ namespace QC
 				return res;
 			}
 
+			std::vector<bool> MeasureNoCollapse() override
+			{
+				const auto measuredQubits = impl.MeasureNoCollapse();
+				const size_t nrQubits = measuredQubits.size();
+
+				std::vector<bool> res(nrQubits);
+				for (size_t q = 0; q < nrQubits; ++q)
+					res[q] = measuredQubits[qubitsMap[q]];
+				
+				return res;
+			}
+
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))

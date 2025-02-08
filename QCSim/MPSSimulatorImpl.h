@@ -133,6 +133,59 @@ namespace QC {
 				return res;
 			}
 
+			std::vector<bool> MeasureNoCollapse() override
+			{
+				if (gammas.empty()) return {};
+
+				const size_t nrQubits = gammas.size();
+				std::vector<bool> res(nrQubits);
+
+				Eigen::MatrixXcd mat;
+
+				double totalProb = 1.;
+
+				for (IndexType qubit = 0; qubit < static_cast<IndexType>(nrQubits); ++qubit)
+				{
+					// 1. First, compute probability for measuring 0
+					// zero matrix
+					MatrixTensorType qubitMat = gammas[qubit].chip(0, 1);
+					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
+					if (qubit != 0)
+						mq = mat * mq;
+					if (qubit < static_cast<IndexType>(nrQubits) - 1)
+					{
+						for (IndexType col = 0; col < mq.cols(); ++col)
+							for (IndexType row = 0; row < mq.rows(); ++row)
+								mq(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+					}
+					const double prob0 = mq.cwiseProduct(mq.conjugate()).sum().real() / totalProb;
+					
+					// use that probability to measure the qubit
+					const double rndVal = 1. - uniformZeroOne(rng);
+					const bool zeroMeasured = rndVal < prob0;
+					res[qubit] = !zeroMeasured;
+
+					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
+
+					qubitMat = gammas[qubit].chip(zeroMeasured ? 0 : 1, 1);
+					mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
+					if (qubit == 0)
+						mat = mq;
+					else
+						mat = mat * mq;
+
+					if (qubit != static_cast<IndexType>(nrQubits) - 1)
+					{
+						for (IndexType col = 0; col < mat.cols(); ++col)
+							for (IndexType row = 0; row < mat.rows(); ++row)
+								mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+					}
+
+				}
+				
+				return res;
+			}
+
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))

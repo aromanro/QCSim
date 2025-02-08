@@ -513,17 +513,20 @@ bool OneAndTwoQubitGatesTestMapped()
 	return true;
 }
 
-bool CheckMeasurements(int nrQubits, int nrMeasurements, std::unordered_map<std::vector<bool>, int>& measurementsRegMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMapOpt)
+bool CheckMeasurements(int nrQubits, int nrMeasurements, std::unordered_map<std::vector<bool>, int>& measurementsRegMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMap, std::unordered_map<std::vector<bool>, int>& measurementsMPSMapOpt, std::unordered_map<std::vector<bool>, int>& measurementsMPSMapAll)
 {
+	static const double threshold = 0.05;
+
 	for (const auto& [key, value] : measurementsRegMap)
 	{
 		const double dif1 = abs((static_cast<double>(measurementsMPSMap[key] - value)) / nrMeasurements);
 		const double dif2 = abs((static_cast<double>(measurementsMPSMapOpt[key] - value)) / nrMeasurements);
-		if (dif1 > 0.05 || dif2 > 0.05)
+		const double dif3 = abs((static_cast<double>(measurementsMPSMapAll[key] - value)) / nrMeasurements);
+		if (dif1 > threshold || dif2 > threshold || dif3 > threshold)
 		{
 			std::cout << "Measurements test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 			std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
-			std::cout << "Difference 1: " << dif1 << " Difference 2: " << dif2 << std::endl;
+			std::cout << "Difference 1: " << dif1 << " Difference 2: " << dif2 << " Difference 3: " << dif3 << std::endl;
 
 			std::cout << "Reg measurements:\n";
 			for (const auto& [k, v] : measurementsRegMap)
@@ -533,20 +536,37 @@ bool CheckMeasurements(int nrQubits, int nrMeasurements, std::unordered_map<std:
 				std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
 			}
 
-			std::cout << "MPS measurements:\n";
-			for (const auto& [k, v] : measurementsMPSMap)
+			if (dif1 > threshold)
 			{
-				for (const auto& b : key)
-					std::cout << b << " ";
-				std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+				std::cout << "MPS measurements:\n";
+				for (const auto& [k, v] : measurementsMPSMap)
+				{
+					for (const auto& b : key)
+						std::cout << b << " ";
+					std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+				}
 			}
 
-			std::cout << "MPS optimized measurements:\n";
-			for (const auto& [k, v] : measurementsMPSMapOpt)
+			if (dif2 > threshold)
 			{
-				for (const auto& b : key)
-					std::cout << b << " ";
-				std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+				std::cout << "MPS optimized measurements:\n";
+				for (const auto& [k, v] : measurementsMPSMapOpt)
+				{
+					for (const auto& b : key)
+						std::cout << b << " ";
+					std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+				}
+			}
+
+			if (dif3 > threshold)
+			{
+				std::cout << "MPS 'no collapse' measurements:\n";
+				for (const auto& [k, v] : measurementsMPSMapAll)
+				{
+					for (const auto& b : key)
+						std::cout << b << " ";
+					std::cout << " : " << static_cast<double>(v) / nrMeasurements << std::endl;
+				}
 			}
 
 			return false;
@@ -576,6 +596,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 				std::unordered_map<std::vector<bool>, int> measurementsRegMap;
 				std::unordered_map<std::vector<bool>, int> measurementsMPSMap;
 				std::unordered_map<std::vector<bool>, int> measurementsMPSMapOpt;
+				std::unordered_map<std::vector<bool>, int> measurementsMPSMapAll;
 
 				size_t remainingCounts = nrMeasurements;
 				size_t nrThreads = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
@@ -592,16 +613,18 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 					const size_t curCnt = std::min(cntPerThread, remainingCounts);
 					remainingCounts -= curCnt;
 
-					tasks[i] = std::async(std::launch::async, [&circuit, &measurementsRegMap, &measurementsMPSMap, &measurementsMPSMapOpt, curCnt, nrQubits, &resultsMutex]()
+					tasks[i] = std::async(std::launch::async, [&circuit, &measurementsRegMap, &measurementsMPSMap, &measurementsMPSMapOpt, &measurementsMPSMapAll, curCnt, nrQubits, &resultsMutex]()
 						{
 							QC::TensorNetworks::MPSSimulator mps(nrQubits);
 							QC::TensorNetworks::MPSSimulator mpsOpt(nrQubits);
+							QC::TensorNetworks::MPSSimulator mpsAll(nrQubits);
 
 							QC::QubitRegister reg(nrQubits);
 
 							std::vector<bool> measurementsReg(nrQubits);
 							std::vector<bool> measurementsMPS(nrQubits);
 							std::vector<bool> measurementsMPSOpt(nrQubits);
+							
 
 							std::set<Eigen::Index> qubits;
 							for (int q = 0; q < nrQubits; ++q)
@@ -613,6 +636,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 								{
 									mps.ApplyGate(*gate);
 									mpsOpt.ApplyGate(*gate);
+									mpsAll.ApplyGate(*gate);
 									reg.ApplyGate(*gate);
 								}
 
@@ -623,17 +647,20 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 									measurementsMPS[q] = mps.MeasureQubit(q);
 									measurementsMPSOpt[q] = measRes[q];
 								}
+								auto measurementsMPSAll = mpsAll.MeasureNoCollapse();
 								
 								{
 									const std::lock_guard lock(resultsMutex);
 									++measurementsRegMap[measurementsReg];
 									++measurementsMPSMap[measurementsMPS];
 									++measurementsMPSMapOpt[measurementsMPSOpt];
+									++measurementsMPSMapAll[measurementsMPSAll];
 								}
 
 								reg.setToBasisState(0);
 								mps.setToBasisState(0);
 								mpsOpt.setToBasisState(0);
+								mpsAll.setToBasisState(0);
 							}
 						});
 				}
@@ -643,7 +670,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 				std::cout << ".";
 
-				const bool res = CheckMeasurements(nrQubits, nrMeasurements, measurementsRegMap, measurementsMPSMap, measurementsMPSMapOpt);
+				const bool res = CheckMeasurements(nrQubits, nrMeasurements, measurementsRegMap, measurementsMPSMap, measurementsMPSMapOpt, measurementsMPSMapAll);
 
 				if (!res)
 					return false;
