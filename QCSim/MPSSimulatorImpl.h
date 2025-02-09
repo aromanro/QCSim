@@ -150,10 +150,9 @@ namespace QC {
 					// zero matrix
 					MatrixTensorType qubitMat = gammas[qubit].chip(0, 1);
 					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
+					MultiplyMatrixWithLambda(qubit, mq);
 					if (qubit != 0)
 						mq = mat * mq;
-
-					MultiplyMatrixWithLambda(qubit, mq);
 
 					const double prob0 = mq.cwiseProduct(mq.conjugate()).sum().real() / totalProb;
 					
@@ -171,12 +170,11 @@ namespace QC {
 					{
 						qubitMat = gammas[qubit].chip(1, 1);
 						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
+						MultiplyMatrixWithLambda(qubit, mq);
 						if (qubit == 0)
 							mat = mq;
 						else
 							mat = mat * mq;
-
-						MultiplyMatrixWithLambda(qubit, mat);
 					}
 				}
 				
