@@ -450,10 +450,10 @@ namespace QC {
 		{
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 			double accum = 0;
-			size_t state = NrBasisStates - 1;
+			size_t state = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
-				accum += norm(registerStorage(i));
+				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
 					state = i;
