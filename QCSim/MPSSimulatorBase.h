@@ -388,6 +388,8 @@ namespace QC {
 					return GenerateStatevector<6>();
 				case 7:
 					return GenerateStatevector<7>();
+				default:
+					break;
 				}
 
 				return {};
@@ -413,6 +415,8 @@ namespace QC {
 					return GenerateStatevector<14>();
 				case 15:
 					return GenerateStatevector<15>();
+				default:
+					break;
 				}
 
 				return {};
@@ -438,6 +442,8 @@ namespace QC {
 					return GenerateStatevector<22>();
 				case 23:
 					return GenerateStatevector<23>();
+				default:
+					break;
 				}
 
 				return {};
@@ -463,6 +469,8 @@ namespace QC {
 					return GenerateStatevector<30>();
 				case 31:
 					return GenerateStatevector<31>();
+				default:
+					break;
 				}
 
 				return {};

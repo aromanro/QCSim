@@ -219,6 +219,17 @@ namespace QC {
 					{
 						Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
 						// apply the swap gate, optimized
+						
+						// NOTE: with proper data structures this could be way more optimized
+						// instead of those generic eigen tensors for example, a more optimized tensor for this would hold Eigen matrices inside and
+						// the physical indices would select among them
+						// that way swapping will reduce to swapping pointers, it would be very fast
+						// but I'm lazy so I use the generic implementation
+						
+						// qiskit aer does it, though
+
+						// it's less important than it appears, because usually SVD will take the most time (unless severely limited or having some particularly easy circuits)
+
 						for (IndexType j = 0; j < theta.dimension(3); ++j)
 							for (IndexType i = 0; i < theta.dimension(0); ++i)
 								std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
