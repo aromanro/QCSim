@@ -246,7 +246,7 @@ namespace QC {
 				}
 
 				//Eigen::JacobiSVD<MatrixClass> SVD;
-				Eigen::BDCSVD<MatrixClass> SVD;
+				Eigen::BDCSVD<MatrixClass> SVD(thetaMatrix.rows(), thetaMatrix.cols());
 
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
