@@ -245,7 +245,8 @@ namespace QC {
 					}
 				}
 
-				Eigen::JacobiSVD<MatrixClass> SVD;
+				//Eigen::JacobiSVD<MatrixClass> SVD;
+				Eigen::BDCSVD<MatrixClass> SVD;
 
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
