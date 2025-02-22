@@ -135,50 +135,13 @@ namespace QC {
 
 			std::vector<bool> MeasureNoCollapse() override
 			{
-				if (gammas.empty()) return {};
-
 				const size_t nrQubits = gammas.size();
-				std::vector<bool> res(nrQubits);
+				return MeasureNoCollapse(static_cast<IndexType>(nrQubits - 1));
+			}
 
-				Eigen::MatrixXcd mat;
-
-				double totalProb = 1.;
-
-				for (IndexType qubit = 0; qubit < static_cast<IndexType>(nrQubits); ++qubit)
-				{
-					// 1. First, compute probability for measuring 0
-					// zero matrix
-					MatrixTensorType qubitMat = gammas[qubit].chip(0, 1);
-					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
-					MultiplyMatrixWithLambda(qubit, mq);
-					if (qubit != 0)
-						mq = mat * mq;
-
-					const double prob0 = mq.cwiseProduct(mq.conjugate()).sum().real() / totalProb;
-					
-					// 2. use that probability to measure the qubit
-					const double rndVal = 1. - uniformZeroOne(rng);
-					const bool zeroMeasured = rndVal < prob0;
-					res[qubit] = !zeroMeasured;
-
-					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
-
-					// now update the matrix
-					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
-						mat = mq;
-					else
-					{
-						qubitMat = gammas[qubit].chip(1, 1);
-						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
-						MultiplyMatrixWithLambda(qubit, mq);
-						if (qubit == 0)
-							mat = mq;
-						else
-							mat = mat * mq;
-					}
-				}
-				
-				return res;
+			std::vector<bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
+			{
+				return MeasureNoCollapse(*qubits.crbegin());
 			}
 
 		private:
@@ -245,8 +208,10 @@ namespace QC {
 					}
 				}
 
-				//Eigen::JacobiSVD<MatrixClass> SVD;
-				Eigen::BDCSVD<MatrixClass> SVD(thetaMatrix.rows(), thetaMatrix.cols());
+				Eigen::JacobiSVD<MatrixClass> SVD;
+				
+				// This one is supposed to be faster on big matrices but from my tests it seems that it's not so accurate, so I'll use Jacobi for now 
+				//Eigen::BDCSVD<MatrixClass> SVD(thetaMatrix.rows(), thetaMatrix.cols());
 
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
@@ -533,6 +498,54 @@ namespace QC {
 					}
 
 				return thetaMatrix;
+			}
+
+			std::vector<bool> MeasureNoCollapse(IndexType limit)
+			{
+				if (gammas.empty()) return {};
+
+				const IndexType limit1 = limit + 1;
+				std::vector<bool> res(limit1);
+
+				Eigen::MatrixXcd mat;
+
+				double totalProb = 1.;
+
+				for (IndexType qubit = 0; qubit < limit1; ++qubit)
+				{
+					// 1. First, compute probability for measuring 0
+					// zero matrix
+					MatrixTensorType qubitMat = gammas[qubit].chip(0, 1);
+					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
+					MultiplyMatrixWithLambda(qubit, mq);
+					if (qubit != 0)
+						mq = mat * mq;
+
+					const double prob0 = mq.cwiseProduct(mq.conjugate()).sum().real() / totalProb;
+
+					// 2. use that probability to measure the qubit
+					const double rndVal = 1. - uniformZeroOne(rng);
+					const bool zeroMeasured = rndVal < prob0;
+					res[qubit] = !zeroMeasured;
+
+					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
+
+					// now update the matrix
+					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
+						mat = mq;
+					else
+					{
+						qubitMat = gammas[qubit].chip(1, 1);
+						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
+						MultiplyMatrixWithLambda(qubit, mq);
+						if (qubit == 0)
+							mat = mq;
+						else
+							mat = mat * mq;
+					}
+				}
+
+				return res;
 			}
 		};
 

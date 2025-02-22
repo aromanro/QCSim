@@ -338,6 +338,28 @@ namespace QC
 				}
 			}
 
+			// needs calling MoveAtBeginningOfChain before this (with the same qubits, of course), otherwise it will give wrong results
+			std::vector<bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
+			{
+				if (qubits.empty()) return {};
+
+				std::set<IndexType> mappedQubits;
+				for (const auto qubit : qubits)
+					mappedQubits.insert(qubitsMap[qubit]);
+
+				const auto measuredQubits = impl.MeasureNoCollapse(mappedQubits);
+
+				std::vector<bool> res(qubits.size());
+				IndexType q = 0;
+				for (auto val : measuredQubits)
+				{
+					res[qubitsMapInv[q]] = val;
+					++q;
+				}
+
+				return res;
+			}
+
 		private:
 			void InitQubitsMap()
 			{
