@@ -512,12 +512,7 @@ namespace QC {
 			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
 
 			if (firstQubit == secondQubit)
-			{
-				if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::OneQubitOmpLimit)
-					return BaseClass::MeasureQubitNoCollapse(NrBasisStates, registerStorage, firstQubit, prob);
-
-				return BaseClass::MeasureQubitNoCollapseOmp(NrBasisStates, registerStorage, firstQubit, prob);
-			}
+				return BaseClass::MeasureQubitNoCollapse(NrBasisStates, registerStorage, firstQubit, prob);
 			
 			return BaseClass::MeasureNoCollapse(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}

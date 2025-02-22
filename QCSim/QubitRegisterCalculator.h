@@ -342,17 +342,13 @@ namespace QC {
 			const size_t measuredQubitMask = 1ULL << qubit;
 
 			size_t state = 0;
-			std::atomic_bool found = false;
-
-#pragma omp parallel for reduction(+:accum) shared(found) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
 			for (long long i = 0; i < NrBasisStates; ++i)
 			{
-				if (found) continue;
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
 					state = i;
-					found = true;
+					break;
 				}
 			}
 			
@@ -397,31 +393,6 @@ namespace QC {
 				{
 					state = i;
 					break;
-				}
-			}
-
-			return (state & measuredQubitMask) != 0 ? 1 : 0;
-		}
-
-		static inline size_t MeasureQubitNoCollapseOmp(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
-		{
-			double accum = 0;
-			const auto processor_count = GetNumberOfThreads();
-
-			const size_t measuredQubitMask = 1ULL << qubit;
-
-			size_t state = 0;
-			std::atomic_bool found = false;
-
-#pragma omp parallel for reduction(+:accum) shared(found) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
-			for (long long i = 0; i < NrBasisStates; ++i)
-			{
-				if (found) continue;
-				accum += std::norm(registerStorage(i));
-				if (prob <= accum)
-				{
-					state = i;
-					found = true;
 				}
 			}
 
