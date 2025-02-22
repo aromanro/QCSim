@@ -59,7 +59,7 @@ namespace BellInequalities {
 			int res1 = -1;
 			if (separateMeasurements)
 			{
-				state = BaseClass::Measure(0, 0);
+				state = BaseClass::Measure(0);
 				if (state) res1 = 1;
 			}
 
@@ -70,7 +70,7 @@ namespace BellInequalities {
 
 			int res2 = -1;
 			if (separateMeasurements)
-				state |= BaseClass::Measure(1, 1) << 1;
+				state |= BaseClass::Measure(1) << 1;
 			else
 			{
 				state = BaseClass::Measure();

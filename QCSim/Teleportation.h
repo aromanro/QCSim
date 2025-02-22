@@ -144,7 +144,7 @@ namespace Teleportation
 		{
 			Teleport();
 
-			return AlgorithmClass::Measure(2, 2); // teleported qubit
+			return AlgorithmClass::Measure(2); // teleported qubit
 		}
 	};
 

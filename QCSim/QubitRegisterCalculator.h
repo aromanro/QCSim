@@ -299,15 +299,20 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-			for (size_t state = measuredQubitMask; state < NrBasisStates; ++state)
+			size_t state = 0;
+			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
-				if (state & measuredQubitMask)
-					accum += std::norm(registerStorage[state]);
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					state = i;
+					break;
+				}
 			}
 
 			size_t measuredState = 0ULL;
 			size_t measuredStateMask = 0ULL;
-			if (prob <= accum)
+			if ((state & measuredQubitMask) != 0)
 			{
 				measuredState = 1ULL;
 				measuredStateMask = measuredQubitMask;
@@ -323,7 +328,6 @@ namespace QC {
 			const double norm = 1. / sqrt(accum);
 
 			// collapse
-
 			for (size_t state = 0; state < NrBasisStates; ++state)
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
 
@@ -337,16 +341,24 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule) 
-			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
-			{
-				if (state & measuredQubitMask)
-					accum += std::norm(registerStorage[state]);
-			}
+			size_t state = 0;
+			bool found = false;
 
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+			for (long long i = 0; i < NrBasisStates; ++i)
+			{
+				if (found) continue;
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					state = i;
+					found = true;
+				}
+			}
+			
 			size_t measuredState = 0ULL;
 			size_t measuredStateMask = 0ULL;
-			if (prob <= accum)
+			if ((state & measuredQubitMask) != 0)
 			{
 				measuredState = 1ULL;
 				measuredStateMask = measuredQubitMask;
@@ -377,17 +389,18 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-			for (size_t state = measuredQubitMask; state < NrBasisStates; ++state)
+			size_t state = 0;
+			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
-				if (state & measuredQubitMask)
-					accum += std::norm(registerStorage[state]);
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					state = i;
+					break;
+				}
 			}
 
-			size_t measuredState = 0;
-			if (prob <= accum)
-				measuredState = 1;
-
-			return measuredState;
+			return (state & measuredQubitMask) != 0 ? 1 : 0;
 		}
 
 		static inline size_t MeasureQubitNoCollapseOmp(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
@@ -397,18 +410,22 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
+			size_t state = 0;
+			bool found = false;
+
 #pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
-			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long i = 0; i < NrBasisStates; ++i)
 			{
-				if (state & measuredQubitMask)
-					accum += std::norm(registerStorage[state]);
+				if (found) continue;
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					state = i;
+					found = true;
+				}
 			}
 
-			size_t measuredState = 0;
-			if (prob <= accum)
-				measuredState = 1;
-
-			return measuredState;
+			return (state & measuredQubitMask) != 0 ? 1 : 0;
 		}
 
 		static inline double GetQubitProbability(size_t NrBasisStates, const VectorClass& registerStorage, size_t qubit)
@@ -443,72 +460,41 @@ namespace QC {
 			return accum;
 		}
 
-		// TODO: the following are awful, there might be a better way to optimize this based on cache locality
-		// see the above that implement a single qubit measurement
 		static inline size_t Measure(size_t NrBasisStates, VectorClass& registerStorage, size_t firstQubit, size_t secondQubit, const double prob)
 		{
 			double accum = 0;
 
 			const size_t secondQubitp1 = secondQubit + 1;
-
 			const size_t firstPartMask = (1ULL << firstQubit) - 1;
 			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
 			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
-			const size_t secondPartMax = secondPartMask >> secondQubitp1;
-			const size_t maxMeasuredState = measuredPartMask >> firstQubit;
-
-			size_t measuredState = maxMeasuredState;
-
-			double norm = 1;
-			for (size_t state = 0; state <= maxMeasuredState; ++state)
+			size_t measuredState = 0;
+			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
-				const size_t stateRegBits = state << firstQubit;
-				double stateProbability = 0;
-
-				for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-				{
-					const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
-				}
-
-				accum += stateProbability;
+				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
-					measuredState = state;
-					norm = 1. / sqrt(stateProbability);
+					measuredState = i;
 					break;
 				}
 			}
+			measuredState &= measuredPartMask;
+
+			// find the norm
+			accum = 0;
+			for (size_t state = measuredState; state < NrBasisStates; ++state)
+			{
+				if ((state & measuredPartMask) == measuredState)
+					accum += std::norm(registerStorage[state]);
+			}
+			const double norm = 1. / sqrt(accum);
 
 			// collapse
-			for (size_t state = 0; state <= maxMeasuredState; ++state)
-			{
-				const size_t stateRegBits = state << firstQubit;
+			for (size_t state = 0; state < NrBasisStates; ++state)
+				registerStorage[state] *= ((state & measuredPartMask) == measuredState) ? norm : 0;
 
-				if (state == measuredState)
-				{
-					for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-					{
-						const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-							registerStorage[secondPart | firstPartBits] *= norm;
-					}
-				}
-				else
-				{
-					for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-					{
-						const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-						for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-							registerStorage[secondPart | firstPartBits] = 0;
-					}
-				}
-			}
-
-
-			return measuredState;
+			return measuredState >> firstQubit;
 		}
 
 		static inline size_t MeasureNoCollapse(size_t NrBasisStates, VectorClass& registerStorage, size_t firstQubit, size_t secondQubit, const double prob)
@@ -516,36 +502,22 @@ namespace QC {
 			double accum = 0;
 
 			const size_t secondQubitp1 = secondQubit + 1;
-
 			const size_t firstPartMask = (1ULL << firstQubit) - 1;
 			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
 			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
-			const size_t secondPartMax = secondPartMask >> secondQubitp1;
-			const size_t maxMeasuredState = measuredPartMask >> firstQubit;
-
-			size_t measuredState = maxMeasuredState;
-			for (size_t state = 0; state <= maxMeasuredState; ++state)
+			size_t measuredState = 0;
+			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
-				const size_t stateRegBits = state << firstQubit;
-				double stateProbability = 0;
-
-				for (size_t secondPartBits = 0; secondPartBits <= secondPartMax; ++secondPartBits)
-				{
-					const size_t secondPart = (secondPartBits << secondQubitp1) | stateRegBits;
-					for (size_t firstPartBits = 0; firstPartBits <= firstPartMask; ++firstPartBits)
-						stateProbability += std::norm(registerStorage[secondPart | firstPartBits]);
-				}
-
-				accum += stateProbability;
+				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
-					measuredState = state;
+					measuredState = i;
 					break;
 				}
 			}
 
-			return measuredState;
+			return (measuredState & measuredPartMask) >> firstQubit;
 		}
 
 		static int GetNumberOfThreads()

@@ -66,7 +66,7 @@ bool checkQubit0()
 
 		// measure first qubit only
 
-		const size_t state = reg.Measure(0, 0);
+		const size_t state = reg.MeasureQubit(0);
 		++measurements[state];
 
 		Eigen::VectorXcd amplitudes = reg.getRegisterStorage();
@@ -129,7 +129,7 @@ bool checkQubit1()
 
 		// measure second qubit only
 
-		const size_t state = reg.Measure(1, 1);
+		const size_t state = reg.MeasureQubit(1);
 		++measurements[state];
 
 		Eigen::VectorXcd amplitudes = reg.getRegisterStorage();
@@ -190,10 +190,10 @@ bool checkSingleQubitMeasurements()
 	{
 		setRegister(reg);
 
-		size_t state = reg.Measure(0, 0);
+		size_t state = reg.MeasureQubit(0);
 		++measurements[state];
 
-		state = reg.Measure(1, 1);
+		state = reg.MeasureQubit(1);
 		++fmeasurements[state];
 	}
 
@@ -211,10 +211,10 @@ bool checkSingleQubitMeasurements()
 	{
 		setRegister(reg);
 
-		size_t state = reg.Measure(1, 1);
+		size_t state = reg.MeasureQubit(1);
 		++measurements[state];
 
-		state = reg.Measure(0, 0);
+		state = reg.MeasureQubit(0);
 		++fmeasurements[state];
 	}
 
