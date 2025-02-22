@@ -304,6 +304,11 @@ namespace QC {
 				std::cout << "Gamma " << gammas.size() - 1 << ":\n" << gammas[gammas.size() - 1] << std::endl;
 			}
 
+			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
+			{
+				// do nothing, it's here just to provide an implementation
+			}
+
 		protected:
 			void MultiplyMatrixWithLambda(IndexType qubit, MatrixClass& mat) const
 			{

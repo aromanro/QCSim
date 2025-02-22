@@ -311,6 +311,33 @@ namespace QC
 				return sim;
 			}
 
+			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
+			{
+				IndexType qubitPos = 0;
+
+				for (const auto qubit : qubits)
+				{
+					IndexType realQubit = qubitsMap[qubit];
+					while (realQubit != qubitPos)
+					{
+						const IndexType toQubitReal = realQubit - 1;
+						const IndexType toQubitInv = qubitsMapInv[toQubitReal];
+
+						impl.ApplyGate(swapGate, realQubit, toQubitReal);
+
+						qubitsMap[toQubitInv] = realQubit;
+						qubitsMapInv[realQubit] = toQubitInv;
+
+						qubitsMap[qubit] = toQubitReal;
+						qubitsMapInv[toQubitReal] = qubit;
+
+						realQubit = toQubitReal;
+					}
+
+					++qubitPos;
+				}
+			}
+
 		private:
 			void InitQubitsMap()
 			{
@@ -355,6 +382,7 @@ namespace QC
 
 				swapDown = !swapDown;
 			}
+
 
 			MPSSimulatorImpl impl;
 			std::vector<IndexType> qubitsMap;
