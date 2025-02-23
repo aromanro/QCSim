@@ -468,6 +468,47 @@ namespace QC {
 			return measuredState >> firstQubit;
 		}
 
+		static inline size_t MeasureOmp(size_t NrBasisStates, VectorClass& registerStorage, size_t firstQubit, size_t secondQubit, const double prob)
+		{
+			const auto processor_count = GetNumberOfThreads();
+			double accum = 0;
+
+			const size_t secondQubitp1 = secondQubit + 1;
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
+			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
+
+			size_t measuredState = 0;
+			for (size_t i = 0; i < NrBasisStates; ++i)
+			{
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					measuredState = i;
+					break;
+				}
+			}
+			measuredState &= measuredPartMask;
+
+			// find the norm
+			accum = 0;
+
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+			for (long long state = measuredState; state < static_cast<long long int>(NrBasisStates); ++state)
+			{
+				if ((state & measuredPartMask) == measuredState)
+					accum += std::norm(registerStorage[state]);
+			}
+			const double norm = 1. / sqrt(accum);
+
+			// collapse
+#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+				registerStorage[state] *= ((state & measuredPartMask) == measuredState) ? norm : 0;
+
+			return measuredState >> firstQubit;
+		}
+
 		static inline size_t MeasureNoCollapse(size_t NrBasisStates, VectorClass& registerStorage, size_t firstQubit, size_t secondQubit, const double prob)
 		{
 			double accum = 0;

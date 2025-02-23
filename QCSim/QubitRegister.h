@@ -210,7 +210,10 @@ namespace QC {
 				return BaseClass::MeasureQubitOmp(NrBasisStates, registerStorage, firstQubit, prob);
 			}
 
-			return  BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
+			if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::OneQubitOmpLimit)
+				return BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
+			
+			return  BaseClass::MeasureOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 		}
 
 
