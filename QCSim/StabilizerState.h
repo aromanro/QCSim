@@ -361,9 +361,11 @@ namespace QC {
 				}
 
 				// the mod 4 that appears here is because the values for the powers of i keep repeating
-				assert(m % 4 == 0 || m % 4 == 2 || m % 4 == -2);
+				const int mod = m % 4;
 
-				h.PhaseSign = m % 4 != 0;
+				assert(mod == 0 || mod == 2 || mod == -2);
+
+				h.PhaseSign = mod != 0;
 			}
 
 			static inline int BoolToInt(bool b)
