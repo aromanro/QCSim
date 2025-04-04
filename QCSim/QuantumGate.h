@@ -248,7 +248,7 @@ namespace QC {
 			{
 				const double t2 = theta * 0.5;
 
-				OpClass::operatorMat(2, 2) = std::polar(1., gamma) * std::complex<double>(cos(t2), 0.);
+				OpClass::operatorMat(2, 2) = std::polar(1., gamma) * cos(t2);
 				OpClass::operatorMat(2, 3) = -std::polar(1., gamma + lambda) * sin(t2);
 				OpClass::operatorMat(3, 2) = std::polar(1., gamma + phi) * sin(t2);
 				OpClass::operatorMat(3, 3) = std::polar(1., gamma + phi + lambda) * cos(t2);
