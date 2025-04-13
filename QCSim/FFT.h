@@ -17,6 +17,8 @@ namespace Fourier {
 		FFTWPlan() = default;
 		FFTWPlan(const FFTWPlan&) = delete;
 		FFTWPlan& operator=(const FFTWPlan&) = delete;
+		FFTWPlan(FFTWPlan&& other) noexcept : plan(other.plan) { other.plan = nullptr; }
+		FFTWPlan& operator=(FFTWPlan&& other) noexcept { plan = other.plan; other.plan = nullptr; return *this; }
 
 		~FFTWPlan() 
 		{ 
@@ -162,6 +164,11 @@ namespace Fourier {
 	{
 	public:
 		explicit FFT(int numThreads = 0); // zero means let it alone for FFTW to decide
+		FFT(const FFT&) = delete;
+		FFT& operator=(const FFT&) = delete;
+		FFT(FFT&&) noexcept = default;
+		FFT& operator=(FFT&&) noexcept = default;
+		~FFT() = default;
 
 		// 1D
 

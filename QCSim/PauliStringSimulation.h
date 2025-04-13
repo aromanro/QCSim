@@ -49,7 +49,7 @@ namespace QuantumSimulation {
 		QC::Gates::RzGate<MatrixClass> rz;
 	};
 
-	// you may decompose a Hamiltonian in a sum of such terms with real coeffcients
+	// you may decompose a Hamiltonian in a sum of such terms with real coefficients
 	// for details on fermionic Hamiltonians see Jordan-Wigner transformation in 3.1 in "Simulation of Electronic Structure Hamiltonians Using Quantum Computers" by James D. Whitfield, Jacob Biamonte, and Alan Aspuru-Guzik
 	// https://arxiv.org/abs/1001.3855 
 	// or this page: https://learn.microsoft.com/en-us/azure/quantum/user-guide/libraries/chemistry/concepts/jordan-wigner

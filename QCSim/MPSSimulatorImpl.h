@@ -27,7 +27,8 @@ namespace QC {
 			// also two qubit gates need to act on adjacent qubits
 			// don't try to apply a gate that doesn't satisfy these conditions
 			// use swap gates to move qubits around
-			// maybe wrap this up into a higher level simulator that swaps the qubits for you and maps them to minimize swaps
+			// this is wrapped up into a higher level simulator that swaps the qubits for you and maps them to minimize swaps
+			// so this should not be used directly
 			void ApplyGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
 				if (gate.getQubitsNumber() > 2) throw std::invalid_argument("Three qubit gates not supported");

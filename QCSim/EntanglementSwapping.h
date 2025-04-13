@@ -7,7 +7,6 @@
 
 namespace Teleportation {
 
-
 	// Alice and Bob have qubits 0 and 1 and 2 and 3 respectively
 	// 4 and 5 are in some other place(s)
 

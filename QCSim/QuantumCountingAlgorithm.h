@@ -13,7 +13,7 @@
 #include <numeric>
 
 // the other more complex algorithms that are have functions/oracles have (usually, at this moment Shor doesn't, but I'll probably change that)
-// two implementations: one that explicitely contructs a big matrix for the function/oracle, the operator to be applied on the quantum register
+// two implementations: one that explicitely constructs a big matrix for the function/oracle, the operator to be applied on the quantum register
 // and one where the same is achieved by constructing a circuit out of simple quantum gates, to avoid going through that big matrix construction and multiplication
 // the later case was made possible due of the optimization existing now for 1, 2 and 3 qubit gates (see ApplyGate implementation in register), otherwise going through the big matrix for each gate would be too slow
 
