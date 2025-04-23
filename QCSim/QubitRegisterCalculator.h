@@ -342,7 +342,7 @@ namespace QC {
 			const size_t measuredQubitMask = 1ULL << qubit;
 
 			size_t state = 0;
-			for (long long i = 0; i < NrBasisStates; ++i)
+			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
@@ -438,7 +438,6 @@ namespace QC {
 			const size_t secondQubitp1 = secondQubit + 1;
 			const size_t firstPartMask = (1ULL << firstQubit) - 1;
 			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
-			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
 			size_t measuredState = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
@@ -476,7 +475,6 @@ namespace QC {
 			const size_t secondQubitp1 = secondQubit + 1;
 			const size_t firstPartMask = (1ULL << firstQubit) - 1;
 			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
-			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
 			size_t measuredState = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
@@ -516,7 +514,6 @@ namespace QC {
 			const size_t secondQubitp1 = secondQubit + 1;
 			const size_t firstPartMask = (1ULL << firstQubit) - 1;
 			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
-			const size_t secondPartMask = NrBasisStates - 1 - measuredPartMask - firstPartMask;
 
 			size_t measuredState = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
