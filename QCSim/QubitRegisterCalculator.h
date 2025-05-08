@@ -299,20 +299,20 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-			size_t state = 0;
+			size_t pstate = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
-					state = i;
+					pstate = i;
 					break;
 				}
 			}
 
 			size_t measuredState = 0ULL;
 			size_t measuredStateMask = 0ULL;
-			if ((state & measuredQubitMask) != 0)
+			if ((pstate & measuredQubitMask) != 0)
 			{
 				measuredState = 1ULL;
 				measuredStateMask = measuredQubitMask;
@@ -341,20 +341,20 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-			size_t state = 0;
+			size_t pstate = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
-					state = i;
+					pstate = i;
 					break;
 				}
 			}
 			
 			size_t measuredState = 0ULL;
 			size_t measuredStateMask = 0ULL;
-			if ((state & measuredQubitMask) != 0)
+			if ((pstate & measuredQubitMask) != 0)
 			{
 				measuredState = 1ULL;
 				measuredStateMask = measuredQubitMask;
@@ -385,18 +385,18 @@ namespace QC {
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-			size_t state = 0;
+			size_t pstate = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
-					state = i;
+					pstate = i;
 					break;
 				}
 			}
 
-			return (state & measuredQubitMask) != 0 ? 1 : 0;
+			return (pstate & measuredQubitMask) != 0 ? 1 : 0;
 		}
 
 		static inline double GetQubitProbability(size_t NrBasisStates, const VectorClass& registerStorage, size_t qubit)
