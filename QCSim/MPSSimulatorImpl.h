@@ -522,25 +522,30 @@ namespace QC {
 					if (qubit != 0)
 						mq = mat * mq;
 
-					const double prob0 = mq.cwiseProduct(mq.conjugate()).sum().real() / totalProb;
+					// this is the probability of measuring all the qubits with the picked up values using the random number generator, up to this one
+					// including a measured zero value for the current qubit 
+					const double allProbability = mq.cwiseProduct(mq.conjugate()).sum().real();
+					// to get the probability for the current qubit to be 0, we need to divide by the probability of measuring all the previous qubits
+					const double prob0 = allProbability / totalProb;
 
 					// 2. use that probability to measure the qubit
 					const double rndVal = 1. - uniformZeroOne(rng);
 					const bool zeroMeasured = rndVal < prob0;
 					res[qubit] = !zeroMeasured;
 
+					// accumulate the probability for measuring the current qubit to whatever was picked by using the random number generator
 					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
 
 					// now update the matrix
 					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
-						mat = mq;
+						mat = std::move(mq);
 					else
 					{
 						qubitMat = gammas[qubit].chip(1, 1);
 						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
 						MultiplyMatrixWithLambda(qubit, mq);
 						if (qubit == 0)
-							mat = mq;
+							mat = std::move(mq);
 						else
 							mat = mat * mq;
 					}

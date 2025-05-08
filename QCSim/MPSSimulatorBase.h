@@ -166,7 +166,7 @@ namespace QC {
 					throw std::invalid_argument("Qubit index out of bounds");
 
 				MatrixTensorType qubitMatrix = gammas[qubit].chip(zeroVal ? 0 : 1, 1);
-
+				
 				if (qubit > 0)
 				{
 					const IndexType qbit1 = qubit - 1;
@@ -181,7 +181,7 @@ namespace QC {
 						for (IndexType row = 0; row < qubitMatrix.dimension(0); ++row)
 							qubitMatrix(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
 				}
-
+				
 				const Eigen::Tensor<std::complex<double>, 0> res = (qubitMatrix * qubitMatrix.conjugate()).sum();
 
 				return res(0).real();
