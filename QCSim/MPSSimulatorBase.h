@@ -165,26 +165,49 @@ namespace QC {
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
 					throw std::invalid_argument("Qubit index out of bounds");
 
-				MatrixTensorType qubitMatrix = gammas[qubit].chip(zeroVal ? 0 : 1, 1);
-				
-				if (qubit > 0)
+				const size_t physIndex = zeroVal ? 0 : 1;
+
+				double res = 0;
+
+				const bool notFirst = qubit > 0;
+				const bool notLast = qubit < static_cast<IndexType>(lambdas.size());
+				if (notFirst && notLast)
 				{
 					const IndexType qbit1 = qubit - 1;
-					for (IndexType col = 0; col < qubitMatrix.dimension(1); ++col)
-						for (IndexType row = 0; row < qubitMatrix.dimension(0); ++row)
-							qubitMatrix(row, col) *= row < lambdas[qbit1].size() ? lambdas[qbit1][row] : 0.;
+					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
+						for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+						{
+							const std::complex<double> val = lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j);
+							res += std::norm(val);
+						}
 				}
-
-				if (qubit < static_cast<IndexType>(lambdas.size()))
+				else if (notFirst)
 				{
-					for (IndexType col = 0; col < qubitMatrix.dimension(1); ++col)
-						for (IndexType row = 0; row < qubitMatrix.dimension(0); ++row)
-							qubitMatrix(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+					const IndexType qbit1 = qubit - 1;
+					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
+						for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
+						{
+							const std::complex<double> val = lambdas[qbit1][i] * gammas[qubit](i, physIndex, j);
+							res += std::norm(val);
+						}
 				}
-				
-				const Eigen::Tensor<std::complex<double>, 0> res = (qubitMatrix * qubitMatrix.conjugate()).sum();
+				else if (notLast)
+				{
+					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
+						for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+						{
+							const std::complex<double> val = lambdas[qubit][j] * gammas[qubit](i, physIndex, j);
+							res += std::norm(val);
+						}
+				}
+				else // both first and last, the case of a single qubit 'chain'
+				{
+					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
+						for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
+							res += std::norm(gammas[qubit](i, physIndex, j));
+				}
 
-				return res(0).real();
+				return res;
 			}
 
 			void setLimitBondDimension(IndexType chival) override
