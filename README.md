@@ -19,7 +19,7 @@ Implemented algorithms:
 *   Quantum Fourier Transform
 *   Phase estimation
 *   Shor
-*   Bernstein–Vazirani
+*   Bernsteinâ€“Vazirani
 *   Quantum counting
 *   Quantum teleportation
 *   Entanglement swapping
@@ -121,3 +121,8 @@ The quantum fourier transform is checked against [FFTW](http://fftw.org/) for Sc
 > [!TIP]
 > I mentioned some things on the corresponding blog page, so please [check it out](https://compphys.go.ro/quantum-computing-simulator/), but I'll also refer here the tutorials papers I mentioned there and the code for them, which I also [provided in another repository](https://github.com/InvictusWingsSRL/QiskitTutorials).
 > If you want to learn qiskit, I higly recommend those.
+
+## SOLANA
+
+CA : 8Ni8KSfjVqLB31UUJqj9UMo4BEnAc156SRqgBKGNdhUL
+https://x.com/AdrianRoman2014
