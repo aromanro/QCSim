@@ -176,29 +176,20 @@ namespace QC {
 					const IndexType qbit1 = qubit - 1;
 					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
 						for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-						{
-							const std::complex<double> val = lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j);
-							res += std::norm(val);
-						}
+							res += std::norm(lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
 				}
 				else if (notFirst)
 				{
 					const IndexType qbit1 = qubit - 1;
 					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
 						for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
-						{
-							const std::complex<double> val = lambdas[qbit1][i] * gammas[qubit](i, physIndex, j);
-							res += std::norm(val);
-						}
+							res += std::norm(lambdas[qbit1][i] * gammas[qubit](i, physIndex, j));
 				}
 				else if (notLast)
 				{
 					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
 						for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-						{
-							const std::complex<double> val = lambdas[qubit][j] * gammas[qubit](i, physIndex, j);
-							res += std::norm(val);
-						}
+							res += std::norm(lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
 				}
 				else // both first and last, the case of a single qubit 'chain'
 				{
