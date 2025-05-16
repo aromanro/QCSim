@@ -320,8 +320,8 @@ namespace QC {
 			{
 				for (size_t i = 0; i < gammas.size() - 1; ++i)
 				{
-					std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
 					std::cout << "Gamma " << i << ":\n" << gammas[i] << std::endl;
+					std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
 				}
 
 				std::cout << "Gamma " << gammas.size() - 1 << ":\n" << gammas[gammas.size() - 1] << std::endl;
