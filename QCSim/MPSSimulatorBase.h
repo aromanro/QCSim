@@ -141,64 +141,23 @@ namespace QC {
 				}
 			}
 
-			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
-			{
-				// easy: shape the gate into a tensor and contract it with the qubit tensor
-				OneQubitGateTensor opTensor;
-
-				const MatrixClass& opMat = gate.getRawOperatorMatrix();
-
-				opTensor(0, 0) = opMat(0, 0);
-				opTensor(0, 1) = opMat(0, 1);
-				opTensor(1, 0) = opMat(1, 0);
-				opTensor(1, 1) = opMat(1, 1);
-
-				// contract the gate tensor with the qubit tensor
-
-				static const Indexes product_dims1{ IntIndexPair(1, 1) };
-				static const std::array<int, 3> permute{ 0, 2, 1 };
-				gammas[qubit] = gammas[qubit].contract(opTensor, product_dims1).shuffle(permute);
-			}
-
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
 					throw std::invalid_argument("Qubit index out of bounds");
 
-				const size_t physIndex = zeroVal ? 0 : 1;
-
-				double res = 0;
-
 				const bool notFirst = qubit > 0;
 				const bool notLast = qubit < static_cast<IndexType>(lambdas.size());
 				if (notFirst && notLast)
-				{
-					const IndexType qbit1 = qubit - 1;
-					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
-						for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-							res += std::norm(lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
-				}
+					return GetProbabilityMiddleQubit(qubit, zeroVal);
 				else if (notFirst)
-				{
-					const IndexType qbit1 = qubit - 1;
-					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
-						for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
-							res += std::norm(lambdas[qbit1][i] * gammas[qubit](i, physIndex, j));
-				}
+					return GetProbabilityLastQubit(qubit, zeroVal);
 				else if (notLast)
-				{
-					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
-						for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-							res += std::norm(lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
-				}
-				else // both first and last, the case of a single qubit 'chain'
-				{
-					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
-						for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
-							res += std::norm(gammas[qubit](i, physIndex, j));
-				}
+					return GetProbabilityFirstQubit(qubit, zeroVal);
 
-				return res;
+				assert(qubit == 0);
+
+				return GetProbabilitySingleQubit(zeroVal);
 			}
 
 			void setLimitBondDimension(IndexType chival) override
@@ -324,6 +283,75 @@ namespace QC {
 			}
 
 		protected:
+			double GetProbabilitySingleQubit(bool zeroVal = true) const
+			{
+				double res = 0;
+
+				const size_t physIndex = zeroVal ? 0 : 1;
+				for (IndexType i = 0; i < gammas[0].dimension(0); ++i)
+					for (IndexType j = 0; j < gammas[0].dimension(2); ++j)
+						res += std::norm(gammas[0](i, physIndex, j));
+
+				return res;
+			}
+
+			double GetProbabilityMiddleQubit(IndexType qubit, bool zeroVal = true) const
+			{
+				double res = 0;
+				const size_t physIndex = zeroVal ? 0 : 1;
+
+				const IndexType qbit1 = qubit - 1;
+				for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
+					for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+						res += std::norm(lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
+				
+				return res;
+			}
+
+			double GetProbabilityLastQubit(IndexType qubit, bool zeroVal = true) const
+			{
+				double res = 0;
+				const size_t physIndex = zeroVal ? 0 : 1;
+
+				const IndexType qbit1 = qubit - 1;
+				for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
+					for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
+						res += std::norm(lambdas[qbit1][i] * gammas[qubit](i, physIndex, j));
+				
+				return res;
+			}
+
+			double GetProbabilityFirstQubit(IndexType qubit, bool zeroVal = true) const
+			{
+				double res = 0;
+				const size_t physIndex = zeroVal ? 0 : 1;
+
+				for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
+					for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+						res += std::norm(lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
+
+				return res;
+			}
+
+			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
+			{
+				// easy: shape the gate into a tensor and contract it with the qubit tensor
+				OneQubitGateTensor opTensor;
+
+				const MatrixClass& opMat = gate.getRawOperatorMatrix();
+
+				opTensor(0, 0) = opMat(0, 0);
+				opTensor(0, 1) = opMat(0, 1);
+				opTensor(1, 0) = opMat(1, 0);
+				opTensor(1, 1) = opMat(1, 1);
+
+				// contract the gate tensor with the qubit tensor
+
+				static const Indexes product_dims1{ IntIndexPair(1, 1) };
+				static const std::array<int, 3> permute{ 0, 2, 1 };
+				gammas[qubit] = gammas[qubit].contract(opTensor, product_dims1).shuffle(permute);
+			}
+
 			void MultiplyMatrixWithLambda(IndexType qubit, MatrixClass& mat) const
 			{
 				const size_t nrQubits = gammas.size();

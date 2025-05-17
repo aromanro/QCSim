@@ -19,7 +19,7 @@ Implemented algorithms:
 *   Quantum Fourier Transform
 *   Phase estimation
 *   Shor
-*   Bernstein–Vazirani
+*   Bernstein-Vazirani
 *   Quantum counting
 *   Quantum teleportation
 *   Entanglement swapping
