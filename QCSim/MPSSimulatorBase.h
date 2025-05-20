@@ -270,11 +270,13 @@ namespace QC {
 			{
 				for (size_t i = 0; i < gammas.size() - 1; ++i)
 				{
-					std::cout << "Gamma " << i << ":\n" << gammas[i] << std::endl;
+					std::cout << std::endl << "Gamma " << i << ":" << std::endl;
+					PrintGamma(i);
 					std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
 				}
 
-				std::cout << "Gamma " << gammas.size() - 1 << ":\n" << gammas[gammas.size() - 1] << std::endl;
+				std::cout << std::endl << "Gamma " << gammas.size() - 1 << std::endl;
+				PrintGamma(gammas.size() - 1);
 			}
 
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
@@ -283,6 +285,28 @@ namespace QC {
 			}
 
 		protected:
+			void PrintGamma(size_t i) const
+			{
+				assert(i < gammas.size());
+				assert(gammas[i].dimension(1) == 2);
+
+				std::cout << std::endl << "Phys index 0 matrix: " << std::endl;
+				for (IndexType j = 0;  j < gammas[i].dimension(0); ++j)
+				{
+					for (IndexType k = 0; k < gammas[i].dimension(2); ++k)
+						std::cout << gammas[i](j, 0, k) << " ";
+					std::cout << std::endl;
+				}
+				std::cout << "Phys index 1 matrix: " << std::endl;
+				for (IndexType j = 0; j < gammas[i].dimension(0); ++j)
+				{
+					for (IndexType k = 0; k < gammas[i].dimension(2); ++k)
+						std::cout << gammas[i](j, 1, k) << " ";
+					std::cout << std::endl;
+				}
+				std::cout << std::endl;
+			}
+
 			double GetProbabilitySingleQubit(bool zeroVal = true) const
 			{
 				double res = 0;
