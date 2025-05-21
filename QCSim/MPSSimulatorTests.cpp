@@ -783,49 +783,35 @@ bool MPSSimulatorTests()
 	std::cout << "\nMPS Simulator Tests" << std::endl;
 
 	/*
-	QC::TensorNetworks::MPSSimulator mps(3);
-	QC::QubitRegister reg(3);
-
 	QC::Gates::PauliXGate xGate;
 	QC::Gates::PauliYGate yGate;
 	QC::Gates::HadamardGate hGate;
-
 	QC::Gates::CNOTGate cnotGate;
+	QC::Gates::SwapGate swapGate;
+	QC::Gates::ControlledPhaseShiftGate phaseShiftGate(0.5);
+
+	int nrQubits = 2;
+	int nrStates = 1 << nrQubits;
+
+	QC::TensorNetworks::MPSSimulator mps(nrQubits);
+	QC::QubitRegister reg(nrQubits);
 
 	mps.ApplyGate(xGate, 0);
-	mps.ApplyGate(hGate, 1);
-	mps.ApplyGate(yGate, 2);
-
 	reg.ApplyGate(xGate, 0);
+
+	mps.ApplyGate(hGate, 1);
 	reg.ApplyGate(hGate, 1);
-	reg.ApplyGate(yGate, 2);
 
-
-	QC::Gates::SwapGate swapGate;
-	mps.ApplyGate(swapGate, 0, 1);
-	reg.ApplyGate(swapGate, 0, 1);
-
-	mps.ApplyGate(cnotGate, 2, 1);
-	reg.ApplyGate(cnotGate, 2, 1);
-
-	
-	QC::Gates::ControlledPhaseShiftGate phaseShiftGate(0.5);
 	mps.ApplyGate(phaseShiftGate, 0, 1);
 	reg.ApplyGate(phaseShiftGate, 0, 1);
 
-	
 	mps.ApplyGate(hGate, 1);
 	reg.ApplyGate(hGate, 1);
 
-	mps.ApplyGate(cnotGate, 2, 1);
-	reg.ApplyGate(cnotGate, 2, 1);
-
-
 	mps.ApplyGate(cnotGate, 0, 1);
-    reg.ApplyGate(cnotGate, 0, 1);
-	
+	reg.ApplyGate(cnotGate, 0, 1);
 
-	for (int i = 0; i < 8; ++i)
+	for (int i = 0; i < nrStates; ++i)
 	{
 		const auto regAmpl = reg.getBasisStateAmplitude(i);
 		const auto mpsAmpl = mps.getBasisStateAmplitude(i);
