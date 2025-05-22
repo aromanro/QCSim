@@ -782,44 +782,5 @@ bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
 
-	/*
-	QC::Gates::PauliXGate xGate;
-	QC::Gates::PauliYGate yGate;
-	QC::Gates::HadamardGate hGate;
-	QC::Gates::CNOTGate cnotGate;
-	QC::Gates::SwapGate swapGate;
-	QC::Gates::ControlledPhaseShiftGate phaseShiftGate(0.5);
-
-	int nrQubits = 2;
-	int nrStates = 1 << nrQubits;
-
-	QC::TensorNetworks::MPSSimulator mps(nrQubits);
-	QC::QubitRegister reg(nrQubits);
-
-	mps.ApplyGate(xGate, 0);
-	reg.ApplyGate(xGate, 0);
-
-	mps.ApplyGate(hGate, 1);
-	reg.ApplyGate(hGate, 1);
-
-	mps.ApplyGate(phaseShiftGate, 0, 1);
-	reg.ApplyGate(phaseShiftGate, 0, 1);
-
-	mps.ApplyGate(hGate, 1);
-	reg.ApplyGate(hGate, 1);
-
-	mps.ApplyGate(cnotGate, 0, 1);
-	reg.ApplyGate(cnotGate, 0, 1);
-
-	for (int i = 0; i < nrStates; ++i)
-	{
-		const auto regAmpl = reg.getBasisStateAmplitude(i);
-		const auto mpsAmpl = mps.getBasisStateAmplitude(i);
-		std::cout << "State " << i << " reg: " << regAmpl << " mps: " << mpsAmpl << std::endl;
-	}
-
-	mps.print();
-	*/
-
 	return StateSimulationTest();
 }

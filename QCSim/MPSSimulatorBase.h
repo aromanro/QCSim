@@ -275,9 +275,33 @@ namespace QC {
 					std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
 				}
 
-				std::cout << std::endl << "Gamma " << gammas.size() - 1 << std::endl;
+				std::cout << std::endl << "Gamma " << gammas.size() - 1 << ":" << std::endl;
 				PrintGamma(gammas.size() - 1);
 			}
+
+			// needed for some tests, ignore
+			void SetSiteMatrices(size_t site, const Eigen::MatrixXcd& matrix0, const Eigen::MatrixXcd& matrix1)
+			{
+				assert(physIndex < gammas.size());
+				assert(matrix0.rows() == matrix1.rows());
+				assert(matrix0.cols() == matrix1.cols());
+
+				gammas[site].resize(matrix0.rows(), 2, matrix0.cols());
+
+				for (IndexType i = 0; i < matrix0.rows(); ++i)
+					for (IndexType j = 0; j < matrix0.cols(); ++j)
+					{
+						gammas[site](i, 0, j) = matrix0(i, j);
+						gammas[site](i, 1, j) = matrix1(i, j);
+					}
+			}
+
+			void SetLambdas(size_t pos, const Eigen::VectorXd& lambda)
+			{
+				assert(pos < lambdas.size());
+				lambdas[pos] = lambda;
+			}
+			// end test functions
 
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
 			{
