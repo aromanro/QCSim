@@ -357,18 +357,18 @@ namespace QC {
 				if (qubit1 != 0)
 				{
 					const IndexType prev = qubit1 - 1;
-					for (IndexType i = 0; i < szl; ++i)
+					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType k = 0; k < sz; ++k)
+							for (IndexType i = 0; i < szl; ++i)
 								if (lambdas[prev][i] > std::numeric_limits<double>::epsilon() * 1E-10) gammas[qubit1](i, j, k) /= lambdas[prev][i];
 								else gammas[qubit1](i, j, k) = 0;
 				}
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
-					for (IndexType i = 0; i < sz; ++i)
+					for (IndexType k = 0; k < szr; ++k)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType k = 0; k < szr; ++k)
+							for (IndexType i = 0; i < sz; ++i)
 								if (lambdas[qubit2][k] > std::numeric_limits<double>::epsilon() * 1E-10) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
 								else gammas[qubit2](i, j, k) = 0;
 				}
@@ -389,24 +389,24 @@ namespace QC {
 				if (qubit1 != 0)
 				{
 					const IndexType prev = qubit1 - 1;
-					for (IndexType i = 0; i < szl; ++i)
+					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType k = 0; k < sz; ++k)
+							for (IndexType i = 0; i < szl; ++i)
 								gammas[qubit1](i, j, k) *= lambdas[prev][i] * lambdas[qubit1][k];
 				}
 				else
 				{
-					for (IndexType i = 0; i < szl; ++i)
+					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType k = 0; k < sz; ++k)
+							for (IndexType i = 0; i < szl; ++i)
 								gammas[qubit1](i, j, k) *= lambdas[qubit1][k];
 				}
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
-					for (IndexType i = 0; i < sz; ++i)
+					for (IndexType k = 0; k < szr; ++k)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType k = 0; k < szr; ++k)
+							for (IndexType i = 0; i < sz; ++i)
 								gammas[qubit2](i, j, k) *= lambdas[qubit2][k];
 				}
 

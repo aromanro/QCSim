@@ -288,8 +288,9 @@ namespace QC {
 
 				gammas[site].resize(matrix0.rows(), 2, matrix0.cols());
 
-				for (IndexType i = 0; i < matrix0.rows(); ++i)
-					for (IndexType j = 0; j < matrix0.cols(); ++j)
+
+				for (IndexType j = 0; j < matrix0.cols(); ++j)
+					for (IndexType i = 0; i < matrix0.rows(); ++i) 
 					{
 						gammas[site](i, 0, j) = matrix0(i, j);
 						gammas[site](i, 1, j) = matrix1(i, j);
@@ -336,8 +337,8 @@ namespace QC {
 				double res = 0;
 
 				const size_t physIndex = zeroVal ? 0 : 1;
-				for (IndexType i = 0; i < gammas[0].dimension(0); ++i)
-					for (IndexType j = 0; j < gammas[0].dimension(2); ++j)
+				for (IndexType j = 0; j < gammas[0].dimension(2); ++j)
+					for (IndexType i = 0; i < gammas[0].dimension(0); ++i)
 						res += std::norm(gammas[0](i, physIndex, j));
 
 				return res;
@@ -349,8 +350,8 @@ namespace QC {
 				const size_t physIndex = zeroVal ? 0 : 1;
 
 				const IndexType qbit1 = qubit - 1;
-				for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
-					for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+				for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
 						res += std::norm(lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
 				
 				return res;
@@ -362,8 +363,8 @@ namespace QC {
 				const size_t physIndex = zeroVal ? 0 : 1;
 
 				const IndexType qbit1 = qubit - 1;
-				for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
-					for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
+				for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
+					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
 						res += std::norm(lambdas[qbit1][i] * gammas[qubit](i, physIndex, j));
 				
 				return res;
@@ -374,8 +375,8 @@ namespace QC {
 				double res = 0;
 				const size_t physIndex = zeroVal ? 0 : 1;
 
-				for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
-					for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+				for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
+					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
 						res += std::norm(lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
 
 				return res;
@@ -396,8 +397,8 @@ namespace QC {
 				const size_t nrQubits = gammas.size();
 
 				if (qubit != static_cast<IndexType>(nrQubits) - 1)	
-					for (IndexType row = 0; row < mat.rows(); ++row)
-						for (IndexType col = 0; col < mat.cols(); ++col)
+					for (IndexType col = 0; col < mat.cols(); ++col)
+						for (IndexType row = 0; row < mat.rows(); ++row)
 							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
 			}
 
