@@ -395,9 +395,9 @@ namespace QC {
 			{
 				const size_t nrQubits = gammas.size();
 
-				if (qubit != static_cast<IndexType>(nrQubits) - 1)
-					for (IndexType col = 0; col < mat.cols(); ++col)
-						for (IndexType row = 0; row < mat.rows(); ++row)
+				if (qubit != static_cast<IndexType>(nrQubits) - 1)	
+					for (IndexType row = 0; row < mat.rows(); ++row)
+						for (IndexType col = 0; col < mat.cols(); ++col)
 							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
 			}
 

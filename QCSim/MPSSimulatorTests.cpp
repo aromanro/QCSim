@@ -782,5 +782,22 @@ bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
 
+	/*
+	QC::TensorNetworks::MPSSimulatorImpl mps(2);
+
+	QC::Gates::PauliXGate xGate;
+	QC::Gates::HadamardGate hGate;
+	QC::Gates::SwapGate swapGate;
+
+	mps.ApplyGate(xGate, 0);
+	mps.ApplyGate(hGate, 1);
+
+	mps.print();
+
+	mps.ApplyGate(swapGate, 0, 1);
+
+	mps.print();
+	*/
+
 	return StateSimulationTest();
 }

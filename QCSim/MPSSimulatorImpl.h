@@ -389,24 +389,24 @@ namespace QC {
 				if (qubit1 != 0)
 				{
 					const IndexType prev = qubit1 - 1;
-					for (IndexType k = 0; k < sz; ++k)
+					for (IndexType i = 0; i < szl; ++i)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
+							for (IndexType k = 0; k < sz; ++k)
 								gammas[qubit1](i, j, k) *= lambdas[prev][i] * lambdas[qubit1][k];
 				}
 				else
 				{
-					for (IndexType k = 0; k < sz; ++k)
+					for (IndexType i = 0; i < szl; ++i)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
+							for (IndexType k = 0; k < sz; ++k)
 								gammas[qubit1](i, j, k) *= lambdas[qubit1][k];
 				}
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
-					for (IndexType k = 0; k < szr; ++k)
+					for (IndexType i = 0; i < sz; ++i)
 						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
+							for (IndexType k = 0; k < szr; ++k)
 								gammas[qubit2](i, j, k) *= lambdas[qubit2][k];
 				}
 
