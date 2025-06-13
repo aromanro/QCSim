@@ -37,7 +37,7 @@ namespace Simon {
 
 			// this is a random way of generating it
 			const long long int seed = std::chrono::steady_clock::now().time_since_epoch().count();
-			auto rng = std::default_random_engine(static_cast<size_t>(seed));
+			auto rng = std::default_random_engine(static_cast<unsigned int>(seed));
 			std::shuffle(functionTable.begin(), functionTable.end(), rng);
 
 			// add some more randomness, do not look in order to indices when searching for a matching index

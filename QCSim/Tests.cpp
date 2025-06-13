@@ -630,7 +630,7 @@ bool CountingTests()
 		// pick 'nrMarked' states at random:		
 		std::vector<size_t> states(nrGroverStates);
 		std::iota(states.begin(), states.end(), 0);
-		std::shuffle(states.begin(), states.end(), std::default_random_engine(static_cast<size_t>(std::chrono::system_clock::now().time_since_epoch().count())));
+		std::shuffle(states.begin(), states.end(), std::default_random_engine(static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count())));
 		states.resize(nrMarked);
 
 		QuantumCounting::QuantumCountingAlgorithm<> quantumCountingAlgorithm(nrPrecisionQubits, nrGroverQubits);

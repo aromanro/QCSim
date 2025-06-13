@@ -219,25 +219,35 @@ namespace QC {
 
 		std::map<size_t, size_t> RepeatedMeasure(size_t nrTimes = 1000)
 		{
+			if (nrTimes == 0) return {}; // nothing to measure
+
 			std::map<size_t, size_t> measurements;
 
-			for (size_t i = 0; i < nrTimes; ++i)
+			if (nrTimes == 1) // shortcut for a single measurement
 			{
-				const size_t res = MeasureNoCollapse();
-				++measurements[res];
+				const size_t meas = MeasureNoCollapse();
+				++measurements[meas];
+				return measurements;
 			}
 
-			return measurements;
-		}
+			// a faster sampling way (O(n) where n is the number of qubits, except the preprocessing phase which is O(N), where N is the number of states), 
+			// there is an even O(1) method (see https://en.wikipedia.org/wiki/Alias_method), but I won't bother here, it's not a so spectacular improvement
 
-		std::map<size_t, size_t> RepeatedMeasure(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
-		{
-			std::map<size_t, size_t> measurements;
+			std::vector<double> probabilities(registerStorage.size());
 
-			for (size_t i = 0; i < nrTimes; ++i)
+			double accum = 0;
+			for (size_t i = 0; i < registerStorage.size(); ++i)
 			{
-				const size_t res = MeasureNoCollapse(firstQubit, secondQubit);
-				++measurements[res];
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+			}
+
+			for (size_t shot = 0; shot < nrTimes; ++shot)
+			{
+				const double prob = 1. - uniformZeroOne(rng);
+				const size_t meas = std::lower_bound(probabilities.begin(), probabilities.end(), prob) - probabilities.begin();
+
+				++measurements[meas];
 			}
 
 			return measurements;
@@ -245,12 +255,75 @@ namespace QC {
 
 		std::unordered_map<size_t, size_t> RepeatedMeasureUnordered(size_t nrTimes = 1000)
 		{
+			if (nrTimes == 0) return {}; // nothing to measure
+
 			std::unordered_map<size_t, size_t> measurements;
 
-			for (size_t i = 0; i < nrTimes; ++i)
+			if (nrTimes == 1) // shortcut for a single measurement
 			{
-				const size_t res = MeasureNoCollapse();
-				++measurements[res];
+				const size_t meas = MeasureNoCollapse();
+				++measurements[meas];
+				return measurements;
+			}
+
+			// a faster sampling way (O(n) where n is the number of qubits, except the preprocessing phase which is O(N), where N is the number of states), 
+			// there is an even O(1) method (see https://en.wikipedia.org/wiki/Alias_method), but I won't bother here, it's not a so spectacular improvement
+
+			std::vector<double> probabilities(registerStorage.size());
+
+			double accum = 0;
+			for (size_t i = 0; i < registerStorage.size(); ++i)
+			{
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+			}
+
+			for (size_t shot = 0; shot < nrTimes; ++shot)
+			{
+				const double prob = 1. - uniformZeroOne(rng);
+				const size_t meas = std::lower_bound(probabilities.begin(), probabilities.end(), prob) - probabilities.begin();
+
+				++measurements[meas];
+			}
+
+			return measurements;
+		}
+
+		std::map<size_t, size_t> RepeatedMeasure(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
+		{
+			if (nrTimes == 0) return {}; // nothing to measure
+
+			std::map<size_t, size_t> measurements;
+			
+			const size_t secondQubitp1 = secondQubit + 1;
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
+			
+			if (nrTimes == 1) // shortcut for a single measurement
+			{
+				const size_t meas = MeasureNoCollapse(firstQubit, secondQubit);
+				++measurements[(meas & measuredPartMask) >> firstQubit];
+				return measurements;
+			}
+
+			// a faster sampling way (O(n) where n is the number of qubits, except the preprocessing phase which is O(N), where N is the number of states), 
+			// there is an even O(1) method (see https://en.wikipedia.org/wiki/Alias_method), but I won't bother here, it's not a so spectacular improvement
+
+			std::vector<double> probabilities(registerStorage.size());
+
+			double accum = 0;
+			for (size_t i = 0; i < registerStorage.size(); ++i)
+			{
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+			}
+
+			for (size_t shot = 0; shot < nrTimes; ++shot)
+			{
+				const double prob = 1. - uniformZeroOne(rng);
+				const size_t meas = std::lower_bound(probabilities.begin(), probabilities.end(), prob) - probabilities.begin();
+
+				++measurements[(meas & measuredPartMask) >> firstQubit];
 			}
 
 			return measurements;
@@ -258,12 +331,40 @@ namespace QC {
 
 		std::unordered_map<size_t, size_t> RepeatedMeasureUnordered(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
 		{
+			if (nrTimes == 0) return {}; // nothing to measure
+
 			std::unordered_map<size_t, size_t> measurements;
 
-			for (size_t i = 0; i < nrTimes; ++i)
+			const size_t secondQubitp1 = secondQubit + 1;
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << secondQubitp1) - 1 - firstPartMask;
+
+			if (nrTimes == 1) // shortcut for a single measurement
 			{
-				const size_t res = MeasureNoCollapse(firstQubit, secondQubit);
-				++measurements[res];
+				const size_t meas = MeasureNoCollapse(firstQubit, secondQubit);
+				++measurements[(meas & measuredPartMask) >> firstQubit];
+				return measurements;
+			}
+
+			// a faster sampling way (O(n) where n is the number of qubits, except the preprocessing phase which is O(N), where N is the number of states), 
+			// there is an even O(1) method (see https://en.wikipedia.org/wiki/Alias_method), but I won't bother here, it's not a so spectacular improvement
+
+			std::vector<double> probabilities(registerStorage.size());
+
+			double accum = 0;
+			for (size_t i = 0; i < registerStorage.size(); ++i)
+			{
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+			}
+
+
+			for (size_t shot = 0; shot < nrTimes; ++shot)
+			{
+				const double prob = 1. - uniformZeroOne(rng);
+				const size_t meas = std::lower_bound(probabilities.begin(), probabilities.end(), prob) - probabilities.begin();
+
+				++measurements[(meas & measuredPartMask) >> firstQubit];
 			}
 
 			return measurements;
@@ -287,7 +388,7 @@ namespace QC {
 			const MatrixClass& gateMatrix = gate.getRawOperatorMatrix();
 
 			// TODO: perhaps also optimize better for controlled gates
-			// TODO: there are ways to optimize further for particular kind of gates, probably I won't bother since it's only a constant factor reduction
+			// TODO: there are ways to optimize further for particular kind of gates, probably I won't bother
 			
 			bool swapStorage = true;
 			if (gateQubits == 1)
