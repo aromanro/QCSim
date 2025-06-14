@@ -101,29 +101,13 @@ namespace QC {
 
 		static inline void ApplyTwoQubitsGate(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
-			const size_t notQubitBit = ~qubitBit;
-			const size_t notCtrlQubitBit = ~ctrlQubitBit;
-			const size_t orqubits = qubitBit | ctrlQubitBit;
-
 			if (gate.isSwapGate())
-			{
-				swapStorage = false;
-
-				for (size_t state = 0; state < NrBasisStates; ++state)
-				{
-					const bool q1 = state & qubitBit ? 1 : 0;
-					if (q1 == 1)
-						continue;
-					const bool q2 = state & ctrlQubitBit ? 1 : 0;
-					if (q2 == 0)
-						continue;
-
-					const size_t swapstate = state ^ orqubits;
-					std::swap(registerStorage(state), registerStorage(swapstate));
-				}
-			}
+				ApplySwapGate(registerStorage, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
 			else if (gate.isControlled())
 			{
+				const size_t notQubitBit = ~qubitBit;
+				const size_t orqubits = qubitBit | ctrlQubitBit;
+
 				for (size_t state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
@@ -145,6 +129,10 @@ namespace QC {
 			}
 			else
 			{
+				const size_t notQubitBit = ~qubitBit;
+				const size_t notCtrlQubitBit = ~ctrlQubitBit;
+				const size_t orqubits = qubitBit | ctrlQubitBit;
+
 				for (size_t state = 0; state < NrBasisStates; ++state)
 				{
 					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -160,32 +148,14 @@ namespace QC {
 
 		static inline void ApplyTwoQubitsGateOmp(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
-			const size_t notQubitBit = ~qubitBit;
-			const size_t notCtrlQubitBit = ~ctrlQubitBit;
-			const size_t orqubits = qubitBit | ctrlQubitBit;
-			const auto processor_count = GetNumberOfThreads();
-
 			if (gate.isSwapGate())
-			{
-				swapStorage = false;
-
-				// TODO: is it worth parallelizing the swap gate?
-#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
-				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
-				{
-					const bool q1 = state & qubitBit ? 1 : 0;
-					if (q1 == 1)
-						continue;
-					const bool q2 = state & ctrlQubitBit ? 1 : 0;
-					if (q2 == 0)
-						continue;
-
-					const size_t swapstate = state ^ orqubits;
-					std::swap(registerStorage(state), registerStorage(swapstate));
-				}
-			}
+				ApplySwapGateOmp(registerStorage, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
 			else if (gate.isControlled())
 			{
+				const size_t notQubitBit = ~qubitBit;
+				const size_t orqubits = qubitBit | ctrlQubitBit;
+				const auto processor_count = GetNumberOfThreads();
+
 				for (size_t state = 0; state < ctrlQubitBit; ++state)
 					resultsStorage(state) = registerStorage(state);
 
@@ -208,6 +178,11 @@ namespace QC {
 			}
 			else
 			{
+				const size_t notQubitBit = ~qubitBit;
+				const size_t notCtrlQubitBit = ~ctrlQubitBit;
+				const size_t orqubits = qubitBit | ctrlQubitBit;
+				const auto processor_count = GetNumberOfThreads();
+
 #pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
@@ -292,13 +267,55 @@ namespace QC {
 		}
 
 	private:
+		static inline void ApplySwapGate(VectorClass& registerStorage, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
+		{
+			const size_t orqubits = qubitBit | ctrlQubitBit;
+
+			swapStorage = false;
+
+			for (size_t state = 0; state < NrBasisStates; ++state)
+			{
+				const bool q1 = state & qubitBit ? 1 : 0;
+				if (q1 == 1)
+					continue;
+				const bool q2 = state & ctrlQubitBit ? 1 : 0;
+				if (q2 == 0)
+					continue;
+
+				const size_t swapstate = state ^ orqubits;
+				std::swap(registerStorage(state), registerStorage(swapstate));
+			}
+		}
+
+		static inline void ApplySwapGateOmp(VectorClass& registerStorage, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
+		{
+			const size_t orqubits = qubitBit | ctrlQubitBit;
+			const auto processor_count = GetNumberOfThreads();
+
+			swapStorage = false;
+
+			// TODO: is it worth parallelizing the swap gate?
+#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
+			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			{
+				const bool q1 = state & qubitBit ? 1 : 0;
+				if (q1 == 1)
+					continue;
+				const bool q2 = state & ctrlQubitBit ? 1 : 0;
+				if (q2 == 0)
+					continue;
+
+				const size_t swapstate = state ^ orqubits;
+				std::swap(registerStorage(state), registerStorage(swapstate));
+			}
+		}
+
 		static inline void ApplyThreeQubitsControlledGate(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
 			const size_t notQubitBit = ~qubitBit;
 			const size_t notCtrlQubitBit = ~ctrlQubitBit;
 			const size_t notQubitBit2 = ~qubitBit2;
 			const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
-			const size_t orqubits = qubitBit | qubitBit2;
 			const size_t orallqubits = qubitBit | ctrlqubits;
 			const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
 
@@ -385,7 +402,6 @@ namespace QC {
 			const size_t notCtrlQubitBit = ~ctrlQubitBit;
 			const size_t notQubitBit2 = ~qubitBit2;
 			const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
-			const size_t orqubits = qubitBit | qubitBit2;
 			const size_t orallqubits = qubitBit | ctrlqubits;
 			const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
 			const auto processor_count = GetNumberOfThreads();
