@@ -403,9 +403,9 @@ namespace QC {
 				const size_t ctrlQubitBit = 1ULL << controllingQubit1;
 
 				if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::TwoQubitOmpLimit)
-					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
+					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
 				else
-					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
+					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
 			}
 			else
 			{
@@ -413,9 +413,9 @@ namespace QC {
 				const size_t ctrlQubitBit = 1ULL << controllingQubit2;
 
 				if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::ThreeQubitOmpLimit)
-					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
+					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
 				else
-					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates);
+					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
 			}
 
 			if (swapStorage) registerStorage.swap(resultsStorage);

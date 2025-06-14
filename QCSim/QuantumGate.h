@@ -396,6 +396,11 @@ namespace QC {
 				OpClass::operatorMat(5, 6) = 1;
 				OpClass::operatorMat(6, 5) = 1;
 			}
+
+			bool isSwapGate() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class CCZGate : public ThreeQubitsControlledGate<MatrixClass>
