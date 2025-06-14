@@ -204,15 +204,13 @@ namespace QC {
 				swapStorage = false;
 				const size_t orqubits = qubitBit | qubitBit2;
 
-				for (size_t state = ctrlQubitBit; state < NrBasisStates; ++state)
+				for (size_t state = std::max(ctrlQubitBit, std::min(qubitBit, qubitBit2)); state < NrBasisStates; ++state)
 				{
 					const size_t ctrl = (state & ctrlQubitBit);
 					const size_t ctrl2 = (state & qubitBit2);
 					if (ctrl == 0 || ctrl2 == 0)
-					{
-						resultsStorage(state) = registerStorage(state);
 						continue;
-					}
+
 					const bool q1 = state & qubitBit ? 1 : 0;
 					if (q1 == 1)
 						continue;
@@ -240,15 +238,13 @@ namespace QC {
 
 				// TODO: is it worth parallelizing the controlled swap gate?
 #pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
-				for (long long int state = ctrlQubitBit; state < NrBasisStates; ++state)
+				for (long long int state = std::max(ctrlQubitBit, std::min(qubitBit, qubitBit2)); state < NrBasisStates; ++state)
 				{
 					const size_t ctrl = (state & ctrlQubitBit);
 					const size_t ctrl2 = (state & qubitBit2);
 					if (ctrl == 0 || ctrl2 == 0)
-					{
-						resultsStorage(state) = registerStorage(state);
 						continue;
-					}
+
 					const bool q1 = state & qubitBit ? 1 : 0;
 					if (q1 == 1)
 						continue;
@@ -273,7 +269,7 @@ namespace QC {
 
 			swapStorage = false;
 
-			for (size_t state = 0; state < NrBasisStates; ++state)
+			for (size_t state = std::min(qubitBit, ctrlQubitBit); state < NrBasisStates; ++state)
 			{
 				const bool q1 = state & qubitBit ? 1 : 0;
 				if (q1 == 1)
@@ -296,7 +292,7 @@ namespace QC {
 
 			// TODO: is it worth parallelizing the swap gate?
 #pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
-			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long int state = std::min(qubitBit, ctrlQubitBit); state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				const bool q1 = state & qubitBit ? 1 : 0;
 				if (q1 == 1)
