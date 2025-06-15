@@ -174,9 +174,7 @@ namespace QC {
 
 				for (size_t state = std::max(ctrlQubitBit, std::min(qubitBit, qubitBit2)); state < NrBasisStates; ++state)
 				{
-					const size_t ctrl = (state & ctrlQubitBit);
-					const size_t ctrl2 = (state & qubitBit2);
-					if (ctrl == 0 || ctrl2 == 0)
+					if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 						continue;
 
 					const bool q1 = state & qubitBit ? 1 : 0;
@@ -208,9 +206,7 @@ namespace QC {
 #pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
 				for (long long int state = std::max(ctrlQubitBit, std::min(qubitBit, qubitBit2)); state < NrBasisStates; ++state)
 				{
-					const size_t ctrl = (state & ctrlQubitBit);
-					const size_t ctrl2 = (state & qubitBit2);
-					if (ctrl == 0 || ctrl2 == 0)
+					if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 						continue;
 
 					const bool q1 = state & qubitBit ? 1 : 0;
@@ -454,9 +450,7 @@ namespace QC {
 
 			for (size_t state = limit; state < NrBasisStates; ++state)
 			{
-				const size_t ctrl = (state & ctrlQubitBit);
-				const size_t ctrl2 = (state & qubitBit2);
-				if (ctrl == 0 || ctrl2 == 0)
+				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 					continue;
 
 				registerStorage(state) *= state & qubitBit ? gateMatrix(7, 7) : gateMatrix(6, 6);
@@ -474,9 +468,7 @@ namespace QC {
 
 			for (size_t state = limit; state < NrBasisStates; ++state)
 			{
-				const size_t ctrl = (state & ctrlQubitBit);
-				const size_t ctrl2 = (state & qubitBit2);
-				if (ctrl == 0 || ctrl2 == 0)
+				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 				{
 					resultsStorage(state) = registerStorage(state);
 					continue;
@@ -502,9 +494,7 @@ namespace QC {
 
 			for (size_t state = limit; state < NrBasisStates; ++state)
 			{
-				const size_t ctrl = (state & ctrlQubitBit);
-				const size_t ctrl2 = (state & qubitBit2);
-				if (ctrl == 0 || ctrl2 == 0)
+				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 				{
 					resultsStorage(state) = registerStorage(state);
 					continue;
@@ -608,9 +598,7 @@ namespace QC {
 #pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
 			for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
-				const size_t ctrl = (state & ctrlQubitBit);
-				const size_t ctrl2 = (state & qubitBit2);
-				if (ctrl == 0 || ctrl2 == 0)
+				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 					continue;
 
 				registerStorage(state) *= state & qubitBit ? gateMatrix(7, 7) : gateMatrix(6, 6);
@@ -630,9 +618,7 @@ namespace QC {
 #pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
 			for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
-				const size_t ctrl = (state & ctrlQubitBit);
-				const size_t ctrl2 = (state & qubitBit2);
-				if (ctrl == 0 || ctrl2 == 0)
+				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 				{
 					resultsStorage(state) = registerStorage(state);
 					continue;
@@ -660,9 +646,7 @@ namespace QC {
 #pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
 			for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
-				const size_t ctrl = (state & ctrlQubitBit);
-				const size_t ctrl2 = (state & qubitBit2);
-				if (ctrl == 0 || ctrl2 == 0)
+				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 				{
 					resultsStorage(state) = registerStorage(state);
 					continue;
