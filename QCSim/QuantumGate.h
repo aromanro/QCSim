@@ -25,6 +25,11 @@ namespace QC {
 			{
 				return true;
 			}
+
+			bool isAntidiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class iSwapGate : public TwoQubitsGate<MatrixClass>
@@ -39,6 +44,11 @@ namespace QC {
 				OpClass::operatorMat(2, 2) = 0;
 				OpClass::operatorMat(1, 2) = std::complex<double>(0, 1);
 				OpClass::operatorMat(2, 1) = std::complex<double>(0, 1);
+			}
+
+			bool isAntidiagonal() const override
+			{
+				return true;
 			}
 		};
 
@@ -113,6 +123,12 @@ namespace QC {
 				OpClass::operatorMat(2, 3) = 1;
 				OpClass::operatorMat(3, 2) = 1;
 			}
+
+			// this reffers only to the controlled block, not the whole matrix
+			bool isAntidiagonal() const override
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class ControlledYGate : public TwoQubitsControlledGate<MatrixClass>
@@ -127,6 +143,12 @@ namespace QC {
 				OpClass::operatorMat(3, 3) = 0;
 				OpClass::operatorMat(2, 3) = std::complex(0., -1.);
 				OpClass::operatorMat(3, 2) = std::complex(0., 1.);
+			}
+
+			// this reffers only to the controlled block, not the whole matrix
+			bool isAntidiagonal() const override
+			{
+				return true;
 			}
 		};
 
@@ -379,6 +401,12 @@ namespace QC {
 			bool isControlQubit(size_t qubit) const override
 			{
 				return qubit <= 1;
+			}
+
+			// this reffers only to the controlled block, not the whole matrix
+			bool isAntidiagonal() const override
+			{
+				return true;
 			}
 		};
 
