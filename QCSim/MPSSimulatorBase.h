@@ -282,7 +282,6 @@ namespace QC {
 			// needed for some tests, ignore
 			void SetSiteMatrices(size_t site, const Eigen::MatrixXcd& matrix0, const Eigen::MatrixXcd& matrix1)
 			{
-				assert(physIndex < gammas.size());
 				assert(matrix0.rows() == matrix1.rows());
 				assert(matrix0.cols() == matrix1.cols());
 
