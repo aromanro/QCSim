@@ -316,6 +316,11 @@ namespace QC {
 			{
 				accum += std::norm(registerStorage[i]);
 				probabilities[i] = accum;
+				if (accum >= 1.0)
+				{
+					probabilities.resize(i + 1);
+					break;
+				}
 			}
 
 			for (size_t shot = 0; shot < nrTimes; ++shot)
@@ -356,6 +361,11 @@ namespace QC {
 			{
 				accum += std::norm(registerStorage[i]);
 				probabilities[i] = accum;
+				if (accum >= 1.0)
+				{
+					probabilities.resize(i + 1);
+					break;
+				}
 			}
 
 
