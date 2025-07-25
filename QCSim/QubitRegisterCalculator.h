@@ -67,12 +67,14 @@ namespace QC {
 
 		static inline void ApplyOneQubitGateOmp(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = OneQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
 
 			if (gate.isDiagonal())
 			{
 				swapStorage = false;
-#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 					registerStorage(state) *= state & qubitBit ? gateMatrix(1, 1) : gateMatrix(0, 0);
 			}
@@ -82,13 +84,13 @@ namespace QC {
 
 				if (gate.isAntidiagonal())
 				{
-#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 					for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 						resultsStorage(state) = state & qubitBit ? gateMatrix(1, 0) * registerStorage(state & notQubitBit) : gateMatrix(0, 1) * registerStorage(state | qubitBit);
 				}
 				else
 				{
-#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 					for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 					{
 						const size_t row = state & qubitBit ? 1 : 0;
@@ -146,12 +148,15 @@ namespace QC {
 			}
 			else
 			{
+				const size_t blockSize = TwoQubitOmpLimit / divSchedule;
+				const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+				const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 				const size_t notQubitBit = ~qubitBit;
 				const size_t notCtrlQubitBit = ~ctrlQubitBit;
 				const size_t orqubits = qubitBit | ctrlQubitBit;
-				const auto processor_count = GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					const size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -198,12 +203,15 @@ namespace QC {
 		{
 			if (gate.isSwapGate())
 			{
-				const auto processor_count = GetNumberOfThreads();
+				const size_t blockSize = ThreeQubitOmpLimit / divSchedule;
+				const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+				const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 				swapStorage = false;
 				const size_t orqubits = qubitBit | qubitBit2;
 
 				// TODO: is it worth parallelizing the controlled swap gate?
-#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 				for (long long int state = std::max(ctrlQubitBit, std::min(qubitBit, qubitBit2)); state < NrBasisStates; ++state)
 				{
 					if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
@@ -249,13 +257,16 @@ namespace QC {
 
 		static inline void ApplySwapGateOmp(VectorClass& registerStorage, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
+			const size_t blockSize = TwoQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			const size_t orqubits = qubitBit | ctrlQubitBit;
-			const auto processor_count = GetNumberOfThreads();
 
 			swapStorage = false;
 
 			// TODO: is it worth parallelizing the swap gate?
-#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = std::min(qubitBit, ctrlQubitBit); state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				const bool q1 = state & qubitBit ? 1 : 0;
@@ -332,10 +343,13 @@ namespace QC {
 
 		static inline void ApplyDiagonalControlGateOmp(VectorClass& registerStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = TwoQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			swapStorage = false;
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				const size_t ctrl = (state & ctrlQubitBit);
@@ -348,13 +362,16 @@ namespace QC {
 
 		static inline void ApplyAntidiagonalControlGateOmp(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = TwoQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			const size_t notQubitBit = ~qubitBit;
 
 			for (size_t state = 0; state < ctrlQubitBit; ++state)
 				resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				const size_t ctrl = (state & ctrlQubitBit);
@@ -370,14 +387,17 @@ namespace QC {
 
 		static inline void ApplyGenericControlGateOmp(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = TwoQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			const size_t notQubitBit = ~qubitBit;
 			const size_t orqubits = qubitBit | ctrlQubitBit;
 
 			for (size_t state = 0; state < ctrlQubitBit; ++state)
 				resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, TwoQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				const size_t ctrl = (state & ctrlQubitBit);
@@ -553,7 +573,9 @@ namespace QC {
 			}
 			else
 			{
-				const auto processor_count = GetNumberOfThreads();
+				const size_t blockSize = ThreeQubitOmpLimit / divSchedule;
+				const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+				const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
 
 				const size_t notQubitBit = ~qubitBit;
 				const size_t notCtrlQubitBit = ~ctrlQubitBit;
@@ -565,7 +587,7 @@ namespace QC {
 				for (long long int state = 0; state < static_cast<long long int>(ctrlQubitBit); ++state)
 					resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 				for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					const size_t ctrl = (state & ctrlQubitBit);
@@ -590,12 +612,15 @@ namespace QC {
 
 		static inline void ApplyDiagonalCCGateOmp(VectorClass& registerStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = ThreeQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			long long limit = static_cast<long long>(std::max(ctrlQubitBit, qubitBit2));
 
 			swapStorage = false;
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
@@ -607,7 +632,10 @@ namespace QC {
 
 		static inline void ApplyAntidiagonalCCGateOmp(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = ThreeQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			long long limit = static_cast<long long>(std::max(ctrlQubitBit, qubitBit2));
 
 			const size_t notQubitBit = ~qubitBit;
@@ -615,7 +643,7 @@ namespace QC {
 			for (size_t state = 0; state < limit; ++state)
 				resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
@@ -630,7 +658,10 @@ namespace QC {
 
 		static inline void ApplyGenericCCGateOmp(VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = ThreeQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			long long limit = static_cast<long long>(std::max(ctrlQubitBit, qubitBit2));
 
 			const size_t notQubitBit = ~qubitBit;
@@ -643,7 +674,7 @@ namespace QC {
 			for (size_t state = 0; state < limit; ++state)
 				resultsStorage(state) = registerStorage(state);
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = limit; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
@@ -664,6 +695,10 @@ namespace QC {
 
 		static inline void ApplyThreeQubitsGenericGateOmp(const GateClass& gate, const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates)
 		{
+			const size_t blockSize = ThreeQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			const size_t notQubitBit = ~qubitBit;
 			const size_t notCtrlQubitBit = ~ctrlQubitBit;
 			const size_t notQubitBit2 = ~qubitBit2;
@@ -671,9 +706,8 @@ namespace QC {
 			const size_t orqubits = qubitBit | qubitBit2;
 			const size_t orallqubits = qubitBit | ctrlqubits;
 			const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
-			const auto processor_count = GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, ThreeQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
@@ -742,8 +776,11 @@ namespace QC {
 
 		static inline size_t MeasureQubitOmp(size_t NrBasisStates, VectorClass& registerStorage, size_t qubit, const double prob)
 		{
+			const size_t blockSize = OneQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			double accum = 0;
-			const auto processor_count = GetNumberOfThreads();
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
@@ -769,7 +806,7 @@ namespace QC {
 			// find the norm
 			accum = 0;
 
-#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)		
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, blockSize)		
 			for (long long state = measuredStateMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if ((state & measuredQubitMask) == measuredStateMask)
@@ -778,7 +815,7 @@ namespace QC {
 			const double norm = 1. / sqrt(accum);
 
 			// collapse
-#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
 
@@ -822,12 +859,15 @@ namespace QC {
 
 		static inline double GetQubitProbabilityOmp(size_t NrBasisStates, const VectorClass& registerStorage, size_t qubit)
 		{
+			const size_t blockSize = OneQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			double accum = 0;
-			const auto processor_count = GetNumberOfThreads();
 
 			const size_t measuredQubitMask = 1ULL << qubit;
 
-#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, blockSize)
 			for (long long state = measuredQubitMask; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if (state & measuredQubitMask)
@@ -875,7 +915,10 @@ namespace QC {
 
 		static inline size_t MeasureOmp(size_t NrBasisStates, VectorClass& registerStorage, size_t firstQubit, size_t secondQubit, const double prob)
 		{
-			const auto processor_count = GetNumberOfThreads();
+			const size_t blockSize = OneQubitOmpLimit / divSchedule;
+			const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
 			double accum = 0;
 
 			const size_t secondQubitp1 = secondQubit + 1;
@@ -897,7 +940,7 @@ namespace QC {
 			// find the norm
 			accum = 0;
 
-#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+#pragma omp parallel for reduction(+:accum) num_threads(processor_count) schedule(static, blockSize)
 			for (long long state = measuredState; state < static_cast<long long int>(NrBasisStates); ++state)
 			{
 				if ((state & measuredPartMask) == measuredState)
@@ -906,7 +949,7 @@ namespace QC {
 			const double norm = 1. / sqrt(accum);
 
 			// collapse
-#pragma omp parallel for num_threads(processor_count) schedule(static, OneQubitOmpLimit / divSchedule)
+#pragma omp parallel for num_threads(processor_count) schedule(static, blockSize)
 			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
 				registerStorage[state] *= ((state & measuredPartMask) == measuredState) ? norm : 0;
 
