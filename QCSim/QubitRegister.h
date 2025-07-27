@@ -591,11 +591,15 @@ namespace QC {
 		// the caller should ensure the hermicity and extract the real part
 		std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates)
 		{
-			const VectorClass bra = registerStorage.adjoint();
+			VectorClass savedState = registerStorage;
 
 			ApplyGates(gates);
 
-			return registerStorage.cwiseProduct(bra).sum();
+			const auto res = (savedState.adjoint() * registerStorage)(0);
+
+			registerStorage.swap(savedState); // restore the state
+
+			return res;
 		}
 
 		std::unique_ptr<QubitRegister<VectorClass, MatrixClass>> Clone() const
