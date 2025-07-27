@@ -662,10 +662,71 @@ bool CountingTests()
 	return true;
 }
 
+bool checkExpectationValues()
+{
+	std::cout << "\nTesting expectation values..." << std::endl;
+
+	QC::QubitRegister<> reg(3);
+	if (!approxEqual(reg.ExpectationValue({}), 1.0, 1e-6))
+	{
+		std::cout << "Expectation value for I is not 1" << std::endl;
+		return false;
+	}
+
+	QC::Gates::PauliZGate<> zGate;
+
+	QC::Gates::AppliedGate<> appliedZGate(zGate.getRawOperatorMatrix(), 0);
+
+	std::vector<QC::Gates::AppliedGate<>> gates{ appliedZGate };
+
+	auto exp = reg.ExpectationValue(gates);
+	if (!approxEqual(exp, 1., 1e-6))
+	{
+		std::cout << "Expectation value for Z0 is not 1, it's " << exp << std::endl;
+		return false;
+	}
+
+	QC::Gates::PauliXGate<> xGate;
+	reg.ApplyGate(xGate, 0);
+	
+	exp = reg.ExpectationValue(gates);
+	if (!approxEqual(exp, -1., 1e-6))
+	{
+		std::cout << "Expectation value for Z0 is not -1 after first qubit flip, it's " << exp << std::endl;
+		return false;
+	}
+
+	QC::Gates::HadamardGate<> hGate;
+	reg.ApplyGate(hGate, 0);
+	exp = reg.ExpectationValue(gates);
+	if (!approxEqual(exp, 0., 1e-6))
+	{
+		std::cout << "Expectation value for Z0 is not 0 after hadamard on first qubit, it's " << exp << std::endl;
+		return false;
+	}
+
+	reg.setToBasisState(0);
+	reg.ApplyGate(hGate, 1);
+
+	QC::Gates::AppliedGate<> appliedZ1Gate(zGate.getRawOperatorMatrix(), 1);
+
+	std::vector<QC::Gates::AppliedGate<>> gatesz1{ appliedZ1Gate };
+
+	exp = reg.ExpectationValue(gatesz1);
+	if (!approxEqual(exp, 0., 1e-6))
+	{
+		std::cout << "Expectation value for Z1 is not 0. after applying hadamard on qubit 1, it's " << exp << std::endl;
+		return false;
+	}
+
+	return true;
+}
+
 bool basicTests()
 {
 	bool res = registerMeasurementsTests();
 	if (res) res = checkGates();
+	if (res) res = checkExpectationValues();
 	if (res) res = ErrorCorrectionTests();
 	if (res) res = BellInequalitiesTests();
 

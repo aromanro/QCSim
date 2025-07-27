@@ -587,6 +587,17 @@ namespace QC {
 			return state;
 		}
 
+		// does not check the gates, that's why it returns a complex number
+		// the caller should ensure the hermicity and extract the real part
+		std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates)
+		{
+			const VectorClass bra = registerStorage.adjoint();
+
+			ApplyGates(gates);
+
+			return registerStorage.cwiseProduct(bra).sum();
+		}
+
 		std::unique_ptr<QubitRegister<VectorClass, MatrixClass>> Clone() const
 		{
 			auto qr = std::make_unique<QubitRegister<VectorClass, MatrixClass>>(1);
