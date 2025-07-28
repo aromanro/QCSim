@@ -341,7 +341,8 @@ namespace QC {
 
 					long long int mloc = 0;
 
-#pragma omp parallel for reduction(+:mloc) num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for reduction(+:mloc) 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						const int x1 = BoolToInt(j.X[q]);

@@ -26,7 +26,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 512)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyH(qubit, q);
 				}
@@ -49,7 +50,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(qubit, q);
@@ -72,7 +74,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 512)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyS(qubit, q);
 				}
@@ -93,7 +96,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(qubit, q);
@@ -120,7 +124,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 128)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 128)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(qubit, q);
@@ -148,7 +153,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyS(qubit, q);
@@ -170,7 +176,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 512)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyX(qubit, q);
 				}
@@ -206,7 +213,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 512)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyZ(qubit, q);
 				}
@@ -224,7 +232,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyCX(target, control, q);
 				}
@@ -247,7 +256,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyZ(target, q);
@@ -274,7 +284,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyH(target, q);
@@ -300,7 +311,8 @@ namespace QC {
 				{
 					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 256)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 256)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyCX(qubit1, qubit2, q);
