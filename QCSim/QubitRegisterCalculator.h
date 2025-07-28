@@ -1017,7 +1017,7 @@ namespace QC {
 		//constexpr static auto cone = std::complex<double>(1.0, 0.0);
 
 		//constexpr static int divSchedule = 4;
-		constexpr static size_t OneQubitOmpLimit = 32768;
+		constexpr static size_t OneQubitOmpLimit = 16384;
 		constexpr static size_t TwoQubitOmpLimit = OneQubitOmpLimit;
 		constexpr static size_t ThreeQubitOmpLimit = OneQubitOmpLimit;
 
