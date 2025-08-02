@@ -134,6 +134,45 @@ namespace QC {
 				return res;
 			}
 
+			// does not check for hermicity, that's why it returns a complex number
+			// the caller should ensure the hermicity and extract the real part
+			// also (for now, at least) it supports only one qubit ops
+			// the problem with two qubit gates is that they will swap qubits around
+			// so instead of only saving the state to compute <psi|U|psi>, and then use it to restore the state,
+			// it would need to save the state twice, once for restoring and one for computing the expectation value - the last one having the qubits swapped as the one on which the gates are applied
+			// anyway, this would be probably used mostly on Pauli strings, so...
+			std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
+			{
+				// at this point it doesn't check if the gates are one qubit, that's done at the higher level
+				// save the current state
+				std::vector<LambdaType> saveLambdas = lambdas;
+				std::vector<GammaType> saveGammas = gammas;
+
+				size_t minQubit = 0;
+				size_t maxQubit = gammas.size() - 1;
+
+				// apply the gates
+				for (const auto& gate : gates)
+				{
+					const size_t qubit = gate.getQubit1();
+					minQubit = std::min(minQubit, qubit);
+					maxQubit = std::max(maxQubit, qubit);
+					ApplySingleQubitGate(gate, qubit);
+				}
+
+				// contract the saved chain with the current one
+				// we need to do that only for the qubits in the range [minQubit, maxQubit]
+				std::complex<double> res = 0.;
+
+				// TODO: implement it
+
+				// restore the state
+				lambdas.swap(saveLambdas);
+				gammas.swap(saveGammas);
+
+				return res;
+			}
+
 			std::vector<bool> MeasureNoCollapse() override
 			{
 				const size_t nrQubits = gammas.size();

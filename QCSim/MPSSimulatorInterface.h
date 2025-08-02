@@ -56,6 +56,7 @@ namespace QC {
 			virtual std::shared_ptr<MPSSimulatorStateInterface> getState() const = 0;
 			virtual void setState(const std::shared_ptr<MPSSimulatorStateInterface>& state) = 0;
 			virtual void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) = 0;
+			virtual std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) = 0;
 			virtual std::vector<bool> MeasureNoCollapse(const std::set<IndexType>& qubits) = 0;
 		};
 

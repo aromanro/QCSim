@@ -338,6 +338,32 @@ namespace QC
 				}
 			}
 
+			// does not check for hermicity, that's why it returns a complex number
+		    // the caller should ensure the hermicity and extract the real part
+			// also (for now, at least) it supports only one qubit ops
+			// the problem with two qubit gates is that they will swap qubits around
+			// so instead of only saving the state to compute <psi|U|psi>, and then use it to restore the state,
+			// it would need to save the state twice, once for restoring and one for computing the expectation value - the last one having the qubits swapped as the one on which the gates are applied
+			// anyway, this would be probably used mostly on Pauli strings, so...
+			std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
+			{
+				std::vector<Gates::AppliedGate<MatrixClass>> translatedOps;
+				translatedOps.reserve(gates.size());
+
+				for (const auto& gate : gates)
+				{
+					if (gate.getQubitsNumber() > 1)
+						throw std::invalid_argument("Expectation value for ops applied on more than one qubit not supported yet");
+					
+					Gates::AppliedGate<MatrixClass> translated(gate);
+					translated.setQubit1(qubitsMap[gate.getQubit1()]);
+
+					translatedOps.emplace_back(std::move(translated));
+				}
+
+				return impl.ExpectationValue(translatedOps);
+			}
+
 			// needs calling MoveAtBeginningOfChain before this (with the same qubits, of course), otherwise it will give wrong results
 			std::vector<bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
 			{
