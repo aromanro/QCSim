@@ -164,7 +164,83 @@ namespace QC {
 				// we need to do that only for the qubits in the range [minQubit, maxQubit]
 				std::complex<double> res = 0.;
 
-				// TODO: implement it
+				const size_t nrSites = maxQubit - minQubit + 1;
+
+				std::vector<GammaType> daggerGammas(nrSites);
+				for (int i = 0; i < nrSites; ++i)
+					daggerGammas[i] = gammas[minQubit + i].conjugate();
+
+				// the lambdas multiplication goes for both dagger and non-dagger gammas
+
+				if (minQubit != 0)
+				{
+					// multiply with the left lambdas as well
+
+					IndexType szl = gammas[minQubit].dimension(0);
+					IndexType sz = gammas[minQubit].dimension(2);
+					const IndexType prev = minQubit - 1;
+
+					for (IndexType k = 0; k < sz; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < szl; ++i)
+								gammas[minQubit](i, j, k) *= lambdas[prev][i];
+
+					szl = daggerGammas[0].dimension(0);
+					sz = daggerGammas[0].dimension(2);
+
+					for (IndexType k = 0; k < sz; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < szl; ++i)
+								daggerGammas[0](i, j, k) *= saveLambdas[prev][i];
+				}
+
+				for (int i = 0; i < nrSites; ++i)
+				{
+					const IndexType q = minQubit + i;
+					// multiply with the right gammas
+
+					IndexType sz = gammas[q].dimension(0);
+					IndexType szr = gammas[q].dimension(2);
+
+					for (IndexType k = 0; k < szr; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < sz; ++i)
+								gammas[q](i, j, k) *= lambdas[q][k];
+
+					sz = daggerGammas[i].dimension(0);
+					szr = daggerGammas[i].dimension(2);
+
+					for (IndexType k = 0; k < szr; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < sz; ++i)
+								daggerGammas[i](i, j, k) *= saveLambdas[q][k];
+				}
+
+
+				if (maxQubit != gammas.size() - 1)
+				{
+					// multiply with the right lambdas as well
+
+					IndexType sz = gammas[maxQubit].dimension(0);
+					IndexType szr = gammas[maxQubit].dimension(2);
+
+					for (IndexType k = 0; k < szr; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < sz; ++i)
+								gammas[maxQubit](i, j, k) *= lambdas[maxQubit][k];
+
+					const size_t lastPos = nrSites - 1;
+					sz = daggerGammas[lastPos].dimension(0);
+					szr = daggerGammas[lastPos].dimension(2);
+
+					for (IndexType k = 0; k < szr; ++k)
+						for (IndexType j = 0; j < 2; ++j)
+							for (IndexType i = 0; i < sz; ++i)
+								daggerGammas[lastPos](i, j, k) *= saveLambdas[maxQubit][k];
+				}
+
+				// TODO: contract the gammas with the dagger gammas
+				
 
 				// restore the state
 				lambdas.swap(saveLambdas);

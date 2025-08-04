@@ -591,6 +591,8 @@ namespace QC {
 		// the caller should ensure the hermicity and extract the real part
 		std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates)
 		{
+			if (gates.empty()) return 1.;
+
 			VectorClass savedState = registerStorage;
 
 			ApplyGates(gates);
