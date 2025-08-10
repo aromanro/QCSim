@@ -662,9 +662,9 @@ bool CountingTests()
 	return true;
 }
 
-bool checkExpectationValues()
+bool checkExpectationValuesStatevector()
 {
-	std::cout << "\nTesting expectation values..." << std::endl;
+	std::cout << "\nTesting statevector expectation values..." << std::endl;
 
 	QC::QubitRegister<> reg(3);
 	if (!approxEqual(reg.ExpectationValue({}), 1.0, 1e-6))
@@ -722,11 +722,14 @@ bool checkExpectationValues()
 	return true;
 }
 
+
+
+
 bool basicTests()
 {
 	bool res = registerMeasurementsTests();
 	if (res) res = checkGates();
-	if (res) res = checkExpectationValues();
+	if (res) res = checkExpectationValuesStatevector();
 	if (res) res = ErrorCorrectionTests();
 	if (res) res = BellInequalitiesTests();
 

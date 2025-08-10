@@ -315,19 +315,19 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 						std::cout << "Difference: " << dif << std::endl;
 
 						std::cout << "Reg measurements:\n";
-						for (const auto& [key, value] : measurementsRegMap)
+						for (const auto& [key2, value2] : measurementsRegMap)
 						{
-							for (const auto& b : key)
+							for (const auto& b : key2)
 								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(value) / nrMeasurements << std::endl;
+							std::cout << " : " << static_cast<double>(value2) / nrMeasurements << std::endl;
 						}
 
 						std::cout << "MPS measurements:\n";
-						for (const auto& [key, value] : measurementsMPSMap)
+						for (const auto& [key2, value2] : measurementsMPSMap)
 						{
-							for (const auto& b : key)
+							for (const auto& b : key2)
 								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(value) / nrMeasurements << std::endl;
+							std::cout << " : " << static_cast<double>(value2) / nrMeasurements << std::endl;
 						}
 
 						return false;
@@ -362,7 +362,7 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 				std::unordered_map<std::vector<bool>, int> measurementsRegMap;
 				std::unordered_map<std::vector<bool>, int> measurementsMPSMap;
 
-				for (int t = 0; t < nrMeasurements; ++t)
+				for (int t2 = 0; t2 < nrMeasurements; ++t2)
 				{
 					QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
 					QC::QubitRegister reg(nrQubits);
@@ -397,19 +397,19 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 						std::cout << "Difference: " << dif << std::endl;
 
 						std::cout << "Reg measurements:\n";
-						for (const auto& [key, value] : measurementsRegMap)
+						for (const auto& [key2, value2] : measurementsRegMap)
 						{
-							for (const auto& b : key)
+							for (const auto& b : key2)
 								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(value) / nrMeasurements << std::endl;
+							std::cout << " : " << static_cast<double>(value2) / nrMeasurements << std::endl;
 						}
 
 						std::cout << "MPS measurements:\n";
-						for (const auto& [key, value] : measurementsMPSMap)
+						for (const auto& [key2, value2] : measurementsMPSMap)
 						{
-							for (const auto& b : key)
+							for (const auto& b : key2)
 								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(value) / nrMeasurements << std::endl;
+							std::cout << " : " << static_cast<double>(value2) / nrMeasurements << std::endl;
 						}
 
 						return false;
@@ -778,6 +778,66 @@ bool StateSimulationTest()
 		OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits();
 }
 
+bool checkExpectationValuesMPS()
+{
+	std::cout << "\nTesting MPS expectation values..." << std::endl;
+
+	QC::TensorNetworks::MPSSimulator mps(3);
+	if (!approxEqual(mps.ExpectationValue({}), 1.0, 1e-6))
+	{
+		std::cout << "Expectation value for I is not 1" << std::endl;
+		return false;
+	}
+
+	QC::Gates::PauliZGate<> zGate;
+
+	QC::Gates::AppliedGate<> appliedZGate(zGate.getRawOperatorMatrix(), 0);
+
+	std::vector<QC::Gates::AppliedGate<>> gates{ appliedZGate };
+
+	auto exp = mps.ExpectationValue(gates);
+	if (!approxEqual(exp, 1., 1e-6))
+	{
+		std::cout << "Expectation value for Z0 is not 1, it's " << exp << std::endl;
+		return false;
+	}
+
+	QC::Gates::PauliXGate<> xGate;
+	mps.ApplyGate(xGate, 0);
+
+	exp = mps.ExpectationValue(gates);
+	if (!approxEqual(exp, -1., 1e-6))
+	{
+		std::cout << "Expectation value for Z0 is not -1 after first qubit flip, it's " << exp << std::endl;
+		return false;
+	}
+
+	QC::Gates::HadamardGate<> hGate;
+	mps.ApplyGate(hGate, 0);
+	exp = mps.ExpectationValue(gates);
+	if (!approxEqual(exp, 0., 1e-6))
+	{
+		std::cout << "Expectation value for Z0 is not 0 after hadamard on first qubit, it's " << exp << std::endl;
+		return false;
+	}
+
+	mps.setToBasisState(0);
+	mps.ApplyGate(hGate, 1);
+
+	QC::Gates::AppliedGate<> appliedZ1Gate(zGate.getRawOperatorMatrix(), 1);
+
+	std::vector<QC::Gates::AppliedGate<>> gatesz1{ appliedZ1Gate };
+
+	exp = mps.ExpectationValue(gatesz1);
+	if (!approxEqual(exp, 0., 1e-6))
+	{
+		std::cout << "Expectation value for Z1 is not 0. after applying hadamard on qubit 1, it's " << exp << std::endl;
+		return false;
+	}
+
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -799,5 +859,7 @@ bool MPSSimulatorTests()
 	mps.print();
 	*/
 
-	return StateSimulationTest();
+	return StateSimulationTest() /* && checkExpectationValuesMPS()*/;
 }
+
+

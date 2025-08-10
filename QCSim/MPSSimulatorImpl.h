@@ -148,13 +148,13 @@ namespace QC {
 				std::vector<LambdaType> saveLambdas = lambdas;
 				std::vector<GammaType> saveGammas = gammas;
 
-				size_t minQubit = 0;
-				size_t maxQubit = gammas.size() - 1;
+				IndexType minQubit = gates.empty() ? 0 : gammas.size() - 1;
+				IndexType maxQubit = gates.empty() ? gammas.size() - 1 : 0;
 
 				// apply the gates
 				for (const auto& gate : gates)
 				{
-					const size_t qubit = gate.getQubit1();
+					const IndexType qubit = gate.getQubit1();
 					minQubit = std::min(minQubit, qubit);
 					maxQubit = std::max(maxQubit, qubit);
 					ApplySingleQubitGate(gate, qubit);
@@ -194,10 +194,13 @@ namespace QC {
 								daggerGammas[0](i, j, k) *= saveLambdas[prev][i];
 				}
 
-				for (int i = 0; i < nrSites; ++i)
+				for (int s = 0; s < nrSites; ++s)
 				{
-					const IndexType q = minQubit + i;
-					// multiply with the right gammas
+					const IndexType q = minQubit + s;
+					// multiply with the right lambdas
+
+					if (q == lambdas.size())
+						break;
 
 					IndexType sz = gammas[q].dimension(0);
 					IndexType szr = gammas[q].dimension(2);
@@ -207,17 +210,17 @@ namespace QC {
 							for (IndexType i = 0; i < sz; ++i)
 								gammas[q](i, j, k) *= lambdas[q][k];
 
-					sz = daggerGammas[i].dimension(0);
-					szr = daggerGammas[i].dimension(2);
+					sz = daggerGammas[s].dimension(0);
+					szr = daggerGammas[s].dimension(2);
 
 					for (IndexType k = 0; k < szr; ++k)
 						for (IndexType j = 0; j < 2; ++j)
 							for (IndexType i = 0; i < sz; ++i)
-								daggerGammas[i](i, j, k) *= saveLambdas[q][k];
+								daggerGammas[s](i, j, k) *= saveLambdas[q][k];
 				}
 
 
-				if (maxQubit != gammas.size() - 1)
+				if (maxQubit != static_cast<IndexType>(gammas.size()) - 1)
 				{
 					// multiply with the right lambdas as well
 
@@ -240,7 +243,30 @@ namespace QC {
 				}
 
 				// TODO: contract the gammas with the dagger gammas
+
+				// start by contracting the first gamma with the first dagger gamma
+				//  -O-         |
+				// | |     ==>  O
+				//  -O-         |
 				
+				using DimPair = Eigen::Tensor<std::complex<double>, 3>::DimensionPair;
+				static const Eigen::array<DimPair, 2> contract_dim{ DimPair(0, 0), DimPair(1, 1) };
+
+				static const Indexes contract_dim1{ IntIndexPair(0, 0) };
+
+				Eigen::Tensor<std::complex<double>, 2> resTensor = gammas[minQubit].contract(daggerGammas[0], contract_dim);
+
+				// now contract the rest of the gammas with the dagger gammas
+				for (IndexType i = minQubit + 1; i <= maxQubit; ++i)
+				{
+					//  /-O-         |
+                    // O  |     ==>  O
+                    //  \-O-         |
+					resTensor = resTensor.contract(gammas[i], contract_dim1).contract(daggerGammas[i - minQubit], contract_dim);
+				}
+
+				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
+				res = t(0);
 
 				// restore the state
 				lambdas.swap(saveLambdas);
