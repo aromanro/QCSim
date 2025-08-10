@@ -148,21 +148,16 @@ namespace QC {
 				std::vector<LambdaType> saveLambdas = lambdas;
 				std::vector<GammaType> saveGammas = gammas;
 
-				IndexType minQubit = gates.empty() ? 0 : gammas.size() - 1;
-				IndexType maxQubit = gates.empty() ? gammas.size() - 1 : 0;
+				const IndexType lastQubit = static_cast<IndexType>(gammas.size() - 1);
+				IndexType minQubit = gates.empty() ? 0 : lastQubit;
+				IndexType maxQubit = gates.empty() ? lastQubit : 0;
 
-				// apply the gates
 				for (const auto& gate : gates)
 				{
 					const IndexType qubit = gate.getQubit1();
 					minQubit = std::min(minQubit, qubit);
 					maxQubit = std::max(maxQubit, qubit);
-					ApplySingleQubitGate(gate, qubit);
 				}
-
-				// contract the saved chain with the current one
-				// we need to do that only for the qubits in the range [minQubit, maxQubit]
-				std::complex<double> res = 0.;
 
 				const size_t nrSites = maxQubit - minQubit + 1;
 
@@ -170,11 +165,18 @@ namespace QC {
 				for (int i = 0; i < nrSites; ++i)
 					daggerGammas[i] = gammas[minQubit + i].conjugate();
 
+				// apply the gates
+				for (const auto& gate : gates)
+					ApplySingleQubitGate(gate, gate.getQubit1());
+
+				// contract the saved chain with the current one
+				// we need to do that only for the qubits in the range [minQubit, maxQubit]
+
 				// the lambdas multiplication goes for both dagger and non-dagger gammas
 
 				if (minQubit != 0)
 				{
-					// multiply with the left lambdas as well
+					// multiply with the left lambda as well
 
 					IndexType szl = gammas[minQubit].dimension(0);
 					IndexType sz = gammas[minQubit].dimension(2);
@@ -219,29 +221,6 @@ namespace QC {
 								daggerGammas[s](i, j, k) *= saveLambdas[q][k];
 				}
 
-
-				if (maxQubit != static_cast<IndexType>(gammas.size()) - 1)
-				{
-					// multiply with the right lambdas as well
-
-					IndexType sz = gammas[maxQubit].dimension(0);
-					IndexType szr = gammas[maxQubit].dimension(2);
-
-					for (IndexType k = 0; k < szr; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-								gammas[maxQubit](i, j, k) *= lambdas[maxQubit][k];
-
-					const size_t lastPos = nrSites - 1;
-					sz = daggerGammas[lastPos].dimension(0);
-					szr = daggerGammas[lastPos].dimension(2);
-
-					for (IndexType k = 0; k < szr; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-								daggerGammas[lastPos](i, j, k) *= saveLambdas[maxQubit][k];
-				}
-
 				// TODO: contract the gammas with the dagger gammas
 
 				// start by contracting the first gamma with the first dagger gamma
@@ -266,7 +245,7 @@ namespace QC {
 				}
 
 				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
-				res = t(0);
+				std::complex<double> res = t(0);
 
 				// restore the state
 				lambdas.swap(saveLambdas);

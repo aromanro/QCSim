@@ -722,9 +722,6 @@ bool checkExpectationValuesStatevector()
 	return true;
 }
 
-
-
-
 bool basicTests()
 {
 	bool res = registerMeasurementsTests();

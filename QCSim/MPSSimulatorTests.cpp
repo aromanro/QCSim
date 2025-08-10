@@ -835,6 +835,8 @@ bool checkExpectationValuesMPS()
 		return false;
 	}
 
+	std::cout << "\nSuccess" << std::endl;
+
 	return true;
 }
 
@@ -859,7 +861,7 @@ bool MPSSimulatorTests()
 	mps.print();
 	*/
 
-	return StateSimulationTest() /* && checkExpectationValuesMPS()*/;
+	return StateSimulationTest() && checkExpectationValuesMPS();
 }
 
 
