@@ -148,6 +148,8 @@ namespace QC {
 				// at this point it doesn't check if the gates are one qubit, that's done at the higher level
 				// 	
 				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
+				
+				// no need to zip up the whole chain, contracting the ends of the chain that are not touched by the operators should give 1.
 				IndexType minQubit = lastQubit;
 				IndexType maxQubit = 0;
 
@@ -158,7 +160,7 @@ namespace QC {
 					maxQubit = std::max(maxQubit, qubit);
 				}
 
-				const size_t nrSites = maxQubit - minQubit + 1;
+				const IndexType nrSites = maxQubit - minQubit + 1;
 
 				// lambdas are not modified by the single qubit gates
 
@@ -208,7 +210,7 @@ namespace QC {
 				// we need to do that only for the qubits in the range [minQubit, maxQubit]
 
 				static const Eigen::array<IntIndexPair, 2> contract_dim{ IntIndexPair(0, 0), IntIndexPair(1, 1) };
-				static const Indexes contract_dim1{ IntIndexPair(1, 0) };
+				static const Indexes contract_dim1{ IntIndexPair(0, 0) };
 
 				// start by contracting the first gamma with the first dagger gamma
 				//  -O-         |
@@ -216,12 +218,20 @@ namespace QC {
 				//  -O-         |
 				Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(daggerGammas[0], contract_dim);
 
+				Eigen::Tensor<std::complex<double>, 2> resTensor2 = resTensor;
+
 				// now contract the rest of the gammas with the dagger gammas
 				for (IndexType s = 1; s < nrSites; ++s)
+				{
 					//  /-O-       -O-        |
-                    // O  |   ==> | |    ==>  O
-                    //  \-O-       -O-        |
-					resTensor = resTensor.contract(daggerGammas[s], contract_dim1).contract(modGammas[s], contract_dim);
+					// O  |   ==> | |    ==>  O
+					//  \-O-       -O-        |
+					
+					// bug in eigen, does not work as expected without using an intermediate result?
+					// fails even with eval() after the first contract, so I use a separate variable for the first contract
+					Eigen::Tensor<std::complex<double>, 3> intermediateResult = resTensor.contract(modGammas[s], contract_dim1);
+					resTensor = intermediateResult.contract(daggerGammas[s], contract_dim);
+				}
 
 				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
 				std::complex<double> res = t(0);
