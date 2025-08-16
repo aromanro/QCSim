@@ -170,33 +170,7 @@ namespace QC {
 
 				// the lambdas multiplication goes for both dagger and non-dagger gammas,
 				// so the dagger are computed after the lambdas are applied
-				if (minQubit > 0)
-				{
-					// multiply with the left lambda as well
-					const IndexType prev = minQubit - 1;
-					const IndexType szl = modGammas[0].dimension(0);
-					const IndexType szr = modGammas[0].dimension(2);
-
-					for (IndexType r = 0; r < szr; ++r)
-						for (IndexType p = 0; p < 2; ++p)
-							for (IndexType l = 0; l < szl; ++l)
-								modGammas[0](l, p, r) *= lambdas[prev][l];
-				}
-
-				// multiply with the right lambdas
-				for (IndexType s = 0; s < nrSites; ++s)
-				{
-					const IndexType q = minQubit + s;
-					if (q >= lastQubit) break; // no right lambdas for the last qubit
-					
-					const IndexType szl = modGammas[s].dimension(0);
-					const IndexType szr = modGammas[s].dimension(2);
-
-					for (IndexType r = 0; r < szr; ++r)
-						for (IndexType p = 0; p < 2; ++p)
-							for (IndexType l = 0; l < szl; ++l)
-								modGammas[s](l, p, r) *= lambdas[q][r];
-				}
+				MultiplyModGammasWithLambdas(modGammas, minQubit, nrSites);
 
 				std::vector<GammaType> daggerGammas(nrSites);
 				for (IndexType s = 0; s < nrSites; ++s)
@@ -251,6 +225,39 @@ namespace QC {
 			}
 
 		private:
+			void MultiplyModGammasWithLambdas(std::vector<GammaType>& modGammas, IndexType minQubit, IndexType nrSites)
+			{
+				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
+
+				if (minQubit > 0)
+				{
+					// multiply with the left lambda as well
+					const IndexType prev = minQubit - 1;
+					const IndexType szl = modGammas[0].dimension(0);
+					const IndexType szr = modGammas[0].dimension(2);
+
+					for (IndexType r = 0; r < szr; ++r)
+						for (IndexType p = 0; p < 2; ++p)
+							for (IndexType l = 0; l < szl; ++l)
+								modGammas[0](l, p, r) *= lambdas[prev][l];
+				}
+
+				// multiply with the right lambdas
+				for (IndexType s = 0; s < nrSites; ++s)
+				{
+					const IndexType q = minQubit + s;
+					if (q >= lastQubit) break; // no right lambdas for the last qubit
+
+					const IndexType szl = modGammas[s].dimension(0);
+					const IndexType szr = modGammas[s].dimension(2);
+
+					for (IndexType r = 0; r < szr; ++r)
+						for (IndexType p = 0; p < 2; ++p)
+							for (IndexType l = 0; l < szl; ++l)
+								modGammas[s](l, p, r) *= lambdas[q][r];
+				}
+			}
+
 			void ApplyTwoQubitGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1, bool dontApplyGate = false)
 			{
 				// it's more complex than the single qubit gate
