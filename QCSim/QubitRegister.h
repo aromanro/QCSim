@@ -593,6 +593,7 @@ namespace QC {
 		{
 			if (gates.empty()) return 1.;
 
+			// TODO: there are faster methods for special cases, like Pauli strings!
 			VectorClass savedState = registerStorage;
 
 			ApplyGates(gates);

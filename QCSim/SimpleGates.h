@@ -133,29 +133,29 @@ namespace QC {
 		public:
 			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
-			SingleQubitGate()
+			SingleQubitGate() noexcept
 				: BaseClass(MatrixClass::Zero(2, 2))
 			{
 			}
 
-			SingleQubitGate(const SingleQubitGate& other)
+			SingleQubitGate(const SingleQubitGate& other) noexcept
 				: BaseClass(other.operatorMat)
 			{
 			}
 
-			SingleQubitGate(SingleQubitGate&& other)
+			SingleQubitGate(SingleQubitGate&& other) noexcept
 				: BaseClass(std::move(other.operatorMat))
 			{
 			}
 
-			SingleQubitGate(const MatrixClass& U)
+			SingleQubitGate(const MatrixClass& U) noexcept
 				: BaseClass(U)
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 2);
 			}
 
-			SingleQubitGate(MatrixClass&& U)
+			SingleQubitGate(MatrixClass&& U) noexcept
 				: BaseClass(std::move(U))
 			{
 				assert(BaseClass::operatorMat.rows() == BaseClass::operatorMat.cols());
@@ -170,7 +170,7 @@ namespace QC {
 				return *this;
 			}
 
-			SingleQubitGate& operator=(SingleQubitGate&& other)
+			SingleQubitGate& operator=(SingleQubitGate&& other) noexcept
 			{
 				assert(other.operatorMat.rows() == 2);
 				assert(other.operatorMat.cols() == 2);
@@ -186,7 +186,7 @@ namespace QC {
 				return *this;
 			}
 
-			SingleQubitGate& operator=(MatrixClass&& U)
+			SingleQubitGate& operator=(MatrixClass&& U) noexcept
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 2);
@@ -233,29 +233,29 @@ namespace QC {
 		public:
 			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
-			TwoQubitsGate()
+			TwoQubitsGate() noexcept
 				: BaseClass(MatrixClass::Identity(4, 4))
 			{
 			}
 
-			TwoQubitsGate(const TwoQubitsGate& other)
+			TwoQubitsGate(const TwoQubitsGate& other) noexcept
 				: BaseClass(other.operatorMat)
 			{
 			}
 
-			TwoQubitsGate(TwoQubitsGate&& other)
+			TwoQubitsGate(TwoQubitsGate&& other) noexcept
 				: BaseClass(std::move(other.operatorMat))
 			{
 			}
 
-			TwoQubitsGate(const MatrixClass& U)
+			TwoQubitsGate(const MatrixClass& U) noexcept
 				: BaseClass(U)
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 4);
 			}
 
-			TwoQubitsGate(MatrixClass&& U)
+			TwoQubitsGate(MatrixClass&& U) noexcept
 				: BaseClass(std::move(U))
 			{
 				assert(BaseClass::operatorMat.rows() == BaseClass::operatorMat.cols());
@@ -270,7 +270,7 @@ namespace QC {
 				return *this;
 			}
 
-			TwoQubitsGate& operator=(TwoQubitsGate&& other)
+			TwoQubitsGate& operator=(TwoQubitsGate&& other) noexcept
 			{
 				assert(other.operatorMat.rows() == 4);
 				assert(other.operatorMat.cols() == 4);
@@ -286,7 +286,7 @@ namespace QC {
 				return *this;
 			}
 
-			TwoQubitsGate& operator=(MatrixClass&& U)
+			TwoQubitsGate& operator=(MatrixClass&& U) noexcept
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 4);
@@ -334,29 +334,29 @@ namespace QC {
 		public:
 			using BaseClass = QuantumGateWithOp<MatrixClass>;
 
-			ThreeQubitsGate()
+			ThreeQubitsGate() noexcept
 				: BaseClass(MatrixClass::Identity(8, 8))
 			{
 			}
 
-			ThreeQubitsGate(const ThreeQubitsGate& other)
+			ThreeQubitsGate(const ThreeQubitsGate& other) noexcept
 				: BaseClass(other.operatorMat)
 			{
 			}
 
-			ThreeQubitsGate(ThreeQubitsGate&& other)
+			ThreeQubitsGate(ThreeQubitsGate&& other) noexcept
 				: BaseClass(std::move(other.operatorMat))
 			{
 			}
 
-			ThreeQubitsGate(const MatrixClass& U)
+			ThreeQubitsGate(const MatrixClass& U) noexcept
 				: BaseClass(U)
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 8);
 			}
 
-			ThreeQubitsGate(MatrixClass&& U)
+			ThreeQubitsGate(MatrixClass&& U) noexcept
 				: BaseClass(std::move(U))
 			{
 				assert(BaseClass::operatorMat.rows() == BaseClass::operatorMat.cols());
@@ -371,7 +371,7 @@ namespace QC {
 				return *this;
 			}
 
-			ThreeQubitsGate& operator=(ThreeQubitsGate&& other)
+			ThreeQubitsGate& operator=(ThreeQubitsGate&& other) noexcept
 			{
 				assert(other.operatorMat.rows() == 8);
 				assert(other.operatorMat.cols() == 8);
@@ -387,7 +387,7 @@ namespace QC {
 				return *this;
 			}
 
-			ThreeQubitsGate& operator=(MatrixClass&& U)
+			ThreeQubitsGate& operator=(MatrixClass&& U) noexcept
 			{
 				assert(U.rows() == U.cols());
 				assert(U.rows() == 8);
@@ -437,27 +437,27 @@ namespace QC {
 		public:
 			using BaseClass = Gates::QuantumGateWithOp<MatrixClass>;
 
-			AppliedGate()
+			AppliedGate() noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(MatrixClass::Zero(1, 1)), q1(0), q2(0), q3(0)
 			{
 			}
 
-			AppliedGate(const AppliedGate& other)
+			AppliedGate(const AppliedGate& other) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(other.operatorMat), q1(other.q1), q2(other.q2), q3(other.q3)
 			{
 			}
 
-			AppliedGate(AppliedGate&& other)
+			AppliedGate(AppliedGate&& other) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(std::move(other.operatorMat)), q1(other.q1), q2(other.q2), q3(other.q3)
 			{
 			}
 
-			AppliedGate(const MatrixClass& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
+			AppliedGate(const MatrixClass& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
 			{
 			}
 
-			AppliedGate(MatrixClass&& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
+			AppliedGate(MatrixClass&& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(std::move(op)), q1(q1), q2(q2), q3(q3)
 			{
 			}
@@ -471,7 +471,7 @@ namespace QC {
 				return *this;
 			}
 
-			AppliedGate& operator=(AppliedGate&& other)
+			AppliedGate& operator=(AppliedGate&& other) noexcept
 			{
 				BaseClass::operator=(std::move(other.operatorMat));
 				q1 = other.q1;

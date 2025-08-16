@@ -778,7 +778,7 @@ bool StateSimulationTest()
 		OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits();
 }
 
-bool checkExpectationValuesMPS()
+bool checkExpectationValuesMPSSimple()
 {
 	std::cout << "\nTesting MPS expectation values..." << std::endl;
 
@@ -840,6 +840,106 @@ bool checkExpectationValuesMPS()
 	return true;
 }
 
+bool checkExpectationValuesMPS()
+{
+	std::cout << "\nTesting MPS expectation values against statevector..." << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGates(gates);
+	FillTwoQubitGates(gates);
+
+	std::uniform_int_distribution nrGatesDistr(25, 35);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+	
+	std::uniform_int_distribution pauliDistr(0, 2); 
+	const QC::Gates::PauliXGate<> xgate;
+	const QC::Gates::PauliYGate<> ygate;
+	const QC::Gates::PauliZGate<> zgate;
+
+	for (int nrQubits = 3; nrQubits < 9; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		for (int t = 0; t < 10; ++t)
+		{
+#ifdef _DEBUG
+			std::cout << "\n\n\nTest no: " << t << " for " << nrQubits << " qubits" << std::endl << std::endl << std::endl;
+#endif
+
+			QC::TensorNetworks::MPSSimulator mps(nrQubits);
+			QC::QubitRegister reg(nrQubits);
+
+			const int lim = nrGatesDistr(gen);
+
+			for (int i = 0; i < lim; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = qubitDistr(gen);
+				int qubit2 = (qubit1 + 1 + qubitDistr2(gen)) % nrQubits;
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+#ifdef _DEBUG
+				if (twoQubitsGate) std::cout << "Applying two qubit gate " << gate << " on qubits " << qubit1 << " and " << qubit2 << std::endl;
+#endif
+
+				mps.ApplyGate(*gates[gate], qubit1, qubit2);
+				reg.ApplyGate(*gates[gate], qubit1, qubit2);
+			}
+
+			for (int s = 0; s < 5; ++s)
+			{
+				std::cout << ".";
+
+				// generate a random Pauli string and check its expectation value
+				std::vector<QC::Gates::AppliedGate<>> appliedGates;
+				appliedGates.reserve(nrQubits);
+				std::string pauliString;
+
+				for (int q = 0; q < nrQubits; ++q)
+				{
+					if (dist_bool(gen))
+					{
+						auto pauliGateType = pauliDistr(gen);
+						switch (pauliGateType)
+						{
+						case 0: // Pauli X
+							appliedGates.emplace_back(xgate.getRawOperatorMatrix(), q);
+							pauliString += "X";
+							break;
+						case 1: // Pauli Y
+							appliedGates.emplace_back(ygate.getRawOperatorMatrix(), q);
+							pauliString += "Y";
+							break;
+						case 2: // Pauli Z
+							appliedGates.emplace_back(zgate.getRawOperatorMatrix(), q);
+							pauliString += "Z";
+							break;
+						}
+					}
+					else pauliString += "I"; // identity gate, no need to apply it
+				}
+
+				const auto exp1 = reg.ExpectationValue(appliedGates);
+				const auto exp2 = mps.ExpectationValue(appliedGates);
+
+				if (!approxEqual(exp1, exp2, 1E-7))
+				{
+					std::cout << std::endl << "Expectation value for the Pauli string is not equal for MPS and statevector simulator for " << nrQubits << " qubits" << std::endl;
+					std::cout << "Expectation value statevector: " << exp1 << " vs mps: " << exp2 << ", Pauli string: " << pauliString << std::endl;
+					
+					return false;
+				}
+			}
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -861,7 +961,7 @@ bool MPSSimulatorTests()
 	mps.print();
 	*/
 
-	return StateSimulationTest() && checkExpectationValuesMPS();
+	return StateSimulationTest() && checkExpectationValuesMPSSimple() && checkExpectationValuesMPS();
 }
 
 

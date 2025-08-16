@@ -347,6 +347,8 @@ namespace QC
 			// anyway, this would be probably used mostly on Pauli strings, so...
 			std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
 			{
+				if (gates.empty()) return 1.;
+
 				std::vector<Gates::AppliedGate<MatrixClass>> translatedOps;
 				translatedOps.reserve(gates.size());
 
@@ -427,8 +429,7 @@ namespace QC
 
 					movingQubitReal = toQubitReal;
 				} while (movingQubitReal != targetQubitReal);
-
-				swapDown = !swapDown;
+				//swapDown = !swapDown;
 			}
 
 

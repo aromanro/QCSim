@@ -143,14 +143,13 @@ namespace QC {
 			// anyway, this would be probably used mostly on Pauli strings, so...
 			std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
 			{
-				// at this point it doesn't check if the gates are one qubit, that's done at the higher level
-				// save the current state
-				std::vector<LambdaType> saveLambdas = lambdas;
-				std::vector<GammaType> saveGammas = gammas;
+				if (gates.empty()) return 1.;
 
-				const IndexType lastQubit = static_cast<IndexType>(gammas.size() - 1);
-				IndexType minQubit = gates.empty() ? 0 : lastQubit;
-				IndexType maxQubit = gates.empty() ? lastQubit : 0;
+				// at this point it doesn't check if the gates are one qubit, that's done at the higher level
+				// 	
+				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
+				IndexType minQubit = lastQubit;
+				IndexType maxQubit = 0;
 
 				for (const auto& gate : gates)
 				{
@@ -161,95 +160,71 @@ namespace QC {
 
 				const size_t nrSites = maxQubit - minQubit + 1;
 
+				// lambdas are not modified by the single qubit gates
+
+				std::vector<GammaType> modGammas(nrSites);
+				for (IndexType s = 0; s < nrSites; ++s)
+					modGammas[s] = gammas[minQubit + s];
+
+				// the lambdas multiplication goes for both dagger and non-dagger gammas,
+				// so the dagger are computed after the lambdas are applied
+				if (minQubit > 0)
+				{
+					// multiply with the left lambda as well
+					const IndexType prev = minQubit - 1;
+					const IndexType szl = modGammas[0].dimension(0);
+					const IndexType szr = modGammas[0].dimension(2);
+
+					for (IndexType r = 0; r < szr; ++r)
+						for (IndexType p = 0; p < 2; ++p)
+							for (IndexType l = 0; l < szl; ++l)
+								modGammas[0](l, p, r) *= lambdas[prev][l];
+				}
+
+				// multiply with the right lambdas
+				for (IndexType s = 0; s < nrSites; ++s)
+				{
+					const IndexType q = minQubit + s;
+					if (q >= lastQubit) break; // no right lambdas for the last qubit
+					
+					const IndexType szl = modGammas[s].dimension(0);
+					const IndexType szr = modGammas[s].dimension(2);
+
+					for (IndexType r = 0; r < szr; ++r)
+						for (IndexType p = 0; p < 2; ++p)
+							for (IndexType l = 0; l < szl; ++l)
+								modGammas[s](l, p, r) *= lambdas[q][r];
+				}
+
 				std::vector<GammaType> daggerGammas(nrSites);
-				for (int i = 0; i < nrSites; ++i)
-					daggerGammas[i] = gammas[minQubit + i].conjugate();
+				for (IndexType s = 0; s < nrSites; ++s)
+					daggerGammas[s] = modGammas[s].conjugate();
 
 				// apply the gates
 				for (const auto& gate : gates)
-					ApplySingleQubitGate(gate, gate.getQubit1());
+					ApplySingleQubitGate(modGammas[gate.getQubit1() - minQubit], gate);
 
-				// contract the saved chain with the current one
+				// contract the saved dagger chain with the one with the gates applied
 				// we need to do that only for the qubits in the range [minQubit, maxQubit]
 
-				// the lambdas multiplication goes for both dagger and non-dagger gammas
-
-				if (minQubit != 0)
-				{
-					// multiply with the left lambda as well
-
-					IndexType szl = gammas[minQubit].dimension(0);
-					IndexType sz = gammas[minQubit].dimension(2);
-					const IndexType prev = minQubit - 1;
-
-					for (IndexType k = 0; k < sz; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
-								gammas[minQubit](i, j, k) *= lambdas[prev][i];
-
-					szl = daggerGammas[0].dimension(0);
-					sz = daggerGammas[0].dimension(2);
-
-					for (IndexType k = 0; k < sz; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
-								daggerGammas[0](i, j, k) *= saveLambdas[prev][i];
-				}
-
-				for (int s = 0; s < nrSites; ++s)
-				{
-					const IndexType q = minQubit + s;
-					// multiply with the right lambdas
-
-					if (q == lambdas.size())
-						break;
-
-					IndexType sz = gammas[q].dimension(0);
-					IndexType szr = gammas[q].dimension(2);
-
-					for (IndexType k = 0; k < szr; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-								gammas[q](i, j, k) *= lambdas[q][k];
-
-					sz = daggerGammas[s].dimension(0);
-					szr = daggerGammas[s].dimension(2);
-
-					for (IndexType k = 0; k < szr; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-								daggerGammas[s](i, j, k) *= saveLambdas[q][k];
-				}
-
-				// TODO: contract the gammas with the dagger gammas
+				static const Eigen::array<IntIndexPair, 2> contract_dim{ IntIndexPair(0, 0), IntIndexPair(1, 1) };
+				static const Indexes contract_dim1{ IntIndexPair(1, 0) };
 
 				// start by contracting the first gamma with the first dagger gamma
 				//  -O-         |
 				// | |     ==>  O
 				//  -O-         |
-				
-				using DimPair = Eigen::Tensor<std::complex<double>, 3>::DimensionPair;
-				static const Eigen::array<DimPair, 2> contract_dim{ DimPair(0, 0), DimPair(1, 1) };
-
-				static const Indexes contract_dim1{ IntIndexPair(0, 0) };
-
-				Eigen::Tensor<std::complex<double>, 2> resTensor = gammas[minQubit].contract(daggerGammas[0], contract_dim);
+				Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(daggerGammas[0], contract_dim);
 
 				// now contract the rest of the gammas with the dagger gammas
-				for (IndexType i = minQubit + 1; i <= maxQubit; ++i)
-				{
-					//  /-O-         |
-                    // O  |     ==>  O
-                    //  \-O-         |
-					resTensor = resTensor.contract(gammas[i], contract_dim1).contract(daggerGammas[i - minQubit], contract_dim);
-				}
+				for (IndexType s = 1; s < nrSites; ++s)
+					//  /-O-       -O-        |
+                    // O  |   ==> | |    ==>  O
+                    //  \-O-       -O-        |
+					resTensor = resTensor.contract(daggerGammas[s], contract_dim1).contract(modGammas[s], contract_dim);
 
 				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
 				std::complex<double> res = t(0);
-
-				// restore the state
-				lambdas.swap(saveLambdas);
-				gammas.swap(saveGammas);
 
 				return res;
 			}

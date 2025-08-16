@@ -383,12 +383,7 @@ namespace QC {
 
 			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
 			{
-				const MatrixClass& opMat = gate.getRawOperatorMatrix();
-				// contract the gate tensor with the qubit tensor
-
-				static const Indexes product_dims1{ IntIndexPair(1, 1) };
-				static const std::array<int, 3> permute{ 0, 2, 1 };
-				gammas[qubit] = gammas[qubit].contract(Eigen::TensorMap<const OneQubitGateTensor>(opMat.data(), opMat.rows(), opMat.cols()), product_dims1).shuffle(permute);
+				ApplySingleQubitGate(gammas[qubit], gate);
 			}
 
 			void MultiplyMatrixWithLambda(IndexType qubit, MatrixClass& mat) const
@@ -399,6 +394,19 @@ namespace QC {
 					for (IndexType col = 0; col < mat.cols(); ++col)
 						for (IndexType row = 0; row < mat.rows(); ++row)
 							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+			}
+
+			static void ApplySingleQubitGate(GammaType& gamma, const GateClass& gate)
+			{
+				ApplySingleQubitGate(gamma, gate.getRawOperatorMatrix());
+			}
+
+			static void ApplySingleQubitGate(GammaType& gamma, const MatrixClass& opMat)
+			{
+				// contract the gate tensor with the qubit tensor
+				static const Indexes product_dims1{ IntIndexPair(1, 1) };
+				static const std::array<int, 3> permute{ 0, 2, 1 };
+				gamma = gamma.contract(Eigen::TensorMap<const OneQubitGateTensor>(opMat.data(), opMat.rows(), opMat.cols()), product_dims1).shuffle(permute);
 			}
 
 		private:
