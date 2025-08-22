@@ -337,8 +337,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 					long long int mloc = 0;
 
 #pragma omp parallel for reduction(+:mloc) 

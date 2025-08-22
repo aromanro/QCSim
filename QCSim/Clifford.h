@@ -24,7 +24,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 512)
@@ -48,7 +48,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 256)
@@ -72,7 +72,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 512)
@@ -94,7 +94,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 256)
@@ -122,7 +122,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 128)
@@ -151,7 +151,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 256)
@@ -174,7 +174,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 512)
@@ -193,9 +193,10 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 512)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 512)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 						ApplyY(qubit, q);
 				}
@@ -211,7 +212,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 512)
@@ -230,7 +231,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 256)
@@ -254,7 +255,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 256)
@@ -282,7 +283,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 256)
@@ -309,7 +310,7 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
 #pragma omp parallel for 
 					//num_threads(processor_count) schedule(static, 256)
@@ -339,9 +340,10 @@ namespace QC {
 				}
 				else
 				{
-					const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
 
-#pragma omp parallel for num_threads(processor_count) schedule(static, 128)
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 128)
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyS(qubit1, q);
