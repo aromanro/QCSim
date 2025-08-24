@@ -53,6 +53,11 @@ namespace QC {
 				PhaseSign = false;
 			}
 
+			size_t GetNrQubits() const
+			{
+				return X.size();
+			}
+
 			std::vector<bool> X;
 			std::vector<bool> Z;
 			bool PhaseSign; // true means negative phase

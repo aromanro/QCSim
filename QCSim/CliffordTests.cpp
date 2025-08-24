@@ -253,6 +253,7 @@ bool CliffordSimulatorTests()
 			}
 		}
 
+		// applying the measurement again on the same qubit should give the same result
 		for (size_t q = 0; q < nrQubits; ++q)
 		{
 			const bool res1 = cliffordSim.MeasureQubit(q);

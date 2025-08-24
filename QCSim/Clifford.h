@@ -356,6 +356,104 @@ namespace QC {
 				}
 			}
 
+			double ExpectationValue(const std::string& pauliString) const
+			{
+				// We compute this: <Psi|pauliString|Psi>, where |Psi> is defined by the stabilizers
+
+				Generator g(getNrQubits());
+				std::vector<size_t> pos;
+				pos.reserve(pauliString.size());
+
+				for (size_t i = 0; i < pauliString.size(); ++i)
+				{
+					switch (pauliString[i])
+					{
+					case 'i':
+						[[fallthrough]];
+					case 'I':
+						break;
+					case 'x':
+						[[fallthrough]];
+					case 'X':
+						g.X[i] = true;
+						pos.push_back(i);
+						break;
+					case 'y':
+						[[fallthrough]];
+					case 'Y':
+						g.X[i] = true;
+						g.Z[i] = true;
+						g.PhaseSign = !g.PhaseSign; // Y = iXZ, so we get a phase factor of i
+						pos.push_back(i);
+						break;
+					case 'z':
+						[[fallthrough]];
+					case 'Z':
+						g.Z[i] = true;
+						pos.push_back(i);
+						break;
+					default:
+						throw std::runtime_error("Invalid operator in the Pauli string");
+					}
+				}
+
+				// this is easy, if the pauli string transforming the stabilizers leads to an orthogonal state on the original one, the expectation value is zero
+				
+				for (size_t i = 0; i < getNrQubits(); ++i)
+				{
+					// check if the stabilizer anticommutes with the operator
+					bool anticommutes = false;
+					for (size_t j = 0; j < pos.size(); ++j)
+					{
+						size_t pauliOpQubit = pos[j];
+						if (g.X[pauliOpQubit] && stabilizerGenerators[i].Z[pauliOpQubit])
+							anticommutes = !anticommutes;
+						if (g.Z[pauliOpQubit] && stabilizerGenerators[i].X[pauliOpQubit])
+							anticommutes = !anticommutes;
+					}
+					if (anticommutes)
+						return 0.; // expectation value is zero if any of the stabilizers anticommutes with the operator
+				}
+
+				// now we're left with the case when all stabilizers commute with the operator
+				// we need to find if the result is 1 or -1
+
+				// check destabilizers for that
+				std::vector<bool> GZ(g.Z);
+				size_t phase = g.PhaseSign ? 1 : 0;
+
+				for (size_t i = 0; i < getNrQubits(); ++i)
+				{
+					// check if the destabilizer anticommutes with the operator
+					bool anticommutes = false;
+					for (size_t j = 0; j < pos.size(); ++j)
+					{
+						size_t pauliOpQubit = pos[j];
+						if (g.X[pauliOpQubit] && destabilizerGenerators[i].Z[pauliOpQubit])
+							anticommutes = !anticommutes;
+						if (g.Z[pauliOpQubit] && destabilizerGenerators[i].X[pauliOpQubit])
+							anticommutes = !anticommutes;
+					}
+					if (!anticommutes)
+						continue; // commutes, check next destabilizer
+
+					// anticommutes with this destabilizer
+					phase += stabilizerGenerators[i].PhaseSign ? 2 : 0;
+
+					// multiply GZ with the stabilizer
+					for (size_t q = 0; q < getNrQubits(); ++q)
+					{
+						if (stabilizerGenerators[i].X[q] && stabilizerGenerators[i].Z[q])
+							++phase;
+						if (stabilizerGenerators[i].X[q] && GZ[q])
+							phase += 2;
+						GZ[q] = XOR(GZ[q], stabilizerGenerators[i].Z[q]);
+					}
+				}
+
+				return phase % 4 ? -1.0 : 1.0;
+			}
+
 			std::unique_ptr<StabilizerSimulator> Clone() const
 			{
 				auto sim = std::make_unique<StabilizerSimulator>(1);
