@@ -308,6 +308,38 @@ bool CliffordSimulatorTests()
 	return true;
 }
 
+void ConstructPauliString(size_t nrQubits, std::string& pauliStr, std::vector<QC::Gates::AppliedGate<>>& expGates)
+{
+	static const QC::Gates::PauliXGate xgate;
+	static const QC::Gates::PauliYGate ygate;
+	static const QC::Gates::PauliZGate zgate;
+
+	std::uniform_int_distribution pauliDistr(0, 3);
+
+	for (int j = 0; j < static_cast<int>(nrQubits); ++j)
+	{
+		const int p = pauliDistr(gen);
+		switch (p)
+		{
+		case 0:
+			pauliStr += 'I';
+			break;
+		case 1:
+			pauliStr += 'X';
+			expGates.emplace_back(xgate.getRawOperatorMatrix(), j);
+			break;
+		case 2:
+			pauliStr += 'Y';
+			expGates.emplace_back(ygate.getRawOperatorMatrix(), j);
+			break;
+		case 3:
+			pauliStr += 'Z';
+			expGates.emplace_back(zgate.getRawOperatorMatrix(), j);
+			break;
+		}
+	}
+}
+
 
 bool CliffordExpectationValuesTests()
 {
@@ -317,12 +349,6 @@ bool CliffordExpectationValuesTests()
 
 	std::uniform_int_distribution gateDistr(0, 13);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
-
-	std::uniform_int_distribution pauliDistr(0, 3);
-
-	QC::Gates::PauliXGate xgate;
-	QC::Gates::PauliYGate ygate;
-	QC::Gates::PauliZGate zgate;
 
 	std::cout << "\nClifford expectation values" << std::endl;
 
@@ -358,28 +384,7 @@ bool CliffordExpectationValuesTests()
 			expGates.reserve(nrQubits);
 			std::string pauliStr;
 
-			for (int j = 0; j < static_cast<int>(nrQubits); ++j)
-			{
-				const int p = pauliDistr(gen);
-				switch (p)
-				{
-				case 0:
-					pauliStr += 'I';
-					break;
-				case 1:
-					pauliStr += 'X';
-					expGates.emplace_back(xgate.getRawOperatorMatrix(), j);
-					break;
-				case 2:
-					pauliStr += 'Y';
-					expGates.emplace_back(ygate.getRawOperatorMatrix(), j);
-					break;
-				case 3:
-					pauliStr += 'Z';
-					expGates.emplace_back(zgate.getRawOperatorMatrix(), j);
-					break;
-				}
-			}
+			ConstructPauliString(nrQubits, pauliStr, expGates);
 
 			const auto exp1 = qubitRegister.ExpectationValue(expGates);
 			const auto exp2 = cliffordSim.ExpectationValue(pauliStr);

@@ -364,39 +364,8 @@ namespace QC {
 				std::vector<size_t> pos;
 				pos.reserve(pauliString.size());
 				size_t phase = 0;
-				for (size_t i = 0; i < pauliString.size(); ++i)
-				{
-					switch (pauliString[i])
-					{
-					case 'i':
-						[[fallthrough]];
-					case 'I':
-						break;
-					case 'x':
-						[[fallthrough]];
-					case 'X':
-						g.X[i] = true;
-						pos.push_back(i);
-						break;
-					case 'y':
-						[[fallthrough]];
-					case 'Y':
-						g.X[i] = true;
-						g.Z[i] = true;
-						// Y = iXZ, so we get a phase factor of i
-						++phase;
-						pos.push_back(i);
-						break;
-					case 'z':
-						[[fallthrough]];
-					case 'Z':
-						g.Z[i] = true;
-						pos.push_back(i);
-						break;
-					default:
-						throw std::runtime_error("Invalid operator in the Pauli string");
-					}
-				}
+				
+				SetPauliString(pauliString, g, pos, phase);
 
 				// this is easy, if the pauli string transforming the stabilizers leads to an orthogonal state on the original one, the expectation value is zero
 				
@@ -470,6 +439,43 @@ namespace QC {
 			}
 
 		private:
+			static void SetPauliString(const std::string& pauliString, Generator& g, std::vector<size_t>& pos, size_t& phase)
+			{
+				for (size_t i = 0; i < pauliString.size(); ++i)
+				{
+					switch (pauliString[i])
+					{
+					case 'i':
+						[[fallthrough]];
+					case 'I':
+						break;
+					case 'x':
+						[[fallthrough]];
+					case 'X':
+						g.X[i] = true;
+						pos.push_back(i);
+						break;
+					case 'y':
+						[[fallthrough]];
+					case 'Y':
+						g.X[i] = true;
+						g.Z[i] = true;
+						// Y = iXZ, so we get a phase factor of i
+						++phase;
+						pos.push_back(i);
+						break;
+					case 'z':
+						[[fallthrough]];
+					case 'Z':
+						g.Z[i] = true;
+						pos.push_back(i);
+						break;
+					default:
+						throw std::runtime_error("Invalid operator in the Pauli string");
+					}
+				}
+			}
+
 			inline void ApplyH(size_t qubit, size_t q)
 			{
 				// how does this work?
