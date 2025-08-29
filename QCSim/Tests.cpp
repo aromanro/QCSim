@@ -743,7 +743,7 @@ bool SimulatorsTests(int option, bool res)
 	if (!res) return false;
 
 	if (option == 2 || option == 3)
-		res = CliffordSimulatorTests();
+		res = CliffordSimulatorTests() && CliffordExpectationValuesTests();
 
 	return res;
 }

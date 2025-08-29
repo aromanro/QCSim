@@ -792,8 +792,8 @@ bool matchRandomExpectationValues(QC::QubitRegister<>& reg, QC::TensorNetworks::
 	for (int s = 0; s < 5; ++s)
 	{
 		// generate a random Pauli string and check its expectation value
-		std::vector<QC::Gates::AppliedGate<>> appliedGates;
-		appliedGates.reserve(nrQubits);
+		std::vector<QC::Gates::AppliedGate<>> expGates;
+		expGates.reserve(nrQubits);
 		std::string pauliString;
 
 		const auto nrOps = nrOpsDistr(gen);
@@ -802,15 +802,15 @@ bool matchRandomExpectationValues(QC::QubitRegister<>& reg, QC::TensorNetworks::
 			auto gate = gateDistr(gen);
 			const auto qubit = qbitDistr(gen);
 
-			appliedGates.emplace_back(gatesOpExp[gate]->getRawOperatorMatrix(), qubit);
+			expGates.emplace_back(gatesOpExp[gate]->getRawOperatorMatrix(), qubit);
 		}
 
-		const auto exp1 = reg.ExpectationValue(appliedGates);
-		const auto exp2 = mps.ExpectationValue(appliedGates);
+		const auto exp1 = reg.ExpectationValue(expGates);
+		const auto exp2 = mps.ExpectationValue(expGates);
 
 		if (!approxEqual(exp1, exp2, 1E-7))
 		{
-			std::cout << std::endl << "Expectation values are not equal for MPS and statevector simulator for " << nrQubits << " qubits" << std::endl;
+			std::cout << std::endl << "Expectation values are not equal for MPS and statevector simulator for " << nrQubits << " qubits, values: " << exp1 << ", " << exp2 << std::endl;
 	
 			return false;
 		}

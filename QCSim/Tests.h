@@ -37,6 +37,7 @@ bool VQETests();
 bool MPSSimulatorTests();
 
 bool CliffordSimulatorTests();
+bool CliffordExpectationValuesTests();
 
 bool tests(int option);
 

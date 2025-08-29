@@ -190,113 +190,209 @@ void ExecuteCircuit(size_t nrShots, size_t nrQubits, const std::vector<int>& gat
 
 bool CliffordSimulatorTests()
 {
-	const size_t nrTests = 100;
+	const size_t nrTests = 10;
 	const size_t nrShots = 100000;
-	const size_t nrQubits = 4;
-	const size_t nrStates = 1ULL << nrQubits;
 	const double errorThreshold = 0.01;
 	const double probThreshold = 1E-10;
 
 	std::uniform_int_distribution gateDistr(0, 13);
-	std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
 
 	std::cout << "\nClifford gates simulator" << std::endl;
 
-	for (size_t t = 0; t < nrTests; ++t)
+	for (size_t nrQubits = 4; nrQubits < 12; ++nrQubits)
 	{
-		std::unordered_map<size_t, int> results1;
-		std::unordered_map<size_t, int> results2;
+		const size_t nrStates = 1ULL << nrQubits;
+		std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
 
-		// generate random gates, creating a circuit, then apply the random circuits on both simulators
-		const size_t nrGates = nrGatesDistr(gen);
-		std::vector<int> gates(nrGates);
-		std::vector<size_t> qubits1(nrGates);
-		std::vector<size_t> qubits2(nrGates);
-
-		ConstructCircuit(nrQubits, gates, qubits1, qubits2, gateDistr, qubitDistr);
-		
-		QC::QubitRegister qubitRegister(nrQubits);
-		QC::Clifford::StabilizerSimulator cliffordSim(nrQubits);
-
-		for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+		for (size_t t = 0; t < nrTests; ++t)
 		{
-			ApplyGate(cliffordSim, gates[j], qubits1[j], qubits2[j]);
-			const auto gateptr = GetGate(gates[j]);
-			qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
-		}
+			std::unordered_map<size_t, int> results1;
+			std::unordered_map<size_t, int> results2;
 
-		for (size_t q = 0; q < nrQubits; ++q)
-		{
-			const double prob1 = cliffordSim.GetQubitProbability(q);
-			const double prob2 = qubitRegister.GetQubitProbability(q);
+			// generate random gates, creating a circuit, then apply the random circuits on both simulators
+			const size_t nrGates = nrGatesDistr(gen);
+			std::vector<int> gates(nrGates);
+			std::vector<size_t> qubits1(nrGates);
+			std::vector<size_t> qubits2(nrGates);
 
-			if (std::abs(prob1 - prob2) > probThreshold)
+			ConstructCircuit(nrQubits, gates, qubits1, qubits2, gateDistr, qubitDistr);
+
+			QC::QubitRegister qubitRegister(nrQubits);
+			QC::Clifford::StabilizerSimulator cliffordSim(nrQubits);
+
+			for (int j = 0; j < static_cast<int>(gates.size()); ++j)
 			{
-				std::cout << "\nFailed qubits probabilities" << std::endl;
-				std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << std::endl;
+				ApplyGate(cliffordSim, gates[j], qubits1[j], qubits2[j]);
+				const auto gateptr = GetGate(gates[j]);
+				qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
+			}
+
+			for (size_t q = 0; q < nrQubits; ++q)
+			{
+				const double prob1 = cliffordSim.GetQubitProbability(q);
+				const double prob2 = qubitRegister.GetQubitProbability(q);
+
+				if (std::abs(prob1 - prob2) > probThreshold)
+				{
+					std::cout << "\nFailed qubits probabilities" << std::endl;
+					std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << std::endl;
+					return false;
+				}
+			}
+
+			// another way of testing is now available
+			for (size_t state = 0; state < nrStates; ++state)
+			{
+				const double prob1 = cliffordSim.getBasisStateProbability(state);
+				const double prob2 = qubitRegister.getBasisStateProbability(state);
+
+				if (std::abs(prob1 - prob2) > probThreshold)
+				{
+					std::cout << "\nFailed states probabilities" << std::endl;
+					std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << ", State: " << state << std::endl;
+					return false;
+				}
+			}
+
+			// applying the measurement again on the same qubit should give the same result
+			for (size_t q = 0; q < nrQubits; ++q)
+			{
+				const bool res1 = cliffordSim.MeasureQubit(q);
+				const bool res2 = cliffordSim.MeasureQubit(q);
+				if (res1 != res2)
+				{
+					std::cout << "\nFailed qubits measurements" << std::endl;
+					std::cout << "Measurement 1: " << res2 << ", Measurement 2: " << res1 << ", for qubit: " << q << std::endl;
+					return false;
+				}
+			}
+
+			ExecuteCircuit(nrShots, nrQubits, gates, qubits1, qubits2, results1, results2);
+
+			// check to see if the results are close enough
+			for (const auto val : results1)
+			{
+				if (results2.find(val.first) == results2.end()) continue;
+
+				if (std::abs(static_cast<double>(val.second) - results2[val.first]) / nrShots > errorThreshold)
+				{
+					std::cout << "\nFailed" << std::endl;
+					std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
+					std::cout << "Result 1: " << static_cast<double>(val.second) / nrShots << ", Result 2: " << static_cast<double>(results2[val.first]) / nrShots << std::endl;
+					return false;
+				}
+			}
+
+			for (const auto val : results2)
+			{
+				if (results1.find(val.first) == results1.end()) continue;
+
+				if (std::abs(static_cast<double>(val.second) - results1[val.first]) / nrShots > errorThreshold)
+				{
+					std::cout << "\nFailed" << std::endl;
+					std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
+					std::cout << "Result 1: " << static_cast<double>(results1[val.first]) / nrShots << ", Result 2: " << static_cast<double>(val.second) / nrShots << std::endl;
+					return false;
+				}
+			}
+
+			std::cout << '.';
+		}
+	}
+
+	std::cout << std::endl;
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
+
+bool CliffordExpectationValuesTests()
+{
+	const size_t nrTests = 100;
+	const double errorThreshold = 0.01;
+	const double probThreshold = 1E-10;
+
+	std::uniform_int_distribution gateDistr(0, 13);
+	std::uniform_int_distribution nrGatesDistr(5, 20);
+
+	std::uniform_int_distribution pauliDistr(0, 3);
+
+	QC::Gates::PauliXGate xgate;
+	QC::Gates::PauliYGate ygate;
+	QC::Gates::PauliZGate zgate;
+
+	std::cout << "\nClifford expectation values" << std::endl;
+
+	for (size_t nrQubits = 2; nrQubits < 20; ++nrQubits)
+	{
+		const size_t nrStates = 1ULL << nrQubits;
+		std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
+
+		for (size_t t = 0; t < nrTests; ++t)
+		{
+			std::unordered_map<size_t, int> results1;
+			std::unordered_map<size_t, int> results2;
+
+			// generate random gates, creating a circuit, then apply the random circuits on both simulators
+			const size_t nrGates = nrGatesDistr(gen);
+			std::vector<int> gates(nrGates);
+			std::vector<size_t> qubits1(nrGates);
+			std::vector<size_t> qubits2(nrGates);
+
+			ConstructCircuit(nrQubits, gates, qubits1, qubits2, gateDistr, qubitDistr);
+
+			QC::QubitRegister qubitRegister(nrQubits);
+			QC::Clifford::StabilizerSimulator cliffordSim(nrQubits);
+
+			for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+			{
+				ApplyGate(cliffordSim, gates[j], qubits1[j], qubits2[j]);
+				const auto gateptr = GetGate(gates[j]);
+				qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
+			}
+
+			std::vector<QC::Gates::AppliedGate<>> expGates;
+			expGates.reserve(nrQubits);
+			std::string pauliStr;
+
+			for (int j = 0; j < static_cast<int>(nrQubits); ++j)
+			{
+				const int p = pauliDistr(gen);
+				switch (p)
+				{
+				case 0:
+					pauliStr += 'I';
+					break;
+				case 1:
+					pauliStr += 'X';
+					expGates.emplace_back(xgate.getRawOperatorMatrix(), j);
+					break;
+				case 2:
+					pauliStr += 'Y';
+					expGates.emplace_back(ygate.getRawOperatorMatrix(), j);
+					break;
+				case 3:
+					pauliStr += 'Z';
+					expGates.emplace_back(zgate.getRawOperatorMatrix(), j);
+					break;
+				}
+			}
+
+			const auto exp1 = qubitRegister.ExpectationValue(expGates);
+			const auto exp2 = cliffordSim.ExpectationValue(pauliStr);
+			if (!approxEqual(exp1, exp2, 1E-7))
+			{
+				std::cout << std::endl << "Expectation values are not equal for stabilizer and statevector simulator for " << nrQubits << " qubits, values: " << exp1 << ", " << exp2 << std::endl;
+
 				return false;
 			}
 		}
-
-		// another way of testing is now available
-		for (size_t state = 0; state < nrStates; ++state)
-		{
-			const double prob1 = cliffordSim.getBasisStateProbability(state);
-			const double prob2 = qubitRegister.getBasisStateProbability(state);
-
-			if (std::abs(prob1 - prob2) > probThreshold)
-			{
-				std::cout << "\nFailed states probabilities" << std::endl;
-				std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << ", State: " << state << std::endl;
-				return false;
-			}
-		}
-
-		// applying the measurement again on the same qubit should give the same result
-		for (size_t q = 0; q < nrQubits; ++q)
-		{
-			const bool res1 = cliffordSim.MeasureQubit(q);
-			const bool res2 = cliffordSim.MeasureQubit(q);
-			if (res1 != res2)
-			{
-				std::cout << "\nFailed qubits measurements" << std::endl;
-				std::cout << "Measurement 1: " << res2 << ", Measurement 2: " << res1 << ", for qubit: " << q << std::endl;
-				return false;
-			}
-		}
-		
-		ExecuteCircuit(nrShots, nrQubits, gates, qubits1, qubits2, results1, results2);
-
-		// check to see if the results are close enough
-		for (const auto val : results1)
-		{
-			if (results2.find(val.first) == results2.end()) continue;
-
-			if (std::abs(static_cast<double>(val.second) - results2[val.first]) / nrShots > errorThreshold)
-			{
-				std::cout << "\nFailed" << std::endl;
-				std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
-				std::cout << "Result 1: " << static_cast<double>(val.second) / nrShots << ", Result 2: " << static_cast<double>(results2[val.first]) / nrShots << std::endl;
-				return false;
-			}
-		}
-
-		for (const auto val : results2)
-		{
-			if (results1.find(val.first) == results1.end()) continue;
-
-			if (std::abs(static_cast<double>(val.second) - results1[val.first]) / nrShots > errorThreshold)
-			{
-				std::cout << "\nFailed" << std::endl;
-				std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
-				std::cout << "Result 1: " << static_cast<double>(results1[val.first]) / nrShots << ", Result 2: " << static_cast<double>(val.second) / nrShots << std::endl;
-				return false;
-			}
-		}
-
 		std::cout << '.';
 	}
+
 	std::cout << std::endl;
 
 	std::cout << "Success" << std::endl;

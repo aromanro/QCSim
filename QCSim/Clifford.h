@@ -363,7 +363,7 @@ namespace QC {
 				Generator g(getNrQubits());
 				std::vector<size_t> pos;
 				pos.reserve(pauliString.size());
-
+				size_t phase = 0;
 				for (size_t i = 0; i < pauliString.size(); ++i)
 				{
 					switch (pauliString[i])
@@ -383,7 +383,8 @@ namespace QC {
 					case 'Y':
 						g.X[i] = true;
 						g.Z[i] = true;
-						g.PhaseSign = !g.PhaseSign; // Y = iXZ, so we get a phase factor of i
+						// Y = iXZ, so we get a phase factor of i
+						++phase;
 						pos.push_back(i);
 						break;
 					case 'z':
@@ -405,7 +406,7 @@ namespace QC {
 					bool anticommutes = false;
 					for (size_t j = 0; j < pos.size(); ++j)
 					{
-						size_t pauliOpQubit = pos[j];
+						const size_t pauliOpQubit = pos[j];
 						if (g.X[pauliOpQubit] && stabilizerGenerators[i].Z[pauliOpQubit])
 							anticommutes = !anticommutes;
 						if (g.Z[pauliOpQubit] && stabilizerGenerators[i].X[pauliOpQubit])
@@ -420,7 +421,6 @@ namespace QC {
 
 				// check destabilizers for that
 				std::vector<bool> GZ(g.Z);
-				size_t phase = g.PhaseSign ? 1 : 0;
 
 				for (size_t i = 0; i < getNrQubits(); ++i)
 				{
@@ -428,7 +428,7 @@ namespace QC {
 					bool anticommutes = false;
 					for (size_t j = 0; j < pos.size(); ++j)
 					{
-						size_t pauliOpQubit = pos[j];
+						const size_t pauliOpQubit = pos[j];
 						if (g.X[pauliOpQubit] && destabilizerGenerators[i].Z[pauliOpQubit])
 							anticommutes = !anticommutes;
 						if (g.Z[pauliOpQubit] && destabilizerGenerators[i].X[pauliOpQubit])
@@ -438,20 +438,20 @@ namespace QC {
 						continue; // commutes, check next destabilizer
 
 					// anticommutes with this destabilizer
-					phase += stabilizerGenerators[i].PhaseSign ? 2 : 0;
 
-					// multiply GZ with the stabilizer
+					phase += stabilizerGenerators[i].PhaseSign ? 2 : 0;
 					for (size_t q = 0; q < getNrQubits(); ++q)
 					{
-						if (stabilizerGenerators[i].X[q] && stabilizerGenerators[i].Z[q])
-							++phase;
 						if (stabilizerGenerators[i].X[q] && GZ[q])
 							phase += 2;
+						if (stabilizerGenerators[i].X[q] && stabilizerGenerators[i].Z[q])
+							++phase;
+						
 						GZ[q] = XOR(GZ[q], stabilizerGenerators[i].Z[q]);
 					}
 				}
 
-				return phase % 4 ? -1.0 : 1.0;
+				return (phase % 4) ? -1.0 : 1.0;
 			}
 
 			std::unique_ptr<StabilizerSimulator> Clone() const
