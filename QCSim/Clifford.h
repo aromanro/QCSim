@@ -380,16 +380,7 @@ namespace QC {
 				for (size_t i = 0; i < getNrQubits(); ++i)
 				{
 					// check if the destabilizer anticommutes with the operator
-					bool anticommutes = false;
-					for (size_t j = 0; j < pos.size(); ++j)
-					{
-						const size_t pauliOpQubit = pos[j];
-						if (g.X[pauliOpQubit] && destabilizerGenerators[i].Z[pauliOpQubit])
-							anticommutes = !anticommutes;
-						if (g.Z[pauliOpQubit] && destabilizerGenerators[i].X[pauliOpQubit])
-							anticommutes = !anticommutes;
-					}
-					if (!anticommutes)
+					if (CommutesWithDestabilizer(g, destabilizerGenerators[i], pos))
 						continue; // commutes, check next destabilizer
 
 					// anticommutes with this destabilizer
@@ -425,6 +416,21 @@ namespace QC {
 			}
 
 		private:
+			bool CommutesWithDestabilizer(const Generator& g, const Generator& destabilizer, const std::vector<size_t>& pos) const
+			{
+				bool anticommutes = false;
+				for (size_t j = 0; j < pos.size(); ++j)
+				{
+					const size_t pauliOpQubit = pos[j];
+					if (g.X[pauliOpQubit] && destabilizer.Z[pauliOpQubit])
+						anticommutes = !anticommutes;
+					if (g.Z[pauliOpQubit] && destabilizer.X[pauliOpQubit])
+						anticommutes = !anticommutes;
+				}
+
+				return !anticommutes;
+			}
+
 			bool CheckStabilizersAnticommutation(const Generator& g, const std::vector<size_t>& pos) const
 			{
 				for (size_t i = 0; i < getNrQubits(); ++i)
