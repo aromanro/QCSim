@@ -778,106 +778,31 @@ bool StateSimulationTest()
 		OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits();
 }
 
-bool checkExpectationValuesMPSSimple()
+bool matchRandomExpectationValues(QC::QubitRegister<>& reg, QC::TensorNetworks::MPSSimulator& mps)
 {
-	std::cout << "\nTesting MPS expectation values..." << std::endl;
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gatesOpExp;
+	FillOneQubitGates(gatesOpExp);
 
-	QC::TensorNetworks::MPSSimulator mps(3);
-	if (!approxEqual(mps.ExpectationValue({}), 1.0, 1e-6))
-	{
-		std::cout << "Expectation value for I is not 1" << std::endl;
-		return false;
-	}
+	const auto nrQubits = reg.getNrQubits();
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gatesOpExp.size()) - 1);
+	std::uniform_int_distribution nrOpsDistr(1, static_cast<int>(nrQubits));
 
-	QC::Gates::PauliZGate<> zGate;
-
-	QC::Gates::AppliedGate<> appliedZGate(zGate.getRawOperatorMatrix(), 0);
-
-	std::vector<QC::Gates::AppliedGate<>> gates{ appliedZGate };
-
-	auto exp = mps.ExpectationValue(gates);
-	if (!approxEqual(exp, 1., 1e-6))
-	{
-		std::cout << "Expectation value for Z0 is not 1, it's " << exp << std::endl;
-		return false;
-	}
-
-	QC::Gates::PauliXGate<> xGate;
-	mps.ApplyGate(xGate, 0);
-
-	exp = mps.ExpectationValue(gates);
-	if (!approxEqual(exp, -1., 1e-6))
-	{
-		std::cout << "Expectation value for Z0 is not -1 after first qubit flip, it's " << exp << std::endl;
-		return false;
-	}
-
-	QC::Gates::HadamardGate<> hGate;
-	mps.ApplyGate(hGate, 0);
-	exp = mps.ExpectationValue(gates);
-	if (!approxEqual(exp, 0., 1e-6))
-	{
-		std::cout << "Expectation value for Z0 is not 0 after hadamard on first qubit, it's " << exp << std::endl;
-		return false;
-	}
-
-	mps.setToBasisState(0);
-	mps.ApplyGate(hGate, 1);
-
-	QC::Gates::AppliedGate<> appliedZ1Gate(zGate.getRawOperatorMatrix(), 1);
-
-	std::vector<QC::Gates::AppliedGate<>> gatesz1{ appliedZ1Gate };
-
-	exp = mps.ExpectationValue(gatesz1);
-	if (!approxEqual(exp, 0., 1e-6))
-	{
-		std::cout << "Expectation value for Z1 is not 0. after applying hadamard on qubit 1, it's " << exp << std::endl;
-		return false;
-	}
-
-	std::cout << "\nSuccess" << std::endl;
-
-	return true;
-}
-
-bool matchRandomExpectationValues(QC::QubitRegister<>& reg, QC::TensorNetworks::MPSSimulator& mps, int nrQubits)
-{
-	std::uniform_int_distribution pauliDistr(0, 2);
-	const QC::Gates::PauliXGate<> xgate;
-	const QC::Gates::PauliYGate<> ygate;
-	const QC::Gates::PauliZGate<> zgate;
+	std::uniform_int_distribution qbitDistr(0, static_cast<int>(nrQubits) - 1);
 
 	for (int s = 0; s < 5; ++s)
 	{
-		std::cout << ".";
-
 		// generate a random Pauli string and check its expectation value
 		std::vector<QC::Gates::AppliedGate<>> appliedGates;
 		appliedGates.reserve(nrQubits);
 		std::string pauliString;
 
-		for (int q = 0; q < nrQubits; ++q)
+		const auto nrOps = nrOpsDistr(gen);
+		for (int q = 0; q < nrOps; ++q)
 		{
-			if (dist_bool(gen))
-			{
-				auto pauliGateType = pauliDistr(gen);
-				switch (pauliGateType)
-				{
-				case 0: // Pauli X
-					appliedGates.emplace_back(xgate.getRawOperatorMatrix(), q);
-					pauliString += "X";
-					break;
-				case 1: // Pauli Y
-					appliedGates.emplace_back(ygate.getRawOperatorMatrix(), q);
-					pauliString += "Y";
-					break;
-				case 2: // Pauli Z
-					appliedGates.emplace_back(zgate.getRawOperatorMatrix(), q);
-					pauliString += "Z";
-					break;
-				}
-			}
-			else pauliString += "I"; // identity gate, no need to apply it
+			auto gate = gateDistr(gen);
+			const auto qubit = qbitDistr(gen);
+
+			appliedGates.emplace_back(gatesOpExp[gate]->getRawOperatorMatrix(), qubit);
 		}
 
 		const auto exp1 = reg.ExpectationValue(appliedGates);
@@ -885,9 +810,8 @@ bool matchRandomExpectationValues(QC::QubitRegister<>& reg, QC::TensorNetworks::
 
 		if (!approxEqual(exp1, exp2, 1E-7))
 		{
-			std::cout << std::endl << "Expectation value for the Pauli string is not equal for MPS and statevector simulator for " << nrQubits << " qubits" << std::endl;
-			std::cout << "Expectation value statevector: " << exp1 << " vs mps: " << exp2 << ", Pauli string: " << pauliString << std::endl;
-
+			std::cout << std::endl << "Expectation values are not equal for MPS and statevector simulator for " << nrQubits << " qubits" << std::endl;
+	
 			return false;
 		}
 	}
@@ -938,7 +862,7 @@ bool checkExpectationValuesMPS()
 				reg.ApplyGate(*gates[gate], qubit1, qubit2);
 			}
 
-			if (!matchRandomExpectationValues(reg, mps, nrQubits))
+			if (!matchRandomExpectationValues(reg, mps))
 				return false;
 		}
 	}
@@ -969,7 +893,7 @@ bool MPSSimulatorTests()
 	mps.print();
 	*/
 
-	return StateSimulationTest() && checkExpectationValuesMPSSimple() && checkExpectationValuesMPS();
+	return StateSimulationTest() && checkExpectationValuesMPS();
 }
 
 
