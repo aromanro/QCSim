@@ -188,12 +188,71 @@ void ExecuteCircuit(size_t nrShots, size_t nrQubits, const std::vector<int>& gat
 		tasks[i].get();
 }
 
+bool CheckProbability(QC::QubitRegister<>& qubitRegister, QC::Clifford::StabilizerSimulator& cliffordSim)
+{
+	const double probThreshold = 1E-10;
+	size_t nrQubits = qubitRegister.getNrQubits();
+
+	for (size_t q = 0; q < nrQubits; ++q)
+	{
+		const double prob1 = cliffordSim.GetQubitProbability(q);
+		const double prob2 = qubitRegister.GetQubitProbability(q);
+
+		if (std::abs(prob1 - prob2) > probThreshold)
+		{
+			std::cout << "\nFailed qubits probabilities" << std::endl;
+			std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << std::endl;
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool CheckAllStatesProbability(QC::QubitRegister<>& qubitRegister, QC::Clifford::StabilizerSimulator& cliffordSim)
+{
+	const double probThreshold = 1E-10;
+	size_t nrQubits = qubitRegister.getNrQubits();
+	const size_t nrStates = 1ULL << nrQubits;
+
+	for (size_t state = 0; state < nrStates; ++state)
+	{
+		const double prob1 = cliffordSim.getBasisStateProbability(state);
+		const double prob2 = qubitRegister.getBasisStateProbability(state);
+
+		if (std::abs(prob1 - prob2) > probThreshold)
+		{
+			std::cout << "\nFailed states probabilities" << std::endl;
+			std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << ", State: " << state << std::endl;
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool CheckMeasurements(QC::Clifford::StabilizerSimulator& cliffordSim)
+{
+	size_t nrQubits = cliffordSim.getNrQubits();
+	for (size_t q = 0; q < nrQubits; ++q)
+	{
+		const bool res1 = cliffordSim.MeasureQubit(q);
+		const bool res2 = cliffordSim.MeasureQubit(q);
+		if (res1 != res2)
+		{
+			std::cout << "\nFailed qubits measurements" << std::endl;
+			std::cout << "Measurement 1: " << res2 << ", Measurement 2: " << res1 << ", for qubit: " << q << std::endl;
+			return false;
+		}
+	}
+	return true;
+}
+
 bool CliffordSimulatorTests()
 {
 	const size_t nrTests = 10;
 	const size_t nrShots = 100000;
 	const double errorThreshold = 0.01;
-	const double probThreshold = 1E-10;
 
 	std::uniform_int_distribution gateDistr(0, 13);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
@@ -228,45 +287,16 @@ bool CliffordSimulatorTests()
 				qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
 			}
 
-			for (size_t q = 0; q < nrQubits; ++q)
-			{
-				const double prob1 = cliffordSim.GetQubitProbability(q);
-				const double prob2 = qubitRegister.GetQubitProbability(q);
-
-				if (std::abs(prob1 - prob2) > probThreshold)
-				{
-					std::cout << "\nFailed qubits probabilities" << std::endl;
-					std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << std::endl;
-					return false;
-				}
-			}
+			if (!CheckProbability(qubitRegister, cliffordSim))
+				return false;
 
 			// another way of testing is now available
-			for (size_t state = 0; state < nrStates; ++state)
-			{
-				const double prob1 = cliffordSim.getBasisStateProbability(state);
-				const double prob2 = qubitRegister.getBasisStateProbability(state);
-
-				if (std::abs(prob1 - prob2) > probThreshold)
-				{
-					std::cout << "\nFailed states probabilities" << std::endl;
-					std::cout << "Probability statevector: " << prob2 << ", Probability stabilizer: " << prob1 << ", State: " << state << std::endl;
-					return false;
-				}
-			}
+			if (!CheckAllStatesProbability(qubitRegister, cliffordSim))
+				return false;
 
 			// applying the measurement again on the same qubit should give the same result
-			for (size_t q = 0; q < nrQubits; ++q)
-			{
-				const bool res1 = cliffordSim.MeasureQubit(q);
-				const bool res2 = cliffordSim.MeasureQubit(q);
-				if (res1 != res2)
-				{
-					std::cout << "\nFailed qubits measurements" << std::endl;
-					std::cout << "Measurement 1: " << res2 << ", Measurement 2: " << res1 << ", for qubit: " << q << std::endl;
-					return false;
-				}
-			}
+			if (!CheckMeasurements(cliffordSim))
+				return false;
 
 			ExecuteCircuit(nrShots, nrQubits, gates, qubits1, qubits2, results1, results2);
 
