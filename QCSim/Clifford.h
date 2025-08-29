@@ -368,22 +368,8 @@ namespace QC {
 				SetPauliString(pauliString, g, pos, phase);
 
 				// this is easy, if the pauli string transforming the stabilizers leads to an orthogonal state on the original one, the expectation value is zero
-				
-				for (size_t i = 0; i < getNrQubits(); ++i)
-				{
-					// check if the stabilizer anticommutes with the operator
-					bool anticommutes = false;
-					for (size_t j = 0; j < pos.size(); ++j)
-					{
-						const size_t pauliOpQubit = pos[j];
-						if (g.X[pauliOpQubit] && stabilizerGenerators[i].Z[pauliOpQubit])
-							anticommutes = !anticommutes;
-						if (g.Z[pauliOpQubit] && stabilizerGenerators[i].X[pauliOpQubit])
-							anticommutes = !anticommutes;
-					}
-					if (anticommutes)
-						return 0.; // expectation value is zero if any of the stabilizers anticommutes with the operator
-				}
+				if (CheckStabilizersAnticommutation(g, pos))
+					return 0.0;
 
 				// now we're left with the case when all stabilizers commute with the operator
 				// we need to find if the result is 1 or -1
@@ -439,6 +425,27 @@ namespace QC {
 			}
 
 		private:
+			bool CheckStabilizersAnticommutation(const Generator& g, const std::vector<size_t>& pos) const
+			{
+				for (size_t i = 0; i < getNrQubits(); ++i)
+				{
+					// check if the stabilizer anticommutes with the operator
+					bool anticommutes = false;
+					for (size_t j = 0; j < pos.size(); ++j)
+					{
+						const size_t pauliOpQubit = pos[j];
+						if (g.X[pauliOpQubit] && stabilizerGenerators[i].Z[pauliOpQubit])
+							anticommutes = !anticommutes;
+						if (g.Z[pauliOpQubit] && stabilizerGenerators[i].X[pauliOpQubit])
+							anticommutes = !anticommutes;
+					}
+					if (anticommutes)
+						return true;
+				}
+
+				return false;
+			}
+
 			static void SetPauliString(const std::string& pauliString, Generator& g, std::vector<size_t>& pos, size_t& phase)
 			{
 				for (size_t i = 0; i < pauliString.size(); ++i)
