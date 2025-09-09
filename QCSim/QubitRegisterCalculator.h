@@ -439,7 +439,6 @@ namespace QC {
 			else
 			{
 				const size_t notQubitBit = ~qubitBit;
-				const size_t notCtrlQubitBit = ~ctrlQubitBit;
 				const size_t notQubitBit2 = ~qubitBit2;
 				const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
 				const size_t orallqubits = qubitBit | ctrlqubits;
@@ -511,8 +510,6 @@ namespace QC {
 			size_t limit = std::max(ctrlQubitBit, qubitBit2);
 
 			const size_t notQubitBit = ~qubitBit;
-			const size_t notCtrlQubitBit = ~ctrlQubitBit;
-			const size_t notQubitBit2 = ~qubitBit2;
 			const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
 			const size_t orallqubits = qubitBit | ctrlqubits;
 
@@ -545,7 +542,6 @@ namespace QC {
 			const size_t orqubits = qubitBit | qubitBit2;
 			const size_t orallqubits = qubitBit | ctrlqubits;
 			const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
-
 
 			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
@@ -583,7 +579,6 @@ namespace QC {
 				//const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
 
 				const size_t notQubitBit = ~qubitBit;
-				const size_t notCtrlQubitBit = ~ctrlQubitBit;
 				const size_t notQubitBit2 = ~qubitBit2;
 				const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
 				const size_t orallqubits = qubitBit | ctrlqubits;
@@ -672,8 +667,6 @@ namespace QC {
 			long long limit = static_cast<long long>(std::max(ctrlQubitBit, qubitBit2));
 
 			const size_t notQubitBit = ~qubitBit;
-			const size_t notCtrlQubitBit = ~ctrlQubitBit;
-			const size_t notQubitBit2 = ~qubitBit2;
 			const size_t ctrlqubits = ctrlQubitBit | qubitBit2;
 			const size_t orallqubits = qubitBit | ctrlqubits;
 
