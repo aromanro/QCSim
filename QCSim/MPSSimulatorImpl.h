@@ -321,7 +321,7 @@ namespace QC {
 					}
 				}
 
-				//Eigen::JacobiSVD<MatrixClass> SVD;
+				//Eigen::JacobiSVD<MatrixClass> SVD(thetaMatrix.rows(), thetaMatrix.cols());
 				
 				// This one is supposed to be faster on big matrices but from my tests it seems that it's not so accurate, so I'll use Jacobi for now 
 				Eigen::BDCSVD<MatrixClass> SVD(thetaMatrix.rows(), thetaMatrix.cols());
