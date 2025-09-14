@@ -15,6 +15,8 @@
 #include <future>
 
 
+#define NR_QUBITS_LIMIT 9
+
 void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
 {
 	gates.emplace_back(std::make_shared<QC::Gates::HadamardGate<>>());
@@ -65,7 +67,7 @@ bool OneQubitGatesTest()
 	std::uniform_int_distribution nrGatesDistr(50, 100);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
-	for (int nrQubits = 1; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 1; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 
@@ -119,7 +121,7 @@ bool OneAndTwoQubitGatesTest()
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
 
-	for (int nrQubits = 2; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
@@ -270,7 +272,7 @@ bool TestMeasurementsWithOneQubitGatesCircuits()
 
 	const int nrMeasurements = 10000;
 
-	for (int nrQubits = 1; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 1; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		for (int t = 0; t < 5; ++t)
 		{
@@ -352,7 +354,7 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 	const int nrMeasurements = 10000;
 
-	for (int nrQubits = 2; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		for (int t = 0; t < 5; ++t)
 		{
@@ -436,7 +438,7 @@ bool OneAndTwoQubitGatesTestMapped()
 	std::uniform_int_distribution nrGatesDistr(25, 50);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
-	for (int nrQubits = 3; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
@@ -576,7 +578,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 
 	const int nrMeasurements = 10000;
 
-	for (int nrQubits = 3; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		for (int t = 0; t < 5; ++t)
 		{
@@ -699,7 +701,7 @@ bool OneAndTwoQubitGatesTestMappedRandomAmplitudes()
 	std::uniform_int_distribution nrGatesDistr(25, 50);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
-	for (int nrQubits = 3; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
@@ -773,6 +775,15 @@ bool OneAndTwoQubitGatesTestMappedRandomAmplitudes()
 
 bool StateSimulationTest()
 {
+	// for longer tests:
+	/*
+	for (int i = 0; i < 30; ++i)
+	{
+		if (!(OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()))
+			return false;
+	}
+	*/
+
 	return /*OneQubitGatesTest() && OneAndTwoQubitGatesTest() &&
 		TestMeasurementsWithOneQubitGatesCircuits() && TestMeasurementsWithOneAndTwoQubitGatesCircuits() &&*/
 		OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits();
@@ -830,7 +841,7 @@ bool checkExpectationValuesMPS()
 	std::uniform_int_distribution nrGatesDistr(25, 35);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 	
-	for (int nrQubits = 3; nrQubits < 9; ++nrQubits)
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
 		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
