@@ -15,7 +15,7 @@
 #include <future>
 
 
-#define NR_QUBITS_LIMIT 9
+#define NR_QUBITS_LIMIT 14
 
 void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
 {
@@ -776,13 +776,13 @@ bool OneAndTwoQubitGatesTestMappedRandomAmplitudes()
 bool StateSimulationTest()
 {
 	// for longer tests:
-	/*
+	
 	for (int i = 0; i < 30; ++i)
 	{
 		if (!(OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()))
 			return false;
 	}
-	*/
+	
 
 	return /*OneQubitGatesTest() && OneAndTwoQubitGatesTest() &&
 		TestMeasurementsWithOneQubitGatesCircuits() && TestMeasurementsWithOneAndTwoQubitGatesCircuits() &&*/

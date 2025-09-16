@@ -217,7 +217,7 @@ namespace QC {
 				// TODO: is it worth parallelizing the controlled swap gate?
 #pragma omp parallel for 
 				//num_threads(processor_count) schedule(static, blockSize)
-				for (long long int state = std::max(ctrlQubitBit, std::min(qubitBit, qubitBit2)); state < NrBasisStates; ++state)
+				for (long long int state = std::max(ctrlQubitBit, std::min(qubitBit, qubitBit2)); state < static_cast<long long int>(NrBasisStates); ++state)
 				{
 					if ((state & ctrlQubitBit) == 0 || (state & qubitBit2) == 0)
 						continue;
