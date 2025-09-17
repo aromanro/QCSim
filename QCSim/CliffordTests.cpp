@@ -261,7 +261,6 @@ bool CliffordSimulatorTests()
 
 	for (size_t nrQubits = 4; nrQubits < 12; ++nrQubits)
 	{
-		const size_t nrStates = 1ULL << nrQubits;
 		std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
 
 		for (size_t t = 0; t < nrTests; ++t)
@@ -374,8 +373,6 @@ void ConstructPauliString(size_t nrQubits, std::string& pauliStr, std::vector<QC
 bool CliffordExpectationValuesTests()
 {
 	const size_t nrTests = 100;
-	const double errorThreshold = 0.01;
-	const double probThreshold = 1E-10;
 
 	std::uniform_int_distribution gateDistr(0, 13);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
@@ -384,7 +381,6 @@ bool CliffordExpectationValuesTests()
 
 	for (size_t nrQubits = 2; nrQubits < 20; ++nrQubits)
 	{
-		const size_t nrStates = 1ULL << nrQubits;
 		std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
 
 		for (size_t t = 0; t < nrTests; ++t)
