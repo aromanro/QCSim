@@ -194,8 +194,6 @@ namespace QC {
 				//  -O-         |
 				Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(daggerGammas[0], contract_dim);
 
-				Eigen::Tensor<std::complex<double>, 2> resTensor2 = resTensor;
-
 				// now contract the rest of the gammas with the dagger gammas
 				for (IndexType s = 1; s < nrSites; ++s)
 				{
