@@ -17,7 +17,7 @@ namespace QC {
 				: MPSSimulatorBase(N, addseed)
 			{
 				// the default is 16, but with that value I get some precision issues in tests against statevector... too often for my taste
-				SVD.setSwitchSize(24); // lower sizes will use Jacobi
+				SVD.setSwitchSize(32); // lower sizes will use Jacobi
 			}
 
 			void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) override
