@@ -359,6 +359,7 @@ namespace QC {
 			double ExpectationValue(const std::string& pauliString) const
 			{
 				// We compute this: <Psi|pauliString|Psi>, where |Psi> is defined by the stabilizers
+				if (pauliString.empty()) return 1.0;
 
 				Generator g(getNrQubits());
 				std::vector<size_t> pos;
@@ -366,6 +367,7 @@ namespace QC {
 				size_t phase = 0;
 				
 				SetPauliString(pauliString, g, pos, phase);
+				if (pos.empty()) return 1.0;
 
 				// this is easy, if the pauli string transforming the stabilizers leads to an orthogonal state on the original one, the expectation value is zero
 				if (CheckStabilizersAnticommutation(g, pos))
@@ -456,20 +458,15 @@ namespace QC {
 			{
 				for (size_t i = 0; i < pauliString.size(); ++i)
 				{
-					switch (pauliString[i])
+					const char c = toupper(pauliString[i]);
+					switch (c)
 					{
-					case 'i':
-						[[fallthrough]];
 					case 'I':
 						break;
-					case 'x':
-						[[fallthrough]];
 					case 'X':
 						g.X[i] = true;
 						pos.push_back(i);
 						break;
-					case 'y':
-						[[fallthrough]];
 					case 'Y':
 						g.X[i] = true;
 						g.Z[i] = true;
@@ -477,8 +474,6 @@ namespace QC {
 						++phase;
 						pos.push_back(i);
 						break;
-					case 'z':
-						[[fallthrough]];
 					case 'Z':
 						g.Z[i] = true;
 						pos.push_back(i);
