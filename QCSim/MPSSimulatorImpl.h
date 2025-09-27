@@ -17,7 +17,7 @@ namespace QC {
 				: MPSSimulatorBase(N, addseed)
 			{
 				// the default is 16, but with that value I get some precision issues in tests against statevector... too often for my taste
-				SVD.setSwitchSize(32); // lower sizes will use Jacobi
+				//SVD.setSwitchSize(32); // lower sizes will use Jacobi
 			}
 
 			void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) override
@@ -661,10 +661,9 @@ namespace QC {
 				return res;
 			}
 
-			//Eigen::JacobiSVD<MatrixClass> SVD;
-
 			// This one is supposed to be faster on big matrices but from my tests it seems that it's not so accurate, so I'll use Jacobi for now 
-			Eigen::BDCSVD<MatrixClass> SVD;
+			//Eigen::BDCSVD<MatrixClass> SVD;
+			Eigen::JacobiSVD<MatrixClass> SVD;
 		};
 
 	}
