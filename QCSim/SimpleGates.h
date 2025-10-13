@@ -4,6 +4,8 @@
 #include <math.h>
 #include <Eigen/Eigen>
 
+#include <cassert>
+
 namespace QC {
 	namespace Gates {
 

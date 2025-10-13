@@ -23,7 +23,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Download eigen
-      run: curl https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz --output eigen.tgz
+      run: curl https://gitlab.com/libeigen/eigen/-/archive/5.0.0/eigen-5.0.0.tar.gz --output eigen.tgz
     - name: Untar eigen
       run: tar -xzvf eigen.tgz    
 
@@ -48,7 +48,7 @@ jobs:
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: |
-         export EIGEN3_INCLUDE_DIR=$PWD/eigen-3.4.0/
+         export EIGEN5_INCLUDE_DIR=$PWD/eigen-5.0.0/
          export FFTW3_DIR=$PWD/fftw-3.3.10/include/
          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 

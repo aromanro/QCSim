@@ -324,7 +324,7 @@ namespace QC {
 				if (limitEntanglement)
 					SVD.setThreshold(singularValueThreshold);
 
-				SVD.compute(thetaMatrix, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
+				SVD.compute(thetaMatrix);
 
 				const MatrixClass& UmatrixFull = SVD.matrixU();
 				const MatrixClass& VmatrixFull = SVD.matrixV();
@@ -663,7 +663,7 @@ namespace QC {
 
 			// This one is supposed to be faster on big matrices but from my tests it seems that it's not so accurate, so I'll use Jacobi for now 
 			//Eigen::BDCSVD<MatrixClass> SVD;
-			Eigen::JacobiSVD<MatrixClass> SVD;
+			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
 		};
 
 	}
