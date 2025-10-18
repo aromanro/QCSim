@@ -661,9 +661,8 @@ namespace QC {
 				return res;
 			}
 
-			// This one is supposed to be faster on big matrices but from my tests it seems that it's not so accurate, so I'll use Jacobi for now 
-			//Eigen::BDCSVD<MatrixClass> SVD;
-			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
+			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
+			//Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
 		};
 
 	}
