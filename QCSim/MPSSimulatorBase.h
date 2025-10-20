@@ -396,6 +396,17 @@ namespace QC {
 							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
 			}
 
+			void MultiplyMatrixWithLambda(IndexType qubit, MatrixTensorType& mat) const
+			{
+				const size_t nrQubits = gammas.size();
+
+				if (qubit != static_cast<IndexType>(nrQubits) - 1)
+					for (IndexType col = 0; col < mat.dimension(1); ++col)
+						for (IndexType row = 0; row < mat.dimension(0); ++row)
+							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
+			}
+
+
 			static void ApplySingleQubitGate(GammaType& gamma, const GateClass& gate)
 			{
 				ApplySingleQubitGate(gamma, gate.getRawOperatorMatrix());

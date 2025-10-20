@@ -621,17 +621,23 @@ namespace QC {
 
 				for (IndexType qubit = 0; qubit < limit1; ++qubit)
 				{
+					const IndexType dim1 = gammas[qubit].dimension(0);
+					const IndexType dim2 = gammas[qubit].dimension(2);
+
 					// 1. First, compute probability for measuring 0
 					// zero matrix
 					MatrixTensorType qubitMat = gammas[qubit].chip(0, 1);
-					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
-					MultiplyMatrixWithLambda(qubit, mq);
+					MultiplyMatrixWithLambda(qubit, qubitMat);
+					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), dim1, dim2);
+					
 					if (qubit != 0)
 						mq = mat * mq;
 
 					// this is the probability of measuring all the qubits with the picked up values using the random number generator, up to this one
 					// including a measured zero value for the current qubit 
+					
 					const double allProbability = mq.cwiseProduct(mq.conjugate()).sum().real();
+
 					// to get the probability for the current qubit to be 0, we need to divide by the probability of measuring all the previous qubits
 					const double prob0 = allProbability / totalProb;
 
@@ -645,14 +651,15 @@ namespace QC {
 
 					// now update the matrix
 					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
-						mat = std::move(mq);
+						mat.swap(mq);
 					else
 					{
 						qubitMat = gammas[qubit].chip(1, 1);
-						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), qubitMat.dimension(0), qubitMat.dimension(1));
-						MultiplyMatrixWithLambda(qubit, mq);
+						MultiplyMatrixWithLambda(qubit, qubitMat);
+						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), dim1, dim2);
+						
 						if (qubit == 0)
-							mat = std::move(mq);
+							mat.swap(mq);
 						else
 							mat = mat * mq;
 					}
