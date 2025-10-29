@@ -265,28 +265,9 @@ namespace QC {
 						std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
 			}
 
-			void ApplyTwoQubitGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1, bool dontApplyGate = false)
+			MatrixClass ConstructTheta(const GateClass& gate, IndexType qubit1, bool dontApplyGate, bool isSwapGate, bool reversed)
 			{
-				// it's more complex than the single qubit gate
-				// very shortly:
-				// contract tensors for the two qubits, along with the correspnding lambdas
-				// shape the gate into a tensor
-				// contract the gate tensor with the two qubit tensor
-				// apply SVD to separate out the resulting tensor into the two qubit tensors and the lambdas
-
-				IndexType qubit1 = controllingQubit1;
-				IndexType qubit2 = qubit;
-				bool reversed = false;
-
-				if (qubit1 > qubit2)
-				{
-					std::swap(qubit1, qubit2);
-					reversed = true;
-				}
-
 				MatrixClass thetaMatrix;
-
-				const bool isSwapGate = gate.isSwapGate();
 
 				// TODO: optimize for some gates? The most important would be the swap gate, as it's applied a lot to move qubits near each other before applying other two qubit gates
 				// something like:
@@ -318,6 +299,32 @@ namespace QC {
 
 					thetaMatrix = ReshapeThetaBar(thetabar);
 				}
+
+				return thetaMatrix;
+			}
+
+			void ApplyTwoQubitGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1, bool dontApplyGate = false)
+			{
+				// it's more complex than the single qubit gate
+				// very shortly:
+				// contract tensors for the two qubits, along with the correspnding lambdas
+				// shape the gate into a tensor
+				// contract the gate tensor with the two qubit tensor
+				// apply SVD to separate out the resulting tensor into the two qubit tensors and the lambdas
+
+				IndexType qubit1 = controllingQubit1;
+				IndexType qubit2 = qubit;
+				bool reversed = false;
+
+				if (qubit1 > qubit2)
+				{
+					std::swap(qubit1, qubit2);
+					reversed = true;
+				}
+
+				const bool isSwapGate = gate.isSwapGate();
+
+				const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
 
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
 
@@ -361,7 +368,7 @@ namespace QC {
 			}
 
 
-			TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass& gate, bool reversed) const
+			static TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass& gate, bool reversed)
 			{
 				TwoQubitsGateTensor result;
 
@@ -583,7 +590,7 @@ namespace QC {
 				return thetaMatrix;
 			}
 
-			MatrixClass ReshapeTheta(const Eigen::Tensor<std::complex<double>, 4>& theta)
+			static MatrixClass ReshapeTheta(const Eigen::Tensor<std::complex<double>, 4>& theta)
 			{
 				// get it into a matrix for SVD - use JacobiSVD
 				IndexType sz0 = theta.dimension(0);
