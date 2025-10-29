@@ -17,7 +17,7 @@ namespace QC {
 				: MPSSimulatorBase(N, addseed)
 			{
 				// the default is 16, but with that value I get some precision issues in tests against statevector... too often for my taste
-				//SVD.setSwitchSize(32); // lower sizes will use Jacobi
+				SVD.setSwitchSize(blockSizeLimit); // lower sizes will use Jacobi
 			}
 
 			void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) override
@@ -321,16 +321,26 @@ namespace QC {
 					}
 				}
 
+				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
+
 				if (limitEntanglement)
-					SVD.setThreshold(singularValueThreshold);
+				{
+					if (computeWithJacobi)
+						jacobiSVD.setThreshold(singularValueThreshold);
+					else
+						SVD.setThreshold(singularValueThreshold);
+				}
 
-				SVD.compute(thetaMatrix);
+				if (computeWithJacobi)
+					jacobiSVD.compute(thetaMatrix);
+				else
+					SVD.compute(thetaMatrix);
 
-				const MatrixClass& UmatrixFull = SVD.matrixU();
-				const MatrixClass& VmatrixFull = SVD.matrixV();
-				const LambdaType& SvaluesFull = SVD.singularValues();
+				const MatrixClass& UmatrixFull = computeWithJacobi ? jacobiSVD.matrixU() : SVD.matrixU();
+				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
+				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
-				IndexType szm = SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
+				IndexType szm = computeWithJacobi ? jacobiSVD.nonzeroSingularValues() : SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
 				const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
@@ -668,8 +678,10 @@ namespace QC {
 				return res;
 			}
 
+			constexpr static IndexType blockSizeLimit = 24;
+
 			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
-			//Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
+			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
 		};
 
 	}

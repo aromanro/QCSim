@@ -904,6 +904,14 @@ bool MPSSimulatorTests()
 	mps.print();
 	*/
 
+	/*
+	for (int i = 0; i < 100; ++i)
+	{
+		if (!checkExpectationValuesMPS())
+			return false;
+	}
+	*/
+
 	return StateSimulationTest() && checkExpectationValuesMPS();
 }
 
