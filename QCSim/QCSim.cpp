@@ -12,11 +12,11 @@
 
 int ExecuteTests(const std::string& arg1)
 {
-	if (arg1 == "0" && !tests(0)) return -1;
-	else if (arg1 == "1" && !tests(1)) return -1;
-	else if (arg1 == "2" && !tests(2)) return -1;
-	else if (arg1 == "3" && !tests(3)) return -1;
-	else if (arg1 == "4" && !tests(4)) return -1;
+	if (arg1 == "0") return 0;
+	else if (arg1 == "1" && !tests(0)) return -1;
+	else if (arg1 == "2" && !tests(1)) return -1;
+	else if (arg1 == "3" && !tests(2)) return -1;
+	else if (arg1 == "4" && !tests(3)) return -1;
 	else
 	{
 		std::cout << "Unknown command line argument, options are 0, 1, 2, 3, 4" << std::endl;
