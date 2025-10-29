@@ -61,7 +61,7 @@ namespace QC {
 				const double rndVal = 1. - uniformZeroOne(rng);
 				const double prob0 = GetProbability(qubit);
 				const bool zeroMeasured = rndVal < prob0;
-				
+
 				MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
 				const QC::Gates::SingleQubitGate projOp(std::move(projMat));
 
@@ -110,12 +110,12 @@ namespace QC {
 					const bool zeroMeasured = rndVal < prob0;
 
 					res[qubit] = !zeroMeasured;
-					
+
 					MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
 					const QC::Gates::SingleQubitGate projOp(std::move(projMat));
 
 					ApplySingleQubitGate(projOp, qubit);
-					
+
 					for (IndexType q = qubit; q < nextQubit; ++q)
 					{
 						if (lambdas[q].size() == 1) break;
@@ -150,7 +150,7 @@ namespace QC {
 				// at this point it doesn't check if the gates are one qubit, that's done at the higher level
 				// 	
 				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
-				
+
 				// no need to zip up the whole chain, contracting the ends of the chain that are not touched by the operators should give 1.
 				IndexType minQubit = lastQubit;
 				IndexType maxQubit = 0;
@@ -200,7 +200,7 @@ namespace QC {
 					//  /-O-       -O-        |
 					// O  |   ==> | |    ==>  O
 					//  \-O-       -O-        |
-					
+
 					// bug in eigen, does not work as expected without using an intermediate result?
 					// fails even with eval() after the first contract, so I use a separate variable for the first contract
 					Eigen::Tensor<std::complex<double>, 3> intermediateResult = resTensor.contract(modGammas[s], contract_dim1);
@@ -279,46 +279,42 @@ namespace QC {
 
 				MatrixClass thetaMatrix;
 
-				if (dontApplyGate)
+				const bool isSwapGate = gate.isSwapGate();
+
+				// TODO: optimize for some gates? The most important would be the swap gate, as it's applied a lot to move qubits near each other before applying other two qubit gates
+				// something like:
+				if (dontApplyGate || isSwapGate)
 				{
-					// this case is for dealing with entanglement with the qubits entangled with a measured one
+					Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+					// eiter apply the swap gate, optimized
+					// or this case is for dealing with entanglement with the qubits entangled with a measured one
 					// see 'Measure' function for details
-					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+
+					// NOTE: with proper data structures this could be way more optimized
+					// instead of those generic eigen tensors for example, a more optimized tensor for this would hold Eigen matrices inside and
+					// the physical indices would select among them
+					// that way swapping will reduce to swapping pointers, it would be very fast
+					// but I'm lazy so I use the generic implementation
+
+					// qiskit aer does it, though
+
+					// it's less important than it appears, because usually SVD will take the most time (unless severely limited or having some particularly easy circuits)
+
+					if (isSwapGate)
+					{
+						for (IndexType j = 0; j < theta.dimension(3); ++j)
+							for (IndexType i = 0; i < theta.dimension(0); ++i)
+								std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
+					}
 
 					thetaMatrix = ReshapeTheta(theta);
 				}
 				else
 				{
-					// TODO: optimize for some gates? The most important would be the swap gate, as it's applied a lot to move qubits near each other before applying other two qubit gates
-					// something like:
-					if (gate.isSwapGate())
-					{
-						Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
-						// apply the swap gate, optimized
-						
-						// NOTE: with proper data structures this could be way more optimized
-						// instead of those generic eigen tensors for example, a more optimized tensor for this would hold Eigen matrices inside and
-						// the physical indices would select among them
-						// that way swapping will reduce to swapping pointers, it would be very fast
-						// but I'm lazy so I use the generic implementation
-						
-						// qiskit aer does it, though
+					const Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>> U = GetTwoQubitsGateTensor(gate, reversed);
+					const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructThetaBar(qubit1, U);
 
-						// it's less important than it appears, because usually SVD will take the most time (unless severely limited or having some particularly easy circuits)
-
-						for (IndexType j = 0; j < theta.dimension(3); ++j)
-							for (IndexType i = 0; i < theta.dimension(0); ++i)
-								std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
-
-						thetaMatrix = ReshapeTheta(theta);
-					}
-					else
-					{
-						const Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>> U = GetTwoQubitsGateTensor(gate, reversed);
-						const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructThetaBar(qubit1, U);
-
-						thetaMatrix = ReshapeThetaBar(thetabar);
-					}
+					thetaMatrix = ReshapeThetaBar(thetabar);
 				}
 
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
@@ -432,7 +428,7 @@ namespace QC {
 					{
 						const IndexType jind = j * szr + k;
 						for (IndexType i = 0; i < sz; ++i)
-						{	
+						{
 							Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
 						}
 					}
@@ -639,13 +635,13 @@ namespace QC {
 					MatrixTensorType qubitMat = gammas[qubit].chip(0, 1);
 					MultiplyMatrixWithLambda(qubit, qubitMat);
 					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), dim1, dim2);
-					
+
 					if (qubit != 0)
 						mq = mat * mq;
 
 					// this is the probability of measuring all the qubits with the picked up values using the random number generator, up to this one
 					// including a measured zero value for the current qubit 
-					
+
 					const double allProbability = mq.cwiseProduct(mq.conjugate()).sum().real();
 
 					// to get the probability for the current qubit to be 0, we need to divide by the probability of measuring all the previous qubits
@@ -667,7 +663,7 @@ namespace QC {
 						qubitMat = gammas[qubit].chip(1, 1);
 						MultiplyMatrixWithLambda(qubit, qubitMat);
 						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), dim1, dim2);
-						
+
 						if (qubit == 0)
 							mat.swap(mq);
 						else
