@@ -225,7 +225,7 @@ namespace QC {
 			}
 
 		private:
-			void MultiplyModGammasWithLambdas(std::vector<GammaType>& modGammas, IndexType minQubit, IndexType nrSites)
+			void MultiplyModGammasWithLambdas(std::vector<GammaType>& modGammas, IndexType minQubit, IndexType nrSites) const
 			{
 				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
 
@@ -256,6 +256,13 @@ namespace QC {
 							for (IndexType l = 0; l < szl; ++l)
 								modGammas[s](l, p, r) *= lambdas[q][r];
 				}
+			}
+
+			static void SwapTheta(Eigen::Tensor<std::complex<double>, 4>& theta)
+			{
+				for (IndexType j = 0; j < theta.dimension(3); ++j)
+					for (IndexType i = 0; i < theta.dimension(0); ++i)
+						std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
 			}
 
 			void ApplyTwoQubitGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1, bool dontApplyGate = false)
@@ -300,12 +307,7 @@ namespace QC {
 
 					// it's less important than it appears, because usually SVD will take the most time (unless severely limited or having some particularly easy circuits)
 
-					if (isSwapGate)
-					{
-						for (IndexType j = 0; j < theta.dimension(3); ++j)
-							for (IndexType i = 0; i < theta.dimension(0); ++i)
-								std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
-					}
+					if (isSwapGate) SwapTheta(theta);
 
 					thetaMatrix = ReshapeTheta(theta);
 				}
@@ -341,19 +343,16 @@ namespace QC {
 
 				const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
 
-
 				const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
 				const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
 
 				assert(UmatrixFull.cols() == VmatrixFull.cols()); // for 'thin'
 				assert(sz <= UmatrixFull.cols());
 
-
 				const MatrixClass Umatrix = UmatrixFull.topLeftCorner(std::min<IndexType>(2 * szl, UmatrixFull.rows()), sz);
 				const MatrixClass Vmatrix = VmatrixFull.topLeftCorner(std::min<IndexType>(2 * szr, VmatrixFull.rows()), sz).adjoint();
 
 				// now set back lambdas and gammas
-
 				lambdas[qubit1] = SvaluesFull.head(sz);
 				assert(lambdas[qubit1][0] != 0.);
 				lambdas[qubit1].normalize();
