@@ -32,15 +32,19 @@ set(SOURCES QCSim/QCSim.cpp
             QCSim/VQETests.cpp
 			QCSim/MPSSimulatorTests.cpp
 			QCSim/CliffordTests.cpp)
- 
-SET( EIGEN5_INCLUDE_DIR "$ENV{EIGEN5_INCLUDE_DIR}" )
-IF( NOT EIGEN5_INCLUDE_DIR )
-    MESSAGE( FATAL_ERROR "Please set EIGEN5_INCLUDE_DIR env variable to the include directory of Eigen5")
+
+if (NOT DEFINED EIGEN5_INCLUDE_DIR)
+	SET( EIGEN5_INCLUDE_DIR "$ENV{EIGEN5_INCLUDE_DIR}" )
+	IF( NOT EIGEN5_INCLUDE_DIR )
+		MESSAGE( FATAL_ERROR "Please set EIGEN5_INCLUDE_DIR env variable to the include directory of Eigen5")
+	ENDIF()
 ENDIF()
 
-SET( FFTW3_DIR "$ENV{FFTW3_DIR}" )
-IF( NOT FFTW3_DIR )
-    MESSAGE( FATAL_ERROR "Please set FFTW3_DIR env variable to the include directory of fftw3")
+if (NOT DEFINED FFTW3_DIR)
+	SET( FFTW3_DIR "$ENV{FFTW3_DIR}" )
+	IF( NOT FFTW3_DIR )
+		MESSAGE( FATAL_ERROR "Please set FFTW3_DIR env variable to the include directory of fftw3")
+	ENDIF()
 ENDIF()
 
 if(APPLE)
