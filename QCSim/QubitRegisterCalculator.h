@@ -148,52 +148,7 @@ namespace QC {
 					ApplyGenericControlGate(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 			}
 			else
-			{
-				const size_t notQubitBit = ~qubitBit;
-				const size_t notCtrlQubitBit = ~ctrlQubitBit;
-				const size_t orqubits = qubitBit | ctrlQubitBit;
-
-				for (size_t state = 0; state < NrBasisStates; ++state)
-				{
-					size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					size_t m = state & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
-
-					++state;
-
-					row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					m = state & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
-
-					++state;
-
-					row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					m = state & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
-
-					++state;
-
-					row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					m = state & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
-				}
-			}
+				ApplyGenericTwoQubitsGate(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 		}
 
 		static inline void ApplyTwoQubitsGateOmp(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
@@ -210,55 +165,7 @@ namespace QC {
 					ApplyGenericControlGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 			}
 			else
-			{
-				//const size_t blockSize = TwoQubitOmpLimit / divSchedule;
-				//const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
-				//const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
-
-				const size_t notQubitBit = ~qubitBit;
-				const size_t notCtrlQubitBit = ~ctrlQubitBit;
-				const size_t orqubits = qubitBit | ctrlQubitBit;
-
-#pragma omp parallel for 
-				//num_threads(processor_count) schedule(static, blockSize)
-				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 4)
-				{
-					size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					size_t m = state & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
-
-					long long int nextState = state + 1;
-					row = (nextState & ctrlQubitBit ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
-					m = nextState & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +              // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((nextState & notCtrlQubitBit) | qubitBit) +                 // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
-
-					nextState = state + 1;
-					row = (nextState & ctrlQubitBit ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
-					m = nextState & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +              // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((nextState & notCtrlQubitBit) | qubitBit) +                 // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
-
-					nextState = state + 1;
-					row = (nextState & ctrlQubitBit ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
-					m = nextState & notQubitBit; // ensure it's not computed twice
-
-					resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +              // state & ~ctrlQubitBit & ~qubitBit      : 00
-						gateMatrix(row, 1) * registerStorage((nextState & notCtrlQubitBit) | qubitBit) +                 // state & ~ctrlQubitBit |  qubitBit      : 01
-						gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
-						gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
-				}
-			}
+				ApplyGenericTwoQubitsGateOmp(registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates);
 		}
 
 		static inline void ApplyThreeQubitsGate(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
@@ -503,6 +410,54 @@ namespace QC {
 			}
 		}
 
+		static inline void ApplyGenericTwoQubitsGate(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates)
+		{
+			const size_t notQubitBit = ~qubitBit;
+			const size_t notCtrlQubitBit = ~ctrlQubitBit;
+			const size_t orqubits = qubitBit | ctrlQubitBit;
+
+			for (size_t state = 0; state < NrBasisStates; ++state)
+			{
+				size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				size_t m = state & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+
+				++state;
+
+				row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+
+				++state;
+
+				row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+
+				++state;
+
+				row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+			}
+		}
+
 
 		static inline void ApplyDiagonalControlGateOmp(VectorClass& registerStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
@@ -621,6 +576,56 @@ namespace QC {
 			}
 		}
 
+		static inline void ApplyGenericTwoQubitsGateOmp(const VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t ctrlQubitBit, const size_t NrBasisStates)
+		{
+			//const size_t blockSize = TwoQubitOmpLimit / divSchedule;
+			//const size_t NrBlocks = NrBasisStates / blockSize; // it's always a multiple of blockSize, at least two blocks
+			//const auto processor_count = std::min<int>(GetNumberOfThreads(), NrBlocks);
+
+			const size_t notQubitBit = ~qubitBit;
+			const size_t notCtrlQubitBit = ~ctrlQubitBit;
+			const size_t orqubits = qubitBit | ctrlQubitBit;
+
+#pragma omp parallel for 
+			//num_threads(processor_count) schedule(static, blockSize)
+			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 4)
+			{
+				size_t row = (state & ctrlQubitBit ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				size_t m = state & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +                  // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((state & notCtrlQubitBit) | qubitBit) +                     // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+
+				long long int nextState = state + 1;
+				row = (nextState & ctrlQubitBit ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +              // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((nextState & notCtrlQubitBit) | qubitBit) +                 // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
+
+				nextState = state + 1;
+				row = (nextState & ctrlQubitBit ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +              // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((nextState & notCtrlQubitBit) | qubitBit) +                 // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
+
+				nextState = state + 1;
+				row = (nextState & ctrlQubitBit ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit; // ensure it's not computed twice
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(m & notCtrlQubitBit) +              // state & ~ctrlQubitBit & ~qubitBit      : 00
+					gateMatrix(row, 1) * registerStorage((nextState & notCtrlQubitBit) | qubitBit) +                 // state & ~ctrlQubitBit |  qubitBit      : 01
+					gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                                         // state & ~qubitBit     |  ctrlQubitBit  : 10
+					gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
+			}
+		}
 
 		static inline void ApplyThreeQubitsControlledGate(const GateClass& gate, VectorClass& registerStorage, VectorClass& resultsStorage, const MatrixClass& gateMatrix, const size_t qubitBit, const size_t qubitBit2, const size_t ctrlQubitBit, const size_t NrBasisStates, bool& swapStorage)
 		{
