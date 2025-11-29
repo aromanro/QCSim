@@ -655,25 +655,119 @@ namespace QC {
 				const size_t orallqubits = qubitBit | ctrlqubits;
 				const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
 
-				for (size_t state = 0; state < ctrlQubitBit; ++state)
-					resultsStorage(state) = registerStorage(state);
-
-				for (size_t state = ctrlQubitBit; state < NrBasisStates; ++state)
+				for (size_t state = 0; state < NrBasisStates; ++state)
 				{
 					if ((state & ctrlQubitBit) == 0)
-					{
 						resultsStorage(state) = registerStorage(state);
-						continue;
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
+
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
 					}
+					++state;
+					if ((state & ctrlQubitBit) == 0)
+						resultsStorage(state) = registerStorage(state);
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
 
-					const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const size_t m = state & notQubitBit;
-					const size_t m2 = state & notQubitBit2;
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++state;
+					if ((state & ctrlQubitBit) == 0)
+						resultsStorage(state) = registerStorage(state);
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
 
-					resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
-						gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
-						gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
-						gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++state;
+					if ((state & ctrlQubitBit) == 0)
+						resultsStorage(state) = registerStorage(state);
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
+
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++state;
+					if ((state & ctrlQubitBit) == 0)
+						resultsStorage(state) = registerStorage(state);
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
+
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++state;
+					if ((state & ctrlQubitBit) == 0)
+						resultsStorage(state) = registerStorage(state);
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
+
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++state;
+					if ((state & ctrlQubitBit) == 0)
+						resultsStorage(state) = registerStorage(state);
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
+
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++state;
+					if ((state & ctrlQubitBit) == 0)
+						resultsStorage(state) = registerStorage(state);
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
+
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
 				}
 			}
 		}
@@ -875,10 +969,115 @@ namespace QC {
 
 			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
-				const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-				const size_t m = state & notQubitBit;
-				const size_t m2 = state & notQubitBit2;
-				const size_t mnctrlQubitBit = m & notCtrlQubitBit;
+				size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				size_t m = state & notQubitBit;
+				size_t m2 = state & notQubitBit2;
+				size_t mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((state & notCtrlQubitBit) | orqubits) +                      // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+				
+				++state;
+				row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit;
+				m2 = state & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((state & notCtrlQubitBit) | orqubits) +                      // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++state;
+				row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit;
+				m2 = state & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((state & notCtrlQubitBit) | orqubits) +                      // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++state;
+				row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit;
+				m2 = state & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((state & notCtrlQubitBit) | orqubits) +                      // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++state;
+				row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit;
+				m2 = state & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((state & notCtrlQubitBit) | orqubits) +                      // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++state;
+				row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit;
+				m2 = state & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((state & notCtrlQubitBit) | orqubits) +                      // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++state;
+				row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit;
+				m2 = state & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((state & notCtrlQubitBit) | orqubits) +                      // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++state;
+				row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				m = state & notQubitBit;
+				m2 = state & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
 
 				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
 					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
@@ -914,27 +1113,114 @@ namespace QC {
 				const size_t orallqubits = qubitBit | ctrlqubits;
 				const size_t ctrlorqubit2 = ctrlQubitBit | qubitBit;
 
-				for (long long int state = 0; state < static_cast<long long int>(ctrlQubitBit); ++state)
-					resultsStorage(state) = registerStorage(state);
-
 #pragma omp parallel for 
 				//num_threads(processor_count) schedule(static, blockSize)
-				for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
+				for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 8)
 				{
 					if ((state & ctrlQubitBit) == 0)
-					{
 						resultsStorage(state) = registerStorage(state);
-						continue;
+					else
+					{
+						const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+						const size_t m = state & notQubitBit;
+						const size_t m2 = state & notQubitBit2;
+
+						resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
 					}
-
-					const size_t row = 4 | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-					const size_t m = state & notQubitBit;
-					const size_t m2 = state & notQubitBit2;
-
-					resultsStorage(state) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
-						gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
-						gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
-						gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					long long int nextState = state + 1;
+					if ((nextState & ctrlQubitBit) == 0)
+						resultsStorage(nextState) = registerStorage(nextState);
+					else
+					{
+						const size_t row = 4 | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+						const size_t m = nextState & notQubitBit;
+						const size_t m2 = nextState & notQubitBit2;
+						resultsStorage(nextState) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++nextState;
+					if ((nextState & ctrlQubitBit) == 0)
+						resultsStorage(nextState) = registerStorage(nextState);
+					else
+					{
+						const size_t row = 4 | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+						const size_t m = nextState & notQubitBit;
+						const size_t m2 = nextState & notQubitBit2;
+						resultsStorage(nextState) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++nextState;
+					if ((nextState & ctrlQubitBit) == 0)
+						resultsStorage(nextState) = registerStorage(nextState);
+					else
+					{
+						const size_t row = 4 | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+						const size_t m = nextState & notQubitBit;
+						const size_t m2 = nextState & notQubitBit2;
+						resultsStorage(nextState) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++nextState;
+					if ((nextState & ctrlQubitBit) == 0)
+						resultsStorage(nextState) = registerStorage(nextState);
+					else
+					{
+						const size_t row = 4 | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+						const size_t m = nextState & notQubitBit;
+						const size_t m2 = nextState & notQubitBit2;
+						resultsStorage(nextState) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++nextState;
+					if ((nextState & ctrlQubitBit) == 0)
+						resultsStorage(nextState) = registerStorage(nextState);
+					else
+					{
+						const size_t row = 4 | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+						const size_t m = nextState & notQubitBit;
+						const size_t m2 = nextState & notQubitBit2;
+						resultsStorage(nextState) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++nextState;
+					if ((nextState & ctrlQubitBit) == 0)
+						resultsStorage(nextState) = registerStorage(nextState);
+					else
+					{
+						const size_t row = 4 | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+						const size_t m = nextState & notQubitBit;
+						const size_t m2 = nextState & notQubitBit2;
+						resultsStorage(nextState) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
+					++nextState;
+					if ((nextState & ctrlQubitBit) == 0)
+						resultsStorage(nextState) = registerStorage(nextState);
+					else
+					{
+						const size_t row = 4 | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+						const size_t m = nextState & notQubitBit;
+						const size_t m2 = nextState & notQubitBit2;
+						resultsStorage(nextState) = gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +	  // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+							gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+							gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+							gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+					}
 				}
 			}
 		}
@@ -1155,12 +1441,12 @@ namespace QC {
 
 #pragma omp parallel for 
 			//num_threads(processor_count) schedule(static, blockSize)
-			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 8)
 			{
-				const size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
-				const size_t m = state & notQubitBit;
-				const size_t m2 = state & notQubitBit2;
-				const size_t mnctrlQubitBit = m & notCtrlQubitBit;
+				size_t row = (state & ctrlQubitBit ? 4 : 0) | (state & qubitBit2 ? 2 : 0) | (state & qubitBit ? 1 : 0);
+				size_t m = state & notQubitBit;
+				size_t m2 = state & notQubitBit2;
+				size_t mnctrlQubitBit = m & notCtrlQubitBit;
 
 				resultsStorage(state) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
 					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
@@ -1170,6 +1456,111 @@ namespace QC {
 					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
 					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
 					gateMatrix(row, 7) * registerStorage(state | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				long long int nextState = state + 1;
+				row = (nextState & ctrlQubitBit ? 4 : 0) | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit;
+				m2 = nextState & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((nextState & notCtrlQubitBit) | orqubits) +                  // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++nextState;
+				row = (nextState & ctrlQubitBit ? 4 : 0) | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit;
+				m2 = nextState & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((nextState & notCtrlQubitBit) | orqubits) +                  // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++nextState;
+				row = (nextState & ctrlQubitBit ? 4 : 0) | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit;
+				m2 = nextState & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((nextState & notCtrlQubitBit) | orqubits) +                  // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++nextState;
+				row = (nextState & ctrlQubitBit ? 4 : 0) | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit;
+				m2 = nextState & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((nextState & notCtrlQubitBit) | orqubits) +                  // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++nextState;
+				row = (nextState & ctrlQubitBit ? 4 : 0) | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit;
+				m2 = nextState & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((nextState & notCtrlQubitBit) | orqubits) +                  // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++nextState;
+				row = (nextState & ctrlQubitBit ? 4 : 0) | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit;
+				m2 = nextState & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((nextState & notCtrlQubitBit) | orqubits) +                  // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
+
+				++nextState;
+				row = (nextState & ctrlQubitBit ? 4 : 0) | (nextState & qubitBit2 ? 2 : 0) | (nextState & qubitBit ? 1 : 0);
+				m = nextState & notQubitBit;
+				m2 = nextState & notQubitBit2;
+				mnctrlQubitBit = m & notCtrlQubitBit;
+
+				resultsStorage(nextState) = gateMatrix(row, 0) * registerStorage(mnctrlQubitBit & notQubitBit2) +         // state & ~ctrlQubitBit & ~qubitBit2    & ~qubitBit      : 000
+					gateMatrix(row, 1) * registerStorage((m2 & notCtrlQubitBit) | qubitBit) +				          // state & ~ctrlQubitBit & ~qubitBit2    |  qubitBit      : 001
+					gateMatrix(row, 2) * registerStorage(mnctrlQubitBit | qubitBit2) +					              // state & ~ctrlQubitBit & ~qubitBit     |  qubitBit2     : 010
+					gateMatrix(row, 3) * registerStorage((nextState & notCtrlQubitBit) | orqubits) +                  // state & ~ctrlQubitBit |  qubitBit2    |  qubitBit      : 011
+					gateMatrix(row, 4) * registerStorage((m & notQubitBit2) | ctrlQubitBit) +				          // state & ~qubitBit2    & ~qubitBit     |  ctrlQubitBit  : 100
+					gateMatrix(row, 5) * registerStorage(m2 | ctrlorqubit2) +				                          // state & ~qubitBit2    |  ctrlQubitBit |  qubitBit      : 101
+					gateMatrix(row, 6) * registerStorage(m | ctrlqubits) +								              // state & ~qubitBit     |  ctrlQubitBit |  qubitBit2     : 110
+					gateMatrix(row, 7) * registerStorage(nextState | orallqubits);                                        // state |  ctrlQubitBit |  qubitBit2    |  qubitBit      : 111
 			}
 		}
 
