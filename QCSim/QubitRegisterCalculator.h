@@ -333,8 +333,26 @@ namespace QC {
 
 			swapStorage = false;
 
-			for (size_t state = std::min(qubitBit, ctrlQubitBit); state < NrBasisStates; ++state)
+			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
+				if ((state & qubitBit) == 0 && (state & ctrlQubitBit) != 0)
+				{
+					const size_t swapstate = state ^ orqubits;
+					std::swap(registerStorage(state), registerStorage(swapstate));
+				}
+				++state;
+				if ((state & qubitBit) == 0 && (state & ctrlQubitBit) != 0)
+				{
+					const size_t swapstate = state ^ orqubits;
+					std::swap(registerStorage(state), registerStorage(swapstate));
+				}
+				++state;
+				if ((state & qubitBit) == 0 && (state & ctrlQubitBit) != 0)
+				{
+					const size_t swapstate = state ^ orqubits;
+					std::swap(registerStorage(state), registerStorage(swapstate));
+				}
+				++state;
 				if ((state & qubitBit) == 0 && (state & ctrlQubitBit) != 0)
 				{
 					const size_t swapstate = state ^ orqubits;
@@ -356,12 +374,30 @@ namespace QC {
 			// TODO: is it worth parallelizing the swap gate?
 #pragma omp parallel for 
 			//num_threads(processor_count) schedule(static, blockSize)
-			for (long long int state = std::min(qubitBit, ctrlQubitBit); state < static_cast<long long int>(NrBasisStates); state += 2)
+			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 4)
 			{
 				if ((state & qubitBit) == 0 && (state & ctrlQubitBit) != 0)
 				{
 					const size_t swapstate = state ^ orqubits;
 					std::swap(registerStorage(state), registerStorage(swapstate));
+				}
+				long long int nextState = state + 1;
+				if ((nextState & qubitBit) == 0 && (nextState & ctrlQubitBit) != 0)
+				{
+					const size_t swapstate = nextState ^ orqubits;
+					std::swap(registerStorage(nextState), registerStorage(swapstate));
+				}
+				++nextState;
+				if ((nextState & qubitBit) == 0 && (nextState & ctrlQubitBit) != 0)
+				{
+					const size_t swapstate = nextState ^ orqubits;
+					std::swap(registerStorage(nextState), registerStorage(swapstate));
+				}
+				++nextState;
+				if ((nextState & qubitBit) == 0 && (nextState & ctrlQubitBit) != 0)
+				{
+					const size_t swapstate = nextState ^ orqubits;
+					std::swap(registerStorage(nextState), registerStorage(swapstate));
 				}
 			}
 		}
@@ -370,8 +406,17 @@ namespace QC {
 		{
 			swapStorage = false;
 
-			for (size_t state = ctrlQubitBit; state < NrBasisStates; ++state)
+			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
+				if ((state & ctrlQubitBit) != 0)
+					registerStorage(state) *= state & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
+				++state;
+				if ((state & ctrlQubitBit) != 0)
+					registerStorage(state) *= state & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
+				++state;
+				if ((state & ctrlQubitBit) != 0)
+					registerStorage(state) *= state & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
+				++state;
 				if ((state & ctrlQubitBit) != 0)
 					registerStorage(state) *= state & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
 			}
@@ -381,11 +426,23 @@ namespace QC {
 		{
 			const size_t notQubitBit = ~qubitBit;
 
-			for (size_t state = 0; state < ctrlQubitBit; ++state)
-				resultsStorage(state) = registerStorage(state);
-
-			for (size_t state = ctrlQubitBit; state < NrBasisStates; ++state)
+			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
+				if ((state & ctrlQubitBit) == 0)
+					resultsStorage(state) = registerStorage(state);
+				else
+					resultsStorage(state) = state & qubitBit ? gateMatrix(3, 2) * registerStorage(state & notQubitBit) : gateMatrix(2, 3) * registerStorage(state | qubitBit);
+				++state;
+				if ((state & ctrlQubitBit) == 0)
+					resultsStorage(state) = registerStorage(state);
+				else
+					resultsStorage(state) = state & qubitBit ? gateMatrix(3, 2) * registerStorage(state & notQubitBit) : gateMatrix(2, 3) * registerStorage(state | qubitBit);
+				++state;
+				if ((state & ctrlQubitBit) == 0)
+					resultsStorage(state) = registerStorage(state);
+				else
+					resultsStorage(state) = state & qubitBit ? gateMatrix(3, 2) * registerStorage(state & notQubitBit) : gateMatrix(2, 3) * registerStorage(state | qubitBit);
+				++state;
 				if ((state & ctrlQubitBit) == 0)
 					resultsStorage(state) = registerStorage(state);
 				else
@@ -398,11 +455,41 @@ namespace QC {
 			const size_t notQubitBit = ~qubitBit;
 			const size_t orqubits = qubitBit | ctrlQubitBit;
 
-			for (size_t state = 0; state < ctrlQubitBit; ++state)
-				resultsStorage(state) = registerStorage(state);
-
-			for (size_t state = ctrlQubitBit; state < NrBasisStates; ++state)
+			for (size_t state = 0; state < NrBasisStates; ++state)
 			{
+				if ((state & ctrlQubitBit) == 0)
+					resultsStorage(state) = registerStorage(state);
+				else
+				{
+					const size_t row = 2 | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+
+					resultsStorage(state) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                     // state & ~qubitBit     |  ctrlQubitBit  : 10
+						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+				}
+				++state;
+				if ((state & ctrlQubitBit) == 0)
+					resultsStorage(state) = registerStorage(state);
+				else
+				{
+					const size_t row = 2 | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+
+					resultsStorage(state) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                     // state & ~qubitBit     |  ctrlQubitBit  : 10
+						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+				}
+				++state;
+				if ((state & ctrlQubitBit) == 0)
+					resultsStorage(state) = registerStorage(state);
+				else
+				{
+					const size_t row = 2 | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+
+					resultsStorage(state) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                     // state & ~qubitBit     |  ctrlQubitBit  : 10
+						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+				}
+				++state;
 				if ((state & ctrlQubitBit) == 0)
 					resultsStorage(state) = registerStorage(state);
 				else
@@ -427,12 +514,19 @@ namespace QC {
 
 #pragma omp parallel for 
 			//num_threads(processor_count) schedule(static, blockSize)
-			for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 4)
 			{
-				if ((state & ctrlQubitBit) == 0)
-					continue;
-
-				registerStorage(state) *= state & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
+				if ((state & ctrlQubitBit) != 0)
+					registerStorage(state) *= state & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
+				long long int nextState = state + 1;
+				if ((nextState & ctrlQubitBit) != 0)
+					registerStorage(nextState) *= nextState & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
+				++nextState;
+				if ((nextState & ctrlQubitBit) != 0)
+					registerStorage(nextState) *= nextState & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
+				++nextState;
+				if ((nextState & ctrlQubitBit) != 0)
+					registerStorage(nextState) *= nextState & qubitBit ? gateMatrix(3, 3) : gateMatrix(2, 2);
 			}
 		}
 
@@ -444,20 +538,30 @@ namespace QC {
 
 			const size_t notQubitBit = ~qubitBit;
 
-			for (size_t state = 0; state < ctrlQubitBit; ++state)
-				resultsStorage(state) = registerStorage(state);
-
 #pragma omp parallel for 
 			//num_threads(processor_count) schedule(static, blockSize)
-			for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 4)
 			{
 				if ((state & ctrlQubitBit) == 0)
-				{
 					resultsStorage(state) = registerStorage(state);
-					continue;
-				}
+				else
+					resultsStorage(state) = state & qubitBit ? gateMatrix(3, 2) * registerStorage(state & notQubitBit) : gateMatrix(2, 3) * registerStorage(state | qubitBit);
 
-				resultsStorage(state) = state & qubitBit ? gateMatrix(3, 2) * registerStorage(state & notQubitBit) : gateMatrix(2, 3) * registerStorage(state | qubitBit);
+				long long int nextState = state + 1;
+				if ((nextState & ctrlQubitBit) == 0)
+					resultsStorage(nextState) = registerStorage(nextState);
+				else
+					resultsStorage(nextState) = nextState & qubitBit ? gateMatrix(3, 2) * registerStorage(nextState & notQubitBit) : gateMatrix(2, 3) * registerStorage(nextState | qubitBit);
+				++nextState;
+				if ((nextState & ctrlQubitBit) == 0)
+					resultsStorage(nextState) = registerStorage(nextState);
+				else
+					resultsStorage(nextState) = nextState & qubitBit ? gateMatrix(3, 2) * registerStorage(nextState & notQubitBit) : gateMatrix(2, 3) * registerStorage(nextState | qubitBit);
+				++nextState;
+				if ((nextState & ctrlQubitBit) == 0)
+					resultsStorage(nextState) = registerStorage(nextState);
+				else
+					resultsStorage(nextState) = nextState & qubitBit ? gateMatrix(3, 2) * registerStorage(nextState & notQubitBit) : gateMatrix(2, 3) * registerStorage(nextState | qubitBit);
 			}
 		}
 
@@ -470,24 +574,50 @@ namespace QC {
 			const size_t notQubitBit = ~qubitBit;
 			const size_t orqubits = qubitBit | ctrlQubitBit;
 
-			for (size_t state = 0; state < ctrlQubitBit; ++state)
-				resultsStorage(state) = registerStorage(state);
-
 #pragma omp parallel for 
 			//num_threads(processor_count) schedule(static, blockSize)
-			for (long long int state = ctrlQubitBit; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long int state = 0; state < static_cast<long long int>(NrBasisStates); state += 4)
 			{
 				if ((state & ctrlQubitBit) == 0)
-				{
 					resultsStorage(state) = registerStorage(state);
-					continue;
+				else
+				{
+					const size_t row = 2 | (state & qubitBit ? 1 : 0);
+					const size_t m = state & notQubitBit;
+
+					resultsStorage(state) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                     // state & ~qubitBit     |  ctrlQubitBit  : 10
+						gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
 				}
-
-				const size_t row = 2 | (state & qubitBit ? 1 : 0);
-				const size_t m = state & notQubitBit;
-
-				resultsStorage(state) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                     // state & ~qubitBit     |  ctrlQubitBit  : 10
-					gateMatrix(row, 3) * registerStorage(state | orqubits);                                          // state |  ctrlQubitBit |  qubitBit      : 11
+				long long int nextState = state + 1;
+				if ((nextState & ctrlQubitBit) == 0)
+					resultsStorage(nextState) = registerStorage(nextState);
+				else
+				{
+					const size_t row = 2 | (nextState & qubitBit ? 1 : 0);
+					const size_t m = nextState & notQubitBit;
+					resultsStorage(nextState) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                 // state & ~qubitBit     |  ctrlQubitBit  : 10
+						gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
+				}
+				++nextState;
+				if ((nextState & ctrlQubitBit) == 0)
+					resultsStorage(nextState) = registerStorage(nextState);
+				else
+				{
+					const size_t row = 2 | (nextState & qubitBit ? 1 : 0);
+					const size_t m = nextState & notQubitBit;
+					resultsStorage(nextState) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                 // state & ~qubitBit     |  ctrlQubitBit  : 10
+						gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
+				}
+				++nextState;
+				if ((nextState & ctrlQubitBit) == 0)
+					resultsStorage(nextState) = registerStorage(nextState);
+				else
+				{
+					const size_t row = 2 | (nextState & qubitBit ? 1 : 0);
+					const size_t m = nextState & notQubitBit;
+					resultsStorage(nextState) = gateMatrix(row, 2) * registerStorage(m | ctrlQubitBit) +                 // state & ~qubitBit     |  ctrlQubitBit  : 10
+						gateMatrix(row, 3) * registerStorage(nextState | orqubits);                                      // state |  ctrlQubitBit |  qubitBit      : 11
+				}
 			}
 		}
 
