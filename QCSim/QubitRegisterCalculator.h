@@ -1586,6 +1586,13 @@ namespace QC {
 					pstate = i;
 					break;
 				}
+				++i;
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					pstate = i;
+					break;
+				}
 			}
 
 			size_t measuredState = 0ULL;
@@ -1607,7 +1614,11 @@ namespace QC {
 
 			// collapse
 			for (size_t state = 0; state < NrBasisStates; ++state)
+			{
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
+				++state;
+				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
+			}
 
 			return measuredState;
 		}
@@ -1625,6 +1636,13 @@ namespace QC {
 			size_t pstate = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					pstate = i;
+					break;
+				}
+				++i;
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
@@ -1656,8 +1674,12 @@ namespace QC {
 			// collapse
 #pragma omp parallel for 
 			//num_threads(processor_count) schedule(static, blockSize)
-			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); state += 2)
+			{
 				registerStorage[state] *= ((state & measuredQubitMask) == measuredStateMask) ? norm : 0;
+				long long int nextState = state + 1;
+				registerStorage[nextState] *= ((nextState & measuredQubitMask) == measuredStateMask) ? norm : 0;
+			}
 
 			return measuredState;
 		}
@@ -1671,6 +1693,13 @@ namespace QC {
 			size_t pstate = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					pstate = i;
+					break;
+				}
+				++i;
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
@@ -1735,6 +1764,13 @@ namespace QC {
 					measuredState = i;
 					break;
 				}
+				++i;
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					measuredState = i;
+					break;
+				}
 			}
 			measuredState &= measuredPartMask;
 
@@ -1749,7 +1785,11 @@ namespace QC {
 
 			// collapse
 			for (size_t state = 0; state < NrBasisStates; ++state)
+			{
 				registerStorage[state] *= ((state & measuredPartMask) == measuredState) ? norm : 0;
+				++state;
+				registerStorage[state] *= ((state & measuredPartMask) == measuredState) ? norm : 0;
+			}
 
 			return measuredState >> firstQubit;
 		}
@@ -1775,6 +1815,13 @@ namespace QC {
 					measuredState = i;
 					break;
 				}
+				++i;
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					measuredState = i;
+					break;
+				}
 			}
 			measuredState &= measuredPartMask;
 
@@ -1793,8 +1840,12 @@ namespace QC {
 			// collapse
 #pragma omp parallel for 
 			//num_threads(processor_count) schedule(static, blockSize)
-			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); ++state)
+			for (long long state = 0; state < static_cast<long long int>(NrBasisStates); state += 2)
+			{
 				registerStorage[state] *= ((state & measuredPartMask) == measuredState) ? norm : 0;
+				long long int nextState = state + 1;
+				registerStorage[nextState] *= ((nextState & measuredPartMask) == measuredState) ? norm : 0;
+			}
 
 			return measuredState >> firstQubit;
 		}
@@ -1810,6 +1861,13 @@ namespace QC {
 			size_t measuredState = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					measuredState = i;
+					break;
+				}
+				++i;
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{

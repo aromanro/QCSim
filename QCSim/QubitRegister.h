@@ -180,6 +180,13 @@ namespace QC {
 					state = i;
 					break;
 				}
+				++i;
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					state = i;
+					break;
+				}
 			}
 
 			setToBasisState(state); // collapse
@@ -245,6 +252,14 @@ namespace QC {
 					probabilities.resize(i + 1);
 					break;
 				}
+				++i;
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+				if (accum > 1.0 - std::numeric_limits<double>::epsilon())
+				{
+					probabilities.resize(i + 1);
+					break;
+				}
 			}
 
 			for (size_t shot = 0; shot < nrTimes; ++shot)
@@ -279,6 +294,14 @@ namespace QC {
 			double accum = 0;
 			for (size_t i = 0; i < registerStorage.size(); ++i)
 			{
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+				if (accum > 1.0 - std::numeric_limits<double>::epsilon())
+				{
+					probabilities.resize(i + 1);
+					break;
+				}
+				++i;
 				accum += std::norm(registerStorage[i]);
 				probabilities[i] = accum;
 				if (accum > 1.0 - std::numeric_limits<double>::epsilon())
@@ -331,6 +354,14 @@ namespace QC {
 					probabilities.resize(i + 1);
 					break;
 				}
+				++i;
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+				if (accum > 1.0 - std::numeric_limits<double>::epsilon())
+				{
+					probabilities.resize(i + 1);
+					break;
+				}
 			}
 
 			for (size_t shot = 0; shot < nrTimes; ++shot)
@@ -369,6 +400,14 @@ namespace QC {
 			double accum = 0;
 			for (size_t i = 0; i < registerStorage.size(); ++i)
 			{
+				accum += std::norm(registerStorage[i]);
+				probabilities[i] = accum;
+				if (accum > 1.0 - std::numeric_limits<double>::epsilon())
+				{
+					probabilities.resize(i + 1);
+					break;
+				}
+				++i;
 				accum += std::norm(registerStorage[i]);
 				probabilities[i] = accum;
 				if (accum > 1.0 - std::numeric_limits<double>::epsilon())
@@ -576,6 +615,13 @@ namespace QC {
 			size_t state = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
 			{
+				accum += std::norm(registerStorage(i));
+				if (prob <= accum)
+				{
+					state = i;
+					break;
+				}
+				++i;
 				accum += std::norm(registerStorage(i));
 				if (prob <= accum)
 				{
