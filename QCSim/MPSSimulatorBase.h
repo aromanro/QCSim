@@ -343,16 +343,15 @@ namespace QC {
 				return res;
 			}
 
-			double GetProbabilityMiddleQubit(IndexType qubit, bool zeroVal = true) const
+			double GetProbabilityFirstQubit(IndexType qubit, bool zeroVal = true) const
 			{
 				double res = 0;
 				const size_t physIndex = zeroVal ? 0 : 1;
 
-				const IndexType qbit1 = qubit - 1;
 				for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
-						res += std::norm(lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
-				
+					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
+						res += std::norm(lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
+
 				return res;
 			}
 
@@ -369,14 +368,15 @@ namespace QC {
 				return res;
 			}
 
-			double GetProbabilityFirstQubit(IndexType qubit, bool zeroVal = true) const
+			double GetProbabilityMiddleQubit(IndexType qubit, bool zeroVal = true) const
 			{
 				double res = 0;
 				const size_t physIndex = zeroVal ? 0 : 1;
 
+				const IndexType qbit1 = qubit - 1;
 				for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
-						res += std::norm(lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
+					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
+						res += std::norm(lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
 
 				return res;
 			}

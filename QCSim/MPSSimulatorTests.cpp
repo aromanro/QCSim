@@ -25,17 +25,17 @@ void FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 	gates.emplace_back(std::make_shared<QC::Gates::SDGGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::TGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::TDGGate<>>());
-	gates.emplace_back(std::make_shared<QC::Gates::PhaseShiftGate<>>(0.5 * M_PI));
+	gates.emplace_back(std::make_shared<QC::Gates::PhaseShiftGate<>>(0.38 * M_PI));
 	gates.emplace_back(std::make_shared<QC::Gates::PauliXGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::PauliYGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::PauliZGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTDagGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::SplitterGate<>>());
-	gates.emplace_back(std::make_shared<QC::Gates::RxGate<>>(M_PI / 4));
-	gates.emplace_back(std::make_shared<QC::Gates::RyGate<>>(M_PI / 4));
-	gates.emplace_back(std::make_shared<QC::Gates::RzGate<>>(M_PI / 4));
-	gates.emplace_back(std::make_shared<QC::Gates::UGate<>>(M_PI / 4, M_PI / 8));
+	gates.emplace_back(std::make_shared<QC::Gates::RxGate<>>(M_PI / 3));
+	gates.emplace_back(std::make_shared<QC::Gates::RyGate<>>(M_PI / 7));
+	gates.emplace_back(std::make_shared<QC::Gates::RzGate<>>(M_PI / 5));
+	gates.emplace_back(std::make_shared<QC::Gates::UGate<>>(M_PI / 3, M_PI / 5));
 }
 
 void FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
@@ -51,10 +51,10 @@ void FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledSquareRootNOTDagGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledPhaseGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledPhaseShiftGate<>>(M_PI / 3));
-	gates.emplace_back(std::make_shared<QC::Gates::ControlledUGate<>>(M_PI / 4, M_PI / 3));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledUGate<>>(M_PI / 3, M_PI / 7));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRxGate<>>(M_PI / 5));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRyGate<>>(M_PI / 3));
-	gates.emplace_back(std::make_shared<QC::Gates::ControlledRzGate<>>(M_PI / 4));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledRzGate<>>(M_PI / 7));
 }
 
 bool OneQubitGatesTest()
@@ -773,6 +773,57 @@ bool OneAndTwoQubitGatesTestMappedRandomAmplitudes()
 	return true;
 }
 
+
+bool CheckQubitsProbability()
+{
+	std::cout << "\nMPS swapping/mapped simulator qubits probability test for both one and two qubit gates" << std::endl;
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGates(gates);
+	FillTwoQubitGates(gates);
+
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		for (int t = 0; t < 10; ++t)
+		{
+#ifdef _DEBUG
+			std::cout << "\n\n\nTest no: " << t << " for " << nrQubits << " qubits" << std::endl << std::endl << std::endl;
+#endif
+
+			QC::TensorNetworks::MPSSimulator mps(nrQubits);
+			QC::QubitRegister reg(nrQubits);
+
+			const auto circ = GenerateRandomCircuitWithGatesNoAdjacent(gates, 50, 150, nrQubits);
+			for (const auto& gate : circ)
+			{
+				mps.ApplyGate(*gate);
+				reg.ApplyGate(*gate);
+			}
+
+			// check qubits probabilities
+			for (int q = 0; q < nrQubits; ++q)
+			{
+				const auto regProb = reg.GetQubitProbability(q);
+				const auto mpsProb = mps.GetProbability(q, false);
+				if (!approxEqual(regProb, mpsProb, 1E-5))
+				{
+					std::cout << "Qubit " << q << " probability test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
+					std::cout << "Probability for the qubit in statevector: " << regProb << " vs mps: " << mpsProb << std::endl;
+					return false;
+				}
+			}
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
 bool StateSimulationTest()
 {
 	// for longer tests:
@@ -786,7 +837,7 @@ bool StateSimulationTest()
 
 	return /*OneQubitGatesTest() && OneAndTwoQubitGatesTest() &&
 		TestMeasurementsWithOneQubitGatesCircuits() && TestMeasurementsWithOneAndTwoQubitGatesCircuits() &&*/
-		OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits();
+		OneAndTwoQubitGatesTestMappedRandomAmplitudes() && OneAndTwoQubitGatesTestMapped() && TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits() && CheckQubitsProbability();
 }
 
 bool matchRandomExpectationValues(QC::QubitRegister<>& reg, QC::TensorNetworks::MPSSimulator& mps)
