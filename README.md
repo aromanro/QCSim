@@ -3,7 +3,7 @@ Quantum computation simulator
 
 Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator and a Clifford gates simulator (using the stabilizer formalism).
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://www.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=aromanro/QCSim&amp;utm_campaign=Badge_Grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://app.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)
 
 [![Build and test on Ubuntu](https://github.com/aromanro/QCSim/actions/workflows/cmake-single-platform.yml/badge.svg)](https://github.com/aromanro/QCSim/actions/workflows/cmake-single-platform.yml)
