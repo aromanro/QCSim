@@ -264,6 +264,8 @@ namespace QC
 
 			void setState(const std::shared_ptr<MPSSimulatorStateInterface>& state) override
 			{
+				if (!state) return;
+
 				auto baseState = std::static_pointer_cast<MPSSimulatorBaseState>(state);
 				impl.setState(baseState);
 
