@@ -604,13 +604,13 @@ namespace QC {
 
 		void RestoreState()
 		{
-			if (savedStateStorage.empty()) return;
+			if (savedStateStorage.size() == 0) return;
 			registerStorage = savedStateStorage;
 		}
 
 		void RestoreStateDestructive()
 		{
-			if (savedStateStorage.empty()) return;
+			if (savedStateStorage.size() == 0) return;
 			registerStorage.swap(savedStateStorage);
 			savedStateStorage.resize(0);
 		}
