@@ -25,8 +25,8 @@ namespace QC {
 
 			if (addseed == 0)
 			{
-				std::random_device rd;
-				addseed = rd();
+				std::random_device rdl;
+				addseed = rdl();
 			}
 
 			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
@@ -599,12 +599,20 @@ namespace QC {
 
 		void SaveState()
 		{
-			savedSatateStorage = registerStorage;
+			savedStateStorage = registerStorage;
 		}
 
 		void RestoreState()
 		{
-			registerStorage = savedSatateStorage;
+			if (savedStateStorage.empty()) return;
+			registerStorage = savedStateStorage;
+		}
+
+		void RestoreStateDestructive()
+		{
+			if (savedStateStorage.empty()) return;
+			registerStorage.swap(savedStateStorage);
+			savedStateStorage.resize(0);
 		}
 
 		// the following ones should be used for 'repeated measurements' that avoid reexecuting the circuit each time
@@ -658,7 +666,7 @@ namespace QC {
 			qr->NrBasisStates = NrBasisStates;
 			qr->registerStorage = registerStorage;
 			qr->resultsStorage = resultsStorage;
-			qr->savedSatateStorage = savedSatateStorage;
+			qr->savedStateStorage = savedStateStorage;
 			qr->computeGates = computeGates;
 			qr->recordGates = recordGates;
 			
@@ -710,7 +718,7 @@ namespace QC {
 		VectorClass registerStorage;
 		VectorClass resultsStorage;
 
-		VectorClass savedSatateStorage;
+		VectorClass savedStateStorage;
 
 		std::mt19937_64 rng;
 		std::uniform_real_distribution<double> uniformZeroOne;

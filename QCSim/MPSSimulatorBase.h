@@ -261,9 +261,20 @@ namespace QC {
 
 			void setState(const std::shared_ptr<MPSSimulatorStateInterface>& state) override
 			{
+				if (!state) return;
+
 				auto stateRef = std::static_pointer_cast<MPSSimulatorBaseState>(state);
 				lambdas = stateRef->lambdas;
 				gammas = stateRef->gammas;
+			}
+
+			void setStateDestructive(std::shared_ptr<MPSSimulatorStateInterface>& state) override
+			{
+				if (!state) return;
+
+				auto stateRef = std::static_pointer_cast<MPSSimulatorBaseState>(state);
+				lambdas.swap(stateRef->lambdas);
+				gammas.swap(stateRef->gammas);
 			}
 
 			void print() const override

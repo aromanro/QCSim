@@ -254,6 +254,8 @@ namespace QC
 			std::shared_ptr<MPSSimulatorStateInterface> getState() const override
 			{
 				auto baseState = std::static_pointer_cast<MPSSimulatorBaseState>(impl.getState());
+				if (!baseState) return nullptr;
+
 				auto state = std::make_shared<MPSSimulatorState>();
 				state->gammas.swap(baseState->gammas);
 				state->lambdas.swap(baseState->lambdas);
@@ -274,6 +276,18 @@ namespace QC
 				qubitsMapInv = simState->qubitsMapInv;
 			}
 
+			void setStateDestructive(std::shared_ptr<MPSSimulatorStateInterface>& state) override
+			{
+				if (!state) return;
+				impl.setStateDestructive(state);
+
+				auto simState = std::static_pointer_cast<MPSSimulatorState>(state);
+				qubitsMap.swap(simState->qubitsMap);
+				qubitsMapInv.swap(simState->qubitsMapInv);
+				
+				state.reset();
+			}
+
 			void SaveState()
 			{
 				savedState = getState();
@@ -282,6 +296,17 @@ namespace QC
 			void RestoreState()
 			{
 				setState(savedState);
+			}
+
+			void RestoreStateDestructive()
+			{
+				if (!savedState) return;
+				impl.setStateDestructive(savedState);
+
+				auto simState = std::static_pointer_cast<MPSSimulatorState>(savedState);
+				qubitsMap = simState->qubitsMap;
+				qubitsMapInv = simState->qubitsMapInv;
+				savedState.reset();
 			}
 
 			std::unique_ptr<MPSSimulator> Clone() const
