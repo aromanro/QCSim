@@ -36,7 +36,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_1d(n, src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_1d(static_cast<int>(n), src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
 		}
@@ -45,7 +45,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_1d(n, src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_1d(static_cast<int>(n), src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
 		}
@@ -55,7 +55,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_r2c_1d(n, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_r2c_1d(static_cast<int>(n), src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_r2c(plan, src, dst);
 		}
@@ -65,7 +65,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_c2r_1d(n, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_c2r_1d(static_cast<int>(n), src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_c2r(plan, src, dst);
 		}
@@ -77,7 +77,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_2d(n0, n1, src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_2d(static_cast<int>(n0), static_cast<int>(n1), src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
 		}
@@ -87,7 +87,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_2d(n0, n1, src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_2d(static_cast<int>(n0), static_cast<int>(n1), src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
 		}
@@ -97,7 +97,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_r2c_2d(n0, n1, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_r2c_2d(static_cast<int>(n0), static_cast<int>(n1), src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_r2c(plan, src, dst);
 		}
@@ -107,7 +107,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_c2r_2d(n0, n1, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_c2r_2d(static_cast<int>(n0), static_cast<int>(n1), src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_c2r(plan, src, dst);
 		}
@@ -119,7 +119,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_3d(n0, n1, n2, src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_3d(static_cast<int>(n0), static_cast<int>(n1), static_cast<int>(n2), src, dst, FFTW_FORWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
 		}
@@ -129,7 +129,7 @@ namespace Fourier {
 			if (!plan) 
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_3d(n0, n1, n2, src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_3d(static_cast<int>(n0), static_cast<int>(n1), static_cast<int>(n2), src, dst, FFTW_BACKWARD, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft(plan, src, dst);
 		}
@@ -139,7 +139,7 @@ namespace Fourier {
 			if (!plan) 
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_r2c_3d(n0, n1, n2, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_r2c_3d(static_cast<int>(n0), static_cast<int>(n1), static_cast<int>(n2), src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_r2c(plan, src, dst);
 		}
@@ -149,7 +149,7 @@ namespace Fourier {
 			if (!plan)
 			{
 				std::lock_guard lock(planMutex);
-				plan = fftw_plan_dft_c2r_3d(n0, n1, n2, src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+				plan = fftw_plan_dft_c2r_3d(static_cast<int>(n0), static_cast<int>(n1), static_cast<int>(n2), src, dst, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 			}
 			fftw_execute_dft_c2r(plan, src, dst);
 		}

@@ -44,7 +44,7 @@ namespace Adders {
 			for (int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
 			{
 				double phase = M_PI;
-				for (int cbit = qbit - n; cbit >= 0; --cbit)
+				for (int cbit = qbit - static_cast<int>(n); cbit >= 0; --cbit)
 				{
 					fourier.cPhaseShift.SetPhaseShift(phase);
 					BaseClass::ApplyGate(fourier.cPhaseShift, qbit, cbit);
@@ -93,7 +93,7 @@ namespace Adders {
 
 			// the carry qubit
 			double phase = M_PI_2;
-			for (int cbit = n - 1; cbit >= 0; --cbit)
+			for (int cbit = static_cast<int>(n) - 1; cbit >= 0; --cbit)
 			{
 				fourier.cPhaseShift.SetPhaseShift(phase);
 				BaseClass::ApplyGate(fourier.cPhaseShift, 2 * n, cbit);
@@ -104,7 +104,7 @@ namespace Adders {
 			for (int qbit = static_cast<int>(n); qbit < static_cast<int>(2 * n); ++qbit)
 			{
 				phase = M_PI;
-				for (int cbit = qbit - n; cbit >= 0; --cbit)
+				for (int cbit = qbit - static_cast<int>(n); cbit >= 0; --cbit)
 				{
 					fourier.cPhaseShift.SetPhaseShift(phase);
 					BaseClass::ApplyGate(fourier.cPhaseShift, qbit, cbit);

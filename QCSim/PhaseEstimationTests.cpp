@@ -47,12 +47,12 @@ bool PhaseEstimationTestsNoTesorProduct()
 				prevMx = mx;
 				prevCnt = cnt;
 
-				mx = m.first;
+				mx = static_cast<int>(m.first);
 				cnt = m.second;
 			}
 			else if (m.second > prevCnt)
 			{
-				prevMx = m.first;
+				prevMx = static_cast<int>(m.first);
 				prevCnt = m.second;
 			}
 		}
@@ -107,12 +107,12 @@ bool PhaseEstimationTests()
 				prevMx = mx;
 				prevCnt = cnt;
 
-				mx = m.first;
+				mx = static_cast<int>(m.first);
 				cnt = m.second;
 			}
 			else if (m.second > prevCnt)
 			{
-				prevMx = m.first;
+				prevMx = static_cast<int>(m.first);
 				prevCnt = m.second;
 			}
 		}

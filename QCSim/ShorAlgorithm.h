@@ -148,14 +148,14 @@ namespace Shor {
 
 			std::random_device rdev;
 			std::mt19937 genr(rdev());
-			std::uniform_int_distribution<> dist(2, Number - 1);
+			std::uniform_int_distribution<> dist(2ULL, static_cast<unsigned long long>(Number) - 1ULL);
 
 			// well, this probably should be more optimized, but it seems to work
 			for (size_t t = 0; t < numAttempts; ++t)
 			{
 				const int a = dist(genr);
 
-				const size_t g = gcd(Number, a);
+				const size_t g = gcd(static_cast<int>(Number), a);
 				if (g > 1)
 				{
 					//continue;
@@ -181,22 +181,22 @@ namespace Shor {
 				// p is guessed from here using continued fractions
 				std::vector<int> nums;
 				std::vector<int> divs;
-				getFractions(continuedFraction(val, fx.getFunctionStartQubit()), nums, divs);
+				getFractions(continuedFraction(val, static_cast<int>(fx.getFunctionStartQubit())), nums, divs);
 
 				for (size_t i = 1; i < divs.size(); ++i) // skip first as it's for the integer part
 				{
-					size_t p = divs[i];
+					int p = divs[i];
 					if (p % 2) p *= 2;
 					while (p < Number)
 					{
 						if (fx.mod(static_cast<size_t>(pow(fx.getParam(), p))) == 1)
 						{
-							const size_t v = static_cast<size_t>(pow(fx.getParam(), p / 2));
-							const size_t m = fx.mod(v);
+							const int v = static_cast<int>(pow(fx.getParam(), p / 2));
+							const int m = static_cast<int>(fx.mod(v));
 							if (m != 1 && m != Number - 1)
 							{
-								p1 = gcd(m - 1, Number);
-								p2 = gcd(m + 1, Number);
+								p1 = gcd(m - 1, static_cast<int>(Number));
+								p2 = gcd(m + 1, static_cast<int>(Number));
 
 								// either both or at least one are factors
 								const size_t t1 = Number / p1;

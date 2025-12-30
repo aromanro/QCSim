@@ -34,18 +34,18 @@ namespace QC {
 
 			void QFT(RegisterClass& reg, bool doSwap = true)
 			{
-				const size_t sq = BaseClass::BaseClass::getStartQubit();
-				const size_t eq = BaseClass::BaseClass::getEndQubit();
+				const int sq = static_cast<int>(BaseClass::BaseClass::getStartQubit());
+				const int eq = static_cast<int>(BaseClass::BaseClass::getEndQubit());
 
 				reg.ApplyGate(hadamard, eq);
 
 				const double startPhase = M_PI_2;
 
-				for (size_t curQubit = eq; curQubit > sq; --curQubit)
+				for (int curQubit = eq; curQubit > sq; --curQubit)
 				{
-					const size_t curQubitm1 = curQubit - 1;
+					const int curQubitm1 = curQubit - 1;
 					double phase = startPhase; // starts from R2 = phase shift with 2 PI / 2^2 = PI / 2
-					for (int ctrlq = curQubitm1; ctrlq >= static_cast<int>(sq); --ctrlq)
+					for (int ctrlq = curQubitm1; ctrlq >= sq; --ctrlq)
 					{
 						cPhaseShift.SetPhaseShift(phase);
 						reg.ApplyGate(cPhaseShift, curQubit, ctrlq);
@@ -61,20 +61,20 @@ namespace QC {
 
 			void IQFT(RegisterClass& reg, bool doSwap = true)
 			{
-				const size_t sq = BaseClass::BaseClass::getStartQubit();
-				const size_t eq = BaseClass::BaseClass::getEndQubit();
+				const int sq = static_cast<int>(BaseClass::BaseClass::getStartQubit());
+				const int eq = static_cast<int>(BaseClass::BaseClass::getEndQubit());
 
 				if (doSwap) BaseClass::Swap(reg);
 
 				const double startPhase = -M_PI_2;
 
-				for (size_t curQubit = sq + 1; curQubit <= eq; ++curQubit)
+				for (int curQubit = sq + 1; curQubit <= eq; ++curQubit)
 				{
-					const size_t curQubitm1 = curQubit - 1;
+					const int curQubitm1 = curQubit - 1;
 					reg.ApplyGate(hadamard, curQubitm1);
 
 					double phase = startPhase; // starts from R2 = phase shift with 2 PI / 2^2 = PI / 2
-					for (int ctrlq = curQubitm1; ctrlq >= static_cast<int>(sq); --ctrlq)
+					for (int ctrlq = curQubitm1; ctrlq >= sq; --ctrlq)
 					{
 						cPhaseShift.SetPhaseShift(phase);
 						reg.ApplyGate(cPhaseShift, curQubit, ctrlq);

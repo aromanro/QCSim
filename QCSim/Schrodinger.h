@@ -83,7 +83,7 @@ namespace QuantumSimulation {
 		// use it to set a square barrier (positive val) or well (negative val) in the middle
 		void setConstantPotentialInTheMiddle(double val, size_t halfwidth)
 		{
-			const int nrStates = BaseClass::getNrBasisStates();
+			const int nrStates = static_cast<int>(BaseClass::getNrBasisStates());
 			const int halfStates = nrStates / 2;
 
 			for (int i = std::max<int>(1, halfStates - halfwidth); i < std::min<int>(nrStates - 1, halfStates + halfwidth); ++i)
@@ -97,7 +97,7 @@ namespace QuantumSimulation {
 		// use it to set a step potential starting in the middle
 		void setConstantPotentialToRight(double val)
 		{
-			const int nrStates = BaseClass::getNrBasisStates();
+			const int nrStates = static_cast<int>(BaseClass::getNrBasisStates());
 			const int halfStates = nrStates / 2;
 
 			for (int i = halfStates; i < nrStates; ++i)
@@ -114,7 +114,7 @@ namespace QuantumSimulation {
 		{
 			BaseClass::Clear();
 
-			const int nrStates = BaseClass::getNrBasisStates();
+			const int nrStates = static_cast<int>(BaseClass::getNrBasisStates());
 
 			stdev *= deltax;
 			const double a = 1. / (stdev * sqrt(2. * M_PI));

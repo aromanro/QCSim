@@ -32,7 +32,7 @@ namespace QC {
 				size_t stQubit = BaseClass::BaseClass::getStartQubit();
 				size_t enQubit = BaseClass::BaseClass::getEndQubit();
 				size_t nrQubits = enQubit - stQubit + 1;
-				size_t nrBasisStates = 1U << nrQubits;
+				size_t nrBasisStates = 1ULL << nrQubits;
 
 				/*
 					for (size_t state = 0; state < nrBasisStates; ++state)
@@ -136,7 +136,7 @@ namespace QC {
 				size_t stQubit = BaseClass::BaseClass::getStartQubit();
 				size_t enQubit = BaseClass::BaseClass::getEndQubit();
 				size_t nrQubits = enQubit - stQubit + 1;
-				size_t nrBasisStates = 1U << nrQubits;
+				size_t nrBasisStates = 1ULL << nrQubits;
 
 				/*
 					for (size_t state = 0; state < nrBasisStates; ++state)
