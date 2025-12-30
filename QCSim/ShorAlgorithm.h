@@ -187,13 +187,13 @@ namespace Shor {
 				{
 					int p = divs[i];
 					if (p % 2) p *= 2;
-					while (p < Number)
+					while (p < static_cast<int>(Number))
 					{
 						if (fx.mod(static_cast<size_t>(pow(fx.getParam(), p))) == 1)
 						{
 							const int v = static_cast<int>(pow(fx.getParam(), p / 2));
 							const int m = static_cast<int>(fx.mod(v));
-							if (m != 1 && m != Number - 1)
+							if (m != 1 && m != static_cast<int>(Number) - 1)
 							{
 								p1 = gcd(m - 1, static_cast<int>(Number));
 								p2 = gcd(m + 1, static_cast<int>(Number));
