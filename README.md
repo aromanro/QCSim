@@ -11,6 +11,8 @@ Has a statevector simulator (better than the 'naive' matrix multiplication kind)
 
 Blog entry on the Computational Physics Blog: [Quantum Computing Simulator](https://compphys.go.ro/quantum-computing-simulator/)
 
+### More info
+
 Implemented algorithms:
 
 *   Grover
@@ -111,8 +113,13 @@ To see various algorithms in action, look into the `Test` files.
 
 I intend to come from time to time to add more algorithms, but for now I think I have more here than I intended when I started the project, so I'll leave it like this for a while (except maybe some improvements of the existing code and bug fixes if necessary).
 
+### Tools
+
+The project compiles on Windows with Visual Studio 2026 (the code can be compiled with older versions starting with VS 2015, but it's currently maintained with VS 2026 and C++ 17 or higher).
+
 ### Required libraries
 
+The program requires the typical VC++ runtime libraries.
 Dealing with matrices is done with the help of [Eigen](https://eigen.tuxfamily.org/).
 The quantum fourier transform is checked against [FFTW](http://fftw.org/) for Schrodinger quantum simulation. I guess using this library could be avoided, I actually provided several methods of solving the equation in the code, maybe I'll switch to some other one in the tests in the future. For now the check is done with FFTW.
 
