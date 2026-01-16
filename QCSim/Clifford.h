@@ -548,7 +548,7 @@ namespace QC {
 
 			inline void ApplyZ(size_t qubit, size_t q)
 			{
-				// very similar with applying X, but now Z does nothing to Z, and flips the sign for X, as Z^tXZ = -X
+				// very similar with applying X, but now Z does nothing to Z, and flips the sign for X, as ZXZ^t = -X
 				if (destabilizerGenerators[q].X[qubit])
 					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 
