@@ -490,7 +490,7 @@ namespace QC {
 				// looking at it might not reveal immediately what it does
 				// the swaps below just switch the X with Z, because HZH^t = X and HXH^t = Z
 
-				// if we have both X and Z, then it's an Y (with some global phase, given by the sign, Y = iXZ)
+				// if we have both X and Z, then it's a Y (with some global phase, given by the sign, Y = iXZ)
 				// a Y is transformed to a -Y, so a sign change is needed
 
 				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
@@ -525,6 +525,7 @@ namespace QC {
 
 			inline void ApplyX(size_t qubit, size_t q)
 			{
+				// X does nothing to X, but flips the sign for Z, as XZX^t = -Z
 				if (destabilizerGenerators[q].Z[qubit])
 					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 
@@ -534,13 +535,20 @@ namespace QC {
 
 			inline void ApplyY(size_t qubit, size_t q)
 			{
+				// Y flips the sign for both X and Z, as YZY^t = -Z and YXY^t = -X
+				// if both X and Z are present, the sign is flipped twice, so it remains unchanged
+
 				// can be done with ifs, can be done with XORs
-				destabilizerGenerators[q].PhaseSign = XOR(destabilizerGenerators[q].PhaseSign, XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]));
-				stabilizerGenerators[q].PhaseSign = XOR(stabilizerGenerators[q].PhaseSign, XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]));
+				if (XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]))
+					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
+
+				if (XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]))
+					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
 			}
 
 			inline void ApplyZ(size_t qubit, size_t q)
 			{
+				// very similar with applying X, but now Z does nothing to Z, and flips the sign for X, as Z^tXZ = -X
 				if (destabilizerGenerators[q].X[qubit])
 					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 
