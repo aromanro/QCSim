@@ -395,7 +395,7 @@ namespace QC {
 						if (stabilizerGenerators[i].X[q] && stabilizerGenerators[i].Z[q])
 							++phase;
 						
-						GZ[q] = XOR(GZ[q], stabilizerGenerators[i].Z[q]);
+						GZ[q] = GZ[q] != stabilizerGenerators[i].Z[q];
 					}
 				}
 
@@ -486,91 +486,38 @@ namespace QC {
 
 			inline void ApplyH(size_t qubit, size_t q)
 			{
-				// how does this work?
-				// looking at it might not reveal immediately what it does
-				// the swaps below just switch the X with Z, because HZH^t = X and HXH^t = Z
-
-				// if we have both X and Z, then it's a Y (with some global phase, given by the sign, Y = iXZ)
-				// a Y is transformed to a -Y, so a sign change is needed
-
-				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
-					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
-
-				// swap X and Z
-				bool t = destabilizerGenerators[q].X[qubit];
-				destabilizerGenerators[q].X[qubit] = destabilizerGenerators[q].Z[qubit];
-				destabilizerGenerators[q].Z[qubit] = t;
-
-				if (stabilizerGenerators[q].X[qubit] && stabilizerGenerators[q].Z[qubit])
-					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
-
-				// swap X and Z
-				t = stabilizerGenerators[q].X[qubit];
-				stabilizerGenerators[q].X[qubit] = stabilizerGenerators[q].Z[qubit];
-				stabilizerGenerators[q].Z[qubit] = t;
+				destabilizerGenerators[q].ApplyH(qubit);
+				stabilizerGenerators[q].ApplyH(qubit);
 			}
 
 			inline void ApplyS(size_t qubit, size_t q)
 			{
-				if (destabilizerGenerators[q].X[qubit] && destabilizerGenerators[q].Z[qubit])
-					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
-
-				destabilizerGenerators[q].Z[qubit] = XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]);
-
-				if (stabilizerGenerators[q].X[qubit] && stabilizerGenerators[q].Z[qubit])
-					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
-
-				stabilizerGenerators[q].Z[qubit] = XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]);
+				destabilizerGenerators[q].ApplyS(qubit);
+				stabilizerGenerators[q].ApplyS(qubit);
 			}
 
 			inline void ApplyX(size_t qubit, size_t q)
 			{
-				// X does nothing to X, but flips the sign for Z, as XZX^t = -Z
-				if (destabilizerGenerators[q].Z[qubit])
-					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
-
-				if (stabilizerGenerators[q].Z[qubit])
-					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
+				destabilizerGenerators[q].ApplyX(qubit);
+				stabilizerGenerators[q].ApplyX(qubit);
 			}
 
 			inline void ApplyY(size_t qubit, size_t q)
 			{
-				// Y flips the sign for both X and Z, as YZY^t = -Z and YXY^t = -X
-				// if both X and Z are present, the sign is flipped twice, so it remains unchanged
-
-				// can be done with ifs, can be done with XORs
-				if (XOR(destabilizerGenerators[q].Z[qubit], destabilizerGenerators[q].X[qubit]))
-					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
-
-				if (XOR(stabilizerGenerators[q].Z[qubit], stabilizerGenerators[q].X[qubit]))
-					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
+				destabilizerGenerators[q].ApplyY(qubit);
+				stabilizerGenerators[q].ApplyY(qubit);
 			}
 
 			inline void ApplyZ(size_t qubit, size_t q)
 			{
-				// very similar with applying X, but now Z does nothing to Z, and flips the sign for X, as ZXZ^t = -X
-				if (destabilizerGenerators[q].X[qubit])
-					destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
-
-				if (stabilizerGenerators[q].X[qubit])
-					stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
+				destabilizerGenerators[q].ApplyZ(qubit);
+				stabilizerGenerators[q].ApplyZ(qubit);
 			}
 
 			inline void ApplyCX(size_t target, size_t control, size_t q)
 			{
-				if (destabilizerGenerators[q].X[control] && destabilizerGenerators[q].Z[target] &&
-					XOR(destabilizerGenerators[q].X[target], !destabilizerGenerators[q].Z[control]))
-						destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
-
-				destabilizerGenerators[q].X[target] = XOR(destabilizerGenerators[q].X[target], destabilizerGenerators[q].X[control]);
-				destabilizerGenerators[q].Z[control] = XOR(destabilizerGenerators[q].Z[control], destabilizerGenerators[q].Z[target]);
-
-				if (stabilizerGenerators[q].X[control] && stabilizerGenerators[q].Z[target] &&
-					XOR(stabilizerGenerators[q].X[target], !stabilizerGenerators[q].Z[control]))
-						stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
-
-				stabilizerGenerators[q].X[target] = XOR(stabilizerGenerators[q].X[target], stabilizerGenerators[q].X[control]);
-				stabilizerGenerators[q].Z[control] = XOR(stabilizerGenerators[q].Z[control], stabilizerGenerators[q].Z[target]);
+				destabilizerGenerators[q].ApplyCX(target, control);
+				stabilizerGenerators[q].ApplyCX(target, control);
 			}
 		};
 	}

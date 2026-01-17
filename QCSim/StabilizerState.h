@@ -290,10 +290,6 @@ namespace QC {
 				return h.PhaseSign;
 			}
 
-			inline static bool XOR(bool a, bool b)
-			{
-				return a != b;
-			}
 
 			// returns the exponent of the i that multiplies the product of the two corresponding Pauli matrices
 			// 0, 1 or -1
