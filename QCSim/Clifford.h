@@ -558,14 +558,16 @@ namespace QC {
 
 			inline void ApplyCX(size_t target, size_t control, size_t q)
 			{
-				destabilizerGenerators[q].PhaseSign = XOR(destabilizerGenerators[q].PhaseSign, destabilizerGenerators[q].X[control] && destabilizerGenerators[q].Z[target] &&
-					XOR(destabilizerGenerators[q].X[target], XOR(destabilizerGenerators[q].Z[control], true)));
+				if (destabilizerGenerators[q].X[control] && destabilizerGenerators[q].Z[target] &&
+					XOR(destabilizerGenerators[q].X[target], !destabilizerGenerators[q].Z[control]))
+						destabilizerGenerators[q].PhaseSign = !destabilizerGenerators[q].PhaseSign;
 
 				destabilizerGenerators[q].X[target] = XOR(destabilizerGenerators[q].X[target], destabilizerGenerators[q].X[control]);
 				destabilizerGenerators[q].Z[control] = XOR(destabilizerGenerators[q].Z[control], destabilizerGenerators[q].Z[target]);
 
-				stabilizerGenerators[q].PhaseSign = XOR(stabilizerGenerators[q].PhaseSign, stabilizerGenerators[q].X[control] && stabilizerGenerators[q].Z[target] &&
-					XOR(stabilizerGenerators[q].X[target], XOR(stabilizerGenerators[q].Z[control], true)));
+				if (stabilizerGenerators[q].X[control] && stabilizerGenerators[q].Z[target] &&
+					XOR(stabilizerGenerators[q].X[target], !stabilizerGenerators[q].Z[control]))
+						stabilizerGenerators[q].PhaseSign = !stabilizerGenerators[q].PhaseSign;
 
 				stabilizerGenerators[q].X[target] = XOR(stabilizerGenerators[q].X[target], stabilizerGenerators[q].X[control]);
 				stabilizerGenerators[q].Z[control] = XOR(stabilizerGenerators[q].Z[control], stabilizerGenerators[q].Z[target]);
