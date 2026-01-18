@@ -282,6 +282,16 @@ namespace QC
 			ApplyH(qubit2);
 		}
 
+		inline void ApplyISwapDag(size_t qubit1, size_t qubit2)
+		{
+			ApplyH(qubit2);
+			ApplyCX(qubit1, qubit2);
+			ApplyCX(qubit2, qubit1);
+			ApplyH(qubit1);
+			ApplySdg(qubit2);
+			ApplySdg(qubit1);
+		}
+
 		bool PhaseSign; // true means negative phase
 	};
 
@@ -438,6 +448,16 @@ namespace QC
 			ApplyCX(qubit2, qubit1);
 			ApplyCX(qubit1, qubit2);
 			ApplyH(qubit2);
+		}
+
+		inline void ApplyISwapDag(size_t qubit1, size_t qubit2)
+		{
+			ApplyH(qubit2);
+			ApplyCX(qubit1, qubit2);
+			ApplyCX(qubit2, qubit1);
+			ApplyH(qubit1);
+			ApplySdg(qubit2);
+			ApplySdg(qubit1);
 		}
 		
 		double Coefficient;

@@ -25,11 +25,6 @@ namespace QC {
 			{
 				return true;
 			}
-
-			bool isAntidiagonal() const override
-			{
-				return true;
-			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class iSwapGate : public TwoQubitsGate<MatrixClass>
@@ -45,10 +40,20 @@ namespace QC {
 				OpClass::operatorMat(1, 2) = std::complex<double>(0, 1);
 				OpClass::operatorMat(2, 1) = std::complex<double>(0, 1);
 			}
+		};
 
-			bool isAntidiagonal() const override
+		template<class MatrixClass = Eigen::MatrixXcd> class iSwapDagGate : public TwoQubitsGate<MatrixClass>
+		{
+		public:
+			using BaseClass = TwoQubitsGate<MatrixClass>;
+			using OpClass = typename BaseClass::BaseClass;
+
+			iSwapDagGate()
 			{
-				return true;
+				OpClass::operatorMat(1, 1) = 0;
+				OpClass::operatorMat(2, 2) = 0;
+				OpClass::operatorMat(1, 2) = std::complex<double>(0, -1);
+				OpClass::operatorMat(2, 1) = std::complex<double>(0, -1);
 			}
 		};
 

@@ -356,6 +356,44 @@ namespace QC {
 				}
 			}
 
+
+			void ApplyISwapDag(size_t qubit1, size_t qubit2)
+			{
+				const size_t nrQubits = getNrQubits();
+				if (!enableMultithreading || nrQubits < 512)
+				{
+					for (size_t q = 0; q < nrQubits; ++q)
+					{
+						ApplyH(qubit2, q);
+						ApplyCX(qubit1, qubit2, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyH(qubit1, q);
+						ApplyZ(qubit2, q);
+						ApplyS(qubit2, q);
+						ApplyZ(qubit1, q);
+						ApplyS(qubit1, q);
+					}
+				}
+				else
+				{
+					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+
+#pragma omp parallel for 
+					//num_threads(processor_count) schedule(static, 128)
+					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
+					{
+						ApplyH(qubit2, q);
+						ApplyCX(qubit1, qubit2, q);
+						ApplyCX(qubit2, qubit1, q);
+						ApplyH(qubit1, q);
+						ApplyZ(qubit2, q);
+						ApplyS(qubit2, q);
+						ApplyZ(qubit1, q);
+						ApplyS(qubit1, q);
+					}
+				}
+			}
+
 			double ExpectationValue(const std::string& pauliString) const
 			{
 				// We compute this: <Psi|pauliString|Psi>, where |Psi> is defined by the stabilizers

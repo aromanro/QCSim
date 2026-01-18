@@ -20,6 +20,8 @@ std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetTwoQubitsGate(int code)
 		return std::make_shared<QC::Gates::SwapGate<>>();
 	case 13:
 		return std::make_shared<QC::Gates::iSwapGate<>>();
+	case 14:
+		return std::make_shared<QC::Gates::iSwapDagGate<>>();
 	}
 
 	return nullptr;
@@ -74,13 +76,17 @@ void ApplyTwoQubitsGate(QC::Clifford::StabilizerSimulator& simulator, int code, 
 	case 13:
 		simulator.ApplyISwap(qubit1, qubit2);
 		break;
+	case 14:
+		simulator.ApplyISwapDag(qubit1, qubit2);
+		break;
 	}
 }
 
 
+
 void ApplyGate(QC::Clifford::StabilizerSimulator& simulator, int code, int qubit1, int qubit2)
 {
-	switch(code)
+	switch (code)
 	{
 	case 0:
 		simulator.ApplyH(qubit1);
@@ -114,6 +120,141 @@ void ApplyGate(QC::Clifford::StabilizerSimulator& simulator, int code, int qubit
 		break;
 	}
 }
+
+void PrintTwoQubitsGate(int code, int qubit1, int qubit2)
+{
+	switch (code)
+	{
+	case 9:
+		std::cout << "CX " << qubit1 << " " << qubit2 << std::endl;
+		break;
+	case 10:
+		std::cout << "CY " << qubit1 << " " << qubit2 << std::endl;
+		break;
+	case 11:
+		std::cout << "CZ " << qubit1 << " " << qubit2 << std::endl;
+		break;
+	case 12:
+		std::cout << "SWAP " << qubit1 << " " << qubit2 << std::endl;
+		break;
+	case 13:
+		std::cout << "iSWAP " << qubit1 << " " << qubit2 << std::endl;
+		break;
+	case 14:
+		std::cout << "iSWAPDag " << qubit1 << " " << qubit2 << std::endl;
+		break;
+	}
+}
+
+void PrintGate(int code, int qubit1, int qubit2)
+{
+	switch (code)
+	{
+	case 0:
+		std::cout << "H " << qubit1 << std::endl;
+		break;
+	case 1:
+		std::cout << "S " << qubit1 << std::endl;
+		break;
+	case 2:
+		std::cout << "SDG " << qubit1 << std::endl;
+		break;
+	case 3:
+		std::cout << "X " << qubit1 << std::endl;
+		break;
+	case 4:
+		std::cout << "Y " << qubit1 << std::endl;
+		break;
+	case 5:
+		std::cout << "Z " << qubit1 << std::endl;
+		break;
+	case 6:
+		std::cout << "SX " << qubit1 << std::endl;
+		break;
+	case 7:
+		std::cout << "SXDG " << qubit1 << std::endl;
+		break;
+	case 8:
+		std::cout << "K " << qubit1 << std::endl;
+		break;
+	default:
+		PrintTwoQubitsGate(code, qubit1, qubit2);
+	}
+}
+
+
+//***********************************************************************************************************
+// Temporary, might be moved to a different file later
+// Used for testing a rough Pauli propagation implementation
+// NOTE: Actually applies the ^t version of the gates
+//***********************************************************************************************************
+
+void ApplyTwoQubitsGate(QC::PauliStringXZWithSign& simulator, int code, int qubit1, int qubit2)
+{
+	switch (code)
+	{
+	case 9:
+		simulator.ApplyCX(qubit1, qubit2);
+		break;
+	case 10:
+		simulator.ApplyCY(qubit1, qubit2);
+		break;
+	case 11:
+		simulator.ApplyCZ(qubit1, qubit2);
+		break;
+	case 12:
+		simulator.ApplySwap(qubit1, qubit2);
+		break;
+	case 13:
+		simulator.ApplyISwapDag(qubit1, qubit2);
+		break;
+	case 14:
+		simulator.ApplyISwap(qubit1, qubit2);
+		break;
+	}
+}
+
+
+void ApplyGate(QC::PauliStringXZWithSign& simulator, int code, int qubit1, int qubit2)
+{
+	switch (code)
+	{
+	case 0:
+		simulator.ApplyH(qubit1);
+		break;
+	case 1:
+		simulator.ApplySdg(qubit1);
+		break;
+	case 2:
+		simulator.ApplyS(qubit1);
+		break;
+	case 3:
+		simulator.ApplyX(qubit1);
+		break;
+	case 4:
+		simulator.ApplyY(qubit1);
+		break;
+	case 5:
+		simulator.ApplyZ(qubit1);
+		break;
+	case 6:
+		simulator.ApplySxDag(qubit1);
+		break;
+	case 7:
+		simulator.ApplySx(qubit1);
+		break;
+	case 8:
+		simulator.ApplyK(qubit1);
+		break;
+	default:
+		ApplyTwoQubitsGate(simulator, code, qubit1, qubit2);
+		break;
+	}
+}
+
+//***********************************************************************************************************
+// End of temporary
+//***********************************************************************************************************
 
 
 void ConstructCircuit(size_t nrQubits, std::vector<int>& gates, std::vector<size_t>& qubits1, std::vector<size_t>& qubits2, std::uniform_int_distribution<int>& gateDistr, std::uniform_int_distribution<int>& qubitDistr)
@@ -254,7 +395,7 @@ bool CliffordSimulatorTests()
 	const size_t nrShots = 100000;
 	const double errorThreshold = 0.01;
 
-	std::uniform_int_distribution gateDistr(0, 13);
+	std::uniform_int_distribution gateDistr(0, 14);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
 
 	std::cout << "\nClifford gates simulator" << std::endl;
@@ -374,7 +515,7 @@ bool CliffordExpectationValuesTests()
 {
 	const size_t nrTests = 100;
 
-	std::uniform_int_distribution gateDistr(0, 13);
+	std::uniform_int_distribution gateDistr(0, 14);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
 
 	std::cout << "\nClifford expectation values" << std::endl;
@@ -416,10 +557,75 @@ bool CliffordExpectationValuesTests()
 			const auto exp2 = cliffordSim.ExpectationValue(pauliStr);
 			if (!approxEqual(exp1, exp2, 1E-7))
 			{
-				std::cout << std::endl << "Expectation values are not equal for stabilizer and statevector simulator for " << nrQubits << " qubits, values: " << exp1 << ", " << exp2 << std::endl;
+				std::cout << std::endl << "Expectation values are not equal for stabilizer and statevector simulator for " << nrQubits << " qubits, values: " << exp2 << ", " << exp1 << std::endl;
+
+				std::cout << "Pauli string: " << pauliStr << std::endl;
+
+				std::cout << "Circuit:" << std::endl;
+				for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+					PrintGate(gates[j], qubits1[j], qubits2[j]);
 
 				return false;
 			}
+
+			//**************************************************************************************
+			// Temporary, might be moved to a different file later
+			// Checking the Pauli propagation expectation value
+			//**************************************************************************************
+
+			QC::PauliStringXZWithSign pauliSim(nrQubits);
+			for (int j = 0; j < pauliStr.size(); ++j)
+			{
+				char c = pauliStr[j];
+				switch (c)
+				{
+				case 'X':
+					pauliSim.X[j] = true;
+					break;
+				case 'Y':
+					// Y = iXZ
+					pauliSim.X[j] = true;
+					pauliSim.Z[j] = true;
+					break;
+				case 'Z':
+					pauliSim.Z[j] = true;
+					break;
+				}
+			}
+
+			// the Pauli propagation execution starts with the operator and applies the gates in reverse order on it
+			
+			// expectation value is <psi|P|psi> = <0|U^t P U|0>
+			// U is the circuit operator, P is the Pauli string here
+			// so as U is decomposed in individual gates, U = G_n ... G_2 G_1
+			// transforming P is done as P' = G_1^t G_2^t ... G_n^t P G_n ... G_2 G_1
+			// so one needs to apply the gates in reverse order
+
+			// more, as the Pauli string classes are originally designed for the generators of the clifford simulator
+			// ApplyGate does P' = G P G^t
+			// so here we need to apply the ^t version of the gates (in many cases G^t = G, that is, many are hermitian, only for the others care must be taken)
+			// see the ApplyGate implementation above for details
+
+			for (int j = gates.size() - 1; j >= 0; --j)
+				ApplyGate(pauliSim, gates[j], qubits1[j], qubits2[j]);
+
+			const auto pauliExp = pauliSim.ExpectationValue();
+
+			if (!approxEqual(exp2, pauliExp, 1E-7))
+			{
+				std::cout << std::endl << "Expectation values are not equal for stabilizer and Pauli propagation for " << nrQubits << " qubits, values: " << exp2 << ", " << pauliExp << std::endl;
+
+				std::cout << "Pauli string: " << pauliStr << std::endl;
+
+				std::cout << "Circuit:" << std::endl;
+				for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+					PrintGate(gates[j], qubits1[j], qubits2[j]);
+
+				return false;
+			}
+			//**************************************************************************************
+			// End of temporary
+			//**************************************************************************************
 		}
 		std::cout << '.';
 	}
