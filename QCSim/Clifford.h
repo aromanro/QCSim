@@ -437,7 +437,7 @@ namespace QC {
 					}
 				}
 
-				return (phase % 4) ? -1.0 : 1.0;
+				return (phase % 4) == 0 ? 1.0 : -1.0;
 			}
 
 			std::unique_ptr<StabilizerSimulator> Clone() const
