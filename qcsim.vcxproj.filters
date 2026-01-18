@@ -245,5 +245,8 @@
     <ClInclude Include="QCSim\QubitRegisterDebug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\PauliStringXZ.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
