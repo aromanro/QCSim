@@ -48,6 +48,16 @@ namespace QC {
 			{
 				return false;
 			}
+
+			virtual bool IsISwapGate() const
+			{
+				return false;
+			}
+
+			virtual bool IsISwapDagGate() const
+			{
+				return false;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>

@@ -336,6 +336,7 @@
     <ClInclude Include="QCSim\PauliString.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />
     <ClInclude Include="QCSim\PauliStringXZ.h" />
+    <ClInclude Include="QCSim\PauliStringXZCoeff.h" />
     <ClInclude Include="QCSim\PhaseEstimation.h" />
     <ClInclude Include="QCSim\QMeansClustering2D.h" />
     <ClInclude Include="QCSim\QuantumAdder.h" />

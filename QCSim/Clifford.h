@@ -331,8 +331,8 @@ namespace QC {
 					for (size_t q = 0; q < nrQubits; ++q)
 					{
 						ApplyS(qubit1, q);
-						ApplyS(qubit2, q);
 						ApplyH(qubit1, q);
+						ApplyS(qubit2, q);
 						ApplyCX(qubit2, qubit1, q);
 						ApplyCX(qubit1, qubit2, q);
 						ApplyH(qubit2, q);
@@ -347,8 +347,8 @@ namespace QC {
 					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
 					{
 						ApplyS(qubit1, q);
-						ApplyS(qubit2, q);
 						ApplyH(qubit1, q);
+						ApplyS(qubit2, q);
 						ApplyCX(qubit2, qubit1, q);
 						ApplyCX(qubit1, qubit2, q);
 						ApplyH(qubit2, q);
@@ -367,9 +367,9 @@ namespace QC {
 						ApplyH(qubit2, q);
 						ApplyCX(qubit1, qubit2, q);
 						ApplyCX(qubit2, qubit1, q);
-						ApplyH(qubit1, q);
 						ApplyZ(qubit2, q);
 						ApplyS(qubit2, q);
+						ApplyH(qubit1, q);
 						ApplyZ(qubit1, q);
 						ApplyS(qubit1, q);
 					}
@@ -385,9 +385,9 @@ namespace QC {
 						ApplyH(qubit2, q);
 						ApplyCX(qubit1, qubit2, q);
 						ApplyCX(qubit2, qubit1, q);
-						ApplyH(qubit1, q);
 						ApplyZ(qubit2, q);
 						ApplyS(qubit2, q);
+						ApplyH(qubit1, q);
 						ApplyZ(qubit1, q);
 						ApplyS(qubit1, q);
 					}
@@ -399,7 +399,7 @@ namespace QC {
 				// We compute this: <Psi|pauliString|Psi>, where |Psi> is defined by the stabilizers
 				if (pauliString.empty()) return 1.0;
 
-				Generator g(getNrQubits());
+				PauliStringXZ g(getNrQubits());
 				std::vector<size_t> pos;
 				pos.reserve(pauliString.size());
 				size_t phase = 0;
@@ -424,20 +424,22 @@ namespace QC {
 						continue; // commutes, check next destabilizer
 
 					// anticommutes with this destabilizer
+					// multiply with the corresponding stabilizer
+					const Generator& gen = stabilizerGenerators[i];
 
-					phase += stabilizerGenerators[i].PhaseSign ? 2 : 0;
+					phase += gen.PhaseSign ? 2 : 0;
 					for (size_t q = 0; q < getNrQubits(); ++q)
-					{
-						if (stabilizerGenerators[i].X[q] && GZ[q])
+					{	
+						if (gen.X[q] && GZ[q])
 							phase += 2;
-						if (stabilizerGenerators[i].X[q] && stabilizerGenerators[i].Z[q])
+						if (gen.X[q] && gen.Z[q])
 							++phase;
 						
-						GZ[q] = GZ[q] != stabilizerGenerators[i].Z[q];
+						GZ[q] = GZ[q] != gen.Z[q];
 					}
 				}
 
-				return (phase % 4) == 0 ? 1.0 : -1.0;
+				return phase % 4 == 0 ? 1.0 : -1.0;
 			}
 
 			std::unique_ptr<StabilizerSimulator> Clone() const
@@ -456,7 +458,7 @@ namespace QC {
 			}
 
 		private:
-			bool CommutesWithDestabilizer(const Generator& g, const Generator& destabilizer, const std::vector<size_t>& pos) const
+			bool CommutesWithDestabilizer(const PauliStringXZ& g, const Generator& destabilizer, const std::vector<size_t>& pos) const
 			{
 				bool anticommutes = false;
 				for (size_t j = 0; j < pos.size(); ++j)
@@ -471,18 +473,20 @@ namespace QC {
 				return !anticommutes;
 			}
 
-			bool CheckStabilizersAnticommutation(const Generator& g, const std::vector<size_t>& pos) const
+			bool CheckStabilizersAnticommutation(const PauliStringXZ& g, const std::vector<size_t>& pos) const
 			{
 				for (size_t i = 0; i < getNrQubits(); ++i)
 				{
 					// check if the stabilizer anticommutes with the operator
+					const Generator& gen = stabilizerGenerators[i];
 					bool anticommutes = false;
+					int anticommutations = 0;
 					for (size_t j = 0; j < pos.size(); ++j)
 					{
 						const size_t pauliOpQubit = pos[j];
-						if (g.X[pauliOpQubit] && stabilizerGenerators[i].Z[pauliOpQubit])
+						if (g.X[pauliOpQubit] && gen.Z[pauliOpQubit])
 							anticommutes = !anticommutes;
-						if (g.Z[pauliOpQubit] && stabilizerGenerators[i].X[pauliOpQubit])
+						if (g.Z[pauliOpQubit] && gen.X[pauliOpQubit])
 							anticommutes = !anticommutes;
 					}
 					if (anticommutes)
@@ -492,8 +496,9 @@ namespace QC {
 				return false;
 			}
 
-			static void SetPauliString(const std::string& pauliString, Generator& g, std::vector<size_t>& pos, size_t& phase)
+			static void SetPauliString(const std::string& pauliString, PauliStringXZ& g, std::vector<size_t>& pos, size_t& phase)
 			{
+				pos.reserve(pauliString.size());
 				for (size_t i = 0; i < pauliString.size(); ++i)
 				{
 					const char c = toupper(pauliString[i]);

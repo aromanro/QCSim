@@ -40,6 +40,11 @@ namespace QC {
 				OpClass::operatorMat(1, 2) = std::complex<double>(0, 1);
 				OpClass::operatorMat(2, 1) = std::complex<double>(0, 1);
 			}
+
+			virtual bool IsISwapGate() const
+			{
+				return true;
+			}
 		};
 
 		template<class MatrixClass = Eigen::MatrixXcd> class iSwapDagGate : public TwoQubitsGate<MatrixClass>
@@ -54,6 +59,11 @@ namespace QC {
 				OpClass::operatorMat(2, 2) = 0;
 				OpClass::operatorMat(1, 2) = std::complex<double>(0, -1);
 				OpClass::operatorMat(2, 1) = std::complex<double>(0, -1);
+			}
+
+			virtual bool IsISwapDagGate() const
+			{
+				return true;
 			}
 		};
 
