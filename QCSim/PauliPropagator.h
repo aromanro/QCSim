@@ -69,28 +69,10 @@ namespace QC
 	private:
 		static int GetNrQubitsForType(OperationType type)
 		{
-			switch (type)
-			{
-			case OperationType::X:
-			case OperationType::Y:
-			case OperationType::Z:
-			case OperationType::H:
-			case OperationType::K:
-			case OperationType::S:
-			case OperationType::SDG:
-			case OperationType::SX:
-			case OperationType::SXDG:
-				return 1;
-			case OperationType::CX:
-			case OperationType::CY:
-			case OperationType::CZ:
-			case OperationType::SWAP:
-			case OperationType::ISWAP:
-			case OperationType::ISWAPDG:
+			if (static_cast<int>(type) >= static_cast<int>(OperationType::CX))
 				return 2;
-			default:
-				return 0;
-			}
+			
+			return 1;
 		}
 
 		OperationType type;
@@ -348,6 +330,183 @@ namespace QC
 		}
 
 	private:
+		inline void ExecuteX(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyX(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteY(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyY(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteZ(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyZ(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteH(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyH(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteK(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyK(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteS(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyS(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteSDG(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplySdag(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteSX(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplySx(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteSXDG(int qubit)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplySxDag(static_cast<size_t>(qubit));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteCX(int control, int target)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyCX(static_cast<size_t>(control), static_cast<size_t>(target));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteCY(int control, int target)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyCY(static_cast<size_t>(control), static_cast<size_t>(target));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteCZ(int control, int target)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyCZ(static_cast<size_t>(control), static_cast<size_t>(target));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteSWAP(int qubit1, int qubit2)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplySwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteISWAP(int control, int target)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyISwap(static_cast<size_t>(control), static_cast<size_t>(target));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteISWAPDG(int control, int target)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				pstrNew.ApplyISwapDag(static_cast<size_t>(control), static_cast<size_t>(target));
+				Insert(std::move(pstrNew));
+			}
+		}
+
+		inline void ExecuteTwoQubitOp(OperationType opType, int control, int target)
+		{
+			switch (opType)
+			{
+			case OperationType::CX:
+				ExecuteCX(control, target);
+				break;
+			case OperationType::CY:
+				ExecuteCY(control, target);
+				break;
+			case OperationType::CZ:
+				ExecuteCZ(control, target);
+				break;
+			case OperationType::SWAP:
+				ExecuteSWAP(control, target);
+				break;
+			case OperationType::ISWAP:
+				ExecuteISWAP(control, target);
+				break;
+			case OperationType::ISWAPDG:
+				ExecuteISWAPDG(control, target);
+				break;
+			default:
+				break;
+			}
+		}
+
 		void Execute()
 		{
 			for (int i = static_cast<int>(operations.size()) - 1; i >= 0; --i)
@@ -358,126 +517,34 @@ namespace QC
 				switch (op.GetType())
 				{
 				case OperationType::X:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyX(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteX(op.GetQubit(0));
 					break;
 				case OperationType::Y:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyY(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteY(op.GetQubit(0));
 					break;
 				case OperationType::Z:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyZ(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteZ(op.GetQubit(0));
 					break;
 				case OperationType::H:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyH(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteH(op.GetQubit(0));
 					break;
 				case OperationType::K:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyK(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteK(op.GetQubit(0));
 					break;
 				case OperationType::S:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyS(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteS(op.GetQubit(0));
 					break;
 				case OperationType::SDG:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplySdag(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteSDG(op.GetQubit(0));
 					break;
 				case OperationType::SX:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplySx(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteSX(op.GetQubit(0));
 					break;
 				case OperationType::SXDG:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplySxDag(static_cast<size_t>(op.GetQubit(0)));
-						Insert(std::move(pstrNew));
-					}
-					break;
-				case OperationType::CX:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyCX(static_cast<size_t>(op.GetQubit(0)), static_cast<size_t>(op.GetQubit(1)));
-						Insert(std::move(pstrNew));
-					}
-					break;
-				case OperationType::CY:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyCY(static_cast<size_t>(op.GetQubit(0)), static_cast<size_t>(op.GetQubit(1)));
-						Insert(std::move(pstrNew));
-					}
-					break;
-				case OperationType::CZ:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyCZ(static_cast<size_t>(op.GetQubit(0)), static_cast<size_t>(op.GetQubit(1)));
-						Insert(std::move(pstrNew));
-					}
-					break;
-				case OperationType::SWAP:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplySwap(static_cast<size_t>(op.GetQubit(0)), static_cast<size_t>(op.GetQubit(1)));
-						Insert(std::move(pstrNew));
-					}
-					break;
-				case OperationType::ISWAP:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyISwap(static_cast<size_t>(op.GetQubit(0)), static_cast<size_t>(op.GetQubit(1)));
-						Insert(std::move(pstrNew));
-					}
-					break;
-				case OperationType::ISWAPDG:
-					for (auto& pstr : pauliStringsIn)
-					{
-						PauliStringXZWithCoefficient pstrNew = pstr;
-						pstrNew.ApplyISwapDag(static_cast<size_t>(op.GetQubit(0)), static_cast<size_t>(op.GetQubit(1)));
-						Insert(std::move(pstrNew));
-					}
+					ExecuteSXDG(op.GetQubit(0));
 					break;
 				default:
+					ExecuteTwoQubitOp(op.GetType(), op.GetQubit(0), op.GetQubit(1));
 					break;
 				}
 
