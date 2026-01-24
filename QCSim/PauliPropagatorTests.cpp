@@ -67,6 +67,26 @@ void ApplyGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2)
 	}
 }
 
+bool CheckResults(int shots, int nrQubits, std::unordered_map<size_t, size_t>& sampledResultsPauli, const std::unordered_map<size_t, size_t>& sampledResultsStatevector, bool measured = false)
+{
+	for (const auto& kv : sampledResultsStatevector)
+	{
+		const size_t state = kv.first;
+		const size_t countStatevector = kv.second;
+		const size_t countPauli = sampledResultsPauli[state];
+		const double freqStatevector = static_cast<double>(countStatevector) / static_cast<double>(shots);
+		const double freqPauli = static_cast<double>(countPauli) / static_cast<double>(shots);
+
+		if (std::abs(freqStatevector - freqPauli) > 0.1)
+		{
+			std::cout << std::endl << "Sampled frequencies - " << (measured ? "by measurement" : "by sampling") << " - are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, measurement " << state << ", values: " << freqPauli << ", " << freqStatevector << std::endl;
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool TestPauliPropagator()
 {
 	std::cout << "\nPauli Propagator tests" << std::endl;
@@ -161,20 +181,8 @@ bool TestPauliPropagator()
 				}
 
 				// now check the results
-				for (const auto& kv : sampledResultsStatevector)
-				{
-					const size_t state = kv.first;
-					const size_t countStatevector = kv.second;
-					const size_t countPauli = sampledResultsPauli[state];
-					const double freqStatevector = static_cast<double>(countStatevector) / static_cast<double>(shots);
-					const double freqPauli = static_cast<double>(countPauli) / static_cast<double>(shots);
 
-					if (std::abs(freqStatevector - freqPauli) > 0.1)
-					{
-						std::cout << std::endl << "Sampled frequencies are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, measurement " << state << ", values: " << freqPauli << ", " << freqStatevector << std::endl;
-						return false;
-					}
-				}
+				CheckResults(shots, nrQubits, sampledResultsPauli, sampledResultsStatevector);
 
 				// now do the same but with measurements!
 				sampledResultsPauli.clear();
@@ -202,20 +210,7 @@ bool TestPauliPropagator()
 				}
 
 				// now check the results
-				for (const auto& kv : sampledResultsStatevector)
-				{
-					const size_t state = kv.first;
-					const size_t countStatevector = kv.second;
-					const size_t countPauli = sampledResultsPauli[state];
-					const double freqStatevector = static_cast<double>(countStatevector) / static_cast<double>(shots);
-					const double freqPauli = static_cast<double>(countPauli) / static_cast<double>(shots);
-
-					if (std::abs(freqStatevector - freqPauli) > 0.1)
-					{
-						std::cout << std::endl << "Sampled - by measurement - frequencies are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, measurement " << state << ", values: " << freqPauli << ", " << freqStatevector << std::endl;
-						return false;
-					}
-				}
+				CheckResults(shots, nrQubits, sampledResultsPauli, sampledResultsStatevector, true);
 			}
 		}
 		std::cout << '.';
