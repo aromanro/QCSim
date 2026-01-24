@@ -559,6 +559,10 @@ namespace QC
 			// this is for the future, when for example it will support non-clifford gates (maybe rotation gates)
 			// such gates will expand the number of pauli strings
 			// so it won't end up with a single pauli string at the end
+			
+			// also it's useful for measuring expectation values of sums of pauli strings directly
+			// and for sampling too
+			
 			// TODO: can be parallelized if there are many pauli strings
 			double expValue = 0.0;
 			for (const auto& pstr : pauliStringsOut)

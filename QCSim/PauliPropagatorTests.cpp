@@ -183,5 +183,7 @@ bool TestPauliPropagator()
 		std::cout << '.';
 	}
 
+	std::cout << "\nSuccess" << std::endl;
+
 	return true;
 }
