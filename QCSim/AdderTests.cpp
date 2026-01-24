@@ -210,11 +210,67 @@ bool NQubitsAdderTests()
 	return true;
 }
 
+template<class Adder> bool TestAdder(Adder& adder, int n1, int n2, int nQubits)
+{
+	const size_t mask = (1ULL << nQubits) - 1;
+	const size_t expected = n1 + n2;
+
+	std::cout << "Computing " << n1 << "+" << n2 << "...";
+
+	n2 <<= nQubits;
+	n2 |= n1;
+
+	int failures = 0;
+
+	adder.setToBasisState(n2);
+
+	const auto measurements = adder.ExecuteWithMultipleMeasurements(100);
+
+	size_t mostFreqRes = measurements.begin()->first;
+	mostFreqRes >>= nQubits;
+	size_t freqMax = measurements.begin()->second;
+	for (const auto& v : measurements)
+	{
+		size_t res = v.first;
+
+		if ((res & mask) != n1)
+		{
+			std::cout << " Adder altered the first qubits, the result is: " << res << std::endl;
+			return false;
+		}
+		res >>= nQubits;
+
+		if (res != expected)
+			++failures;
+
+		size_t freq = v.second;
+		if (freq > freqMax)
+		{
+			freqMax = freq;
+			mostFreqRes = res;
+		}
+	}
+
+	if (mostFreqRes != expected)
+	{
+		std::cout << " Adder result wrong, number of failures/100 tries: " << failures << " Most frequent result: " << mostFreqRes << std::endl;
+		std::cout << "All results: " << std::endl;
+
+		for (auto& v : measurements)
+			std::cout << v.first << ", " << v.second << " times" << std::endl;
+
+		return false;
+	}
+
+	std::cout << " ok, failures/100 tries: " << failures << std::endl;
+
+	return true;
+}
 
 bool SimpleDrapperAdderTests()
 {
 	const size_t nQubits = 3;
-	const size_t mask = (1ULL << nQubits) - 1;
+	
 
 	std::cout << "Draper adder, adding " << nQubits << "-qubit values..." << std::endl;
 
@@ -231,56 +287,10 @@ bool SimpleDrapperAdderTests()
 		size_t n2 = dist_nr2(gen);
 		if (dist_bool(gen)) std::swap(n1, n2); // this allows having the bigger values (if the ones from distributions are not equal) have equal probability in both registers
 
-		std::cout << "Computing " << n1 << "+" << n2 << "...";
+		
 
-		const size_t expected = n1 + n2;
-
-		n2 <<= nQubits;
-		n2 |= n1;
-
-		int failures = 0;
-
-		adder.setToBasisState(n2);
-
-		const auto measurements = adder.ExecuteWithMultipleMeasurements(100);
-
-		size_t mostFreqRes = measurements.begin()->first;
-		mostFreqRes >>= nQubits;
-		size_t freqMax = measurements.begin()->second;
-		for (const auto& v : measurements)
-		{
-			size_t res = v.first;
-
-			if ((res & mask) != n1)
-			{
-				std::cout << " Adder altered the first qubits, the result is: " << res << std::endl;
-				return false;
-			}
-			res >>= nQubits;
-
-			if (res != expected)
-				++failures;
-
-			size_t freq = v.second;
-			if (freq > freqMax)
-			{
-				freqMax = freq;
-				mostFreqRes = res;
-			}
-		}
-
-		if (mostFreqRes != expected)
-		{
-			std::cout << " Adder result wrong, number of failures/100 tries: " << failures << " Most frequent result: " << mostFreqRes << std::endl;
-			std::cout << "All results: " << std::endl;
-
-			for (auto& v : measurements)
-				std::cout << v.first << ", " << v.second << " times" << std::endl;
-
+		if (!TestAdder(adder, n1, n2, nQubits))
 			return false;
-		}
-
-		std::cout << " ok, failures/100 tries: " << failures << std::endl;
 	}
 
 	return true;
@@ -305,54 +315,8 @@ bool DrapperAdderWithCarryTests()
 		size_t n1 = dist_nr(gen);
 		size_t n2 = dist_nr(gen);
 
-		std::cout << "Computing " << n1 << "+" << n2 << "...";
-
-		const size_t expected = n1 + n2;
-
-		n2 <<= nQubits;
-		n2 |= n1;
-
-		int failures = 0;
-		adder.setToBasisState(n2);
-		const auto measurements = adder.ExecuteWithMultipleMeasurements(100);
-
-		size_t mostFreqRes = measurements.begin()->first;
-		mostFreqRes >>= nQubits;
-		size_t freqMax = measurements.begin()->second;
-		for (const auto& v : measurements)
-		{
-			size_t res = v.first;
-
-			if ((res & mask) != n1)
-			{
-				std::cout << " Adder altered the first qubits, the result is: " << res << std::endl;
-				return false;
-			}
-			res >>= nQubits;
-
-			if (res != expected)
-				++failures;
-
-			size_t freq = v.second;
-			if (freq > freqMax)
-			{
-				freqMax = freq;
-				mostFreqRes = res;
-			}
-		}
-
-		if (mostFreqRes != expected)
-		{
-			std::cout << " Adder result wrong, number of failures/100 tries: " << failures << " Most frequent result: " << mostFreqRes << std::endl;
-			std::cout << "All results: " << std::endl;
-
-			for (auto& v : measurements)
-				std::cout << v.first << ", " << v.second << " times" << std::endl;
-
+		if (!TestAdder(adder, n1, n2, nQubits))
 			return false;
-		}
-
-		std::cout << " ok, failures/100 tries: " << failures << std::endl;
 	}
 
 	return true;

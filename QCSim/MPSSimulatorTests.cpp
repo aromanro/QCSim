@@ -57,57 +57,7 @@ void FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRzGate<>>(M_PI / 7));
 }
 
-bool OneQubitGatesTest()
-{
-	std::cout << "\nMPS simulator state test for one qubit gates" << std::endl;
 
-	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
-	FillOneQubitGates(gates);
-
-	std::uniform_int_distribution nrGatesDistr(50, 100);
-	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
-
-	for (int nrQubits = 1; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
-	{
-		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
-
-		for (int t = 0; t < 10; ++t)
-		{
-			QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
-			QC::QubitRegister reg(nrQubits);
-
-			const int lim = nrGatesDistr(gen);
-
-			for (int i = 0; i < lim; ++i)
-			{
-				const int gate = gateDistr(gen);
-				const int qubit = qubitDistr(gen);
-
-				mps.ApplyGate(*gates[gate], qubit);
-				reg.ApplyGate(*gates[gate], qubit);
-			}
-
-			// now check the results, they should be the same
-			const auto& regState = reg.getRegisterStorage();
-			const auto mpsState = mps.getRegisterStorage(); // this one is computed, returns value, not reference, not stored elsewhere
-
-			for (int i = 0; i < regState.size(); ++i)
-			{
-				if (!approxEqual(regState[i], mpsState[i]))
-				{
-					std::cout << "State simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
-					std::cout << "Reg state:\n" << regState << std::endl;
-					std::cout << "MPS state:\n" << mpsState << std::endl;
-					return false;
-				}
-			}
-		}
-	}
-
-	std::cout << "\nSuccess" << std::endl;
-
-	return true;
-}
 
 bool OneAndTwoQubitGatesTest()
 {
@@ -263,86 +213,6 @@ std::vector<std::shared_ptr<QC::Gates::AppliedGate<>>> GenerateRandomCircuitWith
 	return circuit;
 }
 
-bool TestMeasurementsWithOneQubitGatesCircuits()
-{
-	std::cout << "\nMPS simulator measurements test with circuits with one qubit gates" << std::endl;
-
-	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
-	FillOneQubitGates(gates);
-
-	const int nrMeasurements = 10000;
-
-	for (int nrQubits = 1; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
-	{
-		for (int t = 0; t < 5; ++t)
-		{
-			const auto circuit = GenerateRandomCircuitWithGates(gates, 5, 10, nrQubits);
-			for (int c = 0; c < 3; ++c)
-			{
-				std::unordered_map<std::vector<bool>, int> measurementsRegMap;
-				std::unordered_map<std::vector<bool>, int> measurementsMPSMap;
-
-				for (int i = 0; i < nrMeasurements; ++i)
-				{
-					QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
-					QC::QubitRegister reg(nrQubits);
-
-					for (const auto& gate : circuit)
-					{
-						mps.ApplyGate(*gate);
-						reg.ApplyGate(*gate);
-					}
-
-					std::vector<bool> measurementsReg(nrQubits);
-					std::vector<bool> measurementsMPS(nrQubits);
-
-					for (int q = 0; q < nrQubits; ++q)
-					{
-						measurementsReg[q] = reg.MeasureQubit(q);
-						measurementsMPS[q] = mps.MeasureQubit(q);
-					}
-					++measurementsRegMap[measurementsReg];
-					++measurementsMPSMap[measurementsMPS];
-				}
-
-				std::cout << ".";
-
-				for (const auto& [key, value] : measurementsRegMap)
-				{
-					const double dif = abs((static_cast<double>(measurementsMPSMap[key] - value)) / nrMeasurements);
-					if (dif > 0.05)
-					{
-						std::cout << "Measurements test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
-						std::cout << "Might fail due of the randomness of the measurements\n" << std::endl;
-						std::cout << "Difference: " << dif << std::endl;
-
-						std::cout << "Reg measurements:\n";
-						for (const auto& [key2, value2] : measurementsRegMap)
-						{
-							for (const auto& b : key2)
-								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(value2) / nrMeasurements << std::endl;
-						}
-
-						std::cout << "MPS measurements:\n";
-						for (const auto& [key2, value2] : measurementsMPSMap)
-						{
-							for (const auto& b : key2)
-								std::cout << b << " ";
-							std::cout << " : " << static_cast<double>(value2) / nrMeasurements << std::endl;
-						}
-
-						return false;
-					}
-				}
-			}
-		}
-	}
-
-	std::cout << "\nSuccess" << std::endl;
-
-	return true;
-}
 
 bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 {
