@@ -736,14 +736,16 @@ bool basicTests()
 bool SimulatorsTests(int option, bool res)
 {
 	if (!res) return false;
-
-	if (option == 1 || option == 3)
+	if (option == 1 || option == 4)
 		res = MPSSimulatorTests();
 
 	if (!res) return false;
-
-	if (option == 2 || option == 3)
+	if (option == 2 || option == 4)
 		res = CliffordSimulatorTests() && CliffordExpectationValuesTests();
+
+	if (!res) return false;
+	if (option == 3 || option == 4)
+		res = TestPauliPropagator();
 
 	return res;
 }
@@ -755,7 +757,7 @@ bool tests(int option)
 	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 	
 	bool res = true;
-	if (option == 0 || option == 3)
+	if (option == 0 || option == 4)
 	{
 		res = basicTests() && quantumAdderTests() && DeutschJozsaTests();
 		if (res) res = SimonTests() && BernsteinVaziraniTests() && GroverTests();

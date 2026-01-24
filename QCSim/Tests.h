@@ -3,6 +3,8 @@
 #include <complex>
 #include <Eigen/Eigen>
 #include <random>
+#include "SimpleGates.h"
+
 
 bool approxEqual(double val1, double val2, double err = 1E-10);
 bool approxEqual(std::complex<double> val1, std::complex<double> val2, double err = 1E-10);
@@ -38,6 +40,12 @@ bool MPSSimulatorTests();
 
 bool CliffordSimulatorTests();
 bool CliffordExpectationValuesTests();
+
+void ConstructPauliString(size_t nrQubits, std::string& pauliStr, std::vector<QC::Gates::AppliedGate<>>& expGates);
+void ConstructCircuit(size_t nrQubits, std::vector<int>& gates, std::vector<size_t>& qubits1, std::vector<size_t>& qubits2, std::uniform_int_distribution<int>& gateDistr, std::uniform_int_distribution<int>& qubitDistr);
+std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code);
+
+bool TestPauliPropagator();
 
 bool tests(int option);
 

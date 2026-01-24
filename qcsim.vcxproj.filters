@@ -58,6 +58,9 @@
     <ClCompile Include="QCSim\CliffordTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QCSim\PauliPropagatorTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -249,6 +252,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\PauliStringXZCoeff.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliPropagator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

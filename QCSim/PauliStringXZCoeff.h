@@ -35,6 +35,11 @@ namespace QC
 			Coefficient = 1.0;
 		}
 
+		bool operator==(const PauliStringXZWithCoefficient& other) const
+		{
+			return (X == other.X) && (Z == other.Z);
+		}
+
 		double ExpectationValue() const override
 		{
 			const double expval = PauliStringXZ::ExpectationValue();
@@ -42,7 +47,7 @@ namespace QC
 			return Coefficient * expval;
 		}
 
-		inline void ApplyH(size_t qubit)
+		inline void ApplyH(size_t qubit) override
 		{
 			// how does this work?
 			// looking at it might not reveal immediately what it does
@@ -58,7 +63,7 @@ namespace QC
 			PauliStringXZ::ApplyH(qubit);
 		}
 
-		inline void ApplyS(size_t qubit)
+		inline void ApplyS(size_t qubit) override
 		{
 			if (X[qubit] && Z[qubit])
 				Coefficient = -Coefficient;
@@ -66,14 +71,14 @@ namespace QC
 			PauliStringXZ::ApplyS(qubit);
 		}
 
-		inline void ApplyX(size_t qubit)
+		inline void ApplyX(size_t qubit) override
 		{
 			// X does nothing to X, but flips the sign for Z, as XZX^t = -Z
 			if (Z[qubit])
 				Coefficient = -Coefficient;
 		}
 
-		inline void ApplyY(size_t qubit)
+		inline void ApplyY(size_t qubit) override
 		{
 			// Y flips the sign for both X and Z, as YZY^t = -Z and YXY^t = -X
 			// if both X and Z are present, the sign is flipped twice, so it remains unchanged
@@ -83,14 +88,14 @@ namespace QC
 				Coefficient = -Coefficient;
 		}
 
-		inline void ApplyZ(size_t qubit)
+		inline void ApplyZ(size_t qubit) override
 		{
 			// very similar with applying X, but now Z does nothing to Z, and flips the sign for X, as ZXZ^t = -X
 			if (X[qubit])
 				Coefficient = -Coefficient;
 		}
 
-		inline void ApplyCX(size_t target, size_t control)
+		inline void ApplyCX(size_t target, size_t control) override
 		{
 			if (X[control] && Z[target] && XOR(X[target], !Z[control]))
 				Coefficient = -Coefficient;
@@ -98,81 +103,13 @@ namespace QC
 			PauliStringXZ::ApplyCX(target, control);
 		}
 
-		inline void ApplyK(size_t qubit)
+		std::string ToString() const override
 		{
-			ApplyZ(qubit);
-			ApplyS(qubit);
-			ApplyH(qubit);
-			ApplyS(qubit);
+			std::string result = PauliStringXZ::ToString();
+			return std::to_string(Coefficient) + " * " + result;
 		}
 
-		inline void ApplySdg(size_t qubit)
-		{
-			ApplyZ(qubit);
-			ApplyS(qubit);
-		}
-
-		inline void ApplySx(size_t qubit)
-		{
-			ApplyZ(qubit);
-			ApplyS(qubit);
-			ApplyH(qubit);
-			ApplyZ(qubit);
-			ApplyS(qubit);
-		}
-
-		inline void ApplySxDag(size_t qubit)
-		{
-			ApplyS(qubit);
-			ApplyH(qubit);
-			ApplyS(qubit);
-		}
-
-		inline void ApplyCY(size_t target, size_t control)
-		{
-			ApplyZ(target);
-			ApplyS(target);
-			ApplyCX(target, control);
-			ApplyS(target);
-		}
-
-		inline void ApplyCZ(size_t target, size_t control)
-		{
-			ApplyH(target);
-			ApplyCX(target, control);
-			ApplyH(target);
-		}
-
-		inline void ApplySwap(size_t qubit1, size_t qubit2)
-		{
-			ApplyCX(qubit1, qubit2);
-			ApplyCX(qubit2, qubit1);
-			ApplyCX(qubit1, qubit2);
-		}
-
-		inline void ApplyISwap(size_t qubit1, size_t qubit2)
-		{
-			ApplyS(qubit1);
-			ApplyH(qubit1);
-			ApplyS(qubit2);
-			ApplyCX(qubit2, qubit1);
-			ApplyCX(qubit1, qubit2);
-			ApplyH(qubit2);
-		}
-
-		inline void ApplyISwapDag(size_t qubit1, size_t qubit2)
-		{
-			ApplyH(qubit2);
-			ApplyCX(qubit1, qubit2);
-			ApplyCX(qubit2, qubit1);
-			ApplyZ(qubit2);
-			ApplyS(qubit2);
-			ApplyH(qubit1);
-			ApplyZ(qubit1);
-			ApplyS(qubit1);
-		}
-
-		double Coefficient;
+		mutable double Coefficient;
 	};
 
 }
