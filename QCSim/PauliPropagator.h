@@ -144,7 +144,7 @@ namespace QC
 				// Pin commutes with Z (Z or I is present on that qubit)
 				// Pin anticommutes with Z (X or Y is present on that qubit) - it turns out that in this case the result is 0
 
-				// { sigma_i, sigma_j } = delta_ij
+				// { sigma_i, sigma_j } = 2 delta_ij
 
 				// see the implementation for the execution of the projector for the details
 
