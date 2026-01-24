@@ -169,12 +169,50 @@ bool TestPauliPropagator()
 					const double freqStatevector = static_cast<double>(countStatevector) / static_cast<double>(shots);
 					const double freqPauli = static_cast<double>(countPauli) / static_cast<double>(shots);
 
-					//if (freqStatevector < 0.05 && freqPauli < 0.05)
-					//	continue;
-
 					if (std::abs(freqStatevector - freqPauli) > 0.1)
 					{
 						std::cout << std::endl << "Sampled frequencies are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, measurement " << state << ", values: " << freqPauli << ", " << freqStatevector << std::endl;
+						return false;
+					}
+				}
+
+				// now do the same but with measurements!
+				sampledResultsPauli.clear();
+
+				pauliSimulator.SaveState();
+				for (int j = 0; j < shots; ++j)
+				{
+					std::shuffle(measQubits.begin(), measQubits.end(), gen);
+				
+					auto res = pauliSimulator.Measure(measQubits);
+
+					size_t result = 0;
+					for (size_t q = 0; q < nrQubits; ++q)
+					{
+						if (res[q])
+						{
+							size_t qubit = measQubits[q];
+							result |= (1ULL << qubit);
+						}
+					}
+
+					++sampledResultsPauli[result];
+
+					pauliSimulator.RestoreState();
+				}
+
+				// now check the results
+				for (const auto& kv : sampledResultsStatevector)
+				{
+					const size_t state = kv.first;
+					const size_t countStatevector = kv.second;
+					const size_t countPauli = sampledResultsPauli[state];
+					const double freqStatevector = static_cast<double>(countStatevector) / static_cast<double>(shots);
+					const double freqPauli = static_cast<double>(countPauli) / static_cast<double>(shots);
+
+					if (std::abs(freqStatevector - freqPauli) > 0.1)
+					{
+						std::cout << std::endl << "Sampled - by measurement - frequencies are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, measurement " << state << ", values: " << freqPauli << ", " << freqStatevector << std::endl;
 						return false;
 					}
 				}

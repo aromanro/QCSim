@@ -34,7 +34,8 @@ namespace QC
 		CZ,
 		SWAP,
 		ISWAP,
-		ISWAPDG
+		ISWAPDG,
+		PROJ
 	};
 
 	class Operator {
@@ -69,7 +70,7 @@ namespace QC
 	private:
 		static int GetNrQubitsForType(OperationType type)
 		{
-			if (static_cast<int>(type) >= static_cast<int>(OperationType::CX))
+			if (static_cast<int>(type) >= static_cast<int>(OperationType::CX) && type != OperationType::PROJ)
 				return 2;
 			
 			return 1;
@@ -77,6 +78,28 @@ namespace QC
 
 		OperationType type;
 		std::vector<int> qubits;
+	};
+
+	class Projector : public Operator {
+	public:
+		Projector(int qubit, bool projectOne, double probability)
+			: Operator(OperationType::PROJ, qubit), projectOne(projectOne), probability(probability)
+		{
+		}
+		
+		bool IsProjectOne() const
+		{
+			return projectOne;
+		}
+
+		double GetProbability() const
+		{
+			return probability;
+		}
+
+	private:
+		bool projectOne;
+		double probability;
 	};
 
 	// the Pauli propagation execution starts with the operator and applies the gates in reverse order on it
@@ -98,6 +121,38 @@ namespace QC
 		{
 			std::random_device rd;
 			rng.seed(rd());
+		}
+
+		std::vector<bool> Measure(const std::vector<int>& qubits)
+		{
+			std::vector<bool> results;
+
+			for (int qubit : qubits)
+			{
+				const double p1 = Probability1(qubit);
+				const double prob = uniformZeroOne(rng);
+				const bool measuredOne = prob < p1;
+				results.push_back(measuredOne);
+
+				// update the circuit with the projector
+				// the projector is P0 = (I + Z)/2 or P1 = (I - Z)/2 depending on what was measured
+
+				// its action on pauli strings is:
+				// Pout = 1 / (4 * probability) * (I +/- Z) Pin (I +/- Z)
+
+				// there are two cases:
+				// Pin commutes with Z (Z or I is present on that qubit)
+				// Pin anticommutes with Z (X or Y is present on that qubit) - it turns out that in this case the result is 0
+
+				// { sigma_i, sigma_j } = delta_ij
+
+				// see the implementation for the execution of the projector for the details
+
+				std::unique_ptr<Projector> proj = std::make_unique<Projector>(qubit, measuredOne, measuredOne ? p1 : 1. - p1);
+				operations.push_back(std::move(proj));
+			}
+
+			return results;
 		}
 
 		double ExpectationValue(const std::string& pauliString)
@@ -256,77 +311,92 @@ namespace QC
 
 		void ApplyX(int qubit)
 		{
-			operations.emplace_back(OperationType::X, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::X, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyY(int qubit)
 		{
-			operations.emplace_back(OperationType::Y, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::Y, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyZ(int qubit)
 		{
-			operations.emplace_back(OperationType::Z, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::Z, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyH(int qubit)
 		{
-			operations.emplace_back(OperationType::H, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::H, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyK(int qubit)
 		{
-			operations.emplace_back(OperationType::K, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::K, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyS(int qubit)
 		{
-			operations.emplace_back(OperationType::SDG, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::SDG, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySDG(int qubit)
 		{
-			operations.emplace_back(OperationType::S, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::S, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySX(int qubit)
 		{
-			operations.emplace_back(OperationType::SXDG, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::SXDG, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySXDG(int qubit)
 		{
-			operations.emplace_back(OperationType::SX, static_cast<int>(qubit));
+			auto op = std::make_unique<Operator>(OperationType::SX, static_cast<int>(qubit));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyCX(int control, int target)
 		{
-			operations.emplace_back(OperationType::CX, static_cast<int>(control), static_cast<int>(target));
+			auto op = std::make_unique<Operator>(OperationType::CX, static_cast<int>(control), static_cast<int>(target));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyCY(int control, int target)
 		{
-			operations.emplace_back(OperationType::CY, static_cast<int>(control), static_cast<int>(target));
+			auto op = std::make_unique<Operator>(OperationType::CY, static_cast<int>(control), static_cast<int>(target));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyCZ(int control, int target)
 		{
-			operations.emplace_back(OperationType::CZ, static_cast<int>(control), static_cast<int>(target));
+			auto op = std::make_unique<Operator>(OperationType::CZ, static_cast<int>(control), static_cast<int>(target));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySWAP(int qubit1, int qubit2)
 		{
-			operations.emplace_back(OperationType::SWAP, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			auto op = std::make_unique<Operator>(OperationType::SWAP, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyISWAP(int qubit1, int qubit2)
 		{
-			operations.emplace_back(OperationType::ISWAPDG, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			auto op = std::make_unique<Operator>(OperationType::ISWAPDG, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyISWAPDG(int qubit1, int qubit2)
 		{
-			operations.emplace_back(OperationType::ISWAP, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			auto op = std::make_unique<Operator>(OperationType::ISWAP, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			operations.emplace_back(std::move(op));
 		}
 
 	private:
@@ -512,39 +582,46 @@ namespace QC
 			for (int i = static_cast<int>(operations.size()) - 1; i >= 0; --i)
 			{
 				pauliStringsOut.clear();
-				const Operator& op = operations[i];
+				const auto& op = operations[i];
 
-				switch (op.GetType())
+				switch (op->GetType())
 				{
 				case OperationType::X:
-					ExecuteX(op.GetQubit(0));
+					ExecuteX(op->GetQubit(0));
 					break;
 				case OperationType::Y:
-					ExecuteY(op.GetQubit(0));
+					ExecuteY(op->GetQubit(0));
 					break;
 				case OperationType::Z:
-					ExecuteZ(op.GetQubit(0));
+					ExecuteZ(op->GetQubit(0));
 					break;
 				case OperationType::H:
-					ExecuteH(op.GetQubit(0));
+					ExecuteH(op->GetQubit(0));
 					break;
 				case OperationType::K:
-					ExecuteK(op.GetQubit(0));
+					ExecuteK(op->GetQubit(0));
 					break;
 				case OperationType::S:
-					ExecuteS(op.GetQubit(0));
+					ExecuteS(op->GetQubit(0));
 					break;
 				case OperationType::SDG:
-					ExecuteSDG(op.GetQubit(0));
+					ExecuteSDG(op->GetQubit(0));
 					break;
 				case OperationType::SX:
-					ExecuteSX(op.GetQubit(0));
+					ExecuteSX(op->GetQubit(0));
 					break;
 				case OperationType::SXDG:
-					ExecuteSXDG(op.GetQubit(0));
+					ExecuteSXDG(op->GetQubit(0));
+					break;
+				case OperationType::PROJ:
+					{
+						auto* ptr = op.get();
+						auto* proj = static_cast<Projector*>(ptr);
+						ExecuteProj(op->GetQubit(0), proj->IsProjectOne(), proj->GetProbability());
+					}
 					break;
 				default:
-					ExecuteTwoQubitOp(op.GetType(), op.GetQubit(0), op.GetQubit(1));
+					ExecuteTwoQubitOp(op->GetType(), op->GetQubit(0), op->GetQubit(1));
 					break;
 				}
 
@@ -552,6 +629,29 @@ namespace QC
 			}
 
 			pauliStringsOut = std::move(pauliStringsIn);
+		}
+
+		void ExecuteProj(int qubit, bool projectOne, double probability)
+		{
+			for (auto& pstr : pauliStringsIn)
+			{
+				if (pstr.X[qubit])
+					continue;
+
+				PauliStringXZWithCoefficient pstrNew = pstr;
+				
+				pstrNew.Coefficient *= 0.5 / probability;
+				Insert(pstrNew); // <P>
+
+				// +/- {P, Z}
+				// I or Z present - P commutes with Z
+				pstrNew.Z[qubit] = !pstr.Z[qubit]; // Z becomes I, I becomes Z 
+					
+				if (projectOne) // P1 = (I - Z)/2
+					pstrNew.Coefficient *= -1.0;
+					
+				Insert(std::move(pstrNew));
+			}
 		}
 
 		double ExpectationValue()
@@ -571,6 +671,19 @@ namespace QC
 			return expValue;
 		}
 
+		void Insert(const PauliStringXZWithCoefficient& pstrNew)
+		{
+			auto it = pauliStringsOut.find(pstrNew);
+			if (it != pauliStringsOut.end())
+			{
+				PauliStringXZWithCoefficient pstrExisting = *it;
+				pauliStringsOut.erase(it);
+				pstrNew.Coefficient += pstrExisting.Coefficient;
+			}
+
+			pauliStringsOut.insert(pstrNew);
+		}
+
 		void Insert(PauliStringXZWithCoefficient&& pstrNew)
 		{
 			auto it = pauliStringsOut.find(pstrNew);
@@ -581,13 +694,14 @@ namespace QC
 				pstrNew.Coefficient += pstrExisting.Coefficient;
 			}
 
-			pauliStringsOut.insert(std::move(pstrNew));
+			if (pstrNew.Coefficient != 0.0)
+				pauliStringsOut.insert(std::move(pstrNew));
 		}
 
 		int nrQubits = 0;
 		std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash> pauliStringsIn;
 		std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash> pauliStringsOut;
-		std::vector<Operator> operations;
+		std::vector<std::unique_ptr<Operator>> operations;
 		size_t pos = 0;
 
 		std::mt19937_64 rng;

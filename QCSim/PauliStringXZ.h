@@ -62,6 +62,50 @@ namespace QC
 			return X.size();
 		}
 
+		bool IsX(size_t qubit) const
+		{
+			return X[qubit] && !Z[qubit];
+		}
+
+		bool IsY(size_t qubit) const
+		{
+			return X[qubit] && Z[qubit];
+		}
+
+		bool IsZ(size_t qubit) const
+		{
+			return !X[qubit] && Z[qubit];
+		}
+
+		bool IsI(size_t qubit) const
+		{
+			return !X[qubit] && !Z[qubit];
+		}
+
+		void SetI(size_t qubit)
+		{
+			X[qubit] = false;
+			Z[qubit] = false;
+		}
+
+		void SetX(size_t qubit)
+		{
+			X[qubit] = true;
+			Z[qubit] = false;
+		}
+
+		void SetY(size_t qubit)
+		{
+			X[qubit] = true;
+			Z[qubit] = true;
+		}
+
+		void SetZ(size_t qubit)
+		{
+			X[qubit] = false;
+			Z[qubit] = true;
+		}
+
 		inline static bool XOR(bool a, bool b)
 		{
 			return a != b;
