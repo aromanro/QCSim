@@ -113,6 +113,10 @@ To see various algorithms in action, look into the `Test` files.
 
 I intend to come from time to time to add more algorithms, but for now I think I have more here than I intended when I started the project, so I'll leave it like this for a while (except maybe some improvements of the existing code and bug fixes if necessary).
 
+> [!NOTE]
+> Qcsim simulators are used in Qoro Quantum's [Maestro](https://github.com/QoroQuantum/maestro), where also [qiskit aer](https://github.com/Qiskit/qiskit-aer) and [cuQuantum](https://github.com/NVIDIA/cuQuantum) based cuda simulators are used, so the simulators here are tested against those.
+> In there you may find extensions of qcsim simulators, like the p-blocked simulator (I called it 'composite') - which is useful for simulating distributed quantum computation - or a 'proof of concept' tensor network simulator (there is a serious one implemented with cuQuantum that is also used, but that one is close source).
+
 ### Tools
 
 The project compiles on Windows with Visual Studio 2026 (the code can be compiled with older versions starting with VS 2015, but it's currently maintained with VS 2026 and C++ 17 or higher).

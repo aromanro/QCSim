@@ -145,6 +145,17 @@ namespace QC
 				// Pin anticommutes with Z (X or Y is present on that qubit) - it turns out that in this case the result is 0
 
 				// { sigma_i, sigma_j } = 2 delta_ij
+				// also { Z, I } = 2 Z appears
+
+				// the whole expression is:
+
+				// Pout = 1 / (4 * probability) * (Pin +/- { Pin, Z } + Z Pin Z)
+				// Z Pin Z doesn't do anything to the pauli string except changing the sign if X or Y is present on that qubit
+				// in that case the last term cancels the first and the anticommutator is 0, so the result is 0
+
+				// for the commuting case:
+				// Pout = 1 / (4 * probability) * (2 * Pin +/- { Pin, Z })
+				// { Pin, Z } = 2 Pmod, where Pmod is Pin with Z changed to I if present on that qubit, or I changed to Z if present
 
 				// see the implementation for the execution of the projector for the details
 
@@ -239,6 +250,8 @@ namespace QC
 			results.reserve(qubits.size());
 
 			std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash> pauliStrings;
+			
+			// start with the identity on all qubits
 			PauliStringXZWithCoefficient pauliStr(nrQubits);
 			pauliStrings.insert(pauliStr);
 			
