@@ -615,8 +615,8 @@ namespace QC
 					break;
 				case OperationType::PROJ:
 					{
-						auto* ptr = op.get();
-						auto* proj = static_cast<Projector*>(ptr);
+						const auto* ptr = op.get();
+						const auto* proj = static_cast<const Projector*>(ptr);
 						ExecuteProj(op->GetQubit(0), proj->IsProjectOne(), proj->GetProbability());
 					}
 					break;
@@ -635,7 +635,7 @@ namespace QC
 		{
 			for (auto& pstr : pauliStringsIn)
 			{
-				if (pstr.X[qubit])
+				if (pstr.X[qubit]) // X or Y present - P anticommutes with Z
 					continue;
 
 				PauliStringXZWithCoefficient pstrNew = pstr;
@@ -676,12 +676,12 @@ namespace QC
 			auto it = pauliStringsOut.find(pstrNew);
 			if (it != pauliStringsOut.end())
 			{
-				PauliStringXZWithCoefficient pstrExisting = *it;
+				pstrNew.Coefficient += it->Coefficient;
 				pauliStringsOut.erase(it);
-				pstrNew.Coefficient += pstrExisting.Coefficient;
 			}
 
-			pauliStringsOut.insert(pstrNew);
+			if (pstrNew.Coefficient != 0.0)
+				pauliStringsOut.insert(pstrNew);
 		}
 
 		void Insert(PauliStringXZWithCoefficient&& pstrNew)
@@ -689,9 +689,8 @@ namespace QC
 			auto it = pauliStringsOut.find(pstrNew);
 			if (it != pauliStringsOut.end())
 			{
-				PauliStringXZWithCoefficient pstrExisting = *it;
+				pstrNew.Coefficient += it->Coefficient;
 				pauliStringsOut.erase(it);
-				pstrNew.Coefficient += pstrExisting.Coefficient;
 			}
 
 			if (pstrNew.Coefficient != 0.0)
