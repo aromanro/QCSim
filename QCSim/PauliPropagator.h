@@ -82,8 +82,8 @@ namespace QC
 
 	class Projector : public Operator {
 	public:
-		Projector(int qubit, bool projectOne, double probability)
-			: Operator(OperationType::PROJ, qubit), projectOne(projectOne), probability(probability)
+		Projector(int qubit, bool projectOne, double coefficient)
+			: Operator(OperationType::PROJ, qubit), projectOne(projectOne), coefficient(coefficient)
 		{
 		}
 		
@@ -92,14 +92,14 @@ namespace QC
 			return projectOne;
 		}
 
-		double GetProbability() const
+		double GetCoefficient() const
 		{
-			return probability;
+			return coefficient;
 		}
 
 	private:
 		bool projectOne;
-		double probability;
+		double coefficient;
 	};
 
 	// the Pauli propagation execution starts with the operator and applies the gates in reverse order on it
@@ -159,7 +159,7 @@ namespace QC
 
 				// see the implementation for the execution of the projector for the details
 
-				std::unique_ptr<Projector> proj = std::make_unique<Projector>(qubit, measuredOne, measuredOne ? p1 : 1. - p1);
+				std::unique_ptr<Projector> proj = std::make_unique<Projector>(qubit, measuredOne, 0.5 / (measuredOne ? p1 : 1. - p1));
 				operations.push_back(std::move(proj));
 			}
 
@@ -630,7 +630,7 @@ namespace QC
 					{
 						const auto* ptr = op.get();
 						const auto* proj = static_cast<const Projector*>(ptr);
-						ExecuteProj(op->GetQubit(0), proj->IsProjectOne(), proj->GetProbability());
+						ExecuteProj(op->GetQubit(0), proj->IsProjectOne(), proj->GetCoefficient());
 					}
 					break;
 				default:
@@ -644,7 +644,7 @@ namespace QC
 			pauliStringsOut = std::move(pauliStringsIn);
 		}
 
-		void ExecuteProj(int qubit, bool projectOne, double probability)
+		void ExecuteProj(int qubit, bool projectOne, double coefficient)
 		{
 			for (auto& pstr : pauliStringsIn)
 			{
@@ -653,7 +653,7 @@ namespace QC
 
 				PauliStringXZWithCoefficient pstrNew = pstr;
 				
-				pstrNew.Coefficient *= 0.5 / probability;
+				pstrNew.Coefficient *= coefficient;
 				Insert(pstrNew); // <P>
 
 				// +/- {P, Z}
