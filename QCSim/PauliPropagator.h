@@ -2,22 +2,11 @@
 
 #include "PauliStringXZCoeff.h"
 
-#include <unordered_set>
 #include <string>
 #include <random>
 
 namespace QC
 {
-	struct PauliStringXZHash
-	{
-		std::size_t operator()(const PauliStringXZ& p) const noexcept
-		{
-			std::size_t h1 = std::hash<std::vector<bool>>{}(p.X);
-			std::size_t h2 = std::hash<std::vector<bool>>{}(p.Z);
-			return h1 ^ (h2 << 1);
-		}
-	};
-
 	enum class OperationType : unsigned char
 	{
 		X,
@@ -574,7 +563,9 @@ namespace QC
 		{
 			for (auto& pstr : pauliStrings)
 			{
-				if (pstr.X[qubit]) // X or Y present - P anticommutes with Z
+				if (pstr.Coefficient == 0.0)
+					continue;
+				else if (pstr.X[qubit]) // X or Y present - P anticommutes with Z
 				{
 					pstr.Coefficient = 0.0;
 					continue;
