@@ -160,7 +160,7 @@ namespace QC
 				// see the implementation for the execution of the projector for the details
 
 				std::unique_ptr<Projector> proj = std::make_unique<Projector>(qubit, measuredOne, 0.5 / (measuredOne ? p1 : 1. - p1));
-				operations.push_back(std::move(proj));
+				operations.emplace_back(std::move(proj));
 			}
 
 			return results;
@@ -198,30 +198,21 @@ namespace QC
 
 		double ExpectationValue(const PauliStringXZWithCoefficient& pauliString)
 		{
-			pauliStringsIn.clear();
-			pauliStringsOut.clear();
+			pauliStrings.clear();
 
 			PauliStringXZWithCoefficient pstr = pauliString;
 			pstr.Resize(nrQubits);
 
-			pauliStringsIn.insert(std::move(pstr));
+			pauliStrings.emplace_back(std::move(pstr));
 
 			Execute();
 
 			return ExpectationValue();
 		}
 
-		double ExpectationValue(const std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash>& pauliStrings)
+		double ExpectationValue(const std::vector<PauliStringXZWithCoefficient>& ps)
 		{
-			pauliStringsIn.clear();
-			pauliStringsOut.clear();
-
-			for (const auto& pstr : pauliStrings)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.Resize(nrQubits);
-				pauliStringsIn.insert(std::move(pstrNew));
-			}
+			pauliStrings = ps;
 
 			Execute();
 
@@ -249,11 +240,11 @@ namespace QC
 			std::vector<bool> results;
 			results.reserve(qubits.size());
 
-			std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash> pauliStrings;
+			std::vector<PauliStringXZWithCoefficient> pauliStrings;
 			
 			// start with the identity on all qubits
 			PauliStringXZWithCoefficient pauliStr(nrQubits);
-			pauliStrings.insert(pauliStr);
+			pauliStrings.push_back(pauliStr);
 			
 			// NOTE: the scaling of the coefficients with 0.5 each time is not done, so the expectation values are not normalized
 			// the division when computing expecZ below cancels this out
@@ -263,13 +254,13 @@ namespace QC
 			{
 				const int qubit = qubits[q];
 
-				std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash> newPauliStrings;
+				std::vector<PauliStringXZWithCoefficient> newPauliStrings;
 
 				for (const auto& ps : pauliStrings)
 				{
 					pauliStr = ps;
 					pauliStr.Z[qubit] = true;
-					newPauliStrings.insert(std::move(pauliStr));
+					newPauliStrings.emplace_back(std::move(pauliStr));
 				}
 
 				const double newExpectation = ExpectationValue(newPauliStrings);
@@ -295,7 +286,7 @@ namespace QC
 					if (measuredOne) // also adjust the sign for individual pauli strings if -Z is needed
 						ps.Coefficient *= -1.0;
 
-					pauliStrings.insert(ps);
+					pauliStrings.emplace_back(std::move(ps));
 				}
 			}
 
@@ -415,152 +406,92 @@ namespace QC
 	private:
 		inline void ExecuteX(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyX(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyX(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteY(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyY(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyY(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteZ(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyZ(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyZ(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteH(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyH(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyH(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteK(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyK(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyK(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteS(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyS(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyS(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteSDG(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplySdag(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplySdag(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteSX(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplySx(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplySx(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteSXDG(int qubit)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplySxDag(static_cast<size_t>(qubit));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplySxDag(static_cast<size_t>(qubit));
 		}
 
 		inline void ExecuteCX(int control, int target)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyCX(static_cast<size_t>(control), static_cast<size_t>(target));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyCX(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 
 		inline void ExecuteCY(int control, int target)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyCY(static_cast<size_t>(control), static_cast<size_t>(target));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyCY(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 
 		inline void ExecuteCZ(int control, int target)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyCZ(static_cast<size_t>(control), static_cast<size_t>(target));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyCZ(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 
 		inline void ExecuteSWAP(int qubit1, int qubit2)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplySwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplySwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
 		}
 
 		inline void ExecuteISWAP(int control, int target)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyISwap(static_cast<size_t>(control), static_cast<size_t>(target));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyISwap(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 
 		inline void ExecuteISWAPDG(int control, int target)
 		{
-			for (auto& pstr : pauliStringsIn)
-			{
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				pstrNew.ApplyISwapDag(static_cast<size_t>(control), static_cast<size_t>(target));
-				Insert(std::move(pstrNew));
-			}
+			for (auto& pstr : pauliStrings)
+				pstr.ApplyISwapDag(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 
 		inline void ExecuteTwoQubitOp(OperationType opType, int control, int target)
@@ -594,7 +525,6 @@ namespace QC
 		{
 			for (int i = static_cast<int>(operations.size()) - 1; i >= 0; --i)
 			{
-				pauliStringsOut.clear();
 				const auto& op = operations[i];
 
 				switch (op->GetType())
@@ -637,25 +567,22 @@ namespace QC
 					ExecuteTwoQubitOp(op->GetType(), op->GetQubit(0), op->GetQubit(1));
 					break;
 				}
-
-				pauliStringsIn = std::move(pauliStringsOut);
 			}
-
-			pauliStringsOut = std::move(pauliStringsIn);
 		}
 
 		void ExecuteProj(int qubit, bool projectOne, double coefficient)
 		{
-			for (auto& pstr : pauliStringsIn)
+			for (auto& pstr : pauliStrings)
 			{
 				if (pstr.X[qubit]) // X or Y present - P anticommutes with Z
+				{
+					pstr.Coefficient = 0.0;
 					continue;
+				}
+
+				pstr.Coefficient *= coefficient; // <P>
 
 				PauliStringXZWithCoefficient pstrNew = pstr;
-				
-				pstrNew.Coefficient *= coefficient;
-				Insert(pstrNew); // <P>
-
 				// +/- {P, Z}
 				// I or Z present - P commutes with Z
 				pstrNew.Z[qubit] = !pstr.Z[qubit]; // Z becomes I, I becomes Z 
@@ -663,7 +590,7 @@ namespace QC
 				if (projectOne) // P1 = (I - Z)/2
 					pstrNew.Coefficient *= -1.0;
 					
-				Insert(std::move(pstrNew));
+				pauliStrings.emplace_back(std::move(pstrNew));
 			}
 		}
 
@@ -678,41 +605,15 @@ namespace QC
 			
 			// TODO: can be parallelized if there are many pauli strings
 			double expValue = 0.0;
-			for (const auto& pstr : pauliStringsOut)
+			for (const auto& pstr : pauliStrings)
 				expValue += pstr.ExpectationValue();
 
 			return expValue;
 		}
 
-		void Insert(const PauliStringXZWithCoefficient& pstrNew)
-		{
-			auto it = pauliStringsOut.find(pstrNew);
-			if (it != pauliStringsOut.end())
-			{
-				pstrNew.Coefficient += it->Coefficient;
-				pauliStringsOut.erase(it);
-			}
-
-			if (pstrNew.Coefficient != 0.0)
-				pauliStringsOut.insert(pstrNew);
-		}
-
-		void Insert(PauliStringXZWithCoefficient&& pstrNew)
-		{
-			auto it = pauliStringsOut.find(pstrNew);
-			if (it != pauliStringsOut.end())
-			{
-				pstrNew.Coefficient += it->Coefficient;
-				pauliStringsOut.erase(it);
-			}
-
-			if (pstrNew.Coefficient != 0.0)
-				pauliStringsOut.insert(std::move(pstrNew));
-		}
-
 		int nrQubits = 0;
-		std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash> pauliStringsIn;
-		std::unordered_set<PauliStringXZWithCoefficient, PauliStringXZHash> pauliStringsOut;
+
+		std::vector<PauliStringXZWithCoefficient> pauliStrings;
 		std::vector<std::unique_ptr<Operator>> operations;
 		size_t pos = 0;
 
