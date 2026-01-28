@@ -14,7 +14,11 @@ namespace QC
 
 		PauliStringXZ(const PauliStringXZ& other) : X(other.X), Z(other.Z) {}
 
-		PauliStringXZ(PauliStringXZ&& other) noexcept : X(std::move(other.X)), Z(std::move(other.Z)) {}
+		PauliStringXZ(PauliStringXZ&& other) noexcept
+		{
+			X.swap(other.X);
+			Z.swap(other.Z);
+		}
 
 		virtual ~PauliStringXZ() = default;
 

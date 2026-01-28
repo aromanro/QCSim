@@ -335,6 +335,7 @@
     <ClInclude Include="QCSim\Operators.h" />
     <ClInclude Include="QCSim\Oracle.h" />
     <ClInclude Include="QCSim\PauliPropagator.h" />
+    <ClInclude Include="QCSim\PauliPropOper.h" />
     <ClInclude Include="QCSim\PauliString.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />
     <ClInclude Include="QCSim\PauliStringXZ.h" />

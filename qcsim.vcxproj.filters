@@ -257,5 +257,8 @@
     <ClInclude Include="QCSim\PauliPropagator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\PauliPropOper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

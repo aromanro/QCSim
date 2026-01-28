@@ -1,96 +1,11 @@
 #pragma once
 
-#include "PauliStringXZCoeff.h"
+#include "PauliPropOper.h"
 
-#include <string>
 #include <random>
 
 namespace QC
 {
-	enum class OperationType : unsigned char
-	{
-		X,
-		Y,
-		Z,
-		H,
-		K,
-		S,
-		SDG,
-		SX,
-		SXDG,
-		CX,
-		CY,
-		CZ,
-		SWAP,
-		ISWAP,
-		ISWAPDG,
-		PROJ
-	};
-
-	class Operator {
-	public:
-		Operator() : type(OperationType::X), qubits(1, 0) {}
-
-		Operator(OperationType type, int q1 = 0, int q2 = 0, int q3 = 0)
-			: type(type), qubits(GetNrQubitsForType(type))
-		{
-			qubits[0] = q1;
-			if (GetNrQubits() > 1)
-				qubits[1] = q2;
-			if (GetNrQubits() > 2)
-				qubits[2] = q3;
-		}
-
-		int GetNrQubits() const
-		{
-			return static_cast<int>(qubits.size());
-		}
-
-		int GetQubit(size_t index) const
-		{
-			return qubits[index];
-		}
-
-		OperationType GetType() const
-		{
-			return type;
-		}
-
-	private:
-		static int GetNrQubitsForType(OperationType type)
-		{
-			if (static_cast<int>(type) >= static_cast<int>(OperationType::CX) && type != OperationType::PROJ)
-				return 2;
-			
-			return 1;
-		}
-
-		OperationType type;
-		std::vector<int> qubits;
-	};
-
-	class Projector : public Operator {
-	public:
-		Projector(int qubit, bool projectOne, double coefficient)
-			: Operator(OperationType::PROJ, qubit), projectOne(projectOne), coefficient(coefficient)
-		{
-		}
-		
-		bool IsProjectOne() const
-		{
-			return projectOne;
-		}
-
-		double GetCoefficient() const
-		{
-			return coefficient;
-		}
-
-	private:
-		bool projectOne;
-		double coefficient;
-	};
-
 	// the Pauli propagation execution starts with the operator and applies the gates in reverse order on it
 
 	// expectation value is <psi|P|psi> = <0|U^t P U|0>
@@ -115,6 +30,7 @@ namespace QC
 		std::vector<bool> Measure(const std::vector<int>& qubits)
 		{
 			std::vector<bool> results;
+			results.reserve(qubits.size());
 
 			for (int qubit : qubits)
 			{
@@ -148,7 +64,7 @@ namespace QC
 
 				// see the implementation for the execution of the projector for the details
 
-				std::unique_ptr<Projector> proj = std::make_unique<Projector>(qubit, measuredOne, 0.5 / (measuredOne ? p1 : 1. - p1));
+				std::unique_ptr<Operator> proj = std::make_unique<Projector>(qubit, measuredOne, 0.5 / (measuredOne ? p1 : 1. - p1));
 				operations.emplace_back(std::move(proj));
 			}
 
@@ -244,6 +160,7 @@ namespace QC
 				const int qubit = qubits[q];
 
 				std::vector<PauliStringXZWithCoefficient> newPauliStrings;
+				newPauliStrings.reserve(pauliStrings.size());
 
 				for (const auto& ps : pauliStrings)
 				{
@@ -304,288 +221,109 @@ namespace QC
 
 		void ApplyX(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::X, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorX>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyY(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::Y, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorY>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyZ(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::Z, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorZ>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyH(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::H, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorH>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyK(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::K, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorK>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyS(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::SDG, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorS>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySDG(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::S, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorSDG>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySX(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::SXDG, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorSX>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySXDG(int qubit)
 		{
-			auto op = std::make_unique<Operator>(OperationType::SX, static_cast<int>(qubit));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorSXDG>(qubit);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyCX(int control, int target)
 		{
-			auto op = std::make_unique<Operator>(OperationType::CX, static_cast<int>(control), static_cast<int>(target));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorCX>(control, target);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyCY(int control, int target)
 		{
-			auto op = std::make_unique<Operator>(OperationType::CY, static_cast<int>(control), static_cast<int>(target));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorCY>(control, target);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyCZ(int control, int target)
 		{
-			auto op = std::make_unique<Operator>(OperationType::CZ, static_cast<int>(control), static_cast<int>(target));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorCZ>(control, target);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplySWAP(int qubit1, int qubit2)
 		{
-			auto op = std::make_unique<Operator>(OperationType::SWAP, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorSWAP>(qubit1, qubit2);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyISWAP(int qubit1, int qubit2)
 		{
-			auto op = std::make_unique<Operator>(OperationType::ISWAPDG, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorISWAP>(qubit1, qubit2);
 			operations.emplace_back(std::move(op));
 		}
 
 		void ApplyISWAPDG(int qubit1, int qubit2)
 		{
-			auto op = std::make_unique<Operator>(OperationType::ISWAP, static_cast<int>(qubit1), static_cast<int>(qubit2));
+			std::unique_ptr<Operator> op = std::make_unique<OperatorISWAPDG>(qubit1, qubit2);
 			operations.emplace_back(std::move(op));
 		}
 
 	private:
-		inline void ExecuteX(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyX(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteY(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyY(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteZ(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyZ(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteH(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyH(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteK(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyK(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteS(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyS(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteSDG(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplySdag(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteSX(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplySx(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteSXDG(int qubit)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplySxDag(static_cast<size_t>(qubit));
-		}
-
-		inline void ExecuteCX(int control, int target)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyCX(static_cast<size_t>(control), static_cast<size_t>(target));
-		}
-
-		inline void ExecuteCY(int control, int target)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyCY(static_cast<size_t>(control), static_cast<size_t>(target));
-		}
-
-		inline void ExecuteCZ(int control, int target)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyCZ(static_cast<size_t>(control), static_cast<size_t>(target));
-		}
-
-		inline void ExecuteSWAP(int qubit1, int qubit2)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplySwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
-		}
-
-		inline void ExecuteISWAP(int control, int target)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyISwap(static_cast<size_t>(control), static_cast<size_t>(target));
-		}
-
-		inline void ExecuteISWAPDG(int control, int target)
-		{
-			for (auto& pstr : pauliStrings)
-				pstr.ApplyISwapDag(static_cast<size_t>(control), static_cast<size_t>(target));
-		}
-
-		inline void ExecuteTwoQubitOp(OperationType opType, int control, int target)
-		{
-			switch (opType)
-			{
-			case OperationType::CX:
-				ExecuteCX(control, target);
-				break;
-			case OperationType::CY:
-				ExecuteCY(control, target);
-				break;
-			case OperationType::CZ:
-				ExecuteCZ(control, target);
-				break;
-			case OperationType::SWAP:
-				ExecuteSWAP(control, target);
-				break;
-			case OperationType::ISWAP:
-				ExecuteISWAP(control, target);
-				break;
-			case OperationType::ISWAPDG:
-				ExecuteISWAPDG(control, target);
-				break;
-			default:
-				break;
-			}
-		}
-
-		void Execute()
+		inline void Execute()
 		{
 			for (int i = static_cast<int>(operations.size()) - 1; i >= 0; --i)
 			{
 				const auto& op = operations[i];
-
-				switch (op->GetType())
-				{
-				case OperationType::X:
-					ExecuteX(op->GetQubit(0));
-					break;
-				case OperationType::Y:
-					ExecuteY(op->GetQubit(0));
-					break;
-				case OperationType::Z:
-					ExecuteZ(op->GetQubit(0));
-					break;
-				case OperationType::H:
-					ExecuteH(op->GetQubit(0));
-					break;
-				case OperationType::K:
-					ExecuteK(op->GetQubit(0));
-					break;
-				case OperationType::S:
-					ExecuteS(op->GetQubit(0));
-					break;
-				case OperationType::SDG:
-					ExecuteSDG(op->GetQubit(0));
-					break;
-				case OperationType::SX:
-					ExecuteSX(op->GetQubit(0));
-					break;
-				case OperationType::SXDG:
-					ExecuteSXDG(op->GetQubit(0));
-					break;
-				case OperationType::PROJ:
-					{
-						const auto* ptr = op.get();
-						const auto* proj = static_cast<const Projector*>(ptr);
-						ExecuteProj(op->GetQubit(0), proj->IsProjectOne(), proj->GetCoefficient());
-					}
-					break;
-				default:
-					ExecuteTwoQubitOp(op->GetType(), op->GetQubit(0), op->GetQubit(1));
-					break;
-				}
+				// the operator needs to be applied on all current pauli strings
+				// but not on the newly created ones during this operation - a projector or a non-clifford gate may create new pauli strings
+				const size_t sizeBefore = pauliStrings.size();
+				for (size_t j = 0; j < sizeBefore; ++j)
+					op->Apply(pauliStrings[j], pauliStrings);
 			}
 		}
 
-		void ExecuteProj(int qubit, bool projectOne, double coefficient)
-		{
-			for (auto& pstr : pauliStrings)
-			{
-				if (pstr.Coefficient == 0.0)
-					continue;
-				else if (pstr.X[qubit]) // X or Y present - P anticommutes with Z
-				{
-					pstr.Coefficient = 0.0;
-					continue;
-				}
-
-				pstr.Coefficient *= coefficient; // <P>
-
-				PauliStringXZWithCoefficient pstrNew = pstr;
-				// +/- {P, Z}
-				// I or Z present - P commutes with Z
-				pstrNew.Z[qubit] = !pstr.Z[qubit]; // Z becomes I, I becomes Z 
-					
-				if (projectOne) // P1 = (I - Z)/2
-					pstrNew.Coefficient *= -1.0;
-					
-				pauliStrings.emplace_back(std::move(pstrNew));
-			}
-		}
-
-		double ExpectationValue()
+		inline double ExpectationValue()
 		{
 			// this is for the future, when for example it will support non-clifford gates (maybe rotation gates)
 			// such gates will expand the number of pauli strings
