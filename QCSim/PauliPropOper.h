@@ -21,7 +21,10 @@ namespace QC
 		SWAP,
 		ISWAP,
 		ISWAPDG,
-		PROJ
+		PROJ,
+		RX,
+		RY,
+		RZ
 	};
 
 	class Operator {
@@ -319,6 +322,146 @@ namespace QC
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
 			pauliString.ApplyISwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
+		}
+	};
+
+	class OperatorRotation : public Operator {
+	public:
+		OperatorRotation(OperationType type, int q1 = 0, double angle = 0.0)
+			: Operator(type, q1), angle(angle)
+		{
+		}
+
+		double GetAngle() const
+		{
+			return angle;
+		}
+
+	private:
+		double angle;
+	};
+
+	class OperatorRZ : public OperatorRotation {
+	public:
+		OperatorRZ(int q1 = 0, double angle = 0.0)
+			: OperatorRotation(OperationType::RZ, q1, angle)
+		{
+		}
+
+		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		{
+			if (pauliString.Coefficient == 0.0)
+				return;
+
+			const int qubit = GetQubit(0);
+			// if I or Z, nothing changes
+			if (!pauliString.X[qubit])
+				return;
+
+			// the Pauli string is split in two, make a copy for the second term
+			PauliStringXZWithCoefficient pstrNew = pauliString;
+
+			// the first term is multiplied by cos(angle) and preserves X or Y on the qubit position, so we're done with it
+			pauliString.Coefficient *= std::cos(GetAngle());
+
+			// now deal with the second term
+			// X is set, check Y
+			if (pauliString.Z[qubit]) // Y present
+			{
+				pstrNew.Coefficient *= std::sin(GetAngle());
+				pstrNew.Z[qubit] = false; // Y becomes X
+			}
+			else // only X present
+			{
+				pstrNew.Coefficient *= -std::sin(GetAngle());
+				pstrNew.Z[qubit] = true; // X becomes Y	
+			}
+			pauliStrings.emplace_back(std::move(pstrNew));
+		}
+	};
+
+
+	class OperatorRX : public OperatorRotation {
+	public:
+		OperatorRX(int q1 = 0, double angle = 0.0)
+			: OperatorRotation(OperationType::RX, q1, angle)
+		{
+		}
+
+		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		{
+			if (pauliString.Coefficient == 0.0)
+				return;
+
+			const int qubit = GetQubit(0);
+
+			// if I or X, nothing changes
+			if (!pauliString.Z[qubit])
+				return;
+
+			// the Pauli string is split in two, make a copy for the second term
+			PauliStringXZWithCoefficient pstrNew = pauliString;
+
+			// the first term is multiplied by cos(angle) and preserves Z or Y on the qubit position, so we're done with it
+			pauliString.Coefficient *= std::cos(GetAngle());
+
+			// now deal with the second term
+			// Z is set, check X
+			if (pauliString.X[qubit]) // Y present
+			{
+				pstrNew.Coefficient *= -std::sin(GetAngle());
+				pstrNew.X[qubit] = false; // Y becomes Z
+			}
+			else // only Z present
+			{
+				pstrNew.Coefficient *= std::sin(GetAngle());
+				pstrNew.X[qubit] = true; // Z becomes Y
+			}
+			pauliStrings.emplace_back(std::move(pstrNew));
+		}
+	};
+
+	class OperatorRY : public OperatorRotation {
+	public:
+		OperatorRY(int q1 = 0, double angle = 0.0)
+			: OperatorRotation(OperationType::RY, q1, angle)
+		{
+		}
+
+		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		{
+			if (pauliString.Coefficient == 0.0)
+				return;
+
+			const int qubit = GetQubit(0);
+
+			// if I or Y, nothing changes
+			if (pauliString.X[qubit] == pauliString.Z[qubit])
+				return;
+
+			// the Pauli string is split in two, make a copy for the second term
+			PauliStringXZWithCoefficient pstrNew = pauliString;
+
+			// the first term is multiplied by cos(angle) and preserves X or Z on the qubit position, so we're done with it
+			pauliString.Coefficient *= std::cos(GetAngle());
+
+			// now deal with the second term
+			// any can be checked, as only one is set
+			if (pauliString.X[qubit]) // X present
+			{
+				pstrNew.Coefficient *= std::sin(GetAngle());
+				// X becomes Z
+				pstrNew.X[qubit] = false;
+				pstrNew.Z[qubit] = true;
+			}
+			else // Z case
+			{
+				pstrNew.Coefficient *= -std::sin(GetAngle());
+				// Z becomes X
+				pstrNew.X[qubit] = true;
+				pstrNew.Z[qubit] = false;
+			}
+			pauliStrings.emplace_back(std::move(pstrNew));
 		}
 	};
 

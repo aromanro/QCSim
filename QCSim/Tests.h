@@ -43,7 +43,7 @@ bool CliffordExpectationValuesTests();
 
 void ConstructPauliString(size_t nrQubits, std::string& pauliStr, std::vector<QC::Gates::AppliedGate<>>& expGates);
 void ConstructCircuit(size_t nrQubits, std::vector<int>& gates, std::vector<size_t>& qubits1, std::vector<size_t>& qubits2, std::uniform_int_distribution<int>& gateDistr, std::uniform_int_distribution<int>& qubitDistr);
-std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code);
+std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code, double param = 0.0);
 
 bool TestPauliPropagator();
 

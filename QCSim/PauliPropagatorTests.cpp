@@ -30,7 +30,7 @@ void ApplyTwoQubitsGate(QC::PauliPropagator& simulator, int code, int qubit1, in
 }
 
 
-void ApplyGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2)
+void ApplyGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2, double angle = 0.0)
 {
 	switch (code)
 	{
@@ -61,6 +61,15 @@ void ApplyGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2)
 	case 8:
 		simulator.ApplyK(qubit1);
 		break;
+	case 15:
+		simulator.ApplyRX(qubit1, angle);
+		break;
+	case 16:
+		simulator.ApplyRY(qubit1, angle);
+		break;
+	case 17:
+		simulator.ApplyRZ(qubit1, angle);
+		break;
 	default:
 		ApplyTwoQubitsGate(simulator, code, qubit1, qubit2);
 		break;
@@ -87,13 +96,16 @@ bool CheckResults(int shots, int nrQubits, std::unordered_map<size_t, size_t>& s
 	return true;
 }
 
-bool TestPauliPropagator()
+bool TestPauliPropagatorCorNC(bool clifford = true)
 {
-	std::cout << "\nPauli Propagator tests" << std::endl;
+	std::cout << "\nPauli Propagator tests with " << (clifford ? "Clifford" : "non-Clifford") << " gates" << std::endl;
 	const size_t nrTests = 100;
 
 	std::uniform_int_distribution gateDistr(0, 14);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
+	std::uniform_real_distribution angleDistr(-2. * M_PI, 2. * M_PI);
+	std::bernoulli_distribution boolDistr(0.2);
+	std::uniform_int_distribution rotationGateDistr(15, 17); // RX, RY, RZ
 	
 	for (size_t nrQubits = 2; nrQubits < 20; ++nrQubits)
 	{
@@ -118,10 +130,18 @@ bool TestPauliPropagator()
 			QC::QubitRegister qubitRegister(nrQubits);
 			for (int j = 0; j < static_cast<int>(gates.size()); ++j)
 			{
-				const auto gateptr = GetGate(gates[j]);
+				auto gateptr = GetGate(gates[j]);
+				double angle = 0.0;
+				if (!clifford && boolDistr(gen))
+				{
+					gates[j] = rotationGateDistr(gen);
+					angle = angleDistr(gen);
+					gateptr = GetGate(gates[j], angle);
+				}
+				
 				qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
 
-				ApplyGate(pauliSimulator, gates[j], qubits1[j], qubits2[j]);
+				ApplyGate(pauliSimulator, gates[j], qubits1[j], qubits2[j], angle);
 			}
 
 			std::vector<QC::Gates::AppliedGate<>> expGates;
@@ -219,4 +239,10 @@ bool TestPauliPropagator()
 	std::cout << "\nSuccess" << std::endl;
 
 	return true;
+}
+
+
+bool TestPauliPropagator()
+{
+	return TestPauliPropagatorCorNC(true) && TestPauliPropagatorCorNC(false);
 }

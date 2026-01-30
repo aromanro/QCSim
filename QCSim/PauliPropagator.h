@@ -309,6 +309,24 @@ namespace QC
 			operations.emplace_back(std::move(op));
 		}
 
+		void ApplyRX(int qubit, double angle)
+		{
+			std::unique_ptr<Operator> op = std::make_unique<OperatorRX>(qubit, angle);
+			operations.emplace_back(std::move(op));
+		}
+
+		void ApplyRY(int qubit, double angle)
+		{
+			std::unique_ptr<Operator> op = std::make_unique<OperatorRY>(qubit, angle);
+			operations.emplace_back(std::move(op));
+		}
+
+		void ApplyRZ(int qubit, double angle)
+		{
+			std::unique_ptr<Operator> op = std::make_unique<OperatorRZ>(qubit, angle);
+			operations.emplace_back(std::move(op));
+		}
+
 	private:
 		inline void Execute()
 		{

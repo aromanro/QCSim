@@ -66,6 +66,16 @@ namespace QC
 			return X.size();
 		}
 
+		size_t GetPauliWeight() const
+		{
+			size_t weight = 0;
+			for (size_t i = 0; i < X.size(); ++i)
+				if (X[i] || Z[i])
+					++weight;
+
+			return weight;
+		}
+
 		bool IsX(size_t qubit) const
 		{
 			return X[qubit] && !Z[qubit];

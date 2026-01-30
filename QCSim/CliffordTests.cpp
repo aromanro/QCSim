@@ -28,7 +28,7 @@ std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetTwoQubitsGate(int code)
 }
 
 
-std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code)
+std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code, double param)
 {
 	switch (code)
 	{
@@ -50,6 +50,13 @@ std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code)
 		return std::make_shared<QC::Gates::SquareRootNOTDagGate<>>();
 	case 8:
 		return std::make_shared<QC::Gates::HyGate<>>();
+	// for non-clifford
+	case 15:
+		return std::make_shared<QC::Gates::RxGate<>>(param);
+	case 16:
+		return std::make_shared<QC::Gates::RyGate<>>(param);
+	case 17:
+		return std::make_shared<QC::Gates::RzGate<>>(param);
 	default:
 		return GetTwoQubitsGate(code);
 	}
