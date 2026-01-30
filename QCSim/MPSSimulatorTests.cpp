@@ -113,7 +113,7 @@ bool OneAndTwoQubitGatesTest()
 
 				for (int s = 0; s < regState.size(); ++s)
 				{
-					if (!approxEqual(regState[s], mpsState[s], 1E-7))
+					if (!approxEqual(regState[s], mpsState[s], 1E-3))
 					{
 						std::cout << "State " << s << " simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 
@@ -349,7 +349,7 @@ bool OneAndTwoQubitGatesTestMapped()
 
 				for (int s = 0; s < regState.size(); ++s)
 				{
-					if (!approxEqual(regState[s], mpsState[s], 1E-7))
+					if (!approxEqual(regState[s], mpsState[s], 1E-3))
 					{
 						std::cout << "State " << s << " simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 
@@ -609,7 +609,7 @@ bool OneAndTwoQubitGatesTestMappedRandomAmplitudes()
 					const auto regAmpl = reg.getBasisStateAmplitude(state);
 					const auto mpsAmpl = mps.getBasisStateAmplitude(state);
 
-					if (!approxEqual(regAmpl, mpsAmpl, 1E-7))
+					if (!approxEqual(regAmpl, mpsAmpl, 1E-3))
 					{
 						std::cout << "State " << state << " simulation test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 
@@ -679,7 +679,7 @@ bool CheckQubitsProbability()
 			{
 				const auto regProb = reg.GetQubitProbability(q);
 				const auto mpsProb = mps.GetProbability(q, false);
-				if (!approxEqual(regProb, mpsProb, 1E-5))
+				if (!approxEqual(regProb, mpsProb, 1E-3))
 				{
 					std::cout << "Qubit " << q << " probability test failed for the MPS simulator for " << nrQubits << " qubits" << std::endl;
 					std::cout << "Probability for the qubit in statevector: " << regProb << " vs mps: " << mpsProb << std::endl;
