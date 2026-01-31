@@ -66,7 +66,7 @@ namespace QC
 			return X.size();
 		}
 
-		size_t GetPauliWeight() const
+		size_t PauliWeight() const
 		{
 			size_t weight = 0;
 			for (size_t i = 0; i < X.size(); ++i)

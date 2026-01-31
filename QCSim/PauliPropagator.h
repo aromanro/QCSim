@@ -3,9 +3,28 @@
 #include "PauliPropOper.h"
 
 #include <random>
+#include <unordered_set>
 
 namespace QC
 {
+	struct PauliStringHash
+	{
+		std::size_t operator()(const std::unique_ptr<PauliStringXZWithCoefficient>& p) const
+		{
+			const auto h1 = std::hash<std::vector<bool>>{}(p->X);
+			const auto h2 = std::hash<std::vector<bool>>{}(p->Z);
+			return h1 ^ (h2 << 1);
+		}
+	};
+
+	struct PauliStringEqual
+	{
+		bool operator()(const std::unique_ptr<PauliStringXZWithCoefficient>& a, const std::unique_ptr<PauliStringXZWithCoefficient>& b) const
+		{
+			return (a->X == b->X) && (a->Z == b->Z);
+		}
+	};
+
 	// the Pauli propagation execution starts with the operator and applies the gates in reverse order on it
 
 	// expectation value is <psi|P|psi> = <0|U^t P U|0>
@@ -222,6 +241,32 @@ namespace QC
 			return results;
 		}
 
+		void Trim()
+		{
+			// remove duplicate pauli strings
+			std::unordered_set<std::unique_ptr<PauliStringXZWithCoefficient>, PauliStringHash, PauliStringEqual> uniqueSet;
+			for (auto& ps : pauliStrings)
+			{
+				// also remove the ones with pauli weight over a threshold
+				if (pauliWeightThreshold < nrQubits &&ps->PauliWeight() > pauliWeightThreshold)
+					continue;
+
+				auto it = uniqueSet.find(ps);
+				if (it != uniqueSet.end())
+					(*it)->Coefficient += ps->Coefficient;
+				else
+					uniqueSet.insert(std::move(ps));
+			}
+			pauliStrings.clear();
+			pauliStrings.reserve(uniqueSet.size());
+			
+			for (auto& ps : uniqueSet)
+			{
+				if (std::abs(ps->Coefficient) > coefThreshold) // remove small coefficient pauli strings
+					pauliStrings.push_back(std::move(const_cast<std::unique_ptr<PauliStringXZWithCoefficient>&>(ps)));
+			}
+		}
+
 		int GetNrQubits() const
 		{
 			return nrQubits;
@@ -230,6 +275,26 @@ namespace QC
 		void SetNrQubits(int nQubits)
 		{
 			nrQubits = nQubits;
+		}
+
+		double GetCoefficientThreshold() const
+		{
+			return coefThreshold;
+		}
+
+		void SetCoefficientThreshold(double threshold)
+		{
+			coefThreshold = threshold;
+		}
+
+		size_t GetPauliWeightThreshold() const
+		{
+			return pauliWeightThreshold;
+		}
+		
+		void SetPauliWeightThreshold(size_t threshold)
+		{
+			pauliWeightThreshold = threshold;
 		}
 
 		void SaveState()
@@ -390,6 +455,9 @@ namespace QC
 		std::vector<std::unique_ptr<PauliStringXZWithCoefficient>> pauliStrings;
 		std::vector<std::unique_ptr<Operator>> operations;
 		size_t pos = 0;
+
+		double coefThreshold = 0.0;
+		size_t pauliWeightThreshold = std::numeric_limits<size_t>::max();
 
 		std::mt19937_64 rng;
 		std::uniform_real_distribution<double> uniformZeroOne{ 0., 1. };
