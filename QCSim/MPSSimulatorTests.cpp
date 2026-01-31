@@ -175,7 +175,7 @@ std::vector<std::shared_ptr<QC::Gates::AppliedGate<>>> GenerateRandomCircuitWith
 		appliedGate->setQubit1(qubit1);
 		appliedGate->setQubit2(qubit2);
 		
-		circuit.emplace_back(std::move(appliedGate));
+		circuit.push_back(std::move(appliedGate));
 	}
 
 	return circuit;
@@ -207,7 +207,7 @@ std::vector<std::shared_ptr<QC::Gates::AppliedGate<>>> GenerateRandomCircuitWith
 		appliedGate->setQubit1(qubit1);
 		appliedGate->setQubit2(qubit2);
 
-		circuit.emplace_back(std::move(appliedGate));
+		circuit.push_back(std::move(appliedGate));
 	}
 
 	return circuit;

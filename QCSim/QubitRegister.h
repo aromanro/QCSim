@@ -292,7 +292,7 @@ namespace QC {
 			std::vector<double> probabilities(registerStorage.size());
 
 			double accum = 0;
-			for (size_t i = 0; i < registerStorage.size(); ++i)
+			for (size_t i = 0; i < (size_t)registerStorage.size(); ++i)
 			{
 				accum += std::norm(registerStorage[i]);
 				probabilities[i] = accum;

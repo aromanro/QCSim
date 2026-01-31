@@ -141,7 +141,7 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 				
 				qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
 
-				ApplyGate(pauliSimulator, gates[j], qubits1[j], qubits2[j], angle);
+				ApplyGate(pauliSimulator, gates[j], (int)qubits1[j], (int)qubits2[j], angle);
 			}
 
 			std::vector<QC::Gates::AppliedGate<>> expGates;
@@ -202,7 +202,7 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 
 				// now check the results
 
-				CheckResults(shots, nrQubits, sampledResultsPauli, sampledResultsStatevector);
+				CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector);
 
 				// now do the same but with measurements!
 				sampledResultsPauli.clear();
@@ -230,7 +230,7 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 				}
 
 				// now check the results
-				CheckResults(shots, nrQubits, sampledResultsPauli, sampledResultsStatevector, true);
+				CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector, true);
 			}
 		}
 		std::cout << '.';

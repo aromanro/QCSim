@@ -29,7 +29,7 @@ namespace QC {
 				return false;
 			}
 
-			virtual bool isControlQubit(size_t qubit) const
+			virtual bool isControlQubit(size_t /*qubit*/) const
 			{
 				return false;
 			}

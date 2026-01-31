@@ -23,8 +23,8 @@ namespace QC
 	public:
 		PauliPropagator()
 		{
-			std::random_device rd;
-			rng.seed(rd());
+			std::random_device rdev;
+			rng.seed(rdev());
 		}
 
 		std::vector<bool> Measure(const std::vector<int>& qubits)
@@ -65,7 +65,7 @@ namespace QC
 				// see the implementation for the execution of the projector for the details
 
 				std::unique_ptr<Operator> proj = std::make_unique<Projector>(qubit, measuredOne, 0.5 / (measuredOne ? p1 : 1. - p1));
-				operations.emplace_back(std::move(proj));
+				operations.push_back(std::move(proj));
 			}
 
 			return results;
@@ -105,24 +105,33 @@ namespace QC
 		{
 			pauliStrings.clear();
 
-			PauliStringXZWithCoefficient pstr = pauliString;
-			pstr.Resize(nrQubits);
+			std::unique_ptr<PauliStringXZWithCoefficient> pstr = std::make_unique<PauliStringXZWithCoefficient>(pauliString);
+			pstr->Resize(nrQubits);
 
-			pauliStrings.emplace_back(std::move(pstr));
+			pauliStrings.push_back(std::move(pstr));
 
 			Execute();
 
 			return ExpectationValue();
 		}
 
-		double ExpectationValue(const std::vector<PauliStringXZWithCoefficient>& ps)
+		double ExpectationValue(const std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& ps)
 		{
-			pauliStrings = ps;
+			pauliStrings.clear();
+			pauliStrings.reserve(ps.size());
+			for (const auto& p : ps)
+			{
+				std::unique_ptr<PauliStringXZWithCoefficient> pstr = std::make_unique<PauliStringXZWithCoefficient>(*p);
+				pstr->Resize(nrQubits);
+				pauliStrings.push_back(std::move(pstr));
+			}
 
 			Execute();
 
 			return ExpectationValue();
 		}
+
+
 
 		double Probability0(int qubit)
 		{
@@ -145,12 +154,13 @@ namespace QC
 			std::vector<bool> results;
 			results.reserve(qubits.size());
 
-			std::vector<PauliStringXZWithCoefficient> pauliStrings;
+			std::vector<std::unique_ptr<PauliStringXZWithCoefficient>> pauliStringsStart;
+			//pauliStringsStart.reserve(1ULL << qubits.size());
 			
 			// start with the identity on all qubits
-			PauliStringXZWithCoefficient pauliStr(nrQubits);
-			pauliStrings.push_back(pauliStr);
-			
+			auto pauliStr = std::make_unique<PauliStringXZWithCoefficient>(nrQubits);
+			pauliStringsStart.push_back(std::move(pauliStr));
+
 			// NOTE: the scaling of the coefficients with 0.5 each time is not done, so the expectation values are not normalized
 			// the division when computing expecZ below cancels this out
 
@@ -159,14 +169,14 @@ namespace QC
 			{
 				const int qubit = qubits[q];
 
-				std::vector<PauliStringXZWithCoefficient> newPauliStrings;
-				newPauliStrings.reserve(pauliStrings.size());
+				std::vector<std::unique_ptr<PauliStringXZWithCoefficient>> newPauliStrings;
+				newPauliStrings.reserve(pauliStringsStart.size());
 
-				for (const auto& ps : pauliStrings)
+				for (const auto& ps : pauliStringsStart)
 				{
-					pauliStr = ps;
-					pauliStr.Z[qubit] = true;
-					newPauliStrings.emplace_back(std::move(pauliStr));
+					pauliStr = std::make_unique<PauliStringXZWithCoefficient>(*ps);
+					pauliStr->Z[qubit] = true;
+					newPauliStrings.push_back(std::move(pauliStr));
 				}
 
 				const double newExpectation = ExpectationValue(newPauliStrings);
@@ -187,12 +197,13 @@ namespace QC
 				else
 					expectation += newExpectation; // I + Z
 
+				pauliStringsStart.reserve(pauliStringsStart.size() * 2);
 				for (auto& ps : newPauliStrings)
 				{
 					if (measuredOne) // also adjust the sign for individual pauli strings if -Z is needed
-						ps.Coefficient *= -1.0;
+						ps->Coefficient *= -1.0;
 
-					pauliStrings.emplace_back(std::move(ps));
+					pauliStringsStart.push_back(std::move(ps));
 				}
 			}
 
@@ -222,109 +233,109 @@ namespace QC
 		void ApplyX(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorX>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyY(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorY>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyZ(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorZ>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyH(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorH>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyK(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorK>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyS(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorS>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplySDG(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorSDG>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplySX(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorSX>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplySXDG(int qubit)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorSXDG>(qubit);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyCX(int control, int target)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorCX>(control, target);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyCY(int control, int target)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorCY>(control, target);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyCZ(int control, int target)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorCZ>(control, target);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplySWAP(int qubit1, int qubit2)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorSWAP>(qubit1, qubit2);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyISWAP(int qubit1, int qubit2)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorISWAP>(qubit1, qubit2);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyISWAPDG(int qubit1, int qubit2)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorISWAPDG>(qubit1, qubit2);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyRX(int qubit, double angle)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorRX>(qubit, angle);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyRY(int qubit, double angle)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorRY>(qubit, angle);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 		void ApplyRZ(int qubit, double angle)
 		{
 			std::unique_ptr<Operator> op = std::make_unique<OperatorRZ>(qubit, angle);
-			operations.emplace_back(std::move(op));
+			operations.push_back(std::move(op));
 		}
 
 	private:
@@ -336,6 +347,10 @@ namespace QC
 				// the operator needs to be applied on all current pauli strings
 				// but not on the newly created ones during this operation - a projector or a non-clifford gate may create new pauli strings
 				const size_t sizeBefore = pauliStrings.size();
+
+				if (op->GetType() >= OperationType::PROJ)
+					pauliStrings.reserve(sizeBefore * 2); // in case of projector, can double the number of pauli strings
+
 				for (size_t j = 0; j < sizeBefore; ++j)
 					op->Apply(pauliStrings[j], pauliStrings);
 			}
@@ -353,14 +368,14 @@ namespace QC
 			// TODO: can be parallelized if there are many pauli strings
 			double expValue = 0.0;
 			for (const auto& pstr : pauliStrings)
-				expValue += pstr.ExpectationValue();
+				expValue += pstr->ExpectationValue();
 
 			return expValue;
 		}
 
 		int nrQubits = 0;
 
-		std::vector<PauliStringXZWithCoefficient> pauliStrings;
+		std::vector<std::unique_ptr<PauliStringXZWithCoefficient>> pauliStrings;
 		std::vector<std::unique_ptr<Operator>> operations;
 		size_t pos = 0;
 

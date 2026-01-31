@@ -58,7 +58,7 @@ namespace QC
 
 		// the second parameter is for the case when the operator expands the number of pauli strings - should add them at the end
 		// the first is changed in place
-		virtual void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const
+		virtual void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& /*pauliString*/, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const
 		{
 		}
 
@@ -92,29 +92,29 @@ namespace QC
 			return coefficient;
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& pauliStrings) const override
 		{
-			if (pauliString.Coefficient == 0.0)
+			if (pauliString->Coefficient == 0.0)
 				return;
 			
 			const int qubit = GetQubit(0);
-			if (pauliString.X[qubit]) // X or Y present - P anticommutes with Z
+			if (pauliString->X[qubit]) // X or Y present - P anticommutes with Z
 			{
-				pauliString.Coefficient = 0.0;
+				pauliString->Coefficient = 0.0;
 				return;
 			}
 
-			pauliString.Coefficient *= coefficient; // <P>
+			pauliString->Coefficient *= coefficient; // <P>
 
-			PauliStringXZWithCoefficient pstrNew = pauliString;
+			auto pstrNew = std::make_unique<PauliStringXZWithCoefficient>(*pauliString);
 			// +/- {P, Z}
 			// I or Z present - P commutes with Z
-			pstrNew.Z[qubit] = !pauliString.Z[qubit]; // Z becomes I, I becomes Z 
+			pstrNew->Z[qubit] = !pauliString->Z[qubit]; // Z becomes I, I becomes Z
 
 			if (projectOne) // P1 = (I - Z)/2
-				pstrNew.Coefficient *= -1.0;
+				pstrNew->Coefficient *= -1.0;
 
-			pauliStrings.emplace_back(std::move(pstrNew));
+			pauliStrings.push_back(std::move(pstrNew));
 		}
 
 	private:
@@ -129,10 +129,10 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplyX(static_cast<size_t>(qubit));
+			pauliString->ApplyX(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -143,10 +143,10 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplyY(static_cast<size_t>(qubit));
+			pauliString->ApplyY(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -156,10 +156,10 @@ namespace QC
 			: Operator(OperationType::Z, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplyZ(static_cast<size_t>(qubit));
+			pauliString->ApplyZ(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -169,10 +169,10 @@ namespace QC
 			: Operator(OperationType::H, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplyH(static_cast<size_t>(qubit));
+			pauliString->ApplyH(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -182,10 +182,10 @@ namespace QC
 			: Operator(OperationType::K, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplyK(static_cast<size_t>(qubit));
+			pauliString->ApplyK(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -195,10 +195,10 @@ namespace QC
 			: Operator(OperationType::S, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplySdag(static_cast<size_t>(qubit));
+			pauliString->ApplySdag(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -208,10 +208,10 @@ namespace QC
 			: Operator(OperationType::SDG, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplyS(static_cast<size_t>(qubit));
+			pauliString->ApplyS(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -221,10 +221,10 @@ namespace QC
 			: Operator(OperationType::SX, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplySxDag(static_cast<size_t>(qubit));
+			pauliString->ApplySxDag(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -234,10 +234,10 @@ namespace QC
 			: Operator(OperationType::SXDG, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
-			pauliString.ApplySx(static_cast<size_t>(qubit));
+			pauliString->ApplySx(static_cast<size_t>(qubit));
 		}
 	};
 
@@ -247,11 +247,11 @@ namespace QC
 			: Operator(OperationType::CX, control, target)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int control = GetQubit(0);
 			const int target = GetQubit(1);
-			pauliString.ApplyCX(static_cast<size_t>(control), static_cast<size_t>(target));
+			pauliString->ApplyCX(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 	};
 
@@ -261,11 +261,11 @@ namespace QC
 			: Operator(OperationType::CY, control, target)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int control = GetQubit(0);
 			const int target = GetQubit(1);
-			pauliString.ApplyCY(static_cast<size_t>(control), static_cast<size_t>(target));
+			pauliString->ApplyCY(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 	};
 
@@ -275,11 +275,11 @@ namespace QC
 			: Operator(OperationType::CZ, control, target)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int control = GetQubit(0);
 			const int target = GetQubit(1);
-			pauliString.ApplyCZ(static_cast<size_t>(control), static_cast<size_t>(target));
+			pauliString->ApplyCZ(static_cast<size_t>(control), static_cast<size_t>(target));
 		}
 	};
 
@@ -289,11 +289,11 @@ namespace QC
 			: Operator(OperationType::SWAP, q1, q2)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
-			pauliString.ApplySwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
+			pauliString->ApplySwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
 		}
 	};
 
@@ -303,11 +303,11 @@ namespace QC
 			: Operator(OperationType::ISWAP, q1, q2)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
-			pauliString.ApplyISwapDag(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
+			pauliString->ApplyISwapDag(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
 		}
 	};
 
@@ -317,11 +317,11 @@ namespace QC
 			: Operator(OperationType::ISWAPDG, q1, q2)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
-			pauliString.ApplyISwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
+			pauliString->ApplyISwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
 		}
 	};
 
@@ -348,35 +348,35 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& pauliStrings) const override
 		{
-			if (pauliString.Coefficient == 0.0)
+			if (pauliString->Coefficient == 0.0)
 				return;
 
 			const int qubit = GetQubit(0);
 			// if I or Z, nothing changes
-			if (!pauliString.X[qubit])
+			if (!pauliString->X[qubit])
 				return;
 
 			// the Pauli string is split in two, make a copy for the second term
-			PauliStringXZWithCoefficient pstrNew = pauliString;
+			std::unique_ptr<PauliStringXZWithCoefficient> pstrNew = std::make_unique<PauliStringXZWithCoefficient>(*pauliString);
 
 			// the first term is multiplied by cos(angle) and preserves X or Y on the qubit position, so we're done with it
-			pauliString.Coefficient *= std::cos(GetAngle());
+			pauliString->Coefficient *= std::cos(GetAngle());
 
 			// now deal with the second term
 			// X is set, check Y
-			if (pauliString.Z[qubit]) // Y present
+			if (pauliString->Z[qubit]) // Y present
 			{
-				pstrNew.Coefficient *= std::sin(GetAngle());
-				pstrNew.Z[qubit] = false; // Y becomes X
+				pstrNew->Coefficient *= std::sin(GetAngle());
+				pstrNew->Z[qubit] = false; // Y becomes X
 			}
 			else // only X present
 			{
-				pstrNew.Coefficient *= -std::sin(GetAngle());
-				pstrNew.Z[qubit] = true; // X becomes Y	
+				pstrNew->Coefficient *= -std::sin(GetAngle());
+				pstrNew->Z[qubit] = true; // X becomes Y	
 			}
-			pauliStrings.emplace_back(std::move(pstrNew));
+			pauliStrings.push_back(std::move(pstrNew));
 		}
 	};
 
@@ -388,36 +388,36 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& pauliStrings) const override
 		{
-			if (pauliString.Coefficient == 0.0)
+			if (pauliString->Coefficient == 0.0)
 				return;
 
 			const int qubit = GetQubit(0);
 
 			// if I or X, nothing changes
-			if (!pauliString.Z[qubit])
+			if (!pauliString->Z[qubit])
 				return;
 
 			// the Pauli string is split in two, make a copy for the second term
-			PauliStringXZWithCoefficient pstrNew = pauliString;
+			std::unique_ptr<PauliStringXZWithCoefficient> pstrNew = std::make_unique<PauliStringXZWithCoefficient>(*pauliString);
 
 			// the first term is multiplied by cos(angle) and preserves Z or Y on the qubit position, so we're done with it
-			pauliString.Coefficient *= std::cos(GetAngle());
+			pauliString->Coefficient *= std::cos(GetAngle());
 
 			// now deal with the second term
 			// Z is set, check X
-			if (pauliString.X[qubit]) // Y present
+			if (pauliString->X[qubit]) // Y present
 			{
-				pstrNew.Coefficient *= -std::sin(GetAngle());
-				pstrNew.X[qubit] = false; // Y becomes Z
+				pstrNew->Coefficient *= -std::sin(GetAngle());
+				pstrNew->X[qubit] = false; // Y becomes Z
 			}
 			else // only Z present
 			{
-				pstrNew.Coefficient *= std::sin(GetAngle());
-				pstrNew.X[qubit] = true; // Z becomes Y
+				pstrNew->Coefficient *= std::sin(GetAngle());
+				pstrNew->X[qubit] = true; // Z becomes Y
 			}
-			pauliStrings.emplace_back(std::move(pstrNew));
+			pauliStrings.push_back(std::move(pstrNew));
 		}
 	};
 
@@ -428,40 +428,40 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& pauliStrings) const override
 		{
-			if (pauliString.Coefficient == 0.0)
+			if (pauliString->Coefficient == 0.0)
 				return;
 
 			const int qubit = GetQubit(0);
 
 			// if I or Y, nothing changes
-			if (pauliString.X[qubit] == pauliString.Z[qubit])
+			if (pauliString->X[qubit] == pauliString->Z[qubit])
 				return;
 
 			// the Pauli string is split in two, make a copy for the second term
-			PauliStringXZWithCoefficient pstrNew = pauliString;
+			std::unique_ptr<PauliStringXZWithCoefficient> pstrNew = std::make_unique<PauliStringXZWithCoefficient>(*pauliString);
 
 			// the first term is multiplied by cos(angle) and preserves X or Z on the qubit position, so we're done with it
-			pauliString.Coefficient *= std::cos(GetAngle());
+			pauliString->Coefficient *= std::cos(GetAngle());
 
 			// now deal with the second term
 			// any can be checked, as only one is set
-			if (pauliString.X[qubit]) // X present
+			if (pauliString->X[qubit]) // X present
 			{
-				pstrNew.Coefficient *= std::sin(GetAngle());
+				pstrNew->Coefficient *= std::sin(GetAngle());
 				// X becomes Z
-				pstrNew.X[qubit] = false;
-				pstrNew.Z[qubit] = true;
+				pstrNew->X[qubit] = false;
+				pstrNew->Z[qubit] = true;
 			}
 			else // Z case
 			{
-				pstrNew.Coefficient *= -std::sin(GetAngle());
+				pstrNew->Coefficient *= -std::sin(GetAngle());
 				// Z becomes X
-				pstrNew.X[qubit] = true;
-				pstrNew.Z[qubit] = false;
+				pstrNew->X[qubit] = true;
+				pstrNew->Z[qubit] = false;
 			}
-			pauliStrings.emplace_back(std::move(pstrNew));
+			pauliStrings.push_back(std::move(pstrNew));
 		}
 	};
 

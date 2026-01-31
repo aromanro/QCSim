@@ -387,7 +387,7 @@ namespace QC
 					Gates::AppliedGate<MatrixClass> translated(gate);
 					translated.setQubit1(qubitsMap[gate.getQubit1()]);
 
-					translatedOps.emplace_back(std::move(translated));
+					translatedOps.push_back(std::move(translated));
 				}
 
 				return impl.ExpectationValue(translatedOps);
