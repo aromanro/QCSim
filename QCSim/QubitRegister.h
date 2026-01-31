@@ -674,7 +674,7 @@ namespace QC {
 		}
 
 	protected:
-		inline void CheckQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
+		inline void CheckQubits(const GateClass& /*gate*/, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
 		{
 			if (NrQubits == 0) throw std::invalid_argument("Qubit number is zero");
 			else if (NrQubits <= qubit) throw std::invalid_argument("Qubit number is too high");

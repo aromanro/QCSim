@@ -115,6 +115,18 @@ namespace QC
 			return ExpectationValue();
 		}
 
+		double ExpectationValue(PauliStringXZWithCoefficient&& pauliString)
+		{
+			pauliStrings.clear();
+
+			std::unique_ptr<PauliStringXZWithCoefficient> pstr = std::make_unique<PauliStringXZWithCoefficient>(std::move(pauliString));
+			pauliStrings.push_back(std::move(pstr));
+
+			Execute();
+
+			return ExpectationValue();
+		}
+
 		double ExpectationValue(const std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& ps)
 		{
 			pauliStrings.clear();
@@ -138,7 +150,7 @@ namespace QC
 			PauliStringXZWithCoefficient pstr(nrQubits);
 			pstr.Z[qubit] = true;
 
-			return 0.5 * (1.0 + ExpectationValue(pstr));
+			return 0.5 * (1.0 + ExpectationValue(std::move(pstr)));
 		}
 
 		double Probability1(int qubit)
@@ -146,7 +158,7 @@ namespace QC
 			PauliStringXZWithCoefficient pstr(nrQubits);
 			pstr.Z[qubit] = true;
 
-			return 0.5 * (1.0 - ExpectationValue(pstr));
+			return 0.5 * (1.0 - ExpectationValue(std::move(pstr)));
 		}
 
 		std::vector<bool> Sample(const std::vector<int>& qubits)
