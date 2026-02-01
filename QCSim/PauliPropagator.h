@@ -165,7 +165,7 @@ namespace QC
 			return ExpectationValueAtEnd(pauliStrings);
 		}
 
-		double ExpectationValue(const std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& pauliStringsInput) const
+		double ExpectationValue(const PauliStringStorage& pauliStringsInput) const
 		{
 			PauliStringStorage pauliStrings;
 			pauliStrings.reserve(pauliStringsInput.size());
