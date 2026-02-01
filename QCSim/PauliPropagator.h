@@ -7,9 +7,12 @@
 
 namespace QC
 {
+	using PauliStringPtr = std::unique_ptr<PauliStringXZWithCoefficient>;
+	using PauliStringStorage = std::vector<PauliStringPtr>;
+
 	struct PauliStringHash
 	{
-		std::size_t operator()(const std::unique_ptr<PauliStringXZWithCoefficient>& p) const
+		std::size_t operator()(const PauliStringPtr& p) const
 		{
 			const auto h1 = std::hash<std::vector<bool>>{}(p->X);
 			const auto h2 = std::hash<std::vector<bool>>{}(p->Z);
@@ -19,7 +22,7 @@ namespace QC
 
 	struct PauliStringEqual
 	{
-		bool operator()(const std::unique_ptr<PauliStringXZWithCoefficient>& a, const std::unique_ptr<PauliStringXZWithCoefficient>& b) const
+		bool operator()(const PauliStringPtr& a, const PauliStringPtr& b) const
 		{
 			return (a->X == b->X) && (a->Z == b->Z);
 		}
@@ -44,6 +47,22 @@ namespace QC
 		{
 			std::random_device rdev;
 			rng.seed(rdev());
+		}
+
+		double Probability0(int qubit) const
+		{
+			PauliStringXZWithCoefficient pstr(nrQubits);
+			pstr.Z[qubit] = true;
+
+			return 0.5 * (1.0 + ExpectationValue(std::move(pstr)));
+		}
+
+		double Probability1(int qubit) const
+		{
+			PauliStringXZWithCoefficient pstr(nrQubits);
+			pstr.Z[qubit] = true;
+
+			return 0.5 * (1.0 - ExpectationValue(std::move(pstr)));
 		}
 
 		std::vector<bool> Measure(const std::vector<int>& qubits)
@@ -90,7 +109,7 @@ namespace QC
 			return results;
 		}
 
-		double ExpectationValue(const std::string& pauliString)
+		double ExpectationValue(const std::string& pauliString) const
 		{
 			PauliStringXZWithCoefficient pauli;
 			pauli.Resize(nrQubits);
@@ -120,72 +139,53 @@ namespace QC
 			return ExpectationValue(pauli);
 		}
 
-		double ExpectationValue(const PauliStringXZWithCoefficient& pauliString)
+		double ExpectationValue(const PauliStringXZWithCoefficient& pauliString) const
 		{
-			pauliStrings.clear();
+			PauliStringStorage pauliStrings;
 
-			std::unique_ptr<PauliStringXZWithCoefficient> pstr = std::make_unique<PauliStringXZWithCoefficient>(pauliString);
+			PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(pauliString);
 			pstr->Resize(nrQubits);
 
 			pauliStrings.push_back(std::move(pstr));
 
-			Execute();
+			Execute(pauliStrings);
 
-			return ExpectationValue();
+			return ExpectationValueAtEnd(pauliStrings);
 		}
 
-		double ExpectationValue(PauliStringXZWithCoefficient&& pauliString)
+		double ExpectationValue(PauliStringXZWithCoefficient&& pauliString) const
 		{
-			pauliStrings.clear();
+			PauliStringStorage pauliStrings;
 
-			std::unique_ptr<PauliStringXZWithCoefficient> pstr = std::make_unique<PauliStringXZWithCoefficient>(std::move(pauliString));
+			PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(std::move(pauliString));
 			pauliStrings.push_back(std::move(pstr));
 
-			Execute();
+			Execute(pauliStrings);
 
-			return ExpectationValue();
+			return ExpectationValueAtEnd(pauliStrings);
 		}
 
-		double ExpectationValue(const std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& ps)
+		double ExpectationValue(const std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& pauliStringsInput) const
 		{
-			pauliStrings.clear();
-			pauliStrings.reserve(ps.size());
-			for (const auto& p : ps)
+			PauliStringStorage pauliStrings;
+			pauliStrings.reserve(pauliStringsInput.size());
+			for (const auto& ps : pauliStringsInput)
 			{
-				std::unique_ptr<PauliStringXZWithCoefficient> pstr = std::make_unique<PauliStringXZWithCoefficient>(*p);
-				pstr->Resize(nrQubits);
+				PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(*ps);
 				pauliStrings.push_back(std::move(pstr));
 			}
-
-			Execute();
-
-			return ExpectationValue();
+			Execute(pauliStrings);
+			return ExpectationValueAtEnd(pauliStrings);
 		}
 
 
-
-		double Probability0(int qubit)
-		{
-			PauliStringXZWithCoefficient pstr(nrQubits);
-			pstr.Z[qubit] = true;
-
-			return 0.5 * (1.0 + ExpectationValue(std::move(pstr)));
-		}
-
-		double Probability1(int qubit)
-		{
-			PauliStringXZWithCoefficient pstr(nrQubits);
-			pstr.Z[qubit] = true;
-
-			return 0.5 * (1.0 - ExpectationValue(std::move(pstr)));
-		}
 
 		std::vector<bool> Sample(const std::vector<int>& qubits)
 		{
 			std::vector<bool> results;
 			results.reserve(qubits.size());
 
-			std::vector<std::unique_ptr<PauliStringXZWithCoefficient>> pauliStringsStart;
+			PauliStringStorage pauliStringsStart;
 			//pauliStringsStart.reserve(1ULL << qubits.size());
 			
 			// start with the identity on all qubits
@@ -200,7 +200,7 @@ namespace QC
 			{
 				const int qubit = qubits[q];
 
-				std::vector<std::unique_ptr<PauliStringXZWithCoefficient>> newPauliStrings;
+				PauliStringStorage newPauliStrings;
 				newPauliStrings.reserve(pauliStringsStart.size());
 
 				for (const auto& ps : pauliStringsStart)
@@ -241,10 +241,10 @@ namespace QC
 			return results;
 		}
 
-		void Trim()
+		void TrimWithDeduplication(PauliStringStorage& pauliStrings) const
 		{
 			// remove duplicate pauli strings
-			std::unordered_set<std::unique_ptr<PauliStringXZWithCoefficient>, PauliStringHash, PauliStringEqual> uniqueSet;
+			std::unordered_set<PauliStringPtr, PauliStringHash, PauliStringEqual> uniqueSet;
 			for (auto& ps : pauliStrings)
 			{
 				// also remove the ones with pauli weight over a threshold
@@ -263,8 +263,26 @@ namespace QC
 			for (auto& ps : uniqueSet)
 			{
 				if (std::abs(ps->Coefficient) > coefThreshold) // remove small coefficient pauli strings
-					pauliStrings.push_back(std::move(const_cast<std::unique_ptr<PauliStringXZWithCoefficient>&>(ps)));
+					pauliStrings.push_back(std::move(const_cast<PauliStringPtr&>(ps)));
 			}
+		}
+
+		void TrimWithoutDeduplication(PauliStringStorage& pauliStrings) const
+		{
+			// use the two pointer technique to remove small coefficient pauli strings in place
+			// and also the ones with pauli weight over a threshold
+			size_t writePos = 0;
+			for (size_t readPos = 0; readPos < pauliStrings.size(); ++readPos)
+			{
+				auto& ps = pauliStrings[readPos];
+				if (std::abs(ps->Coefficient) > coefThreshold && (pauliWeightThreshold >= nrQubits || ps->PauliWeight() <= pauliWeightThreshold))
+				{
+					if (writePos != readPos)
+						pauliStrings[writePos] = std::move(pauliStrings[readPos]);
+					++writePos;
+				}
+			}
+			pauliStrings.resize(writePos);
 		}
 
 		int GetNrQubits() const
@@ -416,7 +434,7 @@ namespace QC
 		}
 
 	private:
-		inline void Execute()
+		inline void Execute(PauliStringStorage& pauliStrings) const
 		{
 			for (int i = static_cast<int>(operations.size()) - 1; i >= 0; --i)
 			{
@@ -433,7 +451,7 @@ namespace QC
 			}
 		}
 
-		inline double ExpectationValue()
+		static inline double ExpectationValueAtEnd(const PauliStringStorage& pauliStrings)
 		{
 			// this is for the future, when for example it will support non-clifford gates (maybe rotation gates)
 			// such gates will expand the number of pauli strings
@@ -452,7 +470,6 @@ namespace QC
 
 		int nrQubits = 0;
 
-		std::vector<std::unique_ptr<PauliStringXZWithCoefficient>> pauliStrings;
 		std::vector<std::unique_ptr<Operator>> operations;
 		size_t pos = 0;
 
