@@ -51,28 +51,48 @@ namespace QC
 
 		double Probability0(int qubit) const
 		{
-			PauliStringXZWithCoefficient pstr(nrQubits);
-			pstr.Z[qubit] = true;
+			PauliStringStorage pauliStrings;
 
-			return 0.5 * (1.0 + ExpectationValue(std::move(pstr)));
+			return Probability0(qubit, pauliStrings);
 		}
 
-		double Probability1(int qubit) const
+		double Probability0(int qubit, PauliStringStorage& pauliStrings) const
 		{
 			PauliStringXZWithCoefficient pstr(nrQubits);
 			pstr.Z[qubit] = true;
 
-			return 0.5 * (1.0 - ExpectationValue(std::move(pstr)));
+			return 0.5 * (1.0 + ExpectationValue(std::move(pstr), pauliStrings));
+		}
+
+		double Probability1(int qubit) const
+		{
+			PauliStringStorage pauliStrings;
+			return Probability1(qubit, pauliStrings);
+		}
+
+		double Probability1(int qubit, PauliStringStorage& pauliStrings) const
+		{
+			PauliStringXZWithCoefficient pstr(nrQubits);
+			pstr.Z[qubit] = true;
+
+			return 0.5 * (1.0 - ExpectationValue(std::move(pstr), pauliStrings));
 		}
 
 		std::vector<bool> Measure(const std::vector<int>& qubits)
+		{
+			PauliStringStorage pauliStrings;
+			return Measure(qubits, pauliStrings);
+		}
+
+		std::vector<bool> Measure(const std::vector<int>& qubits, PauliStringStorage& pauliStrings)
 		{
 			std::vector<bool> results;
 			results.reserve(qubits.size());
 
 			for (int qubit : qubits)
 			{
-				const double p1 = Probability1(qubit);
+				pauliStrings.clear();
+				const double p1 = Probability1(qubit, pauliStrings);
 				const double prob = uniformZeroOne(rng);
 				const bool measuredOne = prob < p1;
 				results.push_back(measuredOne);
@@ -111,6 +131,12 @@ namespace QC
 
 		double ExpectationValue(const std::string& pauliString) const
 		{
+			PauliStringStorage pauliStrings;
+			return ExpectationValue(pauliString, pauliStrings);
+		}
+
+		double ExpectationValue(const std::string& pauliString, PauliStringStorage& pauliStrings) const
+		{
 			PauliStringXZWithCoefficient pauli;
 			pauli.Resize(nrQubits);
 
@@ -136,13 +162,17 @@ namespace QC
 				}
 			}
 
-			return ExpectationValue(pauli);
+			return ExpectationValue(pauli, pauliStrings);
 		}
 
 		double ExpectationValue(const PauliStringXZWithCoefficient& pauliString) const
 		{
 			PauliStringStorage pauliStrings;
+			return ExpectationValue(pauliString, pauliStrings);
+		}
 
+		double ExpectationValue(const PauliStringXZWithCoefficient& pauliString, PauliStringStorage& pauliStrings) const
+		{
 			PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(pauliString);
 			pstr->Resize(nrQubits);
 
@@ -156,7 +186,11 @@ namespace QC
 		double ExpectationValue(PauliStringXZWithCoefficient&& pauliString) const
 		{
 			PauliStringStorage pauliStrings;
+			return ExpectationValue(pauliString, pauliStrings);
+		}
 
+		double ExpectationValue(PauliStringXZWithCoefficient&& pauliString, PauliStringStorage& pauliStrings) const
+		{
 			PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(std::move(pauliString));
 			pauliStrings.push_back(std::move(pstr));
 
@@ -168,6 +202,11 @@ namespace QC
 		double ExpectationValue(const PauliStringStorage& pauliStringsInput) const
 		{
 			PauliStringStorage pauliStrings;
+			return ExpectationValue(pauliStringsInput, pauliStrings);
+		}
+
+		double ExpectationValue(const PauliStringStorage& pauliStringsInput, PauliStringStorage& pauliStrings) const
+		{
 			pauliStrings.reserve(pauliStringsInput.size());
 			for (const auto& ps : pauliStringsInput)
 			{
@@ -178,9 +217,13 @@ namespace QC
 			return ExpectationValueAtEnd(pauliStrings);
 		}
 
-
-
 		std::vector<bool> Sample(const std::vector<int>& qubits)
+		{
+			PauliStringStorage pauliStrings;
+			return Sample(qubits, pauliStrings);
+		}
+
+		std::vector<bool> Sample(const std::vector<int>& qubits, PauliStringStorage& pauliStrings)
 		{
 			std::vector<bool> results;
 			results.reserve(qubits.size());
@@ -199,6 +242,7 @@ namespace QC
 			for (int q = 0; q < qubits.size(); ++q)
 			{
 				const int qubit = qubits[q];
+				pauliStrings.clear();
 
 				PauliStringStorage newPauliStrings;
 				newPauliStrings.reserve(pauliStringsStart.size());
@@ -210,7 +254,7 @@ namespace QC
 					newPauliStrings.push_back(std::move(pauliStr));
 				}
 
-				const double newExpectation = ExpectationValue(newPauliStrings);
+				const double newExpectation = ExpectationValue(newPauliStrings, pauliStrings);
 				const double expecZ = newExpectation / expectation; // conditional expectation value of Z on qubit given previous measurement result
 
 				// p1 = = <P1> = <(I - Z)/2> = 0.5 * (1 - <Z>)
