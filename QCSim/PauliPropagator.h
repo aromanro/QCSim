@@ -423,21 +423,21 @@ namespace QC
 			operations.push_back(std::move(op));
 		}
 
-		void ApplyCX(int control, int target)
+		void ApplyCX(int target, int control)
 		{
-			std::unique_ptr<Operator> op = std::make_unique<OperatorCX>(control, target);
+			std::unique_ptr<Operator> op = std::make_unique<OperatorCX>(target, control);
 			operations.push_back(std::move(op));
 		}
 
-		void ApplyCY(int control, int target)
+		void ApplyCY(int target, int control)
 		{
-			std::unique_ptr<Operator> op = std::make_unique<OperatorCY>(control, target);
+			std::unique_ptr<Operator> op = std::make_unique<OperatorCY>(target, control);
 			operations.push_back(std::move(op));
 		}
 
-		void ApplyCZ(int control, int target)
+		void ApplyCZ(int target, int control)
 		{
-			std::unique_ptr<Operator> op = std::make_unique<OperatorCZ>(control, target);
+			std::unique_ptr<Operator> op = std::make_unique<OperatorCZ>(target, control);
 			operations.push_back(std::move(op));
 		}
 

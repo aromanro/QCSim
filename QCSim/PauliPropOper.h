@@ -65,7 +65,7 @@ namespace QC
 	private:
 		static int GetNrQubitsForType(OperationType type)
 		{
-			if (static_cast<int>(type) >= static_cast<int>(OperationType::CX) && type != OperationType::PROJ)
+			if (static_cast<int>(type) >= static_cast<int>(OperationType::CX) && static_cast<int>(type) < static_cast<int>(OperationType::PROJ))
 				return 2;
 
 			return 1;
@@ -243,43 +243,43 @@ namespace QC
 
 	class OperatorCX : public Operator {
 	public:
-		OperatorCX(int control = 0, int target = 0)
-			: Operator(OperationType::CX, control, target)
+		OperatorCX(int target = 0, int control = 0)
+			: Operator(OperationType::CX, target, control)
 		{
 		}
 		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
-			const int control = GetQubit(0);
-			const int target = GetQubit(1);
-			pauliString->ApplyCX(static_cast<size_t>(control), static_cast<size_t>(target));
+			const int target = GetQubit(0);
+			const int control = GetQubit(1);
+			pauliString->ApplyCX(static_cast<size_t>(target), static_cast<size_t>(control));
 		}
 	};
 
 	class OperatorCY : public Operator {
 	public:
-		OperatorCY(int control = 0, int target = 0)
-			: Operator(OperationType::CY, control, target)
+		OperatorCY(int target = 0, int control = 0)
+			: Operator(OperationType::CY, target, control)
 		{
 		}
 		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
-			const int control = GetQubit(0);
-			const int target = GetQubit(1);
-			pauliString->ApplyCY(static_cast<size_t>(control), static_cast<size_t>(target));
+			const int target = GetQubit(0);
+			const int control = GetQubit(1);
+			pauliString->ApplyCY(static_cast<size_t>(target), static_cast<size_t>(control));
 		}
 	};
 
 	class OperatorCZ : public Operator {
 	public:
-		OperatorCZ(int control = 0, int target = 0)
-			: Operator(OperationType::CZ, control, target)
+		OperatorCZ(int target = 0, int control = 0)
+			: Operator(OperationType::CZ, target, control)
 		{
 		}
 		void Apply(std::unique_ptr<PauliStringXZWithCoefficient>& pauliString, std::vector<std::unique_ptr<PauliStringXZWithCoefficient>>& /*pauliStrings*/) const override
 		{
-			const int control = GetQubit(0);
-			const int target = GetQubit(1);
-			pauliString->ApplyCZ(static_cast<size_t>(control), static_cast<size_t>(target));
+			const int target = GetQubit(0);
+			const int control = GetQubit(1);
+			pauliString->ApplyCZ(static_cast<size_t>(target), static_cast<size_t>(control));
 		}
 	};
 
