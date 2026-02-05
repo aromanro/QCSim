@@ -9,13 +9,13 @@ void ApplyTwoQubitsGate(QC::PauliPropagator& simulator, int code, int qubit1, in
 	switch (code)
 	{
 	case 9:
-		simulator.ApplyCX(qubit1, qubit2);
+		simulator.ApplyCX(qubit2, qubit1);
 		break;
 	case 10:
-		simulator.ApplyCY(qubit1, qubit2);
+		simulator.ApplyCY(qubit2, qubit1);
 		break;
 	case 11:
-		simulator.ApplyCZ(qubit1, qubit2);
+		simulator.ApplyCZ(qubit2, qubit1);
 		break;
 	case 12:
 		simulator.ApplySWAP(qubit1, qubit2);
