@@ -10,7 +10,7 @@ namespace QC
 		PauliStringXZWithCoefficient() : Coefficient(1.0) {}
 		PauliStringXZWithCoefficient(size_t nQubits) : PauliStringXZ(nQubits), Coefficient(1.0) {}
 		PauliStringXZWithCoefficient(const PauliStringXZWithCoefficient& other) : PauliStringXZ(other), Coefficient(other.Coefficient) {}
-		PauliStringXZWithCoefficient(PauliStringXZWithCoefficient&& other) noexcept : Coefficient(other.Coefficient), PauliStringXZ(std::move(other)) {}
+		PauliStringXZWithCoefficient(PauliStringXZWithCoefficient&& other) noexcept : PauliStringXZ(std::move(other)), Coefficient(other.Coefficient) {}
 		PauliStringXZWithCoefficient& operator=(const PauliStringXZWithCoefficient& other)
 		{
 			if (this != &other)
