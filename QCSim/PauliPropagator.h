@@ -7,24 +7,23 @@
 
 namespace QC
 {
-	using PauliStringPtr = std::unique_ptr<PauliStringXZWithCoefficient>;
-	using PauliStringStorage = std::vector<PauliStringPtr>;
+	using PauliStringStorage = std::vector<PauliStringXZWithCoefficient>;
 
 	struct PauliStringHash
 	{
-		std::size_t operator()(const PauliStringPtr& p) const
+		std::size_t operator()(const PauliStringXZWithCoefficient& p) const
 		{
-			const auto h1 = std::hash<std::vector<bool>>{}(p->X);
-			const auto h2 = std::hash<std::vector<bool>>{}(p->Z);
+			const auto h1 = std::hash<std::vector<bool>>{}(p.X);
+			const auto h2 = std::hash<std::vector<bool>>{}(p.Z);
 			return h1 ^ (h2 << 1);
 		}
 	};
 
 	struct PauliStringEqual
 	{
-		bool operator()(const PauliStringPtr& a, const PauliStringPtr& b) const
+		bool operator()(const PauliStringXZWithCoefficient& a, const PauliStringXZWithCoefficient& b) const
 		{
-			return (a->X == b->X) && (a->Z == b->Z);
+			return (a.X == b.X) && (a.Z == b.Z);
 		}
 	};
 
@@ -173,8 +172,8 @@ namespace QC
 
 		double ExpectationValue(const PauliStringXZWithCoefficient& pauliString, PauliStringStorage& pauliStrings) const
 		{
-			PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(pauliString);
-			pstr->Resize(nrQubits);
+			PauliStringXZWithCoefficient pstr = pauliString;
+			pstr.Resize(nrQubits);
 
 			pauliStrings.push_back(std::move(pstr));
 
@@ -191,8 +190,7 @@ namespace QC
 
 		double ExpectationValue(PauliStringXZWithCoefficient&& pauliString, PauliStringStorage& pauliStrings) const
 		{
-			PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(std::move(pauliString));
-			pauliStrings.push_back(std::move(pstr));
+			pauliStrings.push_back(std::move(pauliString));
 
 			Execute(pauliStrings);
 
@@ -210,7 +208,7 @@ namespace QC
 			pauliStrings.reserve(pauliStringsInput.size());
 			for (const auto& ps : pauliStringsInput)
 			{
-				PauliStringPtr pstr = std::make_unique<PauliStringXZWithCoefficient>(*ps);
+				PauliStringXZWithCoefficient pstr = ps;
 				pauliStrings.push_back(std::move(pstr));
 			}
 			Execute(pauliStrings);
@@ -232,7 +230,7 @@ namespace QC
 			//pauliStringsStart.reserve(1ULL << qubits.size());
 			
 			// start with the identity on all qubits
-			auto pauliStr = std::make_unique<PauliStringXZWithCoefficient>(nrQubits);
+			PauliStringXZWithCoefficient pauliStr(nrQubits);
 			pauliStringsStart.push_back(std::move(pauliStr));
 
 			// NOTE: the scaling of the coefficients with 0.5 each time is not done, so the expectation values are not normalized
@@ -249,8 +247,8 @@ namespace QC
 
 				for (const auto& ps : pauliStringsStart)
 				{
-					pauliStr = std::make_unique<PauliStringXZWithCoefficient>(*ps);
-					pauliStr->Z[qubit] = true;
+					pauliStr = PauliStringXZWithCoefficient(ps);
+					pauliStr.Z[qubit] = true;
 					newPauliStrings.push_back(std::move(pauliStr));
 				}
 
@@ -276,10 +274,13 @@ namespace QC
 				for (auto& ps : newPauliStrings)
 				{
 					if (measuredOne) // also adjust the sign for individual pauli strings if -Z is needed
-						ps->Coefficient *= -1.0;
+						ps.Coefficient *= -1.0;
 
 					pauliStringsStart.push_back(std::move(ps));
 				}
+				// does not generate duplicates,  so trim only by pauli weight (coefficients stay 1 or -1 here)
+				if (pauliWeightThreshold < nrQubits && q % stepsBetweenTrims == 0)
+					TrimWithoutDeduplication(pauliStringsStart);
 			}
 
 			return results;
@@ -288,16 +289,16 @@ namespace QC
 		void TrimWithDeduplication(PauliStringStorage& pauliStrings) const
 		{
 			// remove duplicate pauli strings
-			std::unordered_set<PauliStringPtr, PauliStringHash, PauliStringEqual> uniqueSet;
+			std::unordered_set<PauliStringXZWithCoefficient, PauliStringHash, PauliStringEqual> uniqueSet;
 			for (auto& ps : pauliStrings)
 			{
 				// also remove the ones with pauli weight over a threshold
-				if (pauliWeightThreshold < nrQubits &&ps->PauliWeight() > pauliWeightThreshold)
+				if (pauliWeightThreshold < nrQubits && ps.PauliWeight() > pauliWeightThreshold)
 					continue;
 
 				auto it = uniqueSet.find(ps);
 				if (it != uniqueSet.end())
-					(*it)->Coefficient += ps->Coefficient;
+					(*it).Coefficient += ps.Coefficient;
 				else
 					uniqueSet.insert(std::move(ps));
 			}
@@ -306,8 +307,8 @@ namespace QC
 			
 			for (auto& ps : uniqueSet)
 			{
-				if (std::abs(ps->Coefficient) > coefThreshold) // remove small coefficient pauli strings
-					pauliStrings.push_back(std::move(const_cast<PauliStringPtr&>(ps)));
+				if (std::abs(ps.Coefficient) > coefThreshold) // remove small coefficient pauli strings
+					pauliStrings.push_back(std::move(const_cast<PauliStringXZWithCoefficient&>(ps)));
 			}
 		}
 
@@ -319,7 +320,7 @@ namespace QC
 			for (size_t readPos = 0; readPos < pauliStrings.size(); ++readPos)
 			{
 				auto& ps = pauliStrings[readPos];
-				if (std::abs(ps->Coefficient) > coefThreshold && (pauliWeightThreshold >= nrQubits || ps->PauliWeight() <= pauliWeightThreshold))
+				if (std::abs(ps.Coefficient) > coefThreshold && (pauliWeightThreshold >= nrQubits || ps.PauliWeight() <= pauliWeightThreshold))
 				{
 					if (writePos != readPos)
 						pauliStrings[writePos] = std::move(pauliStrings[readPos]);
@@ -357,6 +358,26 @@ namespace QC
 		void SetPauliWeightThreshold(size_t threshold)
 		{
 			pauliWeightThreshold = threshold;
+		}
+
+		int StepsBetweenTrims() const
+		{
+			return stepsBetweenTrims;
+		}
+
+		void SetStepsBetweenTrims(int steps)
+		{
+			stepsBetweenTrims = steps;
+		}
+
+		int StepsBetweenDeduplication() const
+		{
+			return stepsBetweenDeduplication;
+		}
+
+		void SetStepsBetweenDeduplication(int steps)
+		{
+			stepsBetweenDeduplication = steps;
 		}
 
 		void SaveState()
@@ -492,6 +513,11 @@ namespace QC
 
 				for (size_t j = 0; j < sizeBefore; ++j)
 					op->Apply(pauliStrings[j], pauliStrings);
+
+				if (stepsBetweenDeduplication != std::numeric_limits<int>::max() && i % stepsBetweenDeduplication == 0)
+					TrimWithDeduplication(pauliStrings);
+				else if (stepsBetweenTrims != std::numeric_limits<int>::max() && i % stepsBetweenTrims == 0)
+					TrimWithoutDeduplication(pauliStrings);
 			}
 		}
 
@@ -507,17 +533,19 @@ namespace QC
 			// TODO: can be parallelized if there are many pauli strings
 			double expValue = 0.0;
 			for (const auto& pstr : pauliStrings)
-				expValue += pstr->ExpectationValue();
+				expValue += pstr.ExpectationValue();
 
 			return expValue;
 		}
 
 		int nrQubits = 0;
+		int stepsBetweenTrims = std::numeric_limits<int>::max();
+		int stepsBetweenDeduplication = std::numeric_limits<int>::max();
 
 		std::vector<std::unique_ptr<Operator>> operations;
 		size_t pos = 0;
 
-		double coefThreshold = 0.0;
+		double coefThreshold = 0.;
 		size_t pauliWeightThreshold = std::numeric_limits<size_t>::max();
 
 		std::mt19937_64 rng;
