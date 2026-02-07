@@ -96,6 +96,22 @@ bool CheckResults(int shots, int nrQubits, std::unordered_map<size_t, size_t>& s
 	return true;
 }
 
+bool CheckProbability(int nrQubits, QC::PauliPropagator& pauliSimulator, QC::QubitRegister<>& qubitRegister)
+{
+	for (size_t q = 0; q < nrQubits; ++q)
+	{
+		const auto p0 = qubitRegister.GetQubitProbability(q);
+		const auto p1 = 1. - pauliSimulator.Probability0(static_cast<int>(q));
+		if (std::abs(p0 - p1) > 1E-7)
+		{
+			std::cout << std::endl << "Probability values are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, qubit " << q << ", values: " << p1 << ", " << p0 << std::endl;
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool TestPauliPropagatorCorNC(bool clifford = true)
 {
 	std::cout << "\nPauli Propagator tests with " << (clifford ? "Clifford" : "non-Clifford") << " gates" << std::endl;
@@ -127,7 +143,6 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 
 			ConstructCircuit(nrQubits, gates, qubits1, qubits2, gateDistr, qubitDistr);
 
-			
 			pauliSimulator.SetNrQubits(static_cast<int>(nrQubits));
 
 			QC::QubitRegister qubitRegister(nrQubits);
@@ -164,16 +179,8 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 				return false;
 			}
 
-			for (size_t q = 0; q < nrQubits; ++q)
-			{
-				const auto p0 = qubitRegister.GetQubitProbability(q);
-				const auto p1 = 1. - pauliSimulator.Probability0(static_cast<int>(q));
-				if (std::abs(p0 - p1) > 1E-7)
-				{
-					std::cout << std::endl << "Probability values are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, qubit " << q << ", values: " << p1 << ", " << p0 << std::endl;
-					return false;
-				}
-			}
+			if (!CheckProbability(nrQubits, pauliSimulator, qubitRegister))
+				return false;
 
 			// for big number of qubits sampling on the Pauli propagator becomes too slow
 			if (nrQubits < 9 && t < 10) // also limit the number of tests, this can become very slow
@@ -215,7 +222,6 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 				for (int j = 0; j < shots; ++j)
 				{
 					std::shuffle(measQubits.begin(), measQubits.end(), gen);
-				
 					auto res = pauliSimulator.Measure(measQubits);
 
 					size_t result = 0;
