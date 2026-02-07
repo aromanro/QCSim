@@ -112,6 +112,25 @@ bool CheckProbability(int nrQubits, QC::PauliPropagator& pauliSimulator, QC::Qub
 	return true;
 }
 
+void ExecuteCircuit(QC::QubitRegister<>& qubitRegister, QC::PauliPropagator& pauliSimulator, std::vector<int>& gates, std::vector<size_t>& qubits1, std::vector<size_t>& qubits2, std::uniform_real_distribution<double>& angleDistr, std::bernoulli_distribution& boolDistr, std::uniform_int_distribution<int>& rotationGateDistr, bool clifford)
+{
+	for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+	{
+		auto gateptr = GetGate(gates[j]);
+		double angle = 0.0;
+		if (!clifford && boolDistr(gen))
+		{
+			gates[j] = rotationGateDistr(gen);
+			angle = angleDistr(gen);
+			gateptr = GetGate(gates[j], angle);
+		}
+
+		qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
+
+		ApplyGate(pauliSimulator, gates[j], (int)qubits1[j], (int)qubits2[j], angle);
+	}
+}
+
 bool TestPauliPropagatorCorNC(bool clifford = true)
 {
 	std::cout << "\nPauli Propagator tests with " << (clifford ? "Clifford" : "non-Clifford") << " gates" << std::endl;
@@ -146,21 +165,8 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 			pauliSimulator.SetNrQubits(static_cast<int>(nrQubits));
 
 			QC::QubitRegister qubitRegister(nrQubits);
-			for (int j = 0; j < static_cast<int>(gates.size()); ++j)
-			{
-				auto gateptr = GetGate(gates[j]);
-				double angle = 0.0;
-				if (!clifford && boolDistr(gen))
-				{
-					gates[j] = rotationGateDistr(gen);
-					angle = angleDistr(gen);
-					gateptr = GetGate(gates[j], angle);
-				}
-				
-				qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
 
-				ApplyGate(pauliSimulator, gates[j], (int)qubits1[j], (int)qubits2[j], angle);
-			}
+			ExecuteCircuit(qubitRegister, pauliSimulator, gates, qubits1, qubits2, angleDistr, boolDistr, rotationGateDistr, clifford);
 
 			std::vector<QC::Gates::AppliedGate<>> expGates;
 			expGates.reserve(nrQubits);
