@@ -233,7 +233,7 @@ template<class Adder> bool TestAdder(Adder& adder, int n1, int n2, int nQubits)
 	{
 		size_t res = v.first;
 
-		if ((res & mask) != n1)
+		if ((res & mask) != static_cast<size_t>(n1))
 		{
 			std::cout << " Adder altered the first qubits, the result is: " << res << std::endl;
 			return false;
@@ -300,7 +300,6 @@ bool SimpleDrapperAdderTests()
 bool DrapperAdderWithCarryTests()
 {
 	const size_t nQubits = 3;
-	const size_t mask = (1ULL << nQubits) - 1;
 
 	std::cout << "Draper adder with carry, adding " << nQubits << "-qubit values..." << std::endl;
 
