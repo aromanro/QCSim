@@ -120,7 +120,7 @@ namespace QC {
 
 				double prob = 1.0;
 				size_t countRandomQubits = DealWithDeterministicQubits(state, handledQubits, firstRandomQubit, firstP, prob);
-				if (countRandomQubits == 0)
+				if (countRandomQubits == 0 || prob == 0.0)
 					return prob;
 
 				// we're going to modify the generators, so let's save the current state, to be restored at the end
@@ -153,6 +153,8 @@ namespace QC {
 					handledQubits[firstRandomQubit] = true; // not really needed, we won't look back
 
 					countRandomQubits = DealWithDeterministicQubits(state, handledQubits, firstRandomQubit, firstP, prob);
+					if (prob == 0.0)
+						break;
 				} while (countRandomQubits > 0);
 
 				// we're done, restore the state

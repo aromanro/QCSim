@@ -7,8 +7,6 @@
 
 namespace QC
 {
-	using PauliStringStorage = std::vector<PauliStringXZWithCoefficient>;
-
 	struct PauliStringHash
 	{
 		std::size_t operator()(const PauliStringXZWithCoefficient& p) const

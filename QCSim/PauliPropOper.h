@@ -4,6 +4,8 @@
 
 namespace QC
 {
+	using PauliStringStorage = std::vector<PauliStringXZWithCoefficient>;
+
 	enum class OperationType : unsigned char
 	{
 		X,
@@ -58,7 +60,7 @@ namespace QC
 
 		// the second parameter is for the case when the operator expands the number of pauli strings - should add them at the end
 		// the first is changed in place
-		virtual void Apply(PauliStringXZWithCoefficient& /*pauliString*/, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const
+		virtual void Apply(PauliStringXZWithCoefficient& /*pauliString*/, PauliStringStorage& /*pauliStrings*/) const
 		{
 		}
 
@@ -92,7 +94,7 @@ namespace QC
 			return coefficient;
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& pauliStrings) const override
 		{
 			if (pauliString.Coefficient == 0.0)
 				return;
@@ -129,7 +131,7 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyX(static_cast<size_t>(qubit));
@@ -143,7 +145,7 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyY(static_cast<size_t>(qubit));
@@ -156,7 +158,7 @@ namespace QC
 			: Operator(OperationType::Z, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyZ(static_cast<size_t>(qubit));
@@ -169,7 +171,7 @@ namespace QC
 			: Operator(OperationType::H, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyH(static_cast<size_t>(qubit));
@@ -182,7 +184,7 @@ namespace QC
 			: Operator(OperationType::K, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyK(static_cast<size_t>(qubit));
@@ -195,7 +197,7 @@ namespace QC
 			: Operator(OperationType::S, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplySdag(static_cast<size_t>(qubit));
@@ -208,7 +210,7 @@ namespace QC
 			: Operator(OperationType::SDG, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyS(static_cast<size_t>(qubit));
@@ -221,7 +223,7 @@ namespace QC
 			: Operator(OperationType::SX, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplySxDag(static_cast<size_t>(qubit));
@@ -234,7 +236,7 @@ namespace QC
 			: Operator(OperationType::SXDG, q1)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplySx(static_cast<size_t>(qubit));
@@ -247,7 +249,7 @@ namespace QC
 			: Operator(OperationType::CX, target, control)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int target = GetQubit(0);
 			const int control = GetQubit(1);
@@ -261,7 +263,7 @@ namespace QC
 			: Operator(OperationType::CY, target, control)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int target = GetQubit(0);
 			const int control = GetQubit(1);
@@ -275,7 +277,7 @@ namespace QC
 			: Operator(OperationType::CZ, target, control)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int target = GetQubit(0);
 			const int control = GetQubit(1);
@@ -289,7 +291,7 @@ namespace QC
 			: Operator(OperationType::SWAP, q1, q2)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
@@ -303,7 +305,7 @@ namespace QC
 			: Operator(OperationType::ISWAP, q1, q2)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
@@ -317,7 +319,7 @@ namespace QC
 			: Operator(OperationType::ISWAPDG, q1, q2)
 		{
 		}
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& /*pauliStrings*/) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& /*pauliStrings*/) const override
 		{
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
@@ -348,7 +350,7 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& pauliStrings) const override
 		{
 			if (pauliString.Coefficient == 0.0)
 				return;
@@ -389,7 +391,7 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& pauliStrings) const override
 		{
 			if (pauliString.Coefficient == 0.0)
 				return;
@@ -430,7 +432,7 @@ namespace QC
 		{
 		}
 
-		void Apply(PauliStringXZWithCoefficient& pauliString, std::vector<PauliStringXZWithCoefficient>& pauliStrings) const override
+		void Apply(PauliStringXZWithCoefficient& pauliString, PauliStringStorage& pauliStrings) const override
 		{
 			if (pauliString.Coefficient == 0.0)
 				return;
