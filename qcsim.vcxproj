@@ -363,6 +363,7 @@
     <ClInclude Include="QCSim\Teleportation.h" />
     <ClInclude Include="QCSim\TeleportedCNOT.h" />
     <ClInclude Include="QCSim\Tests.h" />
+    <ClInclude Include="QCSim\ThreadPool.h" />
     <ClInclude Include="QCSim\Utils.h" />
     <ClInclude Include="QCSim\VQE.h" />
   </ItemGroup>

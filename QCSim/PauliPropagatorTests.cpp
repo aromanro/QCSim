@@ -100,14 +100,17 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 {
 	std::cout << "\nPauli Propagator tests with " << (clifford ? "Clifford" : "non-Clifford") << " gates" << std::endl;
 	const size_t nrTests = 100;
+	const size_t maxQubits = 20;
 
 	std::uniform_int_distribution gateDistr(0, 14);
 	std::uniform_int_distribution nrGatesDistr(5, 20);
 	std::uniform_real_distribution angleDistr(-2. * M_PI, 2. * M_PI);
 	std::bernoulli_distribution boolDistr(0.2);
 	std::uniform_int_distribution rotationGateDistr(15, 17); // RX, RY, RZ
+
+	QC::PauliPropagator pauliSimulator;
 	
-	for (size_t nrQubits = 2; nrQubits < 20; ++nrQubits)
+	for (size_t nrQubits = 2; nrQubits < maxQubits; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
 
@@ -124,7 +127,7 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 
 			ConstructCircuit(nrQubits, gates, qubits1, qubits2, gateDistr, qubitDistr);
 
-			QC::PauliPropagator pauliSimulator;
+			
 			pauliSimulator.SetNrQubits(static_cast<int>(nrQubits));
 
 			QC::QubitRegister qubitRegister(nrQubits);
@@ -202,7 +205,8 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 
 				// now check the results
 
-				CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector);
+				if (!CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector, true))
+					return false;
 
 				// now do the same but with measurements!
 				sampledResultsPauli.clear();
@@ -230,8 +234,11 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 				}
 
 				// now check the results
-				CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector, true);
+				if (!CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector, true))
+					return false;
 			}
+
+			pauliSimulator.ClearOperations();
 		}
 		std::cout << '.';
 	}
