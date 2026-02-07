@@ -131,6 +131,55 @@ void ExecuteCircuit(QC::QubitRegister<>& qubitRegister, QC::PauliPropagator& pau
 	}
 }
 
+std::unordered_map<size_t, size_t> CollectSampledResults(QC::PauliPropagator& pauliSimulator, std::vector<int>& measQubits, int shots, int nrQubits, std::mt19937& gen)
+{
+	std::unordered_map<size_t, size_t> sampledResultsPauli;
+	for (int j = 0; j < shots; ++j)
+	{
+		std::shuffle(measQubits.begin(), measQubits.end(), gen);
+		auto res = pauliSimulator.Sample(measQubits);
+
+		size_t result = 0;
+		for (size_t q = 0; q < nrQubits; ++q)
+		{
+			if (res[q])
+			{
+				size_t qubit = measQubits[q];
+				result |= (1ULL << qubit);
+			}
+		}
+
+		++sampledResultsPauli[result];
+	}
+	return sampledResultsPauli;
+}
+
+std::unordered_map<size_t, size_t> CollectMeasuredResults(QC::PauliPropagator& pauliSimulator, std::vector<int>& measQubits, int shots, int nrQubits, std::mt19937& gen)
+{
+	std::unordered_map<size_t, size_t> sampledResultsPauli;
+	pauliSimulator.SaveState();
+	for (int j = 0; j < shots; ++j)
+	{
+		std::shuffle(measQubits.begin(), measQubits.end(), gen);
+		auto res = pauliSimulator.Measure(measQubits);
+
+		size_t result = 0;
+		for (size_t q = 0; q < nrQubits; ++q)
+		{
+			if (res[q])
+			{
+				size_t qubit = measQubits[q];
+				result |= (1ULL << qubit);
+			}
+		}
+
+		++sampledResultsPauli[result];
+
+		pauliSimulator.RestoreState();
+	}
+	return sampledResultsPauli;
+}
+
 bool TestPauliPropagatorCorNC(bool clifford = true)
 {
 	std::cout << "\nPauli Propagator tests with " << (clifford ? "Clifford" : "non-Clifford") << " gates" << std::endl;
@@ -144,7 +193,7 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 	std::uniform_int_distribution rotationGateDistr(15, 17); // RX, RY, RZ
 
 	QC::PauliPropagator pauliSimulator;
-	
+
 	for (size_t nrQubits = 2; nrQubits < maxQubits; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
@@ -193,59 +242,16 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 			{
 				std::vector<int> measQubits(nrQubits);
 				std::iota(measQubits.begin(), measQubits.end(), 0);
-				
+
 				int shots = 1000;
 				auto sampledResultsStatevector = qubitRegister.RepeatedMeasureUnordered(shots);
-				
-				std::unordered_map<size_t, size_t> sampledResultsPauli;	
-				for (int j = 0; j < shots; ++j)
-				{
-					std::shuffle(measQubits.begin(), measQubits.end(), gen);
-					auto res = pauliSimulator.Sample(measQubits);
 
-					size_t result = 0;
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						if (res[q])
-						{
-							size_t qubit = measQubits[q];
-							result |= (1ULL << qubit);
-						}
-					}
-
-					++sampledResultsPauli[result];
-				}
-
-				// now check the results
-
+				auto sampledResultsPauli = CollectSampledResults(pauliSimulator, measQubits, shots, (int)nrQubits, gen);
 				if (!CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector, true))
 					return false;
 
 				// now do the same but with measurements!
-				sampledResultsPauli.clear();
-
-				pauliSimulator.SaveState();
-				for (int j = 0; j < shots; ++j)
-				{
-					std::shuffle(measQubits.begin(), measQubits.end(), gen);
-					auto res = pauliSimulator.Measure(measQubits);
-
-					size_t result = 0;
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						if (res[q])
-						{
-							size_t qubit = measQubits[q];
-							result |= (1ULL << qubit);
-						}
-					}
-
-					++sampledResultsPauli[result];
-
-					pauliSimulator.RestoreState();
-				}
-
-				// now check the results
+				sampledResultsPauli = CollectMeasuredResults(pauliSimulator, measQubits, shots, (int)nrQubits, gen);
 				if (!CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector, true))
 					return false;
 			}
