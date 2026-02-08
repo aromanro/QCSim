@@ -73,7 +73,9 @@ namespace QC
             std::future<Return> theFuture = task->get_future();
             {
                 std::unique_lock<std::mutex> lock(mtx);
-                tasks.emplace([task]() { (*task)(); });
+                tasks.emplace([task = std::move(task)]() { 
+                    (*task)(); 
+                    });
             }
             cv.notify_one();
             return theFuture;
