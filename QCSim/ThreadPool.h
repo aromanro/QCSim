@@ -8,6 +8,8 @@
 #include <functional>
 #include <future>
 
+#include "QubitRegisterCalculator.h"
+
 namespace QC
 {
     template<typename Return = double> class ThreadPool
@@ -16,7 +18,7 @@ namespace QC
         explicit ThreadPool(size_t numThreads = 0)
         {
             if (numThreads == 0)
-                numThreads = std::thread::hardware_concurrency();
+                numThreads = QubitRegisterCalculator<>::GetNumberOfThreads();
             if (numThreads == 0)
                 numThreads = 4;
 
@@ -31,16 +33,18 @@ namespace QC
                             cv.wait(lock, [this] { return stopped || !tasks.empty(); });
                             if (stopped && tasks.empty())
                                 return;
-                            taskRunning = true;
+                            //taskRunning = true;
                             task = std::move(tasks.front());
                             tasks.pop();
                         }
                         task();
+                        /*
                         {
                             std::unique_lock<std::mutex> lock(mtx);
                             taskRunning = false;
                         }
 						cvDone.notify_all();
+                        */
                     }
                 });
             }
@@ -75,6 +79,7 @@ namespace QC
             return theFuture;
         }
 
+        /*
         bool HasWork()
         {
             std::unique_lock<std::mutex> lock(mtx);
@@ -89,6 +94,7 @@ namespace QC
 			cvDone.wait(lock, [this] { return tasks.empty() && !taskRunning; });
             return tasks.empty() && !taskRunning;
         }
+        */
 
         size_t GetThreadCount() const { return workers.size(); }
 
@@ -97,8 +103,8 @@ namespace QC
         std::queue<std::function<void()>> tasks;
         std::mutex mtx;
         std::condition_variable cv;
-        std::condition_variable cvDone;
+        //std::condition_variable cvDone;
         bool stopped = false;
-		bool taskRunning = false;
+		//bool taskRunning = false;
     };
 }

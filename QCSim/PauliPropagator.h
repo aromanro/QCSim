@@ -46,7 +46,7 @@ namespace QC
 		{
 			std::random_device rdev;
 			rng.seed(rdev());
-			auto nrThreads = std::thread::hardware_concurrency();
+			auto nrThreads = QubitRegisterCalculator<>::GetNumberOfThreads();
 			threadPool = std::make_unique<ThreadPool<>>(nrThreads);
 		}
 
@@ -369,7 +369,7 @@ namespace QC
 			pauliStrings.resize(writePos);
 		}
 
-		inline void ApplyOperatorsParallel(int opIndex, PauliStringStorage& pauliStrings, std::mutex& resmtx, std::vector<std::future<double>>& futures, std::atomic_int& inExec) const
+		inline void ApplyOperatorsParallel(int opIndex, PauliStringStorage& pauliStrings, std::mutex& resmtx, std::vector<std::future<double>>& futures, int& inExec, std::condition_variable& cv) const
 		{
 			const size_t sizeBefore = pauliStrings.size();
 			const size_t nJobs = (sizeBefore + batchSize - 1) / batchSize;
@@ -389,16 +389,21 @@ namespace QC
 
 				if (!localNewStrings.empty())
 				{
-					++inExec;
-
+					{
+						std::lock_guard<std::mutex> lock(resmtx);
+						++inExec;
+					}
 					auto futureJob = threadPool->Enqueue(
-						[this, opIndex, localStrings = std::move(localNewStrings), &resmtx, &futures, &inExec]() -> double
+						[this, opIndex, localStrings = std::move(localNewStrings), &resmtx, &futures, &inExec, &cv]() -> double
 						{
 							auto ps = std::move(localStrings);
-							const double res = ExecuteParallel(ps, opIndex - 1, resmtx, futures, inExec);
+							const double res = ExecuteParallel(ps, opIndex - 1, resmtx, futures, inExec, cv);
 
-							--inExec;
-							
+							{
+								std::lock_guard<std::mutex> lock(resmtx);
+								--inExec;
+							}
+							cv.notify_one();
 							return res;
 						}
 					);
@@ -410,7 +415,7 @@ namespace QC
 			}
 		}
 
-		inline double ExecuteParallel(PauliStringStorage& pauliStrings, int startIndex, std::mutex& resmtx, std::vector<std::future<double>>& futures, std::atomic_int& inExec) const
+		inline double ExecuteParallel(PauliStringStorage& pauliStrings, int startIndex, std::mutex& resmtx, std::vector<std::future<double>>& futures, int& inExec, std::condition_variable& cv) const
 		{
 			for (int i = startIndex; i >= 0; --i)
 			{
@@ -421,7 +426,7 @@ namespace QC
 				const bool isSplitting = op->GetType() >= OperationType::PROJ;
 				if (sizeBefore >= parallelThreshold && isSplitting)
 				{
-					ApplyOperatorsParallel(i, pauliStrings, resmtx, futures, inExec);
+					ApplyOperatorsParallel(i, pauliStrings, resmtx, futures, inExec, cv);
 				}
 				else
 				{
@@ -450,14 +455,15 @@ namespace QC
 			{
 				std::vector<std::future<double>> futures;
 				std::mutex resmtx;
-				std::atomic_int inExec{0};
-				res = ExecuteParallel(pauliStrings, static_cast<int>(operations.size()) - 1, resmtx, futures, inExec);
+				int inExec = 0;
+				std::condition_variable cv;
+				res = ExecuteParallel(pauliStrings, static_cast<int>(operations.size()) - 1, resmtx, futures, inExec, cv);
 
 				for (;;)
 				{
-					while (!threadPool->WaitForFinish())
-						std::this_thread::yield();
+					std::unique_lock<std::mutex> lock(resmtx);
 
+					cv.wait(lock, [&inExec] { return inExec == 0; });
 					if (inExec == 0)
 						break;
 					std::this_thread::yield();
