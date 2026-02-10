@@ -255,6 +255,18 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 				sampledResultsPauli = CollectMeasuredResults(pauliSimulator, measQubits, shots, (int)nrQubits, gen);
 				if (!CheckResults(shots, (int)nrQubits, sampledResultsPauli, sampledResultsStatevector, true))
 					return false;
+
+				// this is costly so check only a few values
+				for (size_t state = 0; state < 10; ++state)
+				{
+					const auto pStatevector = qubitRegister.getBasisStateProbability(state);
+					const auto pPauli = pauliSimulator.Probability(state);
+					if (std::abs(pStatevector - pPauli) > 1E-5)
+					{
+						std::cout << std::endl << "Probability values are not equal for pauli propagator and statevector simulator for " << nrQubits << " qubits, state " << state << ", values: " << pPauli << ", " << pStatevector << std::endl;
+						return false;
+					}
+				}
 			}
 
 			pauliSimulator.ClearOperations();

@@ -220,6 +220,35 @@ namespace QC
 
 		void ClearOperations() { operations.clear(); }
 
+		double Probability(size_t outcome)
+		{
+			if (nrQubits == 0 || outcome >= 1ULL << nrQubits)
+				return 0.0;
+
+			const size_t pos = operations.size();
+
+			double res = 1.0;
+
+			const size_t lastQubit = nrQubits - 1;
+			for (size_t q = 0; q < lastQubit; ++q)
+			{
+				const bool measuredOne = (outcome & 1) == 1;
+				const double prob = measuredOne ? Probability1(q) : Probability0(q);
+				res *= prob;
+				outcome >>= 1;
+				std::unique_ptr<Operator> proj = std::make_unique<Projector>(q, measuredOne, 0.5 / prob);
+				operations.push_back(std::move(proj));
+			}
+
+			const bool measuredOne = (outcome & 1) == 1;
+			const double prob = measuredOne ? Probability1(lastQubit) : Probability0(lastQubit);
+			res *= prob;
+			
+			operations.resize(pos);
+			
+			return res;
+		}
+
 	private:
 		double ExpectationValue(const PauliStringStorage& pauliStringsInput, PauliStringStorage& pauliStrings) const
 		{
