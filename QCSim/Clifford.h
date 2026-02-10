@@ -480,7 +480,6 @@ namespace QC {
 					// check if the stabilizer anticommutes with the operator
 					const Generator& gen = stabilizerGenerators[i];
 					bool anticommutes = false;
-					int anticommutations = 0;
 					for (size_t j = 0; j < pos.size(); ++j)
 					{
 						const size_t pauliOpQubit = pos[j];
