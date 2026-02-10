@@ -193,6 +193,7 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 	std::uniform_int_distribution rotationGateDistr(15, 17); // RX, RY, RZ
 
 	QC::PauliPropagator pauliSimulator;
+	pauliSimulator.EnableParallel();
 
 	for (size_t nrQubits = 2; nrQubits < maxQubits; ++nrQubits)
 	{

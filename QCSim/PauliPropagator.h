@@ -46,8 +46,8 @@ namespace QC
 		{
 			std::random_device rdev;
 			rng.seed(rdev());
-			auto nrThreads = QubitRegisterCalculator<>::GetNumberOfThreads();
-			threadPool = std::make_unique<ThreadPool<>>(nrThreads);
+			//auto nrThreads = QubitRegisterCalculator<>::GetNumberOfThreads();
+			//threadPool = std::make_unique<ThreadPool<>>(nrThreads);
 		}
 
 		double Probability0(int qubit) const
