@@ -180,6 +180,9 @@ namespace QC
 		size_t GetBatchSizeForSum() const { return batchSizeSum; }
 		void SetBatchSizeForSum(size_t size) { batchSizeSum = size; }
 
+		size_t GetSavePosition() const { return pos; }
+		void SetSavePosition(size_t position) { pos = position; }
+
 		void EnableParallel(size_t numThreads = 0)
 		{
 			threadPool = std::make_unique<ThreadPool<>>(numThreads);
@@ -247,6 +250,20 @@ namespace QC
 			operations.resize(pos);
 			
 			return res;
+		}
+
+		std::vector<std::unique_ptr<Operator>> GetOperations() const
+		{
+			std::vector<std::unique_ptr<Operator>> ops;
+			ops.reserve(operations.size());
+			for (const auto& op : operations)
+				ops.push_back(std::move(op->Clone()));
+			return ops;
+		}
+
+		void SetOperations(std::vector<std::unique_ptr<Operator>>&& newOps)
+		{
+			operations = std::move(newOps);
 		}
 
 	private:

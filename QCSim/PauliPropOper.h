@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include "PauliStringXZCoeff.h"
 
 namespace QC
@@ -64,6 +65,11 @@ namespace QC
 		{
 		}
 
+		virtual std::unique_ptr<Operator> Clone() const
+		{
+			return nullptr;
+		}
+
 	private:
 		static int GetNrQubitsForType(OperationType type)
 		{
@@ -119,6 +125,11 @@ namespace QC
 			pauliStrings.push_back(std::move(pstrNew));
 		}
 
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<Projector>(GetQubit(0), projectOne, coefficient);
+		}
+		
 	private:
 		bool projectOne;
 		double coefficient;
@@ -136,6 +147,11 @@ namespace QC
 			const int qubit = GetQubit(0);
 			pauliString.ApplyX(static_cast<size_t>(qubit));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorX>(GetQubit(0));
+		}
 	};
 
 	class OperatorY : public Operator {
@@ -150,6 +166,11 @@ namespace QC
 			const int qubit = GetQubit(0);
 			pauliString.ApplyY(static_cast<size_t>(qubit));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorY>(GetQubit(0));
+		}
 	};
 
 	class OperatorZ : public Operator {
@@ -162,6 +183,11 @@ namespace QC
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyZ(static_cast<size_t>(qubit));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorZ>(GetQubit(0));
 		}
 	};
 
@@ -176,6 +202,11 @@ namespace QC
 			const int qubit = GetQubit(0);
 			pauliString.ApplyH(static_cast<size_t>(qubit));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorH>(GetQubit(0));
+		}
 	};
 
 	class OperatorK : public Operator {
@@ -188,6 +219,11 @@ namespace QC
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyK(static_cast<size_t>(qubit));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorK>(GetQubit(0));
 		}
 	};
 
@@ -202,6 +238,11 @@ namespace QC
 			const int qubit = GetQubit(0);
 			pauliString.ApplySdag(static_cast<size_t>(qubit));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorS>(GetQubit(0));
+		}
 	};
 
 	class OperatorSDG : public Operator {
@@ -214,6 +255,11 @@ namespace QC
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplyS(static_cast<size_t>(qubit));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorSDG>(GetQubit(0));
 		}
 	};
 
@@ -228,6 +274,11 @@ namespace QC
 			const int qubit = GetQubit(0);
 			pauliString.ApplySxDag(static_cast<size_t>(qubit));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorSX>(GetQubit(0));
+		}
 	};
 
 	class OperatorSXDG : public Operator {
@@ -240,6 +291,11 @@ namespace QC
 		{
 			const int qubit = GetQubit(0);
 			pauliString.ApplySx(static_cast<size_t>(qubit));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorSXDG>(GetQubit(0));
 		}
 	};
 
@@ -255,6 +311,11 @@ namespace QC
 			const int control = GetQubit(1);
 			pauliString.ApplyCX(static_cast<size_t>(target), static_cast<size_t>(control));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorCX>(GetQubit(0), GetQubit(1));
+		}
 	};
 
 	class OperatorCY : public Operator {
@@ -268,6 +329,11 @@ namespace QC
 			const int target = GetQubit(0);
 			const int control = GetQubit(1);
 			pauliString.ApplyCY(static_cast<size_t>(target), static_cast<size_t>(control));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorCY>(GetQubit(0), GetQubit(1));
 		}
 	};
 
@@ -283,6 +349,11 @@ namespace QC
 			const int control = GetQubit(1);
 			pauliString.ApplyCZ(static_cast<size_t>(target), static_cast<size_t>(control));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorCZ>(GetQubit(0), GetQubit(1));
+		}
 	};
 
 	class OperatorSWAP : public Operator {
@@ -296,6 +367,11 @@ namespace QC
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
 			pauliString.ApplySwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorSWAP>(GetQubit(0), GetQubit(1));
 		}
 	};
 
@@ -311,6 +387,11 @@ namespace QC
 			const int qubit2 = GetQubit(1);
 			pauliString.ApplyISwapDag(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorISWAP>(GetQubit(0), GetQubit(1));
+		}
 	};
 
 	class OperatorISWAPDG : public Operator {
@@ -324,6 +405,11 @@ namespace QC
 			const int qubit1 = GetQubit(0);
 			const int qubit2 = GetQubit(1);
 			pauliString.ApplyISwap(static_cast<size_t>(qubit1), static_cast<size_t>(qubit2));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorISWAPDG>(GetQubit(0), GetQubit(1));
 		}
 	};
 
@@ -381,6 +467,11 @@ namespace QC
 			}
 			pauliStrings.push_back(std::move(pstrNew));
 		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorRZ>(GetQubit(0), GetAngle());
+		}
 	};
 
 
@@ -422,6 +513,11 @@ namespace QC
 				pstrNew.X[qubit] = true; // Z becomes Y
 			}
 			pauliStrings.push_back(std::move(pstrNew));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorRX>(GetQubit(0), GetAngle());
 		}
 	};
 
@@ -467,6 +563,11 @@ namespace QC
 				pstrNew.Z[qubit] = false;
 			}
 			pauliStrings.push_back(std::move(pstrNew));
+		}
+
+		std::unique_ptr<Operator> Clone() const override
+		{
+			return std::make_unique<OperatorRY>(GetQubit(0), GetAngle());
 		}
 	};
 
