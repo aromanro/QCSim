@@ -47,6 +47,8 @@ std::shared_ptr<QC::Gates::QuantumGateWithOp<>> GetGate(int code, double param =
 
 bool TestPauliPropagator();
 
+bool TestExtStabilizer();
+
 bool tests(int option);
 
 #ifndef TESTS_CPP_

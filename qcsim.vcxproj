@@ -292,6 +292,7 @@
     <ClCompile Include="QCSim\CliffordTests.cpp" />
     <ClCompile Include="QCSim\DeutschJozsaTests.cpp" />
     <ClCompile Include="QCSim\DistributedTests.cpp" />
+    <ClCompile Include="QCSim\ExtStabilizerTests.cpp" />
     <ClCompile Include="QCSim\GamesTests.cpp" />
     <ClCompile Include="QCSim\IsingTests.cpp" />
     <ClCompile Include="QCSim\MPSSimulatorTests.cpp" />
@@ -314,11 +315,11 @@
     <ClInclude Include="QCSim\EntanglementSwapping.h" />
     <ClInclude Include="QCSim\ErrorCorrection3Qubits.h" />
     <ClInclude Include="QCSim\ErrorCorrectionBase.h" />
+    <ClInclude Include="QCSim\ExtendedStabilizer.h" />
     <ClInclude Include="QCSim\FFT.h" />
     <ClInclude Include="QCSim\Function.h" />
     <ClInclude Include="QCSim\GeneralElitzurVaidmanBomb.h" />
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h" />
-    <ClInclude Include="QCSim\Generator.h" />
     <ClInclude Include="QCSim\GroverAlgorithm.h" />
     <ClInclude Include="QCSim\HadamardTransform.h" />
     <ClInclude Include="QCSim\HardyParadox.h" />

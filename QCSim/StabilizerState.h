@@ -4,14 +4,19 @@
 #include <cassert>
 
 #include "QubitRegisterCalculator.h"
-#include "Generator.h"
+#include "PauliStringXZ.h"
 
 namespace QC {
 	namespace Clifford {
 
 		class StabilizerState {
 		public:
-			StabilizerState() = delete;
+			using Generator = PauliStringXZWithSign;
+
+			StabilizerState()
+				: gen(std::random_device{}()), rnd(0.5)
+			{
+			}
 
 			explicit StabilizerState(size_t nQubits)
 				: destabilizerGenerators(nQubits), stabilizerGenerators(nQubits), gen(std::random_device{}()), rnd(0.5)
@@ -29,6 +34,53 @@ namespace QC {
 					destabilizerGenerators[q].X[q] = true;
 					stabilizerGenerators[q].Z[q] = true;
 				}
+			}
+
+			// copy and move ctors and assignment operators
+			StabilizerState(const StabilizerState& other)
+				: gen(std::random_device{}()), rnd(0.5)
+			{
+				destabilizerGenerators = other.destabilizerGenerators;
+				stabilizerGenerators = other.stabilizerGenerators;
+				savedDestabilizerGenerators = other.savedDestabilizerGenerators;
+				savedStabilizerGenerators = other.savedStabilizerGenerators;
+				enableMultithreading = other.enableMultithreading;
+			}
+
+			StabilizerState(StabilizerState&& other) noexcept
+				: gen(std::random_device{}()), rnd(0.5)
+			{
+				destabilizerGenerators.swap(other.destabilizerGenerators);
+				stabilizerGenerators.swap(other.stabilizerGenerators);
+				savedDestabilizerGenerators.swap(other.savedDestabilizerGenerators);
+				savedStabilizerGenerators.swap(other.savedStabilizerGenerators);
+				enableMultithreading = other.enableMultithreading;
+			}
+
+			StabilizerState& operator=(const StabilizerState& other)
+			{
+				if (this != &other)
+				{
+					destabilizerGenerators = other.destabilizerGenerators;
+					stabilizerGenerators = other.stabilizerGenerators;
+					savedDestabilizerGenerators = other.savedDestabilizerGenerators;
+					savedStabilizerGenerators = other.savedStabilizerGenerators;
+					enableMultithreading = other.enableMultithreading;
+				}
+				return *this;
+			}
+
+			StabilizerState& operator=(StabilizerState&& other) noexcept
+			{
+				if (this != &other)
+				{
+					destabilizerGenerators.swap(other.destabilizerGenerators);
+					stabilizerGenerators.swap(other.stabilizerGenerators);
+					savedDestabilizerGenerators.swap(other.savedDestabilizerGenerators);
+					savedStabilizerGenerators.swap(other.savedStabilizerGenerators);
+					enableMultithreading = other.enableMultithreading;
+				}
+				return *this;
 			}
 
 			void Reset()
@@ -67,10 +119,10 @@ namespace QC {
 						if (p == q) continue;
 
 						if (destabilizerGenerators[q].X[qubit])
-							rowsum(destabilizerGenerators[q], h);
+							destabilizerGenerators[q].rowsum(h, enableMultithreading);
 
 						if (stabilizerGenerators[q].X[qubit])
-							rowsum(stabilizerGenerators[q], h);
+							stabilizerGenerators[q].rowsum(h, enableMultithreading);
 					}
 
 					destabilizerGenerators[p] = h;
@@ -136,10 +188,10 @@ namespace QC {
 						if (firstP == q) continue;
 
 						if (destabilizerGenerators[q].X[firstRandomQubit])
-							rowsum(destabilizerGenerators[q], h);
+							destabilizerGenerators[q].rowsum(h, enableMultithreading);
 
 						if (stabilizerGenerators[q].X[firstRandomQubit])
-							rowsum(stabilizerGenerators[q], h);
+							stabilizerGenerators[q].rowsum(h, enableMultithreading);
 					}
 
 					destabilizerGenerators[firstP] = h;
@@ -287,92 +339,9 @@ namespace QC {
 				// if this is called, all stabilizer generators commute with Z, by the way
 				for (size_t q = 0; q < nrQubits; ++q)
 					if (destabilizerGenerators[q].X[qubit])
-						rowsum(h, stabilizerGenerators[q]);
+						h.rowsum(stabilizerGenerators[q], enableMultithreading);
 
 				return h.PhaseSign;
-			}
-
-
-			// returns the exponent of the i that multiplies the product of the two corresponding Pauli matrices
-			// 0, 1 or -1
-			// for example for x1 = 1, z1 = 0, x2 = 0, z2 = 1
-			// we have X * Z = -i Y so the result should be -1
-			// for x1 = 1, z1 = 0, x2 = 1, z2 = 0
-			// we have X * X = I so the result should be 0
-			static inline int g(int x1, int z1, int x2, int z2)
-			{
-				if (0 == x1 && 0 == z1) return 0; // I for the 1st generator, 0 exponent no matter what the second generator is
-				else if (1 == x1)
-				{
-					if (1 == z1) return z2 - x2;
-
-					return z2 * (2 * x2 - 1);
-				}
-
-				return x2 * (1 - 2 * z2);
-			}
-
-			// multiplies the two generators and stores the result in the first one
-			inline void rowsum(Generator& h, Generator& j)
-			{
-				const size_t nrQubits = h.X.size();
-				// phase sign is negative when 'PhaseSign' is true
-				// 2 because i^2 = -1
-				long long int m = (h.PhaseSign ? 2 : 0) + (j.PhaseSign ? 2 : 0);
-
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						const int x1 = BoolToInt(j.X[q]);
-						const int z1 = BoolToInt(j.Z[q]);
-						const int x2 = BoolToInt(h.X[q]);
-						const int z2 = BoolToInt(h.Z[q]);
-
-						// add up all the exponents of i that contribute to the sign of the product
-						m += g(x1, z1, x2, z2);
-
-						// X * X = I, Z * Z = I, so the value is set when there is only one of them
-						h.X[q] = (x1 ^ x2) == 1;
-						h.Z[q] = (z1 ^ z2) == 1;
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-					long long int mloc = 0;
-
-#pragma omp parallel for reduction(+:mloc) 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						const int x1 = BoolToInt(j.X[q]);
-						const int z1 = BoolToInt(j.Z[q]);
-						const int x2 = BoolToInt(h.X[q]);
-						const int z2 = BoolToInt(h.Z[q]);
-
-						// add up all the exponents of i that contribute to the sign of the product
-						mloc += g(x1, z1, x2, z2);
-
-						// X * X = I, Z * Z = I, so the value is set when there is only one of them
-						h.X[q] = (x1 ^ x2) == 1;
-						h.Z[q] = (z1 ^ z2) == 1;
-					}
-
-					m += mloc;
-				}
-
-				// the mod 4 that appears here is because the values for the powers of i keep repeating
-				const int mod = m % 4;
-
-				assert(mod == 0 || mod == 2 || mod == -2);
-
-				h.PhaseSign = mod != 0;
-			}
-
-			static inline int BoolToInt(bool b)
-			{
-				return b ? 1 : 0;
 			}
 
 			std::vector<Generator> destabilizerGenerators;

@@ -7,7 +7,7 @@ namespace QC {
 
 		class StabilizerSimulator : public StabilizerState {
 		public:
-			StabilizerSimulator() = delete;
+			StabilizerSimulator() = default;
 
 			explicit StabilizerSimulator(size_t nQubits)
 				: StabilizerState(nQubits)

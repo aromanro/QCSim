@@ -61,6 +61,9 @@
     <ClCompile Include="QCSim\PauliPropagatorTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QCSim\ExtStabilizerTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -239,9 +242,6 @@
     <ClInclude Include="QCSim\Clifford.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\Generator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\StabilizerState.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -251,9 +251,6 @@
     <ClInclude Include="QCSim\PauliStringXZ.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\PauliStringXZCoeff.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\PauliPropagator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -261,6 +258,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\ThreadPool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\ExtendedStabilizer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliStringXZCoeff.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
