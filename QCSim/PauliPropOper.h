@@ -34,14 +34,12 @@ namespace QC
 	public:
 		Operator() : type(OperationType::X), qubits(1, 0) {}
 
-		Operator(OperationType type, int q1 = 0, int q2 = 0, int q3 = 0)
+		Operator(OperationType type, int q1 = 0, int q2 = 0)
 			: type(type), qubits(GetNrQubitsForType(type))
 		{
 			qubits[0] = q1;
 			if (GetNrQubits() > 1)
 				qubits[1] = q2;
-			if (GetNrQubits() > 2)
-				qubits[2] = q3;
 		}
 
 		int GetNrQubits() const
