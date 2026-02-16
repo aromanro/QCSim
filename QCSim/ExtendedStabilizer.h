@@ -14,7 +14,7 @@ namespace QC {
 	public:
 		using Signs = std::vector<bool>;
 
-		Frame(size_t nrQubits) : amplitude(1., 0.), signs(nrQubits, std::vector<bool>(nrQubits, false))
+		Frame(size_t nrQubits) : amplitudes(1, std::complex<double>(1., 0.)), signs(nrQubits, std::vector<bool>(nrQubits, false))
 		{
 			stabilizers.resize(nrQubits);
 			for (size_t s = 0; s < nrQubits; ++s)
@@ -23,7 +23,8 @@ namespace QC {
 
 		size_t GetNrQubits() const
 		{
-			return signs.size();
+			if (signs.empty()) return 0;
+			return signs.front().size();
 		}
 
 		void SetZDiagonal()
@@ -32,7 +33,7 @@ namespace QC {
 				stabilizers[s].Z[s] = true;
 		}
 
-		std::complex<double> amplitude;
+		std::vector<std::complex<double>> amplitudes;
 		std::vector<Signs> signs;
 		std::vector<PauliStringXZ> stabilizers;
 	};
