@@ -14,7 +14,7 @@ namespace QC {
 	public:
 		using Signs = std::vector<bool>;
 
-		Frame(size_t nrQubits) : amplitudes(1, std::complex<double>(1., 0.)), signs(nrQubits, std::vector<bool>(nrQubits, false))
+		Frame(size_t nrQubits) : amplitudes(1, std::complex<double>(1., 0.)), signs(1, std::vector<bool>(nrQubits, false))
 		{
 			stabilizers.resize(nrQubits);
 			for (size_t s = 0; s < nrQubits; ++s)
@@ -24,6 +24,7 @@ namespace QC {
 		size_t GetNrQubits() const
 		{
 			if (signs.empty()) return 0;
+
 			return signs.front().size();
 		}
 
@@ -31,6 +32,11 @@ namespace QC {
 		{
 			for (size_t s = 0; s < GetNrQubits(); ++s)
 				stabilizers[s].Z[s] = true;
+		}
+
+		size_t GetFrameSize() const
+		{
+			return amplitudes.size();
 		}
 
 		std::vector<std::complex<double>> amplitudes;
