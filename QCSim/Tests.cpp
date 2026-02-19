@@ -744,7 +744,7 @@ bool SimulatorsTests(int option, bool res)
 		res = CliffordSimulatorTests() && CliffordExpectationValuesTests();
 
 	if (!res) return false;
-	if (option == 3 || option == 5)
+	if (option == 3 || option == 5)	
 		res = TestPauliPropagator();
 
 	if (!res) return false;

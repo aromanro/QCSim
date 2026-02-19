@@ -429,12 +429,14 @@ namespace QC
 		}
 
 		// multiplies the two generators and stores the result in the current one
-		inline void rowsum(const PauliStringXZWithSign& j, bool enableMultithreading)
+		inline void Multiply(const PauliStringXZWithSign& j, bool enableMultithreading)
 		{
 			const size_t nrQubits = X.size();
 			// phase sign is negative when 'PhaseSign' is true
-			// 2 because i^2 = -1
-			long long int m = (PhaseSign ? 2 : 0) + (j.PhaseSign ? 2 : 0);
+			// 2 because i^2 = -1, 0 because i^0 = 1
+			long long int m = (PhaseSign ? 2 : 0) + (j.PhaseSign ? 2 : 0); // this gets the sign from the signs of the two generators
+			
+			// we still need to add the contribution from the Pauli strings:
 
 			if (!enableMultithreading || nrQubits < 1024)
 			{

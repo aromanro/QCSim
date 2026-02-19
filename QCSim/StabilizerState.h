@@ -114,16 +114,16 @@ namespace QC {
 					// grab the first anticommuting generator
 					Generator& h = stabilizerGenerators[p];
 					// then multiply each other anticommuting one (stabilizer or destabilizer) with it 
-					for (size_t q = 0; q < getNrQubits(); ++q)
-					{
-						if (p == q) continue;
 
-						if (destabilizerGenerators[q].X[qubit])
-							destabilizerGenerators[q].rowsum(h, enableMultithreading);
-
+					// X present means it's either X or Y, both of which anticommute with Z
+					// otherwise it's either I or Z, which commute with Z
+					for (size_t q = p + 1; q < getNrQubits(); ++q)
 						if (stabilizerGenerators[q].X[qubit])
-							stabilizerGenerators[q].rowsum(h, enableMultithreading);
-					}
+							stabilizerGenerators[q].Multiply(h, enableMultithreading);
+
+					for (size_t q = 0; q < getNrQubits(); ++q)
+						if (destabilizerGenerators[q].X[qubit])
+							destabilizerGenerators[q].Multiply(h, enableMultithreading);
 
 					destabilizerGenerators[p] = h;
 
@@ -183,16 +183,14 @@ namespace QC {
 					prob *= 0.5; // a random qubit has the 0.5 probability
 
 					Generator& h = stabilizerGenerators[firstP];
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						if (firstP == q) continue;
 
-						if (destabilizerGenerators[q].X[firstRandomQubit])
-							destabilizerGenerators[q].rowsum(h, enableMultithreading);
-
+					for (size_t q = firstP + 1; q < nrQubits; ++q)
 						if (stabilizerGenerators[q].X[firstRandomQubit])
-							stabilizerGenerators[q].rowsum(h, enableMultithreading);
-					}
+							stabilizerGenerators[q].Multiply(h, enableMultithreading);
+
+					for (size_t q = 0; q < nrQubits; ++q)
+						if (destabilizerGenerators[q].X[firstRandomQubit])
+							destabilizerGenerators[q].Multiply(h, enableMultithreading);
 
 					destabilizerGenerators[firstP] = h;
 
@@ -201,8 +199,9 @@ namespace QC {
 
 					// set the measured outcome to the expected value for this state
 					h.PhaseSign = state[firstRandomQubit];
-
 					handledQubits[firstRandomQubit] = true; // not really needed, we won't look back
+
+					++firstRandomQubit;
 
 					countRandomQubits = DealWithDeterministicQubits(state, handledQubits, firstRandomQubit, firstP, prob);
 					if (prob == 0.0)
@@ -335,11 +334,11 @@ namespace QC {
 				// no change to generators, just need to compute the sign in order to get the measurement result
 				Generator h(nrQubits);
 
-				// all the stabilizer generators for which the corresponding destabilizer anticommuntes with Z are multiplied together
+				// all the stabilizer generators for which the corresponding destabilizer anticommutes with Z are multiplied together
 				// if this is called, all stabilizer generators commute with Z, by the way
 				for (size_t q = 0; q < nrQubits; ++q)
 					if (destabilizerGenerators[q].X[qubit])
-						h.rowsum(stabilizerGenerators[q], enableMultithreading);
+						h.Multiply(stabilizerGenerators[q], enableMultithreading);
 
 				return h.PhaseSign;
 			}
