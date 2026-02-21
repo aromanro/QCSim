@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <algorithm>
+#include <string>
+#include <cassert>
 
 namespace QC
 {
@@ -376,28 +378,6 @@ namespace QC
 			PauliStringXZ::ApplyCX(target, control);
 		}
 
-		// the following are for the extended stabilizer simulator
-		inline void ApplyXleft(size_t qubit)
-		{
-			X[qubit] = !X[qubit];
-		}
-
-		inline void ApplyYleft(size_t qubit)
-		{
-			if (X[qubit] && !Z[qubit])
-				PhaseSign = !PhaseSign;
-
-			X[qubit] = !X[qubit];
-			Z[qubit] = !Z[qubit];
-		}
-
-		inline void ApplyZleft(size_t qubit)
-		{
-			if (X[qubit] && Z[qubit])
-				PhaseSign = !PhaseSign;
-			Z[qubit] = !Z[qubit];
-		}
-
 		std::string ToString() const override
 		{
 			std::string result = PauliStringXZ::ToString();
@@ -483,6 +463,7 @@ namespace QC
 			// the mod 4 that appears here is because the values for the powers of i keep repeating
 			const int mod = m % 4;
 
+			// cannot have i or -i as a global phase
 			assert(mod == 0 || mod == 2 || mod == -2);
 
 			PhaseSign = mod != 0;

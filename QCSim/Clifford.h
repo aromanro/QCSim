@@ -401,7 +401,6 @@ namespace QC {
 
 				PauliStringXZ g(getNrQubits());
 				std::vector<size_t> pos;
-				pos.reserve(pauliString.size());
 				size_t phase = 0;
 				
 				SetPauliString(pauliString, g, pos, phase);
@@ -420,7 +419,7 @@ namespace QC {
 				for (size_t i = 0; i < getNrQubits(); ++i)
 				{
 					// check if the destabilizer anticommutes with the operator
-					if (CommutesWithDestabilizer(g, destabilizerGenerators[i], pos))
+					if (CommutesWithGenerator(g, destabilizerGenerators[i], pos))
 						continue; // commutes, check next destabilizer
 
 					// anticommutes with this destabilizer
@@ -458,39 +457,26 @@ namespace QC {
 			}
 
 		private:
-			bool CommutesWithDestabilizer(const PauliStringXZ& g, const Generator& destabilizer, const std::vector<size_t>& pos) const
+			static inline bool CommutesWithGenerator(const PauliStringXZ& g, const PauliStringXZ& generator, const std::vector<size_t>& pos)
 			{
-				bool anticommutes = false;
+				bool commutes = true;
 				for (size_t j = 0; j < pos.size(); ++j)
 				{
 					const size_t pauliOpQubit = pos[j];
-					if (g.X[pauliOpQubit] && destabilizer.Z[pauliOpQubit])
-						anticommutes = !anticommutes;
-					if (g.Z[pauliOpQubit] && destabilizer.X[pauliOpQubit])
-						anticommutes = !anticommutes;
+					if (g.X[pauliOpQubit] && generator.Z[pauliOpQubit])
+						commutes = !commutes;
+					if (g.Z[pauliOpQubit] && generator.X[pauliOpQubit])
+						commutes = !commutes;
 				}
 
-				return !anticommutes;
+				return commutes;
 			}
 
 			bool CheckStabilizersAnticommutation(const PauliStringXZ& g, const std::vector<size_t>& pos) const
 			{
 				for (size_t i = 0; i < getNrQubits(); ++i)
-				{
-					// check if the stabilizer anticommutes with the operator
-					const Generator& gen = stabilizerGenerators[i];
-					bool anticommutes = false;
-					for (size_t j = 0; j < pos.size(); ++j)
-					{
-						const size_t pauliOpQubit = pos[j];
-						if (g.X[pauliOpQubit] && gen.Z[pauliOpQubit])
-							anticommutes = !anticommutes;
-						if (g.Z[pauliOpQubit] && gen.X[pauliOpQubit])
-							anticommutes = !anticommutes;
-					}
-					if (anticommutes)
+					if (!CommutesWithGenerator(g, stabilizerGenerators[i], pos))
 						return true;
-				}
 
 				return false;
 			}

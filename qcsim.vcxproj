@@ -317,6 +317,7 @@
     <ClInclude Include="QCSim\ErrorCorrectionBase.h" />
     <ClInclude Include="QCSim\ExtendedStabilizer.h" />
     <ClInclude Include="QCSim\FFT.h" />
+    <ClInclude Include="QCSim\Frame.h" />
     <ClInclude Include="QCSim\Function.h" />
     <ClInclude Include="QCSim\GeneralElitzurVaidmanBomb.h" />
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h" />

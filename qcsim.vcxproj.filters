@@ -263,6 +263,9 @@
     <ClInclude Include="QCSim\ExtendedStabilizer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\Frame.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="QCSim\PauliStringXZCoeff.h">
       <Filter>Header Files</Filter>
     </ClInclude>
