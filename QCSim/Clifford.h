@@ -463,9 +463,7 @@ namespace QC {
 				for (size_t j = 0; j < pos.size(); ++j)
 				{
 					const size_t pauliOpQubit = pos[j];
-					if (g.X[pauliOpQubit] && generator.Z[pauliOpQubit])
-						commutes = !commutes;
-					if (g.Z[pauliOpQubit] && generator.X[pauliOpQubit])
+					if ((g.X[pauliOpQubit] && generator.Z[pauliOpQubit]) != (g.Z[pauliOpQubit] && generator.X[pauliOpQubit])) 
 						commutes = !commutes;
 				}
 

@@ -126,6 +126,17 @@ namespace QC
 			return a != b;
 		}
 
+		bool Commutes(const PauliStringXZ& other) const
+		{
+			if (X.size() != other.X.size()) return false;
+			bool commutes = true;
+			for (size_t i = 0; i < X.size(); ++i)
+				if ((X[i] && other.Z[i]) != (Z[i] && other.X[i]))	
+					commutes = !commutes;
+			
+			return commutes;
+		}
+
 		virtual double ExpectationValue() const
 		{
 			for (size_t i = 0; i < X.size(); ++i)

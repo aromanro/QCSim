@@ -27,7 +27,7 @@ int ExecuteTests(const std::string& arg1)
 		return tests(5) ? 0 : -1;
 	else
 	{
-		std::cout << "Unknown command line argument, options are 0, 1, 2, 3, 4" << std::endl;
+		std::cout << "Unknown command line argument, options are 0, 1, 2, 3, 4, 5, 6" << std::endl;
 		return -1;
 	}
 

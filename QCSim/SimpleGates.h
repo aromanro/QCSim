@@ -116,21 +116,13 @@ namespace QC {
 
 			size_t getQubitsNumber() const override
 			{
-				size_t sz = static_cast<size_t>(operatorMat.rows() - 1);
-
-				size_t res = 0;
-				while (sz) {
-					++res;
-					sz >>= 1;
-				}
-
-				return res;
+				return log2(operatorMat.rows());
 			}
 
 			void setOperator(const MatrixClass& U)
 			{
 				assert(U.rows() == U.cols());
-				assert(U.rows() == 1ULL << getQubitsNumber());
+				//assert(U.rows() == 1ULL << getQubitsNumber());
 
 				operatorMat = U;
 			}

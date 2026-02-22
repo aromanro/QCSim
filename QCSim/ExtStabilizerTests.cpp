@@ -62,15 +62,15 @@ void ApplyGate(QC::ExtendedStabilizer& simulator, int code, int qubit1, int qubi
 		break;
 	/*
 	case 15:
-		simulator.ApplyRX(qubit1, angle);
+		simulator.ApplyRx(qubit1, angle);
 		break;
 	case 16:
-		simulator.ApplyRY(qubit1, angle);
+		simulator.ApplyRy(qubit1, angle);
 		break;
 	case 17:
-		simulator.ApplyRZ(qubit1, angle);
+		simulator.ApplyRz(qubit1, angle);
 		break;
-		*/
+	*/	
 	default:
 		ApplyTwoQubitsGate(simulator, code, qubit1, qubit2);
 		break;
@@ -106,7 +106,7 @@ static bool TestExtStabilizerMeasurements()
 	const size_t nrTests = 10;
 	const size_t maxQubits = 8;
 
-	std::uniform_int_distribution gateDistr(0, 9);
+	std::uniform_int_distribution gateDistr(0, 14);
 	std::uniform_int_distribution nrGatesDistr(50, 100);
 	std::uniform_real_distribution angleDistr(-2. * M_PI, 2. * M_PI);
 	std::bernoulli_distribution boolDistr(0.2);
@@ -205,6 +205,30 @@ static bool TestExtStabilizerMeasurements()
 bool TestExtStabilizer()
 {
 	std::cout << "\nExtended Stabilizer tests" << std::endl;
+
+	// basic sanity check: repeated rotations must compose correctly
+	/*
+	{
+		constexpr size_t nrQubits = 1;
+		QC::ExtendedStabilizer extstabSim(nrQubits);
+		QC::QubitRegister<> qubitRegister(nrQubits);
+
+		const double theta = M_PI / 2.0;
+		auto rx = GetGate(15, theta);
+		qubitRegister.ApplyGate(*rx, 0, 0);
+		extstabSim.ApplyRx(0, theta);
+		qubitRegister.ApplyGate(*rx, 0, 0);
+		extstabSim.ApplyRx(0, theta);
+
+		const double p1 = qubitRegister.GetQubitProbability(0);
+		const double p2 = extstabSim.GetQubitProbability(0);
+		if (!approxEqual(p1, p2, 1E-10))
+		{
+			std::cout << "\nRotation composition failed for Rx on 1 qubit, values: " << p1 << ", " << p2 << std::endl;
+			return false;
+		}
+	}
+	*/
 
 	const size_t nrTests = 100;
 	const size_t maxQubits = 20;
