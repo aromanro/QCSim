@@ -1,7 +1,7 @@
 # QCSim
 Quantum computation simulator
 
-Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator, a Clifford gates simulator using the stabilizer formalism and a Pauli propagation simulator (work in progress, for now it works only with Clifford gates - it already allows not only expectation values, but also sampling and measurements with 'collapse').
+Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator, a Clifford gates simulator using the stabilizer formalism and a Pauli propagation simulator.
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://app.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)
