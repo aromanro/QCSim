@@ -165,13 +165,12 @@ namespace QC {
 			double getBasisStateProbability(const std::vector<bool>& state)
 			{
 				const size_t nrQubits = getNrQubits();
-				std::vector<bool> handledQubits(nrQubits, false);
 
 				size_t firstRandomQubit = 0;
 				size_t firstP = 0;
 
 				double prob = 1.0;
-				size_t countRandomQubits = DealWithDeterministicQubits(state, handledQubits, firstRandomQubit, firstP, prob);
+				size_t countRandomQubits = DealWithDeterministicQubits(state, firstRandomQubit, firstP, prob);
 				if (countRandomQubits == 0 || prob == 0.0)
 					return prob;
 
@@ -199,11 +198,10 @@ namespace QC {
 
 					// set the measured outcome to the expected value for this state
 					h.PhaseSign = state[firstRandomQubit];
-					handledQubits[firstRandomQubit] = true; // not really needed, we won't look back
 
 					++firstRandomQubit;
 
-					countRandomQubits = DealWithDeterministicQubits(state, handledQubits, firstRandomQubit, firstP, prob);
+					countRandomQubits = DealWithDeterministicQubits(state, firstRandomQubit, firstP, prob);
 					if (prob == 0.0)
 						break;
 				} while (countRandomQubits > 0);
@@ -271,7 +269,7 @@ namespace QC {
 			}
 
 		protected:
-			inline size_t DealWithDeterministicQubits(const std::vector<bool>& state, std::vector<bool>& handledQubits, size_t& firstRandomQubit, size_t& firstP, double& prob)
+			inline size_t DealWithDeterministicQubits(const std::vector<bool>& state, size_t& firstRandomQubit, size_t& firstP, double& prob)
 			{
 				const size_t nrQubits = getNrQubits();
 				size_t p;
@@ -281,8 +279,6 @@ namespace QC {
 				// in that case, we can return immediately
 				for (size_t qubit = firstRandomQubit; qubit < nrQubits; ++qubit)
 				{
-					if (handledQubits[qubit]) continue;
-					
 					if (IsRandomResult(qubit, p))
 					{
 						if (0 == countRandomQubits)
@@ -299,8 +295,6 @@ namespace QC {
 							prob = 0.;
 							return 0;
 						}
-
-						handledQubits[qubit] = true;
 					}
 				}
 
