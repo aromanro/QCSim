@@ -194,6 +194,7 @@ namespace QC {
 		// this is not the most efficient way to do it
 		// it can be done considering that only one or two columns are modified by gates
 		// it's here for completion and tests
+		// see 'Efficient Inner-Product Algorithm for Stabilizer States' by Garcia, Markov and Cross for details
 		void ReduceToRowEchelonForm()
 		{
 			const size_t nrQubits = GetNrQubits();
