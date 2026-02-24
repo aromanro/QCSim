@@ -143,13 +143,14 @@ namespace QC {
 			return sign;
 		}
 
-		double GetPauliExpectation(const PauliStringXZ& op, size_t componentIndex) const
+		double GetPauliExpectation(const PauliStringXZ& op) const
 		{
 			const size_t nrQubits = GetNrQubits();
 
 			PauliStringXZ target(op);
 			int phase = 0;
 
+			std::vector<bool> addPhase(nrQubits, false);
 			for (size_t s = 0; s < nrQubits; ++s)
 			{
 				size_t pivotCol = nrQubits;
@@ -172,6 +173,8 @@ namespace QC {
 				if (pivotCol >= nrQubits || (target.X[pivotCol] && !stabilizers[s].X[pivotCol]) || (!target.X[pivotCol] && target.Z[pivotCol] && !stabilizers[s].Z[pivotCol]))
 					continue;
 
+				addPhase[s] = true;
+
 				for (size_t q = 0; q < nrQubits; ++q)
 				{
 					phase += PauliStringXZWithSign::g(
@@ -183,12 +186,58 @@ namespace QC {
 					target.X[q] = target.X[q] != stabilizers[s].X[q];
 					target.Z[q] = target.Z[q] != stabilizers[s].Z[q];
 				}
-
-				if (signs[componentIndex][s])
-					phase += 2;
 			}
 
-			return phase % 4 == 0 ? 1.0 : -1.0;
+			int phaseSave = phase;
+			double result = 0.0;
+			for (size_t componentIndex = 0; componentIndex < GetFrameSize(); ++componentIndex)
+			{
+				for (size_t s = 0; s < nrQubits; ++s)
+					if (addPhase[s] && signs[componentIndex][s])
+						phase += 2;
+
+				result += std::norm(amplitudes[componentIndex]) * (phase % 4 == 0 ? 1.0 : -1.0);
+				phase = phaseSave;
+			}
+
+			return result;
+		}
+
+		bool IsDeterministic(size_t qubit) const
+		{
+			const size_t nrQubits = GetNrQubits();
+			for (size_t s = 0; s < nrQubits; ++s)
+				if (stabilizers[s].X[qubit])
+					return false;
+			return true;
+		}
+
+		double GetQubitProbability(size_t qubit) const
+		{
+			const size_t nrQubits = GetNrQubits();
+
+			for (size_t s = 0; s < nrQubits; ++s)
+				if (stabilizers[s].X[qubit])
+					return 0.5;
+
+			double prob = 0.0;
+			for (size_t k = 0; k < GetFrameSize(); ++k)
+				if (GetDeterministicOutcome(qubit, k))
+					prob += std::norm(amplitudes[k]);
+
+			return prob;
+		}
+
+		double GetDeterministicQubitProbability(size_t qubit) const
+		{
+			const size_t nrQubits = GetNrQubits();
+
+			double prob = 0.0;
+			for (size_t k = 0; k < GetFrameSize(); ++k)
+				if (GetDeterministicOutcome(qubit, k))
+					prob += std::norm(amplitudes[k]);
+
+			return prob;
 		}
 
 		// this is not the most efficient way to do it
@@ -200,6 +249,7 @@ namespace QC {
 			const size_t nrQubits = GetNrQubits();
 
 			size_t currentRow = 0;
+
 			for (size_t col = 0; col < nrQubits; ++col)
 			{
 				size_t pivotRow = nrQubits;
@@ -309,6 +359,45 @@ namespace QC {
 				signs[k][i] = signs[k][j];
 				signs[k][j] = t;
 			}
+		}
+
+		void Cofactor(size_t qubit)
+		{
+			const size_t nrQubits = GetNrQubits();
+
+			size_t p = nrQubits;
+			for (size_t s = 0; s < nrQubits; ++s)
+				if (stabilizers[s].X[qubit])
+				{
+					p = s;
+					break;
+				}
+
+			if (p >= nrQubits) return;
+
+			for (size_t s = 0; s < nrQubits; ++s)
+				if (s != p && stabilizers[s].X[qubit])
+					MultiplyGeneratorInto(p, s);
+
+			stabilizers[p].Clear();
+			stabilizers[p].Z[qubit] = true;
+
+			const size_t oldSize = GetFrameSize();
+			const double invSqrt2 = 1.0 / std::sqrt(2.0);
+
+			amplitudes.resize(2 * oldSize);
+			signs.resize(2 * oldSize);
+
+			for (size_t k = 0; k < oldSize; ++k)
+			{
+				amplitudes[k] *= invSqrt2;
+
+				amplitudes[oldSize + k] = amplitudes[k];
+				signs[oldSize + k] = signs[k];
+				signs[oldSize + k][p] = !signs[k][p];
+			}
+
+			ReduceToRowEchelonFormForColumn(qubit);
 		}
 
 		void Print() const

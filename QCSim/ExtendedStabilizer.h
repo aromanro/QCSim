@@ -10,7 +10,7 @@ namespace QC {
 		ExtendedStabilizer() = delete;
 
 		explicit ExtendedStabilizer(size_t nrQubits)
-			: gen(std::random_device{}()), rnd(0.5)
+			: gen(std::random_device{}()), rnd(0.5), dist(0.0, 1.0)
 		{
 			frames.emplace_back(nrQubits);
 			frames.back().SetZDiagonal();
@@ -31,6 +31,7 @@ namespace QC {
 
 		void ApplyH(size_t qubit)
 		{
+			// TODO: also need to update the amplitudes
 			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
@@ -48,6 +49,7 @@ namespace QC {
 
 		void ApplyS(size_t qubit)
 		{
+			// TODO: also need to update the amplitudes
 			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
@@ -65,6 +67,7 @@ namespace QC {
 
 		void ApplyX(size_t qubit)
 		{
+			// TODO: also need to update the amplitudes
 			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
@@ -79,6 +82,7 @@ namespace QC {
 
 		void ApplyY(size_t qubit)
 		{
+			// TODO: also need to update the amplitudes
 			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
@@ -93,6 +97,7 @@ namespace QC {
 
 		void ApplyZ(size_t qubit)
 		{
+			// TODO: also need to update the amplitudes
 			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
@@ -181,6 +186,7 @@ namespace QC {
 
 		void ApplyCX(size_t target, size_t control)
 		{
+			// TODO: also need to update the amplitudes
 			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
@@ -200,6 +206,7 @@ namespace QC {
 		bool Measure(size_t qubit)
 		{
 			auto& frame = frames.front();
+
 			const size_t nrQubits = GetNrQubits();
 
 			size_t p = nrQubits;
@@ -212,6 +219,7 @@ namespace QC {
 
 			if (p < nrQubits)
 			{
+				// nondeterministic
 				for (size_t s = 0; s < nrQubits; ++s)
 					if (s != p && frame.stabilizers[s].X[qubit])
 						frame.MultiplyGeneratorInto(p, s);
@@ -220,6 +228,12 @@ namespace QC {
 				frame.stabilizers[p].Z[qubit] = true;
 
 				const bool outcome = rnd(gen);
+				if (outcome)
+				{
+					for (size_t k = 0; k < frame.GetFrameSize(); ++k)
+						if (frame.signs[k][p])
+							frame.amplitudes[k] = -frame.amplitudes[k];
+				}
 
 				for (size_t k = 0; k < frame.GetFrameSize(); ++k)
 					frame.signs[k][p] = outcome;
@@ -229,24 +243,47 @@ namespace QC {
 				return outcome;
 			}
 
-			return frame.GetDeterministicOutcome(qubit, 0);
+			// deterministic
+			const double prob1 = frame.GetDeterministicQubitProbability(qubit);
+			const bool outcome = dist(gen) < prob1;
+
+			double normSq = 0.0;
+			size_t writeIdx = 0;
+			for (size_t k = 0; k < frame.GetFrameSize(); ++k)
+			{
+				if (frame.GetDeterministicOutcome(qubit, k) == outcome)
+				{
+					if (writeIdx != k)
+					{
+						frame.amplitudes[writeIdx] = frame.amplitudes[k];
+						frame.signs[writeIdx] = std::move(frame.signs[k]);
+					}
+					normSq += std::norm(frame.amplitudes[writeIdx]);
+					++writeIdx;
+				}
+			}
+
+			frame.amplitudes.resize(writeIdx);
+			frame.signs.resize(writeIdx);
+
+			if (normSq > 0.0)
+			{
+				const double invNorm = 1.0 / std::sqrt(normSq);
+				for (auto& a : frame.amplitudes)
+					a *= invNorm;
+			}
+
+			return outcome;
 		}
 
-		double GetQubitProbability(size_t qubit)
+		double GetQubitProbability(size_t qubit) const
 		{
 			const auto& frame = frames.front();
-			const size_t nrQubits = GetNrQubits();
 
-			for (size_t s = 0; s < nrQubits; ++s)
-				if (frame.stabilizers[s].X[qubit])
-					return 0.5;
+			if (!frame.IsDeterministic(qubit))
+				return 0.5;
 
-			double prob = 0.0;
-			for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-				if (frame.GetDeterministicOutcome(qubit, k))
-					prob += std::norm(frame.amplitudes[k]);
-			
-			return prob;
+			return frame.GetDeterministicQubitProbability(qubit);
 		}
 
 		double ExpectationValue(const std::string& pauliString) const
@@ -254,6 +291,7 @@ namespace QC {
 			if (pauliString.empty()) return 1.0;
 
 			const auto& frame = frames.front();
+
 			const size_t nrQubits = GetNrQubits();
 
 			PauliStringXZ op(nrQubits);
@@ -265,11 +303,7 @@ namespace QC {
 			if (frame.CheckStabilizersAnticommutation(op, pos))
 				return 0.0;
 
-			double result = 0.0;
-			for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-				result += std::norm(frame.amplitudes[k]) * frame.GetPauliExpectation(op, k);
-
-			return result;
+			return frame.GetPauliExpectation(op);
 		}
 
 		void SaveState()
@@ -319,6 +353,7 @@ namespace QC {
 
 		std::mt19937 gen;
 		std::bernoulli_distribution rnd;
+		std::uniform_real_distribution<double> dist;
 	};
 
 }
