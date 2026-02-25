@@ -365,6 +365,7 @@ namespace QC {
 		{
 			const size_t nrQubits = GetNrQubits();
 
+			// check the qubit to see if it's deterministic or not
 			size_t p = nrQubits;
 			for (size_t s = 0; s < nrQubits; ++s)
 				if (stabilizers[s].X[qubit])
@@ -373,20 +374,25 @@ namespace QC {
 					break;
 				}
 
+			// deterministic, duplication not needed
 			if (p >= nrQubits) return;
 
+			// remove X from all the other stabilizers
 			for (size_t s = 0; s < nrQubits; ++s)
 				if (s != p && stabilizers[s].X[qubit])
 					MultiplyGeneratorInto(p, s);
 
+			// collapse the stabilizer to Z on the qubit
 			stabilizers[p].Clear();
 			stabilizers[p].Z[qubit] = true;
 
+			// duplicate and update the signs and amplitudes
 			const size_t oldSize = GetFrameSize();
 			const double invSqrt2 = 1.0 / std::sqrt(2.0);
 
-			amplitudes.resize(2 * oldSize);
-			signs.resize(2 * oldSize);
+			const size_t newSize = 2 * oldSize;
+			amplitudes.resize(newSize);
+			signs.resize(newSize);
 
 			for (size_t k = 0; k < oldSize; ++k)
 			{
@@ -397,7 +403,7 @@ namespace QC {
 				signs[oldSize + k][p] = !signs[k][p];
 			}
 
-			ReduceToRowEchelonFormForColumn(qubit);
+			ReduceToRowEchelonForm();
 		}
 
 		void Print() const

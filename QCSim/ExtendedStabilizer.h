@@ -238,7 +238,7 @@ namespace QC {
 				for (size_t k = 0; k < frame.GetFrameSize(); ++k)
 					frame.signs[k][p] = outcome;
 
-				frame.ReduceToRowEchelonFormForColumn(qubit);
+				frame.ReduceToRowEchelonForm();
 
 				return outcome;
 			}
