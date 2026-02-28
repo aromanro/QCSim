@@ -32,17 +32,9 @@ namespace QC {
 		void ApplyH(size_t qubit)
 		{
 			// TODO: also need to update the amplitudes
-			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
-				for (size_t l = 0; l < nrQubits; ++l)
-				{
-					if (frame.stabilizers[l].X[qubit] && frame.stabilizers[l].Z[qubit])
-						for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-							frame.signs[k][l] = !frame.signs[k][l];
-
-					frame.stabilizers[l].ApplyH(qubit);
-				}
+				frame.ApplyHNoReduction(qubit);
 				frame.ReduceToRowEchelonFormForColumn(qubit);
 			}
 		}
@@ -50,17 +42,9 @@ namespace QC {
 		void ApplyS(size_t qubit)
 		{
 			// TODO: also need to update the amplitudes
-			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
-				for (size_t l = 0; l < nrQubits; ++l)
-				{
-					if (frame.stabilizers[l].X[qubit] && frame.stabilizers[l].Z[qubit])
-						for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-							frame.signs[k][l] = !frame.signs[k][l];
-
-					frame.stabilizers[l].ApplyS(qubit);
-				}
+				frame.ApplySNoReduction(qubit);
 				frame.ReduceToRowEchelonFormForColumn(qubit);
 			}
 		}
@@ -68,137 +52,147 @@ namespace QC {
 		void ApplyX(size_t qubit)
 		{
 			// TODO: also need to update the amplitudes
-			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
-			{
-				for (size_t l = 0; l < nrQubits; ++l)
-				{
-					if (frame.stabilizers[l].Z[qubit])
-						for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-							frame.signs[k][l] = !frame.signs[k][l];
-				}
-			}
+				frame.ApplyX(qubit);
 		}
 
 		void ApplyY(size_t qubit)
 		{
 			// TODO: also need to update the amplitudes
-			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
-			{
-				for (size_t l = 0; l < nrQubits; ++l)
-				{
-					if (frame.stabilizers[l].X[qubit] != frame.stabilizers[l].Z[qubit])
-						for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-							frame.signs[k][l] = !frame.signs[k][l];
-				}
-			}
+				frame.ApplyY(qubit);
 		}
 
 		void ApplyZ(size_t qubit)
 		{
 			// TODO: also need to update the amplitudes
-			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
-			{
-				for (size_t l = 0; l < nrQubits; ++l)
-				{
-					if (frame.stabilizers[l].X[qubit])
-						for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-							frame.signs[k][l] = !frame.signs[k][l];
-				}
-			}
+				frame.ApplyZ(qubit);
 		}
 
 		void ApplySdg(size_t qubit)
 		{
-			ApplyZ(qubit);
-			ApplyS(qubit);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplyZ(qubit);
+				frame.ApplySNoReduction(qubit);
+				frame.ReduceToRowEchelonFormForColumn(qubit);
+			}
 		}
 
 		void ApplyK(size_t qubit)
 		{
-			ApplyZ(qubit);
-			ApplyS(qubit);
-			ApplyH(qubit);
-			ApplyS(qubit);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplyZ(qubit);
+				frame.ApplySNoReduction(qubit);
+				frame.ApplyHNoReduction(qubit);
+				frame.ApplySNoReduction(qubit);
+				frame.ReduceToRowEchelonFormForColumn(qubit);
+			}
 		}
 
 		void ApplySx(size_t qubit)
 		{
-			ApplyZ(qubit);
-			ApplyS(qubit);
-			ApplyH(qubit);
-			ApplyZ(qubit);
-			ApplyS(qubit);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplyZ(qubit);
+				frame.ApplySNoReduction(qubit);
+				frame.ApplyHNoReduction(qubit);
+				frame.ApplyZ(qubit);
+				frame.ApplySNoReduction(qubit);
+				frame.ReduceToRowEchelonFormForColumn(qubit);
+			}
 		}
 
 		void ApplySxDag(size_t qubit)
 		{
-			ApplyS(qubit);
-			ApplyH(qubit);
-			ApplyS(qubit);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplySNoReduction(qubit);
+				frame.ApplyHNoReduction(qubit);
+				frame.ApplySNoReduction(qubit);
+				frame.ReduceToRowEchelonFormForColumn(qubit);
+			}
 		}
 
 		void ApplyCY(size_t target, size_t control)
 		{
-			ApplyZ(target);
-			ApplyS(target);
-			ApplyCX(target, control);
-			ApplyS(target);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplyZ(target);
+				frame.ApplySNoReduction(target);
+				frame.ApplyCXNoReduction(target, control);
+				frame.ApplySNoReduction(target);
+				frame.ReduceToRowEchelonFormForColumns(target, control);
+			}
 		}
 
 		void ApplyCZ(size_t target, size_t control)
 		{
-			ApplyH(target);
-			ApplyCX(target, control);
-			ApplyH(target);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplyCZNoReduction(target, control);
+				frame.ReduceToRowEchelonFormForColumns(target, control);
+			}
 		}
 
 		void ApplySwap(size_t qubit1, size_t qubit2)
 		{
-			ApplyCX(qubit1, qubit2);
-			ApplyCX(qubit2, qubit1);
-			ApplyCX(qubit1, qubit2);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplyCXNoReduction(qubit1, qubit2);
+				frame.ApplyCXNoReduction(qubit2, qubit1);
+				frame.ApplyCXNoReduction(qubit1, qubit2);
+				frame.ReduceToRowEchelonFormForColumns(qubit1, qubit2);
+			}
 		}
 
 		void ApplyISwap(size_t qubit1, size_t qubit2)
 		{
-			ApplyS(qubit1);
-			ApplyH(qubit1);
-			ApplyS(qubit2);
-			ApplyCX(qubit2, qubit1);
-			ApplyCX(qubit1, qubit2);
-			ApplyH(qubit2);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplySNoReduction(qubit1);
+				frame.ApplyHNoReduction(qubit1);
+				frame.ApplySNoReduction(qubit2);
+				frame.ApplyCXNoReduction(qubit2, qubit1);
+				frame.ApplyCXNoReduction(qubit1, qubit2);
+				frame.ApplyHNoReduction(qubit2);
+				frame.ReduceToRowEchelonFormForColumns(qubit1, qubit2);
+			}
 		}
 
 		void ApplyISwapDag(size_t qubit1, size_t qubit2)
 		{
-			ApplyH(qubit2);
-			ApplyCX(qubit1, qubit2);
-			ApplyCX(qubit2, qubit1);
-			ApplyZ(qubit2);
-			ApplyS(qubit2);
-			ApplyH(qubit1);
-			ApplyZ(qubit1);
-			ApplyS(qubit1);
+			// TODO: also need to update the amplitudes
+			for (auto& frame : frames)
+			{
+				frame.ApplyHNoReduction(qubit2);
+				frame.ApplyCXNoReduction(qubit1, qubit2);
+				frame.ApplyCXNoReduction(qubit2, qubit1);
+				frame.ApplyZ(qubit2);
+				frame.ApplySNoReduction(qubit2);
+				frame.ApplyHNoReduction(qubit1);
+				frame.ApplyZ(qubit1);
+				frame.ApplySNoReduction(qubit1);
+				frame.ReduceToRowEchelonFormForColumns(qubit1, qubit2);
+			}
 		}
 
 		void ApplyCX(size_t target, size_t control)
 		{
 			// TODO: also need to update the amplitudes
-			const size_t nrQubits = GetNrQubits();
 			for (auto& frame : frames)
 			{
-				for (size_t l = 0; l < nrQubits; ++l)
-				{
-					if (frame.stabilizers[l].X[control] && frame.stabilizers[l].Z[target]
-						&& PauliStringXZ::XOR(frame.stabilizers[l].X[target], !frame.stabilizers[l].Z[control]))
-						for (size_t k = 0; k < frame.GetFrameSize(); ++k)
-							frame.signs[k][l] = !frame.signs[k][l];
-
-					frame.stabilizers[l].ApplyCX(target, control);
-				}
+				frame.ApplyCXNoReduction(target, control);
 				frame.ReduceToRowEchelonFormForColumns(target, control);
 			}
 		}

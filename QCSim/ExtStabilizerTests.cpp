@@ -272,7 +272,6 @@ bool TestExtStabilizer()
 				}
 			}
 
-			
 			std::vector<QC::Gates::AppliedGate<>> expGates;
 			expGates.reserve(nrQubits);
 			std::string pauliStr;
@@ -290,8 +289,27 @@ bool TestExtStabilizer()
 				return false;
 			}
 
-			//extstabSim.frames.begin()->Print();
-			//std::cout << "****************************************************************" << std::endl;
+			/*
+			std::cout << "Original: " << std::endl;
+			extstabSim.frames.begin()->Print();
+			std::cout << "****************************************************************" << std::endl;
+			auto frame = *extstabSim.frames.begin();
+			auto circuit = frame.BasisNormalize();
+			std::cout << "Basis normalized: " << std::endl;
+			frame.Print();
+
+			for (int i = 0; i < nrQubits; ++i)
+				for (int j = i + 1; j < nrQubits; ++j)
+				{
+					if (i == j) continue;
+					if (frame.stabilizers[i].X[j] || frame.stabilizers[i].Z[j])
+					{
+						std::cout << "Not normalized!" << std::endl;
+						return false;
+					}
+				}
+			std::cout << "****************************************************************" << std::endl;
+			*/
 		}
 		std::cout << '.';
 	}

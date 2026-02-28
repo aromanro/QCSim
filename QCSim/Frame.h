@@ -13,6 +13,19 @@
 
 namespace QC {
 
+	enum class NormalizationGateType: unsigned char{
+		H = 0,
+		S,
+		CX,
+		CZ
+	};
+
+	struct NormalizationGate {
+		NormalizationGateType type = NormalizationGateType::H;
+		size_t qubit1 = 0;
+		size_t qubit2 = 0;
+	};
+
 	class Frame {
 	public:
 		using Signs = std::vector<bool>;
@@ -40,6 +53,85 @@ namespace QC {
 		size_t GetFrameSize() const
 		{
 			return amplitudes.size();
+		}
+
+		void ApplyHNoReduction(size_t qubit)
+		{
+			const size_t nrQubits = GetNrQubits();
+			for (size_t l = 0; l < nrQubits; ++l)
+			{
+				if (stabilizers[l].X[qubit] && stabilizers[l].Z[qubit])
+					for (size_t k = 0; k < GetFrameSize(); ++k)
+						signs[k][l] = !signs[k][l];
+
+				stabilizers[l].ApplyH(qubit);
+			}
+		}
+
+		void ApplySNoReduction(size_t qubit)
+		{
+			const size_t nrQubits = GetNrQubits();
+			for (size_t l = 0; l < nrQubits; ++l)
+			{
+				if (stabilizers[l].X[qubit] && stabilizers[l].Z[qubit])
+					for (size_t k = 0; k < GetFrameSize(); ++k)
+						signs[k][l] = !signs[k][l];
+
+				stabilizers[l].ApplyS(qubit);
+			}
+		}
+
+		void ApplyX(size_t qubit)
+		{
+			const size_t nrQubits = GetNrQubits();
+			for (size_t l = 0; l < nrQubits; ++l)
+			{
+				if (stabilizers[l].Z[qubit])
+					for (size_t k = 0; k < GetFrameSize(); ++k)
+						signs[k][l] = !signs[k][l];
+			}
+		}
+
+		void ApplyY(size_t qubit)
+		{
+			const size_t nrQubits = GetNrQubits();
+			for (size_t l = 0; l < nrQubits; ++l)
+			{
+				if (stabilizers[l].X[qubit] != stabilizers[l].Z[qubit])
+					for (size_t k = 0; k < GetFrameSize(); ++k)
+						signs[k][l] = !signs[k][l];
+			}
+		}
+
+		void ApplyZ(size_t qubit)
+		{
+			const size_t nrQubits = GetNrQubits();
+			for (size_t l = 0; l < nrQubits; ++l)
+			{
+				if (stabilizers[l].X[qubit])
+					for (size_t k = 0; k < GetFrameSize(); ++k)
+						signs[k][l] = !signs[k][l];
+			}
+		}
+
+		void ApplyCXNoReduction(size_t target, size_t control)
+		{
+			const size_t nrQubits = GetNrQubits();
+			for (size_t l = 0; l < nrQubits; ++l)
+			{
+				if (stabilizers[l].X[control] && stabilizers[l].Z[target]
+					&& PauliStringXZ::XOR(stabilizers[l].X[target], !stabilizers[l].Z[control]))
+					for (size_t k = 0; k < GetFrameSize(); ++k)
+						signs[k][l] = !signs[k][l];
+				stabilizers[l].ApplyCX(target, control);
+			}
+		}
+
+		void ApplyCZNoReduction(size_t target, size_t control)
+		{
+			ApplyHNoReduction(target);
+			ApplyCXNoReduction(target, control);
+			ApplyHNoReduction(target);
 		}
 
 		static inline bool CommutesWithGenerator(const PauliStringXZ& g, const PauliStringXZ& generator, const std::vector<size_t>& pos)
@@ -249,7 +341,7 @@ namespace QC {
 			const size_t nrQubits = GetNrQubits();
 
 			size_t currentRow = 0;
-
+			// X block
 			for (size_t col = 0; col < nrQubits; ++col)
 			{
 				size_t pivotRow = nrQubits;
@@ -270,7 +362,8 @@ namespace QC {
 				}
 				++currentRow;
 			}
-
+			
+			// Z block
 			for (size_t col = 0; col < nrQubits && currentRow < nrQubits; ++col)
 			{
 				size_t pivotRow = nrQubits;
@@ -352,6 +445,7 @@ namespace QC {
 
 		void Swap(size_t i, size_t j)
 		{
+			if (i == j) return;
 			std::swap(stabilizers[i], stabilizers[j]);
 			for (size_t k = 0; k < GetFrameSize(); ++k)
 			{
@@ -404,6 +498,141 @@ namespace QC {
 			}
 
 			ReduceToRowEchelonForm();
+		}
+
+		// assumes the frame is already in row echelon form
+		std::vector<NormalizationGate> BasisNormalize()
+		{
+			std::vector<NormalizationGate> gates;
+			const size_t nrQubits = GetNrQubits();
+
+			// apply block of Hadamard gates
+			for (size_t j = 0; j < nrQubits; ++j)
+			{
+				size_t k = nrQubits;
+				for (size_t r = j; r < nrQubits; ++r)
+					if (stabilizers[r].X[j]) // X or Y
+					{
+						k = r;
+						break;
+					}
+				if (k < nrQubits)
+				{
+					Swap(j, k);
+					for (size_t r = j + 1; r < nrQubits; ++r)
+						if (stabilizers[r].X[j])
+							MultiplyGeneratorInto(j, r);
+				}
+				else {
+					for (long long int r = nrQubits - 1; r >= j; --r)
+						if (stabilizers[r].Z[j]) // Z
+						{
+							k = r;
+							break;
+						}
+					if (k < nrQubits)
+					{
+						Swap(j, k);
+
+						for (size_t r = j + 1; r < nrQubits; ++r)
+							if (stabilizers[r].Z[j])
+								MultiplyGeneratorInto(j, r);
+
+						for (size_t c = j + 1; c < nrQubits; ++c)
+						{
+							if (stabilizers[j].X[c] || stabilizers[j].Z[c]) // has X, Y or Z
+							{
+								ApplyHNoReduction(j);
+								gates.push_back({ NormalizationGateType::H, j });
+
+								break;
+							}
+						}
+					}
+				}
+			}
+
+			// check: below the diagonal are only I and Z
+			/*
+			for (size_t j = 0; j < nrQubits; ++j)
+				for (size_t k = 0; k < j; ++k)
+					if (stabilizers[j].X[k]) // X or Y
+					{
+						std::cerr << "Below diagonal there aren't only I and Z, can't be normalized to basis form" << std::endl;
+						exit(1);
+					}
+			*/
+
+			// above the diagonal
+			// apply block of CX gates
+			for (size_t j = 0; j < nrQubits; ++j)
+				for (size_t k = j + 1; k < nrQubits; ++k)
+					if (stabilizers[j].X[k]) // X or Y
+					{
+						ApplyCXNoReduction(k, j);
+						gates.push_back({ NormalizationGateType::CX, k, j });
+					}
+
+			// above the diagonal
+			// apply block of CZ gates
+			for (size_t j = 0; j < nrQubits; ++j)
+				for (size_t k = j + 1; k < nrQubits; ++k)
+					if (stabilizers[j].Z[k]) // Z
+					{
+						ApplyCZNoReduction(k, j);
+						gates.push_back({ NormalizationGateType::CZ, k, j });
+					}
+
+			// diagonal
+			// apply block of S gates
+			for (size_t j = 0; j < nrQubits; ++j)
+				if (stabilizers[j].X[j] && stabilizers[j].Z[j]) // Y
+				{
+					ApplySNoReduction(j);
+					gates.push_back({ NormalizationGateType::S, j });
+				}
+
+			// diagonal
+			// apply block of H gates
+			for (size_t j = 0; j < nrQubits; ++j)
+				if (stabilizers[j].X[j]) // X
+				{
+					ApplyHNoReduction(j);
+					gates.push_back({ NormalizationGateType::H, j });
+				}
+
+			// eliminate trailing Zs below the diagonal to ensure basis form
+			for (size_t j = 0; j < nrQubits; ++j)
+				for (size_t k = j + 1; k < nrQubits; ++k)
+					if (stabilizers[k].Z[j]) // Z
+						MultiplyGeneratorInto(j, k);
+
+			return gates;
+		}
+
+		void ApplyCircuit(const std::vector<NormalizationGate>& gates)
+		{
+			for (const auto& gate : gates)
+			{
+				switch (gate.type)
+				{
+				case NormalizationGateType::H:
+					ApplyHNoReduction(gate.qubit1);
+					break;
+				case NormalizationGateType::S:
+					ApplySNoReduction(gate.qubit1);
+					break;
+				case NormalizationGateType::CX:
+					ApplyCXNoReduction(gate.qubit1, gate.qubit2);
+					break;
+				case NormalizationGateType::CZ:
+					ApplyCZNoReduction(gate.qubit1, gate.qubit2);
+					break;
+				default:
+					std::cerr << "Unknown gate type in ApplyCircuit" << std::endl;
+					break;
+				}
+			}
 		}
 
 		void Print() const
