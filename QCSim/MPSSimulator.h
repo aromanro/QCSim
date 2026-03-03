@@ -205,7 +205,7 @@ namespace QC
 
 				std::vector<bool> res(nrQubits);
 				for (size_t q = 0; q < nrQubits; ++q)
-					res[q] = measuredQubits[qubitsMap[q]];
+					res[qubitsMapInv[q]] = measuredQubits[q];
 				
 				return res;
 			}

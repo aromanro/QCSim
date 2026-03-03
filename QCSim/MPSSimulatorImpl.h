@@ -2,6 +2,9 @@
 
 #include "MPSSimulatorBase.h"
 
+#define USE_FAST_SVD 1
+
+
 namespace QC {
 
 	namespace TensorNetworks {
