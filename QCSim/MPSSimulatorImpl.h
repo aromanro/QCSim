@@ -2,8 +2,6 @@
 
 #include "MPSSimulatorBase.h"
 
-#include <future>
-
 namespace QC {
 
 	namespace TensorNetworks {
@@ -16,8 +14,10 @@ namespace QC {
 			MPSSimulatorImpl(size_t N, unsigned int addseed = 0)
 				: MPSSimulatorBase(N, addseed)
 			{
+#ifdef USE_FAST_SVD
 				// the default is 16, but with that value I get some precision issues in tests against statevector... too often for my taste
 				SVD.setSwitchSize(blockSizeLimit); // lower sizes will use Jacobi
+#endif
 			}
 
 			void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) override
@@ -326,18 +326,27 @@ namespace QC {
 
 				const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
 
+#ifdef USE_FAST_SVD
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
+#endif
 
 				if (limitEntanglement)
 				{
+#ifdef USE_FAST_SVD
 					if (computeWithJacobi)
+#endif
 						jacobiSVD.setThreshold(singularValueThreshold);
+#ifdef USE_FAST_SVD
 					else
 						SVD.setThreshold(singularValueThreshold);
+#endif
 				}
 
+#ifdef USE_FAST_SVD
 				if (computeWithJacobi)
+#endif
 					jacobiSVD.compute(thetaMatrix);
+#ifdef USE_FAST_SVD
 				else
 					SVD.compute(thetaMatrix);
 
@@ -346,6 +355,14 @@ namespace QC {
 				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
 				IndexType szm = computeWithJacobi ? jacobiSVD.nonzeroSingularValues() : SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
+#else
+				const MatrixClass& UmatrixFull = jacobiSVD.matrixU();
+				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
+				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
+
+				IndexType szm = jacobiSVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
+#endif
+
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
 				const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
@@ -680,9 +697,10 @@ namespace QC {
 				return res;
 			}
 
+#ifdef USE_FAST_SVD
 			constexpr static IndexType blockSizeLimit = 24;
-
 			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
+#endif
 			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
 		};
 
