@@ -77,25 +77,21 @@ namespace QC
 			void setLimitBondDimension(IndexType chival) override
 			{
 				impl.setLimitBondDimension(chival);
-				InitQubitsMap();
 			}
 
 			void setLimitEntanglement(double svdThreshold) override
 			{
 				impl.setLimitEntanglement(svdThreshold);
-				InitQubitsMap();
 			}
 
 			void dontLimitBondDimension() override
 			{
 				impl.dontLimitBondDimension();
-				InitQubitsMap();
 			}
 
 			void dontLimitEntanglement() override
 			{
 				impl.dontLimitEntanglement();
-				InitQubitsMap();
 			}
 
 			VectorClass getRegisterStorage() const override
