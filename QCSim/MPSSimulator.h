@@ -435,7 +435,8 @@ namespace QC
 
 				if (realq2 - realq1 <= 1) return;
 
-				const bool swapDown = qubitsMap.size() - realq2 < realq1;
+				// this is just a heuristic, better solutions that minimize the number of swaps would be possible
+				const bool swapDown = qubitsMap.size() - realq2 <= realq1;
 
 				const IndexType targetQubitReal = swapDown ? realq1 + 1 : realq2 - 1;
 				IndexType movingQubitReal = swapDown ? realq2 : realq1;
