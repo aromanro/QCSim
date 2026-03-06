@@ -433,6 +433,10 @@ namespace QC
 					std::swap(qubit1, qubit2);
 				}
 
+				if (realq2 - realq1 <= 1) return;
+
+				const bool swapDown = qubitsMap.size() - realq2 < realq1;
+
 				const IndexType targetQubitReal = swapDown ? realq1 + 1 : realq2 - 1;
 				IndexType movingQubitReal = swapDown ? realq2 : realq1;
 				const IndexType movingQubitInv = swapDown ? qubit2 : qubit1;
@@ -452,7 +456,6 @@ namespace QC
 
 					movingQubitReal = toQubitReal;
 				} while (movingQubitReal != targetQubitReal);
-				//swapDown = !swapDown;
 			}
 
 
@@ -460,7 +463,7 @@ namespace QC
 			std::vector<IndexType> qubitsMap;
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
-			bool swapDown = false;
+
 
 			std::shared_ptr<MPSSimulatorStateInterface> savedState;
 		};
