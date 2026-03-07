@@ -435,6 +435,16 @@ namespace QC
 
 				if (realq2 - realq1 <= 1) return;
 
+				const IndexType mid = (qubitsMap.size() - 1) >> 1;
+				if (realq1 < mid && realq2 > mid) // is the middle between the two qubits?
+				{
+					const IndexType mappedMid = qubitsMapInv[mid];
+					SwapQubits(qubit1, mappedMid); // this brings qubit1 near the middle
+					realq1 = qubitsMap[qubit1];
+					// the other qubit is above the middle, so it won't be affected by the swap
+					// the code that follows will bring qubit2 in the middle
+				} // otherwise the qubit that's near an end of the chain will be moved towards the other qubit
+
 				// this is just a heuristic, better solutions that minimize the number of swaps would be possible
 				const bool swapDown = qubitsMap.size() - realq2 <= realq1;
 
