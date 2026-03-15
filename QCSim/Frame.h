@@ -13,7 +13,7 @@
 
 namespace QC {
 
-	enum class NormalizationGateType: unsigned char{
+	enum class NormalizationGateType : unsigned char {
 		H = 0,
 		S,
 		CX,
@@ -362,7 +362,7 @@ namespace QC {
 				}
 				++currentRow;
 			}
-			
+
 			// Z block
 			for (size_t col = 0; col < nrQubits && currentRow < nrQubits; ++col)
 			{
@@ -633,6 +633,108 @@ namespace QC {
 					break;
 				}
 			}
+		}
+
+
+		inline void Multiply(PauliStringXZ& r, std::vector<bool>& rsigns, const PauliStringXZ& j, const std::vector<bool>& jsigns)
+		{
+			const size_t nrQubits = r.X.size();
+			assert(r.X.size() == r.Z.size() && r.X.size() == j.X.size() && j.X.size() == j.Z.size() && rsigns.size() == jsigns.size());
+
+			// phase sign is negative when 'PhaseSign' is true
+			// 2 because i^2 = -1, 0 because i^0 = 1
+			std::vector<long long int> ms(rsigns.size());
+			for (size_t i = 0; i < rsigns.size(); ++i)
+				ms[i] = (rsigns[i] ? 2 : 0) + (jsigns[i] ? 2 : 0); // this gets the sign from the signs of the two generators
+
+			// we still need to add the contribution from the Pauli strings:
+
+			for (size_t q = 0; q < nrQubits; ++q)
+			{
+				const int x1 = PauliStringXZWithSign::BoolToInt(j.X[q]);
+				const int z1 = PauliStringXZWithSign::BoolToInt(j.Z[q]);
+				const int x2 = PauliStringXZWithSign::BoolToInt(r.X[q]);
+				const int z2 = PauliStringXZWithSign::BoolToInt(r.Z[q]);
+
+				// add up all the exponents of i that contribute to the sign of the product
+				const auto gval = PauliStringXZWithSign::g(x1, z1, x2, z2);
+				for (size_t i = 0; i < rsigns.size(); ++i)
+					ms[i] += gval;
+
+				// X * X = I, Z * Z = I, so the value is set when there is only one of them
+				r.X[q] = (x1 ^ x2) == 1;
+				r.Z[q] = (z1 ^ z2) == 1;
+			}
+
+
+			// the mod 4 that appears here is because the values for the powers of i keep repeating
+			for (size_t i = 0; i < rsigns.size(); ++i)
+			{
+				const int mod = ms[i] % 4;
+
+				// cannot have i or -i as a global phase
+				assert(mod == 0 || mod == 2 || mod == -2);
+
+				rsigns[i] = mod != 0;
+			}
+		}
+
+		// WARNING: this alters both frames, so if you want to keep the original ones, make copies before calling this
+		double Product(Frame& other)
+		{
+			const size_t nrQubits = GetNrQubits();
+
+			const auto circ = other.BasisNormalize();
+			ApplyCircuit(circ);
+			ReduceToRowEchelonForm();
+			size_t k = 0;
+
+			for (size_t row = 0; row < nrQubits; ++row)
+			{
+				// if the row contains X or Y, increment k
+				bool hasXorY = false;
+				for (size_t col = 0; col < nrQubits; ++col)
+					if (stabilizers[row].X[col])
+					{
+						hasXorY = true;
+						break;
+					}
+
+				if (hasXorY)
+					++k;
+				else // has only I and Z
+					{
+						// check orthogonality
+						PauliStringXZ R(nrQubits);
+						std::vector<bool> Rsigns(GetFrameSize(), false);
+
+						for (size_t col = 0; col < nrQubits; ++col)
+							if (stabilizers[row].Z[col])
+							{
+								std::vector<bool> colSigns(GetFrameSize());
+								for (size_t c = 0; c < GetFrameSize(); ++c)
+									colSigns[c] = other.signs[c][col];
+								Multiply(R, Rsigns, other.stabilizers[col], colSigns);
+							}
+
+						if (R.X == stabilizers[row].X && R.Z == stabilizers[row].Z)
+						{
+							// check if the signs are opposite
+							bool oppositeSigns = true;
+							for (size_t c = 0; c < GetFrameSize(); ++c)
+								if (Rsigns[c] == signs[c][row])
+								{
+									oppositeSigns = false;
+									break;
+								}
+
+							if (oppositeSigns)
+								return 0.0; // orthogonal
+						}
+					}
+			}
+
+			return pow(2., -0.5 * k);
 		}
 
 		void Print() const
