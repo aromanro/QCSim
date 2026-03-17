@@ -74,6 +74,12 @@ namespace QC
 				InitQubitsMap();
 			}
 
+			void SetInitialQubitsMap(const std::vector<IndexType>& initialMap) {
+				qubitsMap = initialMap;
+				for (size_t i = 0; i < initialMap.size(); ++i)
+					qubitsMapInv[initialMap[i]] = i;
+			}
+
 			void setLimitBondDimension(IndexType chival) override
 			{
 				impl.setLimitBondDimension(chival);
