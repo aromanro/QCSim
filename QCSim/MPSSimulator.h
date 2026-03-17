@@ -75,9 +75,13 @@ namespace QC
 			}
 
 			void SetInitialQubitsMap(const std::vector<long long int>& initialMap) {
-				qubitsMap = initialMap;
+				assert(initialMap.size() == impl.getNrQubits());
+
 				for (size_t i = 0; i < initialMap.size(); ++i)
+				{
+					qubitsMap[i] = initialMap[i];
 					qubitsMapInv[initialMap[i]] = i;
+				}
 			}
 
 			void setLimitBondDimension(IndexType chival) override
