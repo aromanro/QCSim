@@ -116,7 +116,7 @@ namespace QC {
 
 			size_t getQubitsNumber() const override
 			{
-				return log2(operatorMat.rows());
+				return static_cast<size_t>(log2(operatorMat.rows()));
 			}
 
 			void setOperator(const MatrixClass& U)
