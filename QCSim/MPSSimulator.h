@@ -597,8 +597,7 @@ namespace QC
 			}
 
 
-			// Find the meeting position with lowest immediate swap cost
-			// using actual bond dimensions from the simulator
+			// Heuristic: swap towards positions in chain with smaller bond dimensions, the cost of a generic gate is bigger than the cost of a swap
 			IndexType FindBestMeetingPositionLocal(IndexType logicalQ1, IndexType logicalQ2) const
 			{
 				IndexType realq1 = qubitsMap[logicalQ1];
@@ -614,7 +613,7 @@ namespace QC
 				
 				for (IndexType m = realq1 + 1; m < realq2; ++m)
 				{
-					if (bondDims[m] > bestBond)
+					if (bondDims[m] < bestBond)
 					{
 						bestBond = bondDims[m];
 						bestPos = m;
