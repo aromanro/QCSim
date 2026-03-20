@@ -610,20 +610,13 @@ namespace QC
 				const auto bondDims = impl.getBondDimensions();
 
 				IndexType bestPos = realq1;
-				double bestCost = std::numeric_limits<double>::infinity();
-
-				for (IndexType m = realq1; m < realq2; ++m)
+				IndexType bestBond = bondDims[realq1];
+				
+				for (IndexType m = realq1 + 1; m < realq2; ++m)
 				{
-					double cost = 0;
-					// Cost of moving lower qubit rightward to m
-					for (IndexType i = realq1; i < m; ++i)
-						cost += std::pow(static_cast<double>(bondDims[i]), 3.);
-					// Cost of moving upper qubit leftward to m+1
-					for (IndexType i = m + 1; i < realq2; ++i)
-						cost += std::pow(static_cast<double>(bondDims[i]), 3.);
-					if (cost < bestCost)
+					if (bondDims[m] > bestBond)
 					{
-						bestCost = cost;
+						bestBond = bondDims[m];
 						bestPos = m;
 					}
 				}
