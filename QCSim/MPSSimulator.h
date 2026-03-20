@@ -2,6 +2,7 @@
 
 #include "MPSSimulatorImpl.h"
 
+#include <functional>
 #include <vector>
 
 namespace QC
@@ -31,6 +32,13 @@ namespace QC
 		class MPSSimulator : public MPSSimulatorInterface
 		{
 		public:
+			// Callback signature: (logicalQ1, logicalQ2, qubitsMap, qubitsMapInv, bondDims) -> meetPosition
+			using MeetingPositionCallback = std::function<IndexType(
+				IndexType, IndexType,
+				const std::vector<IndexType>&,
+				const std::vector<IndexType>&,
+				const std::vector<IndexType>&)>;
+
 			MPSSimulator() = delete;
 
 			MPSSimulator(size_t N, unsigned int addseed = 0)
@@ -166,7 +174,27 @@ namespace QC
 				// don't forget to update the qubitsMap
 				if (gate.getQubitsNumber() > 1 && abs(qubit1 - qubit2) > 1)
 				{
-					SwapQubits(qubit, controllingQubit1);
+					if (meetingPositionCallback)
+					{
+						// External lookahead optimizer supplies the meeting position
+						const IndexType meetPos = meetingPositionCallback(
+							qubit, controllingQubit1,
+							qubitsMap, qubitsMapInv,
+							impl.getBondDimensions());
+						SwapQubitsToPosition(qubit, controllingQubit1, meetPos);
+					}
+					else if (useOptimalMeetingPosition)
+					{
+						// Use actual bond dimensions for immediate cost optimization
+						const IndexType meetPos = FindBestMeetingPositionLocal(
+							qubit, controllingQubit1);
+						SwapQubitsToPosition(qubit, controllingQubit1, meetPos);
+					}
+					else
+					{
+						// Existing heuristic
+						SwapQubits(qubit, controllingQubit1);
+					}
 					qubit1 = qubitsMap[qubit];
 					qubit2 = qubitsMap[controllingQubit1];
 					assert(abs(qubit1 - qubit2) == 1);
@@ -329,6 +357,9 @@ namespace QC
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
 
+				sim->useOptimalMeetingPosition = useOptimalMeetingPosition;
+				sim->meetingPositionCallback = meetingPositionCallback;
+
 				if (savedState) {
 					auto simState = std::static_pointer_cast<MPSSimulatorState>(savedState);
 					auto clonedSavedState = std::make_shared<MPSSimulatorState>();
@@ -342,6 +373,27 @@ namespace QC
 				}
 
 				return sim;
+			}
+
+			// Enable/disable immediate meeting position optimization
+			// using actual bond dimensions (no lookahead, just cheapest path)
+			void SetUseOptimalMeetingPosition(bool enable)
+			{
+				useOptimalMeetingPosition = enable;
+			}
+
+			// Set a callback for external lookahead-based meeting position.
+			// When set, this takes priority over both the heuristic and the
+			// local optimizer.  Pass nullptr to clear.
+			void SetMeetingPositionCallback(MeetingPositionCallback callback)
+			{
+				meetingPositionCallback = std::move(callback);
+			}
+
+			// Get actual bond dimensions from the underlying simulator
+			std::vector<IndexType> getBondDimensions() const
+			{
+				return impl.getBondDimensions();
 			}
 
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
@@ -482,12 +534,112 @@ namespace QC
 				} while (movingQubitReal != targetQubitReal);
 			}
 
+			// Swap two logical qubits so they meet at a specified bond position.
+			// meetPosition is the bond index (in real/chain coordinates) where
+			// the two qubits will end up adjacent: one at meetPosition, the other
+			// at meetPosition+1.
+			void SwapQubitsToPosition(IndexType qubit1, IndexType qubit2,
+									  IndexType meetPosition)
+			{
+				IndexType realq1 = qubitsMap[qubit1];
+				IndexType realq2 = qubitsMap[qubit2];
+				if (realq1 > realq2)
+				{
+					std::swap(realq1, realq2);
+					std::swap(qubit1, qubit2);
+				}
+
+				if (realq2 - realq1 <= 1) return;
+
+				assert(meetPosition >= realq1 && meetPosition < realq2);
+
+				// Move lower qubit (qubit1) rightward from realq1 to meetPosition
+				{
+					IndexType movingReal = realq1;
+					while (movingReal < meetPosition)
+					{
+						const IndexType toReal = movingReal + 1;
+						const IndexType toInv = qubitsMapInv[toReal];
+
+						impl.ApplyGate(swapGate, movingReal, toReal);
+
+						qubitsMap[toInv] = movingReal;
+						qubitsMapInv[movingReal] = toInv;
+
+						qubitsMap[qubit1] = toReal;
+						qubitsMapInv[toReal] = qubit1;
+
+						movingReal = toReal;
+					}
+				}
+
+				// Move upper qubit (qubit2) leftward from realq2 to meetPosition+1
+				{
+					IndexType movingReal = realq2;
+					while (movingReal > meetPosition + 1)
+					{
+						const IndexType toReal = movingReal - 1;
+						const IndexType toInv = qubitsMapInv[toReal];
+
+						impl.ApplyGate(swapGate, toReal, movingReal);
+
+						qubitsMap[toInv] = movingReal;
+						qubitsMapInv[movingReal] = toInv;
+
+						qubitsMap[qubit2] = toReal;
+						qubitsMapInv[toReal] = qubit2;
+
+						movingReal = toReal;
+					}
+				}
+
+				assert(abs(qubitsMap[qubit1] - qubitsMap[qubit2]) == 1);
+			}
+
+
+			// Find the meeting position with lowest immediate swap cost
+			// using actual bond dimensions from the simulator
+			IndexType FindBestMeetingPositionLocal(IndexType logicalQ1, IndexType logicalQ2) const
+			{
+				IndexType realq1 = qubitsMap[logicalQ1];
+				IndexType realq2 = qubitsMap[logicalQ2];
+				if (realq1 > realq2) std::swap(realq1, realq2);
+
+				if (realq2 - realq1 <= 1) return realq1;
+
+				const auto bondDims = impl.getBondDimensions();
+
+				IndexType bestPos = realq1;
+				double bestCost = std::numeric_limits<double>::infinity();
+
+				for (IndexType m = realq1; m < realq2; ++m)
+				{
+					double cost = 0;
+					// Cost of moving lower qubit rightward to m
+					for (IndexType i = realq1; i < m; ++i)
+						cost += std::pow(static_cast<double>(bondDims[i]), 3.);
+					// Cost of moving upper qubit leftward to m+1
+					for (IndexType i = m + 1; i < realq2; ++i)
+						cost += std::pow(static_cast<double>(bondDims[i]), 3.);
+					if (cost < bestCost)
+					{
+						bestCost = cost;
+						bestPos = m;
+					}
+				}
+
+				return bestPos;
+			}
+
 
 			MPSSimulatorImpl impl;
 			std::vector<IndexType> qubitsMap;
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
 
+			bool useOptimalMeetingPosition = false;
+
+			MeetingPositionCallback meetingPositionCallback;
 
 			std::shared_ptr<MPSSimulatorStateInterface> savedState;
 		};

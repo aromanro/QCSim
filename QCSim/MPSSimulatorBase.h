@@ -319,6 +319,14 @@ namespace QC {
 				// do nothing, it's here just to provide an implementation
 			}
 
+			std::vector<IndexType> getBondDimensions() const
+			{
+				std::vector<IndexType> dims(lambdas.size());
+				for (size_t i = 0; i < lambdas.size(); ++i)
+					dims[i] = lambdas[i].size();
+				return dims;
+			}
+
 		protected:
 			void PrintGamma(size_t i) const
 			{
