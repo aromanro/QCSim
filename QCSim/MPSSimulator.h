@@ -32,9 +32,8 @@ namespace QC
 		class MPSSimulator : public MPSSimulatorInterface
 		{
 		public:
-			// Callback signature: (logicalQ1, logicalQ2, qubitsMap, qubitsMapInv, bondDims) -> meetPosition
+			// Callback signature: (qubitsMap, qubitsMapInv, bondDims) -> meetPosition
 			using MeetingPositionCallback = std::function<IndexType(
-				IndexType, IndexType,
 				const std::vector<IndexType>&,
 				const std::vector<IndexType>&,
 				const std::vector<IndexType>&)>;
@@ -629,7 +628,7 @@ namespace QC
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
 
-			bool useOptimalMeetingPosition = false;
+			bool useOptimalMeetingPosition = true;
 
 			MeetingPositionCallback meetingPositionCallback;
 

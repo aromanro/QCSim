@@ -320,7 +320,6 @@ bool OneAndTwoQubitGatesTestMapped()
 #endif
 
 			QC::TensorNetworks::MPSSimulator mps(nrQubits);
-			mps.SetUseOptimalMeetingPosition(true);
 			QC::QubitRegister reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
@@ -479,12 +478,8 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 					tasks[i] = std::async(std::launch::async, [&circuit, &measurementsRegMap, &measurementsMPSMap, &measurementsMPSMapOpt, &measurementsMPSMapAll, curCnt, nrQubits, &resultsMutex]()
 						{
 							QC::TensorNetworks::MPSSimulator mps(nrQubits);
-							mps.SetUseOptimalMeetingPosition(true);
 							QC::TensorNetworks::MPSSimulator mpsOpt(nrQubits);
-							mpsOpt.SetUseOptimalMeetingPosition(true);
 							QC::TensorNetworks::MPSSimulator mpsAll(nrQubits);
-							mpsAll.SetUseOptimalMeetingPosition(true);
-
 							QC::QubitRegister reg(nrQubits);
 
 							std::vector<bool> measurementsReg(nrQubits);
@@ -587,7 +582,6 @@ bool OneAndTwoQubitGatesTestMappedRandomAmplitudes()
 #endif
 
 			QC::TensorNetworks::MPSSimulator mps(nrQubits);
-			mps.SetUseOptimalMeetingPosition(true);
 			QC::QubitRegister reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
@@ -670,7 +664,6 @@ bool CheckQubitsProbability()
 #endif
 
 			QC::TensorNetworks::MPSSimulator mps(nrQubits);
-			mps.SetUseOptimalMeetingPosition(true);
 			QC::QubitRegister reg(nrQubits);
 
 			const auto circ = GenerateRandomCircuitWithGatesNoAdjacent(gates, 50, 150, nrQubits);
@@ -780,7 +773,6 @@ bool checkExpectationValuesMPS()
 #endif
 
 			QC::TensorNetworks::MPSSimulator mps(nrQubits);
-			mps.SetUseOptimalMeetingPosition(true);
 			QC::QubitRegister reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
