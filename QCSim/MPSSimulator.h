@@ -177,7 +177,6 @@ namespace QC
 					{
 						// External lookahead optimizer supplies the meeting position
 						const IndexType meetPos = meetingPositionCallback(
-							qubit, controllingQubit1,
 							qubitsMap, qubitsMapInv,
 							impl.getBondDimensions());
 						SwapQubitsToPosition(qubit, controllingQubit1, meetPos);
