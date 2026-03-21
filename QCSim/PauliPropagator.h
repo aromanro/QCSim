@@ -236,15 +236,15 @@ namespace QC
 			for (size_t q = 0; q < lastQubit; ++q)
 			{
 				const bool measuredOne = (outcome & 1) == 1;
-				const double prob = measuredOne ? Probability1(q) : Probability0(q);
+				const double prob = measuredOne ? Probability1(static_cast<int>(q)) : Probability0(static_cast<int>(q));
 				res *= prob;
 				outcome >>= 1;
-				std::unique_ptr<Operator> proj = std::make_unique<Projector>(q, measuredOne, 0.5 / prob);
+				std::unique_ptr<Operator> proj = std::make_unique<Projector>(static_cast<int>(q), measuredOne, 0.5 / prob);
 				operations.push_back(std::move(proj));
 			}
 
 			const bool measuredOne = (outcome & 1) == 1;
-			const double prob = measuredOne ? Probability1(lastQubit) : Probability0(lastQubit);
+			const double prob = measuredOne ? Probability1(static_cast<int>(lastQubit)) : Probability0(static_cast<int>(lastQubit));
 			res *= prob;
 			
 			operations.resize(pos);
