@@ -437,7 +437,7 @@ namespace QC
 				{
 					if (gate.getQubitsNumber() > 1)
 						throw std::invalid_argument("Expectation value for ops applied on more than one qubit not supported yet");
-					
+
 					Gates::AppliedGate<MatrixClass> translated(gate);
 					translated.setQubit1(qubitsMap[gate.getQubit1()]);
 
@@ -445,6 +445,11 @@ namespace QC
 				}
 
 				return impl.ExpectationValue(translatedOps);
+			}
+
+			std::complex<double> ProjectOnZero() const override
+			{
+				return impl.ProjectOnZero();
 			}
 
 			// needs calling MoveAtBeginningOfChain before this (with the same qubits, of course), otherwise it will give wrong results
