@@ -32,9 +32,8 @@ namespace QC
 		class MPSSimulator : public MPSSimulatorInterface
 		{
 		public:
-			// Callback signature: (qubitsMap, qubitsMapInv, bondDims) -> meetPosition
+			// Callback signature: (qubitsMap, bondDims) -> meetPosition
 			using MeetingPositionCallback = std::function<IndexType(
-				const std::vector<IndexType>&,
 				const std::vector<IndexType>&,
 				const std::vector<IndexType>&)>;
 
@@ -177,8 +176,7 @@ namespace QC
 					{
 						// External lookahead optimizer supplies the meeting position
 						const IndexType meetPos = meetingPositionCallback(
-							qubitsMap, qubitsMapInv,
-							impl.getBondDimensions());
+							qubitsMap, impl.getBondDimensions());
 						SwapQubitsToPosition(qubit, controllingQubit1, meetPos);
 					}
 					else if (useOptimalMeetingPosition)
