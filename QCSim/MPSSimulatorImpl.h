@@ -242,23 +242,21 @@ namespace QC {
 				MultiplyModGammasWithLambdas(modGammas, 0, nrSites);
 
 				// build zero state gammas (bra side): gamma(0,0,0)=1, gamma(0,1,0)=0, lambdas=1
-				std::vector<GammaType> zeroGammas(nrSites, GammaType(1, 2, 1));
-				for (IndexType s = 0; s < nrSites; ++s)
-				{
-					zeroGammas[s](0, 0, 0) = 1.;
-					zeroGammas[s](0, 1, 0) = 0.;
-				}
+				// a single one is enough, since it repeats for all the sites
+				GammaType zeroGamma(1, 2, 1);
+				zeroGamma(0, 0, 0) = 1.;
+				zeroGamma(0, 1, 0) = 0.;
 
 				// contract the ket chain with the bra (zero state) chain
 				static const Eigen::array<IntIndexPair, 2> contract_dim{ IntIndexPair(0, 0), IntIndexPair(1, 1) };
 				static const Indexes contract_dim1{ IntIndexPair(0, 0) };
 
-				Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(zeroGammas[0], contract_dim);
+				Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(zeroGamma, contract_dim);
 
 				for (IndexType s = 1; s < nrSites; ++s)
 				{
 					Eigen::Tensor<std::complex<double>, 3> intermediateResult = resTensor.contract(modGammas[s], contract_dim1);
-					resTensor = intermediateResult.contract(zeroGammas[s], contract_dim);
+					resTensor = intermediateResult.contract(zeroGamma, contract_dim);
 				}
 
 				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
