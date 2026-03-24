@@ -231,36 +231,26 @@ namespace QC {
 			// useful for maestro/composer for checking some stuff
 			std::complex<double> ProjectOnZero() const override
 			{
-				const IndexType nrSites = static_cast<IndexType>(gammas.size());
-				if (nrSites == 0) return 0.;
+				const size_t nrQubits = getNrQubits();
+				if (nrQubits == 0) return 0.;
 
-				// copy current state gammas and apply lambdas (ket side)
-				std::vector<GammaType> modGammas(nrSites);
-				for (IndexType s = 0; s < nrSites; ++s)
-					modGammas[s] = gammas[s];
+				static const Indexes product_dims{ IntIndexPair(1, 0) };
+				MatrixTensorType res = gammas[0].chip(0, 1);
 
-				MultiplyModGammasWithLambdas(modGammas, 0, nrSites);
-
-				// build zero state gammas (bra side): gamma(0,0,0)=1, gamma(0,1,0)=0, lambdas=1
-				// a single one is enough, since it repeats for all the sites
-				GammaType zeroGamma(1, 2, 1);
-				zeroGamma(0, 0, 0) = 1.;
-				zeroGamma(0, 1, 0) = 0.;
-
-				// contract the ket chain with the bra (zero state) chain
-				static const Eigen::array<IntIndexPair, 2> contract_dim{ IntIndexPair(0, 0), IntIndexPair(1, 1) };
-				static const Indexes contract_dim1{ IntIndexPair(0, 0) };
-
-				Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(zeroGamma, contract_dim);
-
-				for (IndexType s = 1; s < nrSites; ++s)
+				for (size_t q = 1; q < nrQubits; ++q)
 				{
-					Eigen::Tensor<std::complex<double>, 3> intermediateResult = resTensor.contract(modGammas[s], contract_dim1);
-					resTensor = intermediateResult.contract(zeroGamma, contract_dim);
+					const size_t q1 = q - 1;
+
+					for (IndexType c = 0; c < res.dimension(1); ++c)
+						for (IndexType r = 0; r < res.dimension(0); ++r)
+							res(r, c) *= lambdas[q1][c];
+
+					// why? Needs this intermediary variable here, not even calling eval() works if assigning directly to res
+					MatrixTensorType tmp = res.contract(gammas[q].chip(0, 1), product_dims);
+					res = std::move(tmp);
 				}
 
-				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
-				return t(0);
+				return res(0, 0);
 			}
 
 		private:
