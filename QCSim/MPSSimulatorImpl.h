@@ -216,13 +216,13 @@ namespace QC {
 				return res;
 			}
 
-			std::vector<bool> MeasureNoCollapse() override
+			std::unordered_map<IndexType, bool> MeasureNoCollapse() override
 			{
 				const size_t nrQubits = gammas.size();
 				return MeasureNoCollapse(static_cast<IndexType>(nrQubits - 1));
 			}
 
-			std::vector<bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
+			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
 			{
 				return MeasureNoCollapse(*qubits.crbegin());
 			}
@@ -666,12 +666,12 @@ namespace QC {
 				return thetaMatrix;
 			}
 
-			std::vector<bool> MeasureNoCollapse(IndexType limit)
+			std::unordered_map<IndexType, bool> MeasureNoCollapse(IndexType limit)
 			{
 				if (gammas.empty()) return {};
 
 				const IndexType limit1 = limit + 1;
-				std::vector<bool> res(limit1);
+				std::unordered_map<IndexType, bool> res;
 
 				Eigen::MatrixXcd mat;
 

@@ -47,7 +47,7 @@ namespace QC {
 			virtual void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) = 0;
 			virtual bool MeasureQubit(IndexType qubit) = 0;
 			virtual std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) = 0;
-			virtual std::vector<bool> MeasureNoCollapse() = 0;
+			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse() = 0;
 			virtual double GetProbability(IndexType qubit, bool zeroVal = true) const = 0;
 			virtual std::complex<double> getBasisStateAmplitude(size_t State) const = 0;
 			virtual std::complex<double> getBasisStateAmplitude(std::vector<bool>& State) const = 0;
@@ -59,7 +59,7 @@ namespace QC {
 			virtual void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) = 0;
 			virtual std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) = 0;
 			virtual std::complex<double> ProjectOnZero() const = 0;
-			virtual std::vector<bool> MeasureNoCollapse(const std::set<IndexType>& qubits) = 0;
+			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) = 0;
 		};
 
 	}

@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <vector>
+#include <unordered_set>
 
 namespace QC
 {
@@ -228,14 +229,14 @@ namespace QC
 				return res;
 			}
 
-			std::vector<bool> MeasureNoCollapse() override
+			std::unordered_map<IndexType, bool> MeasureNoCollapse() override
 			{
 				const auto measuredQubits = impl.MeasureNoCollapse();
 				const size_t nrQubits = measuredQubits.size();
 
-				std::vector<bool> res(nrQubits);
-				for (size_t q = 0; q < nrQubits; ++q)
-					res[qubitsMapInv[q]] = measuredQubits[q];
+				std::unordered_map<IndexType, bool> res;
+				for (const auto& [qubit, val] : measuredQubits)
+					res[qubitsMapInv[qubit]] = val;
 				
 				return res;
 			}
@@ -394,28 +395,51 @@ namespace QC
 
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
 			{
-				IndexType qubitPos = 0;
+				std::unordered_set<IndexType> handledQubits;
 
-				for (const auto qubit : qubits)
+				IndexType currentQubitPos = 0;
+				// skip over all qubits that are already in the right position, that is, at the beginning of the chain
+				for (; currentQubitPos < static_cast<IndexType>(qubitsMap.size()); ++currentQubitPos)
 				{
-					IndexType realQubit = qubitsMap[qubit];
-					while (realQubit != qubitPos)
-					{
-						const IndexType toQubitReal = realQubit - 1;
-						const IndexType toQubitInv = qubitsMapInv[toQubitReal];
+					const IndexType logicalQubit = qubitsMapInv[currentQubitPos];
+					if (qubits.find(logicalQubit) == qubits.end())
+						break;
+					handledQubits.insert(logicalQubit);
+				}
 
-						impl.ApplyGate(swapGate, realQubit, toQubitReal);
+				if (handledQubits.size() == qubits.size())
+					return;
 
-						qubitsMap[toQubitInv] = realQubit;
-						qubitsMapInv[realQubit] = toQubitInv;
+				for (IndexType pos = currentQubitPos; pos < static_cast<IndexType>(qubitsMap.size()); ++pos)
+				{
+					const IndexType logicalQubit = qubitsMapInv[pos];
+					// is this a qubit that doesn't need to be moved?
+					if (qubits.find(logicalQubit) == qubits.end())
+						continue;
 
-						qubitsMap[qubit] = toQubitReal;
-						qubitsMapInv[toQubitReal] = qubit;
+					// needs to be moved if it's not already in the right position
+					const IndexType currentLogicalPosQubit = qubitsMapInv[currentQubitPos];
+					SwapQubits(currentLogicalPosQubit, logicalQubit, true);
 
-						realQubit = toQubitReal;
-					}
+					// they are brought together, now swap them
+					const IndexType movingQubitReal = qubitsMap[logicalQubit];
+					const IndexType toQubitReal = qubitsMap[currentLogicalPosQubit];
 
-					++qubitPos;
+					assert(abs(movingQubitReal - toQubitReal) == 1);
+
+					impl.ApplyGate(swapGate, movingQubitReal, toQubitReal);
+
+					// update the maps
+					qubitsMap[logicalQubit] = toQubitReal;
+					qubitsMap[currentLogicalPosQubit] = movingQubitReal;
+					qubitsMapInv[toQubitReal] = logicalQubit;
+					qubitsMapInv[movingQubitReal] = currentLogicalPosQubit;
+
+					handledQubits.insert(logicalQubit);
+					if (handledQubits.size() == qubits.size())
+						break;
+
+					++currentQubitPos;
 				}
 			}
 
@@ -453,7 +477,7 @@ namespace QC
 			}
 
 			// needs calling MoveAtBeginningOfChain before this (with the same qubits, of course), otherwise it will give wrong results
-			std::vector<bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
+			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
 			{
 				if (qubits.empty()) return {};
 
@@ -463,13 +487,9 @@ namespace QC
 
 				const auto measuredQubits = impl.MeasureNoCollapse(mappedQubits);
 
-				std::vector<bool> res(qubits.size());
-				IndexType q = 0;
-				for (auto val : measuredQubits)
-				{
-					res[qubitsMapInv[q]] = val;
-					++q;
-				}
+				std::unordered_map<IndexType, bool> res;
+				for (const auto& [qubit, val] : measuredQubits)
+					res[qubitsMapInv[qubit]] = val;
 
 				return res;
 			}
@@ -484,7 +504,7 @@ namespace QC
 					qubitsMapInv[i] = qubitsMap[i] = i;
 			}
 
-			void SwapQubits(IndexType qubit1, IndexType qubit2)
+			void SwapQubits(IndexType qubit1, IndexType qubit2, bool forceSwapDown = false)
 			{
 				// if the qubits are not adjacent, apply swap gates until they are
 				// don't forget to update the qubitsMap
@@ -501,18 +521,21 @@ namespace QC
 				//const bool swapDown =
 				//	realq1 + realq2 <= static_cast<IndexType>(qubitsMap.size()) - 1;
 
-				const IndexType mid = (qubitsMap.size() - 1) >> 1;
-				if (realq1 < mid && realq2 > mid) // is the middle between the two qubits?
+				if (!forceSwapDown)
 				{
-					const IndexType mappedMid = qubitsMapInv[mid];
-					SwapQubits(qubit1, mappedMid); // this brings qubit1 near the middle
-					realq1 = qubitsMap[qubit1];
-					// the other qubit is above the middle, so it won't be affected by the swap
-					// the code that follows will bring qubit2 in the middle
-				} // otherwise the qubit that's near an end of the chain will be moved towards the other qubit
+					const IndexType mid = (qubitsMap.size() - 1) >> 1;
+					if (realq1 < mid && realq2 > mid) // is the middle between the two qubits?
+					{
+						const IndexType mappedMid = qubitsMapInv[mid];
+						SwapQubits(qubit1, mappedMid); // this brings qubit1 near the middle
+						realq1 = qubitsMap[qubit1];
+						// the other qubit is above the middle, so it won't be affected by the swap
+						// the code that follows will bring qubit2 in the middle
+					} // otherwise the qubit that's near an end of the chain will be moved towards the other qubit
+				}
 
 				// this is just a heuristic, better solutions that minimize the number of swaps would be possible
-				const bool swapDown = static_cast<IndexType>(qubitsMap.size()) - realq2 <= realq1;
+				const bool swapDown = forceSwapDown ? true : static_cast<IndexType>(qubitsMap.size()) - realq2 <= realq1;
 
 				const IndexType targetQubitReal = swapDown ? realq1 + 1 : realq2 - 1;
 				IndexType movingQubitReal = swapDown ? realq2 : realq1;

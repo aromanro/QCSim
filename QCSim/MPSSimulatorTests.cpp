@@ -509,13 +509,16 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 									measurementsMPSOpt[q] = measRes[q];
 								}
 								auto measurementsMPSAll = mpsAll.MeasureNoCollapse();
+								std::vector<bool> measurementsMPSAllVec(nrQubits);
+								for (const auto& [qubit, val] : measurementsMPSAll)
+									measurementsMPSAllVec[qubit] = val;
 								
 								{
 									const std::lock_guard lock(resultsMutex);
 									++measurementsRegMap[measurementsReg];
 									++measurementsMPSMap[measurementsMPS];
 									++measurementsMPSMapOpt[measurementsMPSOpt];
-									++measurementsMPSMapAll[measurementsMPSAll];
+									++measurementsMPSMapAll[measurementsMPSAllVec];
 								}
 
 								reg.setToBasisState(0);
