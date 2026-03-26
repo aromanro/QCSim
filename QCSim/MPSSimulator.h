@@ -556,6 +556,15 @@ namespace QC
 
 					movingQubitReal = toQubitReal;
 				} while (movingQubitReal != targetQubitReal);
+
+				assert(abs(qubitsMap[qubit1] - qubitsMap[qubit2]) == 1);
+				/*
+				if (abs(qubitsMap[qubit1] - qubitsMap[qubit2]) != 1)
+				{
+					std::cerr << "Error: qubits not adjacent after SwapQubits" << std::endl;
+					exit(1);
+				}
+				*/
 			}
 
 			// Swap two logical qubits so they meet at a specified bond position.
@@ -618,6 +627,13 @@ namespace QC
 				}
 
 				assert(abs(qubitsMap[qubit1] - qubitsMap[qubit2]) == 1);
+				/*
+				if (abs(qubitsMap[qubit1] - qubitsMap[qubit2]) != 1)
+				{
+					std::cerr << "Error: qubits not adjacent after SwapQubits" << std::endl;
+					exit(1);
+				}
+				*/
 			}
 
 
