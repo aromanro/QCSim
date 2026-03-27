@@ -586,6 +586,14 @@ namespace QC
 
 				assert(meetPosition >= realq1 && meetPosition < realq2);
 
+				/*
+				if (meetPosition < realq1 || meetPosition >= realq2)
+				{
+					std::cerr << "Error: invalid meeting position in SwapQubitsToPosition" << std::endl;
+					exit(1);
+				}
+				*/
+
 				// Move lower qubit (qubit1) rightward from realq1 to meetPosition
 				{
 					IndexType movingReal = realq1;

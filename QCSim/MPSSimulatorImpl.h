@@ -206,14 +206,13 @@ namespace QC {
 
 					// bug in eigen, does not work as expected without using an intermediate result?
 					// fails even with eval() after the first contract, so I use a separate variable for the first contract
-					Eigen::Tensor<std::complex<double>, 3> intermediateResult = resTensor.contract(modGammas[s], contract_dim1);
+					const Eigen::Tensor<std::complex<double>, 3> intermediateResult = resTensor.contract(modGammas[s], contract_dim1);
 					resTensor = intermediateResult.contract(daggerGammas[s], contract_dim);
 				}
 
 				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
-				std::complex<double> res = t(0);
 
-				return res;
+				return t(0);
 			}
 
 			std::unordered_map<IndexType, bool> MeasureNoCollapse() override
