@@ -589,6 +589,8 @@ namespace QC {
 				if (stabilizers[j].X[j] && stabilizers[j].Z[j]) // Y
 				{
 					ApplySNoReduction(j);
+					for (size_t k = 0; k < GetFrameSize(); ++k)
+						amplitudes[k] *= std::complex<double>(0., 1.); // S adds a global phase of i, which is not tracked by the signs, so we need to add it to the amplitudes
 					gates.push_back({ NormalizationGateType::S, j });
 				}
 
@@ -680,6 +682,7 @@ namespace QC {
 		}
 
 		// WARNING: this alters both frames, so if you want to keep the original ones, make copies before calling this
+		// TODO: Seems not correct for frames (as in multiple components), but correct for stabilizer states (as in single component), need to be fixed
 		double Product(Frame& other)
 		{
 			const size_t nrQubits = GetNrQubits();

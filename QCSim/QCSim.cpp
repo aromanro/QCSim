@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
 		std::cout << "2 to run MPS simulator tests" << std::endl;
 		std::cout << "3 to run Clifford simulator tests" << std::endl;
 		std::cout << "4 to run Pauli propagator tests" << std::endl;
-		std::cout << "5 to run extended stabilizer tests" << std::endl;
+		std::cout << "5 to run extended stabilizer (not yet fully implemented) tests" << std::endl;
 		std::cout << "6 to run all tests" << std::endl;
 		std::cout << "Command: ";
 		std::string dummy;

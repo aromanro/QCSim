@@ -352,6 +352,7 @@ namespace QC {
 
 				const bool isSwapGate = gate.isSwapGate();
 
+				// the size is (2 * left bond dim) x (2 * right bond dim)
 				const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
 
 #ifdef USE_FAST_SVD
@@ -370,6 +371,8 @@ namespace QC {
 #endif
 				}
 
+				// n x p is decomposed into U = n x n, singular vals diagonal matrix = n x p, V^t = p x p
+				// the thin version U = n x min(n, p), singular vals diagonal matrix = min(n,p) x min(n,p), V^t = min(n,p) x p
 #ifdef USE_FAST_SVD
 				if (computeWithJacobi)
 #endif
@@ -401,8 +404,11 @@ namespace QC {
 				assert(UmatrixFull.cols() == VmatrixFull.cols()); // for 'thin'
 				assert(sz <= UmatrixFull.cols());
 
-				const MatrixClass Umatrix = UmatrixFull.topLeftCorner(std::min<IndexType>(2 * szl, UmatrixFull.rows()), sz);
-				const MatrixClass Vmatrix = VmatrixFull.topLeftCorner(std::min<IndexType>(2 * szr, VmatrixFull.rows()), sz).adjoint();
+				assert(2 * szl == UmatrixFull.rows());
+				assert(2 * szr == VmatrixFull.rows());
+
+				const MatrixClass Umatrix = UmatrixFull.topLeftCorner(UmatrixFull.rows(), sz);
+				const MatrixClass Vmatrix = VmatrixFull.topLeftCorner(VmatrixFull.rows(), sz).adjoint();
 
 				// now set back lambdas and gammas
 				lambdas[qubit1] = SvaluesFull.head(sz);
