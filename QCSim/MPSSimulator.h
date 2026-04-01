@@ -35,7 +35,7 @@ namespace QC
 		public:
 			// Callback signature: (qubitsMap, bondDims) -> meetPosition
 			using MeetingPositionCallback = std::function<IndexType(
-				const std::vector<IndexType>&,
+				//const std::vector<IndexType>&,
 				const std::vector<IndexType>&)>;
 
 			MPSSimulator() = delete;
@@ -177,8 +177,10 @@ namespace QC
 					{
 						// External lookahead optimizer supplies the meeting position
 						const IndexType meetPos = meetingPositionCallback(
-							qubitsMap, impl.getBondDimensions());
+							/*qubitsMap,*/ impl.getBondDimensions());
 						SwapQubitsToPosition(qubit, controllingQubit1, meetPos);
+
+						//impl.printBondDimensions();
 					}
 					else if (useOptimalMeetingPosition)
 					{
@@ -192,6 +194,7 @@ namespace QC
 						// Existing heuristic
 						SwapQubits(qubit, controllingQubit1);
 					}
+
 					qubit1 = qubitsMap[qubit];
 					qubit2 = qubitsMap[controllingQubit1];
 					assert(abs(qubit1 - qubit2) == 1);

@@ -327,6 +327,14 @@ namespace QC {
 				return dims;
 			}
 
+			void printBondDimensions() const
+			{
+				std::cout << "Bond dimensions: ";
+				for (const auto& lambda : lambdas)
+					std::cout << lambda.size() << " ";
+				std::cout << std::endl;
+			}
+
 		protected:
 			void PrintGamma(size_t i) const
 			{
