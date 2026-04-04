@@ -235,7 +235,6 @@ namespace QC
 			std::unordered_map<IndexType, bool> MeasureNoCollapse() override
 			{
 				const auto measuredQubits = impl.MeasureNoCollapse();
-				const size_t nrQubits = measuredQubits.size();
 
 				std::unordered_map<IndexType, bool> res;
 				for (const auto& [qubit, val] : measuredQubits)
