@@ -41,7 +41,7 @@ namespace QC {
 				OpClass::operatorMat(2, 1) = std::complex<double>(0, 1);
 			}
 
-			virtual bool IsISwapGate() const
+			bool IsISwapGate() const override
 			{
 				return true;
 			}
@@ -61,7 +61,7 @@ namespace QC {
 				OpClass::operatorMat(2, 1) = std::complex<double>(0, -1);
 			}
 
-			virtual bool IsISwapDagGate() const
+			bool IsISwapDagGate() const override
 			{
 				return true;
 			}

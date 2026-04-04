@@ -296,6 +296,7 @@
     <ClCompile Include="QCSim\GamesTests.cpp" />
     <ClCompile Include="QCSim\IsingTests.cpp" />
     <ClCompile Include="QCSim\MPSSimulatorTests.cpp" />
+    <ClCompile Include="QCSim\PathIntegralTests.cpp" />
     <ClCompile Include="QCSim\PauliPropagatorTests.cpp" />
     <ClCompile Include="QCSim\PhaseEstimationTests.cpp" />
     <ClCompile Include="QCSim\QMLTests.cpp" />
@@ -336,6 +337,7 @@
     <ClInclude Include="QCSim\NQubitsQuantumGate.h" />
     <ClInclude Include="QCSim\Operators.h" />
     <ClInclude Include="QCSim\Oracle.h" />
+    <ClInclude Include="QCSim\PathIntegral.h" />
     <ClInclude Include="QCSim\PauliPropagator.h" />
     <ClInclude Include="QCSim\PauliPropOper.h" />
     <ClInclude Include="QCSim\PauliString.h" />

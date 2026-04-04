@@ -25,6 +25,8 @@ int ExecuteTests(const std::string& arg1)
 		return tests(4) ? 0 : -1;
 	else if (arg1 == "6")
 		return tests(5) ? 0 : -1;
+	else if (arg1 == "7")
+		return tests(6) ? 0 : -1;
 	else
 	{
 		std::cout << "Unknown command line argument, options are 0, 1, 2, 3, 4, 5, 6" << std::endl;
@@ -51,8 +53,9 @@ int main(int argc, char* argv[])
 		std::cout << "2 to run MPS simulator tests" << std::endl;
 		std::cout << "3 to run Clifford simulator tests" << std::endl;
 		std::cout << "4 to run Pauli propagator tests" << std::endl;
-		std::cout << "5 to run extended stabilizer (not yet fully implemented) tests" << std::endl;
-		std::cout << "6 to run all tests" << std::endl;
+		std::cout << "5 to run path integral tests" << std::endl;
+		std::cout << "6 to run extended stabilizer tests (not yet fully implemented, works only with clifford gates)" << std::endl;
+		std::cout << "7 to run all tests" << std::endl;
 		std::cout << "Command: ";
 		std::string dummy;
 		getline(std::cin, dummy);
@@ -60,7 +63,7 @@ int main(int argc, char* argv[])
 		const char c = dummy.size() == 1 ? dummy[0] : 'x';
 
 		if (c == '0') break;
-		else if (c >= '1' && c <= '6') tests(c - '1');
+		else if (c >= '1' && c <= '7') tests(c - '1');
 		else
 			std::cout << "Sorry, unknown command" << std::endl;
 	}

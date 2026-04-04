@@ -49,6 +49,8 @@ bool TestPauliPropagator();
 
 bool TestExtStabilizer();
 
+bool TestPathIntegral();
+
 bool tests(int option);
 
 #ifndef TESTS_CPP_
