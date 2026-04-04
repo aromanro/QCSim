@@ -118,6 +118,7 @@ namespace QC {
 				return amplitude;
 			}
 
+			// TODO: this could be improved, this sums the max possible considering only the number of qubits that the gates act on, not the action of the particular gates
 			static size_t CountPossibleQubitsChanges(const std::vector<QC::Gates::AppliedGate<>>& circuit)
 			{
 				size_t count = 0;
