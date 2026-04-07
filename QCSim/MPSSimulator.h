@@ -178,6 +178,7 @@ namespace QC
 						// External lookahead optimizer supplies the meeting position
 						const IndexType meetPos = meetingPositionCallback(
 							/*qubitsMap,*/ impl.getBondDimensions());
+
 						SwapQubitsToPosition(qubit, controllingQubit1, meetPos);
 
 						//impl.printBondDimensions();
@@ -587,6 +588,18 @@ namespace QC
 				if (realq2 - realq1 <= 1) return;
 
 				assert(meetPosition >= realq1 && meetPosition < realq2);
+
+				// just in case some invalid meeting position is given, fallback to the heuristic
+				if (meetPosition < realq1 || meetPosition >= realq2)
+				{
+					if (useOptimalMeetingPosition)
+						meetPosition = FindBestMeetingPositionLocal(qubit1, qubit2);
+					else
+					{
+						SwapQubits(qubit1, qubit2);
+						return;
+					}
+				}
 
 				/*
 				if (meetPosition < realq1 || meetPosition >= realq2)

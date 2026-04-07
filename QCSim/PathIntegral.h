@@ -9,14 +9,14 @@ namespace QC {
 		class PathIntegralSimulator {
 		public:
 			// the start state is |0>
-			static std::complex<double> Propagate(const std::vector<QC::Gates::AppliedGate<>>& circuit, const std::vector<bool>& endState)
+			std::complex<double> Propagate(const std::vector<QC::Gates::AppliedGate<>>& circuit, const std::vector<bool>& endState)
 			{
 				const std::vector<bool> startState(endState.size(), false);
 
 				return Propagate(circuit, startState, endState);
 			}
 
-			static std::complex<double> Propagate(const std::vector<QC::Gates::AppliedGate<>>& circuit, const std::vector<bool>& startState, const std::vector<bool>& endState)
+			std::complex<double> Propagate(const std::vector<QC::Gates::AppliedGate<>>& circuit, const std::vector<bool>& startState, const std::vector<bool>& endState)
 			{
 				assert(startState.size() == endState.size());
 
@@ -25,13 +25,22 @@ namespace QC {
 				return Propagate(circuit, startState, endState, 0, possibleQubitsChanges);
 			}
 
+			void SetTrimValue(double val)
+			{
+				epsilon = val;
+			}
+
+			double GetTrimValue() const
+			{
+				return epsilon;
+			}
+
 		private:
-			static std::complex<double> Propagate(const std::vector<QC::Gates::AppliedGate<>>& circuit, const std::vector<bool>& currentState, const std::vector<bool>& endState, size_t gateIndex, size_t possibleQubitsChanges)
+			// TODO: this can be parallelized!
+			std::complex<double> Propagate(const std::vector<QC::Gates::AppliedGate<>>& circuit, const std::vector<bool>& currentState, const std::vector<bool>& endState, size_t gateIndex, size_t possibleQubitsChanges)
 			{
 				if (gateIndex >= circuit.size())
 					return currentState == endState ? std::complex<double>(1., 0.) : std::complex<double>(0., 0.);
-
-				const double epsilon = 1e-15;
 	
 				const auto& gate = circuit[gateIndex];
 				const auto& U = gate.getRawOperatorMatrix();
@@ -41,7 +50,8 @@ namespace QC {
 
 				possibleQubitsChanges -= gateQubits;
 
-				std::complex<double> amplitude = 0.;
+				std::complex<double> amplitude(0., 0.);
+
 				if (gateQubits == 1)
 				{
 					const size_t qubit = gate.getQubit1();
@@ -52,7 +62,7 @@ namespace QC {
 					for (Eigen::Index row = 0; row < 2; ++row)
 					{
 						const std::complex<double> val = U(row, col);
-						if (std::abs(std::real(val)) > epsilon || std::abs(std::imag(val)) > epsilon)
+						if (std::norm(val) > epsilon)
 						{
 							std::vector<bool> nextState{ currentState };
 							nextState[qubit] = row == 1;
@@ -60,7 +70,8 @@ namespace QC {
 							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
 								continue;
 
-							amplitude += val * Propagate(circuit, nextState, endState, gateIndex + 1, possibleQubitsChanges);
+							const auto localAmplitude = val * Propagate(circuit, nextState, endState, gateIndex + 1, possibleQubitsChanges);
+							amplitude += localAmplitude;
 						}
 					}
 				}
@@ -75,7 +86,7 @@ namespace QC {
 					for (Eigen::Index row = 0; row < 4; ++row)
 					{
 						const std::complex<double> val = U(row, col);
-						if (std::abs(std::real(val)) > epsilon || std::abs(std::imag(val)) > epsilon)
+						if (std::norm(val) > epsilon)
 						{
 							std::vector<bool> nextState{ currentState };
 							nextState[qubit1] = (row & 1) == 1;
@@ -84,7 +95,8 @@ namespace QC {
 							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
 								continue;
 
-							amplitude += val * Propagate(circuit, nextState, endState, gateIndex + 1, possibleQubitsChanges);
+							const auto localAmplitude = val * Propagate(circuit, nextState, endState, gateIndex + 1, possibleQubitsChanges);
+							amplitude += localAmplitude;
 						}
 					}
 				}
@@ -100,7 +112,7 @@ namespace QC {
 					for (Eigen::Index row = 0; row < 8; ++row)
 					{
 						const std::complex<double> val = U(row, col);
-						if (std::abs(std::real(val)) > epsilon || std::abs(std::imag(val)) > epsilon)
+						if (std::norm(val) > epsilon)
 						{
 							std::vector<bool> nextState{ currentState };
 							nextState[qubit1] = (row & 1) == 1;
@@ -110,7 +122,8 @@ namespace QC {
 							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
 								continue;
 
-							amplitude += val * Propagate(circuit, nextState, endState, gateIndex + 1, possibleQubitsChanges);
+							const auto localAmplitude = val * Propagate(circuit, nextState, endState, gateIndex + 1, possibleQubitsChanges);
+							amplitude += localAmplitude;
 						}
 					}
 				}
@@ -138,6 +151,8 @@ namespace QC {
 						++count;
 				return count;
 			}
+
+			double epsilon = 1e-15;
 		};
 	}
 }

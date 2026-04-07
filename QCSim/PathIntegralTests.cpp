@@ -15,6 +15,8 @@ bool TestPathIntegral()
     std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
     std::uniform_int_distribution nrGatesDistr(1, 30);
 
+    QC::PathIntegral::PathIntegralSimulator piSim;
+
     for (size_t t = 0; t < nrTests; ++t)
     {
         const size_t nrGates = nrGatesDistr(gen);
@@ -43,7 +45,7 @@ bool TestPathIntegral()
                 endState[i] = ((state >> i) & 1) == 1;
 
             const auto regAmpl = qubitRegister.getBasisStateAmplitude(state);
-            const auto piAmpl = QC::PathIntegral::PathIntegralSimulator::Propagate(circuit, endState);
+            const auto piAmpl = piSim.Propagate(circuit, endState);
 
             if (!approxEqual(regAmpl, piAmpl, 1E-7))
             {
