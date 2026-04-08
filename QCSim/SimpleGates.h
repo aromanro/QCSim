@@ -492,6 +492,43 @@ namespace QC {
 			void setQubit2(size_t q) { q2 = q; }
 			void setQubit3(size_t q) { q3 = q; }
 
+			bool isBranching() const
+			{
+				const auto& mat = BaseClass::getRawOperatorMatrix();
+				for (size_t i = 0; i < mat.rows(); ++i) {
+					size_t nonZeroElements = 0;
+					for (size_t j = 0; j < mat.cols(); ++j) {
+						if (std::norm(mat(i, j)) > 1e-15) { 
+							++nonZeroElements;
+							if (nonZeroElements > 1)
+								return true;
+						}
+					}
+				}
+
+				return false;
+			}
+
+			bool isBranchingInState(Eigen::Index state, Eigen::Index& firstNextState) const
+			{
+				const auto& mat = BaseClass::getRawOperatorMatrix();
+				size_t nonZeroElements = 0;
+
+				assert(state >= 0 && state < mat.rows());
+
+				for (size_t i = 0; i < mat.rows(); ++i) {
+					if (std::norm(mat(i, state)) > 1e-15) { 
+						++nonZeroElements;
+						if (nonZeroElements > 1)
+							return true;
+						else
+							firstNextState = i;
+					}
+				}
+
+				return false;
+			}
+
 		private:
 			// don't use it!
 			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override

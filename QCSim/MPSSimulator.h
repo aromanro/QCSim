@@ -33,7 +33,7 @@ namespace QC
 		class MPSSimulator : public MPSSimulatorInterface
 		{
 		public:
-			// Callback signature: (qubitsMap, bondDims) -> meetPosition
+			// Callback signature: (bondDims) -> meetPosition
 			using MeetingPositionCallback = std::function<IndexType(
 				//const std::vector<IndexType>&,
 				const std::vector<IndexType>&)>;
