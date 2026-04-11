@@ -509,6 +509,23 @@ namespace QC {
 				return false;
 			}
 
+			size_t getMaxBranching() const
+			{
+				const auto& mat = BaseClass::getRawOperatorMatrix();
+				size_t maxBranching = 0;
+				for (size_t i = 0; i < mat.rows(); ++i) {
+					size_t nonZeroElements = 0;
+					for (size_t j = 0; j < mat.cols(); ++j) {
+						if (std::norm(mat(i, j)) > 1e-15) { 
+							++nonZeroElements;
+						}
+					}
+					if (nonZeroElements > maxBranching)
+						maxBranching = nonZeroElements;
+				}
+				return maxBranching;
+			}
+
 			bool isBranchingInState(Eigen::Index state, Eigen::Index& firstNextState) const
 			{
 				const auto& mat = BaseClass::getRawOperatorMatrix();
