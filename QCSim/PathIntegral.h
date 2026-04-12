@@ -279,13 +279,15 @@ namespace QC {
 
 						for (const auto& [state, amp] : currentAmplitudes)
 						{
+							if (std::norm(amp) < epsilon) continue;
+
 							assert(qubit < state.size());
 							const Eigen::Index col = (state.get(qubit) ? 1 : 0);
 
 							for (Eigen::Index row = 0; row < 2; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
+								if (std::norm(val) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit, row == 1);
@@ -302,13 +304,15 @@ namespace QC {
 
 						for (const auto& [state, amp] : currentAmplitudes)
 						{
+							if (std::norm(amp) < epsilon) continue;
+
 							assert(qubit1 < state.size() && qubit2 < state.size());
 							const Eigen::Index col = ((state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
 
 							for (Eigen::Index row = 0; row < 4; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
+								if (std::norm(val) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
@@ -327,13 +331,15 @@ namespace QC {
 
 						for (const auto& [state, amp] : currentAmplitudes)
 						{
+							if (std::norm(amp) < epsilon) continue;
+
 							assert(qubit1 < state.size() && qubit2 < state.size() && qubit3 < state.size());
 							const Eigen::Index col = ((state.get(qubit3) ? 4 : 0) | (state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
 
 							for (Eigen::Index row = 0; row < 8; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
+								if (std::norm(val) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
@@ -373,13 +379,15 @@ namespace QC {
 
 						for (const auto& [state, amp] : currentAmplitudes)
 						{
+							if (std::norm(amp) < epsilon) continue;
+
 							assert(qubit < state.size());
 							const Eigen::Index col = (state.get(qubit) ? 1 : 0);
 
 							for (Eigen::Index row = 0; row < 2; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
+								if (std::norm(val) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit, row == 1);
@@ -396,13 +404,15 @@ namespace QC {
 
 						for (const auto& [state, amp] : currentAmplitudes)
 						{
+							if (std::norm(amp) < epsilon) continue;
+
 							assert(qubit1 < state.size() && qubit2 < state.size());
 							const Eigen::Index col = ((state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
 
 							for (Eigen::Index row = 0; row < 4; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
+								if (std::norm(val) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
@@ -421,13 +431,15 @@ namespace QC {
 
 						for (const auto& [state, amp] : currentAmplitudes)
 						{
+							if (std::norm(amp) < epsilon) continue;
+
 							assert(qubit1 < state.size() && qubit2 < state.size() && qubit3 < state.size());
 							const Eigen::Index col = ((state.get(qubit3) ? 4 : 0) | (state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
 
 							for (Eigen::Index row = 0; row < 8; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
+								if (std::norm(val) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
