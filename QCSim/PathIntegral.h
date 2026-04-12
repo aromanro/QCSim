@@ -1,11 +1,58 @@
 #pragma once
 
+#include <array>
 #include <vector>
 
 #include "QuantumGate.h"
 
 namespace QC {
 	namespace PathIntegral {
+
+		struct FastVectorBool {
+			static constexpr size_t MaxWords = 16;
+
+			FastVectorBool() = default;
+
+			explicit FastVectorBool(const std::vector<bool>& v) 
+				: nBits(v.size())
+			{
+				for (size_t i = 0; i < v.size(); ++i)
+					if (v[i]) words[i / 64] |= (1ULL << (i % 64));
+				for (size_t i = (v.size() + 63) / 64; i < MaxWords; ++i)
+					words[i] = 0;
+			}
+
+			bool get(size_t i) const { return (words[i / 64] >> (i % 64)) & 1; }
+
+			void set(size_t i, bool val)
+			{
+				if (val) words[i / 64] |= (1ULL << (i % 64));
+				else words[i / 64] &= ~(1ULL << (i % 64));
+			}
+
+			size_t size() const { return nBits; }
+
+			bool operator==(const FastVectorBool& o) const { return words == o.words; }
+			bool operator!=(const FastVectorBool& o) const { return words != o.words; }
+
+			const std::array<uint64_t, MaxWords>& getWords() const { return words; }
+
+		private:
+			std::array<uint64_t, MaxWords> words{};
+			size_t nBits = 0;
+		};
+
+		struct FastVectorBoolHash {
+			size_t operator()(const FastVectorBool& s) const
+			{
+				const std::array<uint64_t, FastVectorBool::MaxWords>& words = s.getWords();
+				size_t seed = 0;
+				for (int i = (s.size() + 63) / 64 - 1; i >= 0; --i)
+					seed ^= std::hash<uint64_t>{}(words[i]) + (seed << 6);
+				return seed;
+			}
+		};
+
 		class PathIntegralSimulator {
 		public:
 			void SetCircuit(const std::vector<QC::Gates::AppliedGate<>>& circuit)
@@ -66,18 +113,21 @@ namespace QC {
 			{
 				assert(startState.size() == endState.size());
 
-				const size_t possibleQubitsChanges = CountPossibleQubitsChanges(circuit);
+				const FastVectorBool startBits(startState);
+				const FastVectorBool endBits(endState);
 
 				if (doublingsLimit > 0 && !circuitBack.empty())
 				{
 					intermediateAmplitudes.clear();
 
-					PropagateBackward(endState, std::complex<double>(1., 0.), 0);
+					PropagateBackward(endBits, std::complex<double>(1., 0.));
 
-					return PropagateForward(startState, 0, possibleQubitsChanges);
+					return PropagateForward(startBits);
 				}
 
-				return Propagate(startState, endState, 0, possibleQubitsChanges);
+				const size_t possibleQubitsChanges = CountPossibleQubitsChanges(circuit);
+
+				return Propagate(startBits, endBits, 0, possibleQubitsChanges);
 			}
 
 			void SetTrimValue(double val)
@@ -102,188 +152,10 @@ namespace QC {
 
 		private:
 			// TODO: this can be parallelized!
-			std::complex<double> Propagate(const std::vector<bool>& currentState, const std::vector<bool>& endState, size_t gateIndex, size_t possibleQubitsChanges)
+			std::complex<double> Propagate(const FastVectorBool& currentState, const FastVectorBool& endState, size_t gateIndex, size_t possibleQubitsChanges)
 			{
 				if (gateIndex >= circuit.size())
 					return currentState == endState ? std::complex<double>(1., 0.) : std::complex<double>(0., 0.);
-	
-				const auto& gate = circuit[gateIndex];
-				const auto& U = gate.getRawOperatorMatrix();
-				const size_t gateQubits = gate.getQubitsNumber();
-
-				assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
-
-				possibleQubitsChanges -= gateQubits;
-
-				std::complex<double> amplitude(0., 0.);
-
-				if (gateQubits == 1)
-				{
-					const size_t qubit = gate.getQubit1();
-					assert(qubit < currentState.size());
-
-					const Eigen::Index col = (currentState[qubit] ? 1 : 0);
-
-					for (Eigen::Index row = 0; row < 2; ++row)
-					{
-						const std::complex<double> val = U(row, col);
-						if (std::norm(val) > epsilon)
-						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit] = row == 1;
-
-							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
-								continue;
-
-							const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
-							amplitude += localAmplitude;
-						}
-					}
-				}
-				else if (gateQubits == 2)
-				{
-					const size_t qubit1 = gate.getQubit1();
-					const size_t qubit2 = gate.getQubit2();
-					assert(qubit1 < currentState.size() && qubit2 < currentState.size());
-
-					const Eigen::Index col = ((currentState[qubit2] ? 2 : 0) | (currentState[qubit1] ? 1 : 0));
-
-					for (Eigen::Index row = 0; row < 4; ++row)
-					{
-						const std::complex<double> val = U(row, col);
-						if (std::norm(val) > epsilon)
-						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit1] = (row & 1) == 1;
-							nextState[qubit2] = (row & 2) == 2;
-
-							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
-								continue;
-
-							const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
-							amplitude += localAmplitude;
-						}
-					}
-				}
-				else // only up to three qubits gates are supported
-				{
-					const size_t qubit1 = gate.getQubit1();
-					const size_t qubit2 = gate.getQubit2();
-					const size_t qubit3 = gate.getQubit3();
-					assert(qubit1 < currentState.size() && qubit2 < currentState.size() && qubit3 < currentState.size());
-
-					const Eigen::Index col = ((currentState[qubit3] ? 4 : 0) | (currentState[qubit2] ? 2 : 0) | (currentState[qubit1] ? 1 : 0));
-
-					for (Eigen::Index row = 0; row < 8; ++row)
-					{
-						const std::complex<double> val = U(row, col);
-						if (std::norm(val) > epsilon)
-						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit1] = (row & 1) == 1;
-							nextState[qubit2] = (row & 2) == 2;
-							nextState[qubit3] = (row & 4) == 4;
-
-							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
-								continue;
-
-							const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
-							amplitude += localAmplitude;
-						}
-					}
-				}
-
-				return amplitude;
-			}
-
-			void PropagateBackward(const std::vector<bool>& currentState, std::complex<double> amplitude, size_t gateIndex)
-			{
-				if (gateIndex >= circuitBack.size())
-				{
-					intermediateAmplitudes[currentState] += amplitude;
-					return;
-				}
-
-				const auto& gate = circuitBack[gateIndex];
-				const auto& U = gate.getRawOperatorMatrix();
-				const size_t gateQubits = gate.getQubitsNumber();
-
-				assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
-
-				if (gateQubits == 1)
-				{
-					const size_t qubit = gate.getQubit1();
-					assert(qubit < currentState.size());
-
-					const Eigen::Index col = (currentState[qubit] ? 1 : 0);
-
-					for (Eigen::Index row = 0; row < 2; ++row)
-					{
-						const std::complex<double> val = U(row, col);
-						if (std::norm(val) > epsilon)
-						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit] = row == 1;
-
-							PropagateBackward(nextState, val * amplitude, gateIndex + 1);
-						}
-					}
-				}
-				else if (gateQubits == 2)
-				{
-					const size_t qubit1 = gate.getQubit1();
-					const size_t qubit2 = gate.getQubit2();
-					assert(qubit1 < currentState.size() && qubit2 < currentState.size());
-
-					const Eigen::Index col = ((currentState[qubit2] ? 2 : 0) | (currentState[qubit1] ? 1 : 0));
-
-					for (Eigen::Index row = 0; row < 4; ++row)
-					{
-						const std::complex<double> val = U(row, col);
-						if (std::norm(val) > epsilon)
-						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit1] = (row & 1) == 1;
-							nextState[qubit2] = (row & 2) == 2;
-
-							PropagateBackward(nextState, val * amplitude, gateIndex + 1);
-						}
-					}
-				}
-				else // only up to three qubits gates are supported
-				{
-					const size_t qubit1 = gate.getQubit1();
-					const size_t qubit2 = gate.getQubit2();
-					const size_t qubit3 = gate.getQubit3();
-					assert(qubit1 < currentState.size() && qubit2 < currentState.size() && qubit3 < currentState.size());
-
-					const Eigen::Index col = ((currentState[qubit3] ? 4 : 0) | (currentState[qubit2] ? 2 : 0) | (currentState[qubit1] ? 1 : 0));
-
-					for (Eigen::Index row = 0; row < 8; ++row)
-					{
-						const std::complex<double> val = U(row, col);
-						if (std::norm(val) > epsilon)
-						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit1] = (row & 1) == 1;
-							nextState[qubit2] = (row & 2) == 2;
-							nextState[qubit3] = (row & 4) == 4;
-
-							PropagateBackward(nextState, val * amplitude, gateIndex + 1);
-						}
-					}
-				}
-			}
-
-			std::complex<double> PropagateForward(const std::vector<bool>& currentState, size_t gateIndex, size_t possibleQubitsChanges)
-			{
-				if (gateIndex >= circuit.size())
-				{
-					if (intermediateAmplitudes.find(currentState) != intermediateAmplitudes.end())
-						return intermediateAmplitudes[currentState];
-					
-					return std::complex<double>(0., 0.);
-				}
 
 				const auto& gate = circuit[gateIndex];
 				const auto& U = gate.getRawOperatorMatrix();
@@ -300,17 +172,20 @@ namespace QC {
 					const size_t qubit = gate.getQubit1();
 					assert(qubit < currentState.size());
 
-					const Eigen::Index col = (currentState[qubit] ? 1 : 0);
+					const Eigen::Index col = (currentState.get(qubit) ? 1 : 0);
 
 					for (Eigen::Index row = 0; row < 2; ++row)
 					{
 						const std::complex<double> val = U(row, col);
 						if (std::norm(val) > epsilon)
 						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit] = row == 1;
+							auto nextState = currentState;
+							nextState.set(qubit, row == 1);
 
-							const auto localAmplitude = val * PropagateForward(nextState, gateIndex + 1, possibleQubitsChanges);
+							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
+								continue;
+
+							const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
 							amplitude += localAmplitude;
 						}
 					}
@@ -321,18 +196,21 @@ namespace QC {
 					const size_t qubit2 = gate.getQubit2();
 					assert(qubit1 < currentState.size() && qubit2 < currentState.size());
 
-					const Eigen::Index col = ((currentState[qubit2] ? 2 : 0) | (currentState[qubit1] ? 1 : 0));
+					const Eigen::Index col = ((currentState.get(qubit2) ? 2 : 0) | (currentState.get(qubit1) ? 1 : 0));
 
 					for (Eigen::Index row = 0; row < 4; ++row)
 					{
 						const std::complex<double> val = U(row, col);
 						if (std::norm(val) > epsilon)
 						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit1] = (row & 1) == 1;
-							nextState[qubit2] = (row & 2) == 2;
+							auto nextState = currentState;
+							nextState.set(qubit1, (row & 1) == 1);
+							nextState.set(qubit2, (row & 2) == 2);
 
-							const auto localAmplitude = val * PropagateForward(nextState, gateIndex + 1, possibleQubitsChanges);
+							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
+								continue;
+
+							const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
 							amplitude += localAmplitude;
 						}
 					}
@@ -344,25 +222,222 @@ namespace QC {
 					const size_t qubit3 = gate.getQubit3();
 					assert(qubit1 < currentState.size() && qubit2 < currentState.size() && qubit3 < currentState.size());
 
-					const Eigen::Index col = ((currentState[qubit3] ? 4 : 0) | (currentState[qubit2] ? 2 : 0) | (currentState[qubit1] ? 1 : 0));
+					const Eigen::Index col = ((currentState.get(qubit3) ? 4 : 0) | (currentState.get(qubit2) ? 2 : 0) | (currentState.get(qubit1) ? 1 : 0));
 
 					for (Eigen::Index row = 0; row < 8; ++row)
 					{
 						const std::complex<double> val = U(row, col);
 						if (std::norm(val) > epsilon)
 						{
-							std::vector<bool> nextState{ currentState };
-							nextState[qubit1] = (row & 1) == 1;
-							nextState[qubit2] = (row & 2) == 2;
-							nextState[qubit3] = (row & 4) == 4;
+							auto nextState = currentState;
+							nextState.set(qubit1, (row & 1) == 1);
+							nextState.set(qubit2, (row & 2) == 2);
+							nextState.set(qubit3, (row & 4) == 4);
 
-							const auto localAmplitude = val * PropagateForward(nextState, gateIndex + 1, possibleQubitsChanges);
+							if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
+								continue;
+
+							const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
 							amplitude += localAmplitude;
 						}
 					}
 				}
 
 				return amplitude;
+			}
+
+			void PropagateBackward(const FastVectorBool& endState, std::complex<double> amplitude)
+			{
+				std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> currentAmplitudes;
+				currentAmplitudes[endState] = amplitude;
+
+				for (const auto& gate: circuitBack)
+				{
+					const auto& U = gate.getRawOperatorMatrix();
+					const size_t gateQubits = gate.getQubitsNumber();
+
+					assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
+
+					std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> nextAmplitudes;
+
+					if (gateQubits == 1)
+					{
+						const size_t qubit = gate.getQubit1();
+
+						for (const auto& [state, amp] : currentAmplitudes)
+						{
+							assert(qubit < state.size());
+							const Eigen::Index col = (state.get(qubit) ? 1 : 0);
+
+							for (Eigen::Index row = 0; row < 2; ++row)
+							{
+								const std::complex<double> val = U(row, col);
+								if (std::norm(val) > epsilon)
+								{
+									auto nextState = state;
+									nextState.set(qubit, row == 1);
+
+									nextAmplitudes[nextState] += val * amp;
+								}
+							}
+						}
+					}
+					else if (gateQubits == 2)
+					{
+						const size_t qubit1 = gate.getQubit1();
+						const size_t qubit2 = gate.getQubit2();
+
+						for (const auto& [state, amp] : currentAmplitudes)
+						{
+							assert(qubit1 < state.size() && qubit2 < state.size());
+							const Eigen::Index col = ((state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
+
+							for (Eigen::Index row = 0; row < 4; ++row)
+							{
+								const std::complex<double> val = U(row, col);
+								if (std::norm(val) > epsilon)
+								{
+									auto nextState = state;
+									nextState.set(qubit1, (row & 1) == 1);
+									nextState.set(qubit2, (row & 2) == 2);
+
+									nextAmplitudes[nextState] += val * amp;
+								}
+							}
+						}
+					}
+					else // only up to three qubits gates are supported
+					{
+						const size_t qubit1 = gate.getQubit1();
+						const size_t qubit2 = gate.getQubit2();
+						const size_t qubit3 = gate.getQubit3();
+
+						for (const auto& [state, amp] : currentAmplitudes)
+						{
+							assert(qubit1 < state.size() && qubit2 < state.size() && qubit3 < state.size());
+							const Eigen::Index col = ((state.get(qubit3) ? 4 : 0) | (state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
+
+							for (Eigen::Index row = 0; row < 8; ++row)
+							{
+								const std::complex<double> val = U(row, col);
+								if (std::norm(val) > epsilon)
+								{
+									auto nextState = state;
+									nextState.set(qubit1, (row & 1) == 1);
+									nextState.set(qubit2, (row & 2) == 2);
+									nextState.set(qubit3, (row & 4) == 4);
+
+									nextAmplitudes[nextState] += val * amp;
+								}
+							}
+						}
+					}
+
+					currentAmplitudes.swap(nextAmplitudes);
+				}
+
+				intermediateAmplitudes.swap(currentAmplitudes);
+			}
+
+			std::complex<double> PropagateForward(const FastVectorBool& startState)
+			{
+				std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> currentAmplitudes;
+				currentAmplitudes[startState] = std::complex<double>(1., 0.);
+
+				for (const auto& gate: circuit)
+				{
+					const auto& U = gate.getRawOperatorMatrix();
+					const size_t gateQubits = gate.getQubitsNumber();
+
+					assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
+
+					std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> nextAmplitudes;
+
+					if (gateQubits == 1)
+					{
+						const size_t qubit = gate.getQubit1();
+
+						for (const auto& [state, amp] : currentAmplitudes)
+						{
+							assert(qubit < state.size());
+							const Eigen::Index col = (state.get(qubit) ? 1 : 0);
+
+							for (Eigen::Index row = 0; row < 2; ++row)
+							{
+								const std::complex<double> val = U(row, col);
+								if (std::norm(val) > epsilon)
+								{
+									auto nextState = state;
+									nextState.set(qubit, row == 1);
+
+									nextAmplitudes[nextState] += val * amp;
+								}
+							}
+						}
+					}
+					else if (gateQubits == 2)
+					{
+						const size_t qubit1 = gate.getQubit1();
+						const size_t qubit2 = gate.getQubit2();
+
+						for (const auto& [state, amp] : currentAmplitudes)
+						{
+							assert(qubit1 < state.size() && qubit2 < state.size());
+							const Eigen::Index col = ((state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
+
+							for (Eigen::Index row = 0; row < 4; ++row)
+							{
+								const std::complex<double> val = U(row, col);
+								if (std::norm(val) > epsilon)
+								{
+									auto nextState = state;
+									nextState.set(qubit1, (row & 1) == 1);
+									nextState.set(qubit2, (row & 2) == 2);
+
+									nextAmplitudes[nextState] += val * amp;
+								}
+							}
+						}
+					}
+					else // only up to three qubits gates are supported
+					{
+						const size_t qubit1 = gate.getQubit1();
+						const size_t qubit2 = gate.getQubit2();
+						const size_t qubit3 = gate.getQubit3();
+
+						for (const auto& [state, amp] : currentAmplitudes)
+						{
+							assert(qubit1 < state.size() && qubit2 < state.size() && qubit3 < state.size());
+							const Eigen::Index col = ((state.get(qubit3) ? 4 : 0) | (state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
+
+							for (Eigen::Index row = 0; row < 8; ++row)
+							{
+								const std::complex<double> val = U(row, col);
+								if (std::norm(val) > epsilon)
+								{
+									auto nextState = state;
+									nextState.set(qubit1, (row & 1) == 1);
+									nextState.set(qubit2, (row & 2) == 2);
+									nextState.set(qubit3, (row & 4) == 4);
+
+									nextAmplitudes[nextState] += val * amp;
+								}
+							}
+						}
+					}
+
+					currentAmplitudes.swap(nextAmplitudes);
+				}
+
+				std::complex<double> result(0., 0.);
+				for (const auto& [state, amp] : currentAmplitudes)
+				{
+					auto it = intermediateAmplitudes.find(state);
+					if (it != intermediateAmplitudes.end())
+						result += amp * it->second;
+				}
+
+				return result;
 			}
 
 			// TODO: this could be improved, this sums the max possible considering only the number of qubits that the gates act on, not the action of the particular gates
@@ -376,19 +451,20 @@ namespace QC {
 				return count;
 			}
 
-			static size_t CountDifferentQubits(const std::vector<bool>& curState, const std::vector<bool>& endState)
+			static size_t CountDifferentQubits(const FastVectorBool& curState, const FastVectorBool& endState)
 			{
-				assert(curState.size() == endState.size());
 				size_t count = 0;
 				for (size_t i = 0; i < curState.size(); ++i)
-					if (curState[i] != endState[i])
-						++count;
+				{
+					uint64_t diff = curState.getWords()[i] ^ endState.getWords()[i];
+					while (diff) { if ((diff & 1) == 1) ++count; diff >>= 1; }
+				}
 				return count;
 			}
 
 			std::vector<QC::Gates::AppliedGate<>> circuit;
 			std::vector<QC::Gates::AppliedGate<>> circuitBack;
-			std::unordered_map<std::vector<bool>, std::complex<double>> intermediateAmplitudes;
+			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> intermediateAmplitudes;
 
 			size_t doublingsLimit = std::numeric_limits<size_t>::max();
 			double epsilon = 1e-15;
