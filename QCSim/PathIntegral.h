@@ -3,6 +3,10 @@
 #include <array>
 #include <vector>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 #include "QuantumGate.h"
 
 namespace QC {
@@ -31,9 +35,17 @@ namespace QC {
 			}
 
 			size_t size() const { return nBits; }
+			size_t nWords() const { return (nBits + 63) / 64; }
 
-			bool operator==(const FastVectorBool& o) const { return words == o.words; }
-			bool operator!=(const FastVectorBool& o) const { return words != o.words; }
+			bool operator==(const FastVectorBool& o) const
+			{
+				const size_t w = nWords();
+				for (size_t i = 0; i < w; ++i)
+					if (words[i] != o.words[i]) return false;
+				return true;
+			}
+
+			bool operator!=(const FastVectorBool& o) const { return !(*this == o); }
 
 			const std::array<uint64_t, MaxWords>& getWords() const { return words; }
 
@@ -259,6 +271,7 @@ namespace QC {
 					assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
 
 					std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> nextAmplitudes;
+					nextAmplitudes.reserve(currentAmplitudes.size() * 2);
 
 					if (gateQubits == 1)
 					{
@@ -272,7 +285,7 @@ namespace QC {
 							for (Eigen::Index row = 0; row < 2; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon)
+								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit, row == 1);
@@ -295,7 +308,7 @@ namespace QC {
 							for (Eigen::Index row = 0; row < 4; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon)
+								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
@@ -320,7 +333,7 @@ namespace QC {
 							for (Eigen::Index row = 0; row < 8; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon)
+								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
@@ -352,6 +365,7 @@ namespace QC {
 					assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
 
 					std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> nextAmplitudes;
+					nextAmplitudes.reserve(currentAmplitudes.size() * 2);
 
 					if (gateQubits == 1)
 					{
@@ -365,7 +379,7 @@ namespace QC {
 							for (Eigen::Index row = 0; row < 2; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon)
+								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit, row == 1);
@@ -388,7 +402,7 @@ namespace QC {
 							for (Eigen::Index row = 0; row < 4; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon)
+								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
@@ -413,7 +427,7 @@ namespace QC {
 							for (Eigen::Index row = 0; row < 8; ++row)
 							{
 								const std::complex<double> val = U(row, col);
-								if (std::norm(val) > epsilon)
+								if (std::norm(val) > epsilon && std::norm(amp) > epsilon)
 								{
 									auto nextState = state;
 									nextState.set(qubit1, (row & 1) == 1);
@@ -454,10 +468,15 @@ namespace QC {
 			static size_t CountDifferentQubits(const FastVectorBool& curState, const FastVectorBool& endState)
 			{
 				size_t count = 0;
-				for (size_t i = 0; i < curState.size(); ++i)
+				const size_t words = curState.nWords();
+				for (size_t i = 0; i < words; ++i)
 				{
-					uint64_t diff = curState.getWords()[i] ^ endState.getWords()[i];
-					while (diff) { if ((diff & 1) == 1) ++count; diff >>= 1; }
+					const uint64_t diff = curState.getWords()[i] ^ endState.getWords()[i];
+#ifdef _MSC_VER
+					count += __popcnt64(diff);
+#else
+					count += __builtin_popcountll(diff);
+#endif
 				}
 				return count;
 			}
