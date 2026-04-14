@@ -91,7 +91,7 @@ namespace QC {
 					for (auto it = circuit.rbegin(); it != circuit.rend(); ++it)
 					{
 						const auto& gate = *it;
-						
+
 						if (!gate.isBranching())
 						{
 							circuitBack.emplace_back(gate.getRawOperatorMatrix().transpose(), gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
@@ -140,6 +140,42 @@ namespace QC {
 				const size_t possibleQubitsChanges = CountPossibleQubitsChanges(circuit);
 
 				return Propagate(startBits, endBits, 0, possibleQubitsChanges);
+			}
+
+			// the following three methods are for the case one needs all non-zero amplitudes
+			// of course, except the trimmed out ones
+			void PropagateAll(const std::vector<QC::Gates::AppliedGate<>>& circuit)
+			{
+				size_t nQubits = 0;
+				for (const auto& gate : circuit)
+				{
+					nQubits = std::max(nQubits, gate.getQubit1() + 1);
+					if (gate.getQubitsNumber() > 1)
+						nQubits = std::max(nQubits, gate.getQubit2() + 1);
+					if (gate.getQubitsNumber() > 2)
+						nQubits = std::max(nQubits, gate.getQubit3() + 1);
+				}
+
+				const std::vector<bool> startState(nQubits, false);
+
+				PropagateAll(circuit, startState);
+			}
+
+			void PropagateAll(const std::vector<QC::Gates::AppliedGate<>>& circuit, const std::vector<bool>& startState)
+			{
+				assert(startState.size() > 0);
+				const FastVectorBool startBits(startState);
+				intermediateAmplitudes.clear();
+
+				circuitBack.clear();
+				this->circuit = circuit;
+
+				intermediateAmplitudes = PropagateAll(startBits);
+			}
+
+			const std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash>& GetAmplitudes() const 
+			{ 
+				return intermediateAmplitudes; 
 			}
 
 			void SetTrimValue(double val)
@@ -263,7 +299,7 @@ namespace QC {
 				std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> currentAmplitudes;
 				currentAmplitudes[endState] = amplitude;
 
-				for (const auto& gate: circuitBack)
+				for (const auto& gate : circuitBack)
 				{
 					const auto& U = gate.getRawOperatorMatrix();
 					const size_t gateQubits = gate.getQubitsNumber();
@@ -358,12 +394,12 @@ namespace QC {
 				intermediateAmplitudes.swap(currentAmplitudes);
 			}
 
-			std::complex<double> PropagateForward(const FastVectorBool& startState)
+			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> PropagateAll(const FastVectorBool& startState)
 			{
 				std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> currentAmplitudes;
 				currentAmplitudes[startState] = std::complex<double>(1., 0.);
 
-				for (const auto& gate: circuit)
+				for (const auto& gate : circuit)
 				{
 					const auto& U = gate.getRawOperatorMatrix();
 					const size_t gateQubits = gate.getQubitsNumber();
@@ -454,6 +490,13 @@ namespace QC {
 
 					currentAmplitudes.swap(nextAmplitudes);
 				}
+
+				return currentAmplitudes;
+			}
+
+			std::complex<double> PropagateForward(const FastVectorBool& startState)
+			{
+				const auto currentAmplitudes = PropagateAll(startState);
 
 				std::complex<double> result(0., 0.);
 				for (const auto& [state, amp] : currentAmplitudes)
