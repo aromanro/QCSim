@@ -100,7 +100,7 @@ namespace QC {
 						if (!gate.isBranching())
 							continue;
 
-						doublings += gate.getMaxBranching();
+						++doublings;
 					}
 
 					const size_t halfDoublings = doublings / 2;
@@ -119,7 +119,8 @@ namespace QC {
 							continue;
 						}
 
-						doublings += gate.getMaxBranching();
+						++doublings;
+
 						if (doublings > doublingsLimit || doublings > halfDoublings)
 							break;
 
