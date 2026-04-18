@@ -87,6 +87,26 @@ namespace QC {
 				return doublingsLimit;
 			}
 
+			void SaveAmplitudes()
+			{
+				savedAmplitudes = intermediateAmplitudes;
+			}
+
+			void RestoreAmplitudes()
+			{
+				intermediateAmplitudes = savedAmplitudes;
+			}
+
+			void SwapAmplitudes	()
+			{
+				intermediateAmplitudes.swap(savedAmplitudes);
+			}
+
+			void ClearSavedAmplitudes()
+			{
+				savedAmplitudes.clear();
+			}
+
 			void SetCircuit(const std::vector<QC::Gates::AppliedGate<>>& circuit)
 			{
 				intermediateAmplitudes.clear();
@@ -454,6 +474,8 @@ namespace QC {
 			std::vector<QC::Gates::AppliedGate<>> circuit;
 			std::vector<QC::Gates::AppliedGate<>> circuitBack;
 			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> intermediateAmplitudes;
+
+			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> savedAmplitudes;
 
 			size_t doublingsLimit = std::numeric_limits<size_t>::max();
 			double epsilon = 1e-15;
