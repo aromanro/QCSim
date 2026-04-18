@@ -87,6 +87,11 @@ namespace QC {
 				return doublingsLimit;
 			}
 
+			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash>& GetAmplitudes()
+			{
+				return intermediateAmplitudes;
+			}
+
 			void SaveAmplitudes()
 			{
 				savedAmplitudes = intermediateAmplitudes;
@@ -304,11 +309,6 @@ namespace QC {
 				}
 
 				currentAmplitudes.swap(nextAmplitudes);
-			}
-
-			const std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash>& GetAmplitudes() const 
-			{ 
-				return intermediateAmplitudes; 
 			}
 
 		private:
