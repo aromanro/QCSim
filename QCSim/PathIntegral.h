@@ -409,13 +409,11 @@ namespace QC {
 
 			void PropagateBackward(const FastVectorBool& endState, std::complex<double> amplitude)
 			{
-				std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> currentAmplitudes;
-				currentAmplitudes[endState] = amplitude;
+				intermediateAmplitudes.clear();
+				intermediateAmplitudes[endState] = amplitude;
 
 				for (const auto& gate : circuitBack)
-					PropagateStep(gate, currentAmplitudes);
-
-				intermediateAmplitudes.swap(currentAmplitudes);
+					PropagateStep(gate, intermediateAmplitudes);
 			}
 
 			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> PropagateAll(const FastVectorBool& startState)
