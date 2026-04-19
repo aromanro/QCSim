@@ -59,7 +59,7 @@ namespace QC {
 			{
 				const std::array<uint64_t, FastVectorBool::MaxWords>& words = s.getWords();
 				size_t seed = 0;
-				for (int i = (s.size() + 63) / 64 - 1; i >= 0; --i)
+				for (int i = static_cast<int>((s.size() + 63) / 64) - 1; i >= 0; --i)
 					seed ^= std::hash<uint64_t>{}(words[i]) + (seed << 6);
 				return seed;
 			}

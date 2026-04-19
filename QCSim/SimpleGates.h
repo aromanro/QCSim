@@ -495,9 +495,9 @@ namespace QC {
 			bool isBranching() const
 			{
 				const auto& mat = BaseClass::getRawOperatorMatrix();
-				for (size_t i = 0; i < mat.rows(); ++i) {
+				for (size_t i = 0; i < static_cast<size_t>(mat.rows()); ++i) {
 					size_t nonZeroElements = 0;
-					for (size_t j = 0; j < mat.cols(); ++j) {
+					for (size_t j = 0; j < static_cast<size_t>(mat.cols()); ++j) {
 						if (std::norm(mat(i, j)) > 1e-15) { 
 							++nonZeroElements;
 							if (nonZeroElements > 1)
@@ -513,9 +513,9 @@ namespace QC {
 			{
 				const auto& mat = BaseClass::getRawOperatorMatrix();
 				size_t maxBranching = 0;
-				for (size_t i = 0; i < mat.rows(); ++i) {
+				for (size_t i = 0; i < static_cast<size_t>(mat.rows()); ++i) {
 					size_t nonZeroElements = 0;
-					for (size_t j = 0; j < mat.cols(); ++j) {
+					for (size_t j = 0; j < static_cast<size_t>(mat.cols()); ++j) {
 						if (std::norm(mat(i, j)) > 1e-15) { 
 							++nonZeroElements;
 						}
