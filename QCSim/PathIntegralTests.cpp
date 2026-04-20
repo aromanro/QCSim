@@ -58,6 +58,23 @@ bool TestPathIntegral()
             }
         }
 
+        // the above went with the paths from end state towards the 'middle' and from start state to meet them in the middle,
+        // for qubits probabilities must go from start to end with all of them
+        piSim.PropagateAll(circuit);
+
+        for (size_t q = 0; q < nrQubits; ++q)
+        {
+			const auto qubitProb = qubitRegister.GetQubitProbability(q);
+			const auto piQubitProb = piSim.QubitProbability(q);
+
+            if (!approxEqual(qubitProb, piQubitProb, 1E-7))
+            {
+                std::cout << std::endl << "Qubit probability mismatch for path integral and statevector simulator for qubit " << q << " with " << nrQubits << " qubits" << std::endl;
+                std::cout << "Statevector: " << qubitProb << " vs Path integral: " << piQubitProb << std::endl;
+				return false;
+            }
+        }
+
         std::cout << '.';
     }
 

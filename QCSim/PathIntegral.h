@@ -102,7 +102,7 @@ namespace QC {
 				intermediateAmplitudes = savedAmplitudes;
 			}
 
-			void SwapAmplitudes	()
+			void SwapAmplitudes()
 			{
 				intermediateAmplitudes.swap(savedAmplitudes);
 			}
@@ -309,6 +309,17 @@ namespace QC {
 				}
 
 				currentAmplitudes.swap(nextAmplitudes);
+			}
+
+			double QubitProbability(size_t qubit, bool value = true) const
+			{
+				double prob = 0.;
+				for (const auto& [state, amp] : intermediateAmplitudes)
+				{
+					if (state.get(qubit) == value)
+						prob += std::norm(amp);
+				}
+				return prob;
 			}
 
 		private:
