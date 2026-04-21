@@ -33,6 +33,23 @@ namespace QC {
 					words[i] = 0;
 			}
 
+			FastVectorBool(const FastVectorBool& other) = default;
+			
+			FastVectorBool& operator=(const FastVectorBool& other) = default;
+			
+			FastVectorBool(FastVectorBool&& other) noexcept
+			{
+				words.swap(other.words);
+				nBits = other.nBits;
+			}
+
+			FastVectorBool& operator=(FastVectorBool&& other) noexcept
+			{
+				words.swap(other.words);
+				nBits = other.nBits;
+				return *this;
+			}
+
 			bool get(size_t i) const { return (words[i / 64] >> (i % 64)) & 1; }
 
 			void set(size_t i, bool val)
