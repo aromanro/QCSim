@@ -117,6 +117,27 @@ namespace QC {
 				savedAmplitudes.clear();
 			}
 
+			void Reset()
+			{
+				intermediateAmplitudes.clear();
+				savedAmplitudes.clear();
+				circuit.clear();
+				circuitBack.clear();
+			}
+
+			PathIntegralSimulator Clone() const
+			{
+				PathIntegralSimulator theClone;
+				theClone.doublingsLimit = doublingsLimit;
+				theClone.epsilon = epsilon;
+				theClone.intermediateAmplitudes = intermediateAmplitudes;
+				theClone.savedAmplitudes = savedAmplitudes;
+				theClone.circuit = circuit;
+				theClone.circuitBack = circuitBack;
+
+				return theClone;
+			}
+
 			void SetCircuit(const std::vector<QC::Gates::AppliedGate<>>& circuit)
 			{
 				intermediateAmplitudes.clear();
