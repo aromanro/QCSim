@@ -27,6 +27,12 @@ namespace QC {
 					words[i] = 0;
 			}
 
+			explicit FastVectorBool(size_t nBits) : nBits(nBits)
+			{
+				for (size_t i = 0; i < MaxWords; ++i)
+					words[i] = 0;
+			}
+
 			bool get(size_t i) const { return (words[i / 64] >> (i % 64)) & 1; }
 
 			void set(size_t i, bool val)
