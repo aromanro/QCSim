@@ -2,6 +2,7 @@
 
 #include <array>
 #include <vector>
+#include <random>
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -67,6 +68,10 @@ namespace QC {
 
 		class PathIntegralSimulator {
 		public:
+			PathIntegralSimulator()
+				: doublingsLimit(std::numeric_limits<size_t>::max()), epsilon(1E-15), rng(std::random_device{}()), uniformZeroOne(0, 1)
+			{}
+
 			void SetTrimValue(double val)
 			{
 				epsilon = val;
@@ -322,6 +327,49 @@ namespace QC {
 				return prob;
 			}
 
+			FastVectorBool MeasureNoCollapse() {
+				const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
+				double accum = 0;
+				for (const auto& [state, amp] : intermediateAmplitudes) {
+					accum += std::norm(amp);
+					if (prob <= accum)
+						return state;
+				}
+
+				return intermediateAmplitudes.begin()->first;
+			}
+
+			bool MeasureQubit(size_t qubit) {
+				const auto state = MeasureNoCollapse();
+				const bool result = state.get(qubit);
+
+				
+				double accum = 0.;
+				for (const auto& [s, amp] : intermediateAmplitudes) {
+					if (s.get(qubit) == result)
+						accum += std::norm(amp);
+				}
+
+				double normFactor = 1.;
+				
+				const double sqrtAccum = std::sqrt(accum);
+				if (sqrtAccum > std::numeric_limits<double>::epsilon())
+					normFactor = 1. / sqrtAccum;
+				
+				// collapse the state
+				for (auto it = intermediateAmplitudes.begin(); it != intermediateAmplitudes.end();) {
+					if (it->first.get(qubit) == result)
+					{
+						it->second *= normFactor;
+						++it;
+					}
+					else
+						it = intermediateAmplitudes.erase(it);
+				}
+
+				return result;
+			}
+
 		private:
 			// TODO: this can be parallelized!
 			std::complex<double> Propagate(const FastVectorBool& currentState, const FastVectorBool& endState, size_t gateIndex, size_t possibleQubitsChanges)
@@ -486,8 +534,11 @@ namespace QC {
 
 			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> savedAmplitudes;
 
-			size_t doublingsLimit = std::numeric_limits<size_t>::max();
-			double epsilon = 1e-15;
+			size_t doublingsLimit;
+			double epsilon;
+
+			std::mt19937_64 rng;
+			std::uniform_real_distribution<double> uniformZeroOne;
 		};
 	}
 }
