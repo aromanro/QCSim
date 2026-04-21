@@ -41,6 +41,14 @@ namespace QC {
 				else words[i / 64] &= ~(1ULL << (i % 64));
 			}
 
+			std::vector<bool> toVector() const
+			{
+				std::vector<bool> res(nBits);
+				for (size_t i = 0; i < nBits; ++i)
+					res[i] = get(i);
+				return res;
+			}
+
 			size_t size() const { return nBits; }
 			size_t nWords() const { return (nBits + 63) / 64; }
 
