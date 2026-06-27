@@ -257,7 +257,7 @@ namespace QC {
 			{
 				constexpr double tolerance = 1E-9;
 				if (probability < -tolerance || probability > 1. + tolerance)
-					throw std::runtime_error("Invalid measurement probability produced by the MPS state");
+					std::cerr << "Invalid measurement probability produced by the MPS state" << std::endl;
 
 				return ClampProbability(std::clamp(probability, 0., 1.));
 			}

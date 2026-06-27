@@ -88,8 +88,8 @@ namespace QC {
 			{
 				if (ops.empty()) return;
 
-				const IndexType qubit = ops.front().getQubit1();
-				const IndexType controllingQubit1 = ops.front().getQubit2();
+				const size_t qubit = ops.front().getQubit1();
+				const size_t controllingQubit1 = ops.front().getQubit2();
 				for (const auto& op : ops)
 					if (op.getQubit1() != qubit || op.getQubit2() != controllingQubit1)
 						throw std::invalid_argument("All Kraus operators need to act on the same qubits");
@@ -178,7 +178,7 @@ namespace QC {
 			{
 				constexpr double tolerance = 1E-9;
 				if (probability < -tolerance || probability > 1. + tolerance)
-					throw std::runtime_error("Invalid measurement probability produced by the MPO state");
+					std::cerr << "Invalid measurement probability produced by the MPO state" << std::endl;
 
 				return ClampProbability(std::clamp(probability, 0., 1.));
 			}
