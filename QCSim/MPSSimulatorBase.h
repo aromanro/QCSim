@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <iostream>
+#include <algorithm>
+#include <limits>
 
 #include <unsupported/Eigen/CXX11/Tensor>
 
@@ -36,8 +38,11 @@ namespace QC {
 			MPSSimulatorBase() = delete;
 
 			MPSSimulatorBase(size_t N, unsigned int addseed = 0)
-				: lambdas(N - 1, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1))
+				: lambdas(N > 0 ? N - 1 : 0, LambdaType::Ones(1)), gammas(N, GammaType(1, 2, 1))
 			{
+				if (N == 0)
+					throw std::invalid_argument("MPSSimulator requires at least one qubit");
+
 				for (auto& gamma : gammas)
 				{
 					gamma(0, 0, 0) = 1.;
@@ -98,7 +103,7 @@ namespace QC {
 			void setToQubitState(IndexType q) override
 			{
 				Clear();
-				if (q >= static_cast<IndexType>(gammas.size()))
+				if (q < 0 || q >= static_cast<IndexType>(gammas.size()))
 					return;
 
 				gammas[q](0, 0, 0) = 0.;
@@ -149,15 +154,15 @@ namespace QC {
 				const bool notFirst = qubit > 0;
 				const bool notLast = qubit < static_cast<IndexType>(lambdas.size());
 				if (notFirst && notLast)
-					return GetProbabilityMiddleQubit(qubit, zeroVal);
+					return ClampProbability(GetProbabilityMiddleQubit(qubit, zeroVal));
 				else if (notFirst)
-					return GetProbabilityLastQubit(qubit, zeroVal);
+					return ClampProbability(GetProbabilityLastQubit(qubit, zeroVal));
 				else if (notLast)
-					return GetProbabilityFirstQubit(qubit, zeroVal);
+					return ClampProbability(GetProbabilityFirstQubit(qubit, zeroVal));
 
 				assert(qubit == 0);
 
-				return GetProbabilitySingleQubit(zeroVal);
+				return ClampProbability(GetProbabilitySingleQubit(zeroVal));
 			}
 
 			void setLimitBondDimension(IndexType chival) override
@@ -242,12 +247,12 @@ namespace QC {
 
 			double getBasisStateProbability(size_t State) const override
 			{
-				return std::norm(getBasisStateAmplitude(State));
+				return ClampProbability(std::norm(getBasisStateAmplitude(State)));
 			}
 
 			double getBasisStateProbability(std::vector<bool>& State) const override
 			{
-				return std::norm(getBasisStateAmplitude(State));
+				return ClampProbability(std::norm(getBasisStateAmplitude(State)));
 			}
 
 			std::shared_ptr<MPSSimulatorStateInterface> getState() const override
@@ -336,6 +341,15 @@ namespace QC {
 			}
 
 		protected:
+			static double ClampProbability(double probability)
+			{
+				constexpr double tolerance = 1E-12;
+				if (probability < 0. && probability > -tolerance) return 0.;
+				if (probability > 1. && probability < 1. + tolerance) return 1.;
+
+				return probability;
+			}
+
 			void PrintGamma(size_t i) const
 			{
 				assert(i < gammas.size());

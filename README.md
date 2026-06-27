@@ -2,6 +2,8 @@
 Quantum computation simulator
 
 Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator, a Clifford gates simulator using the stabilizer formalism, a Pauli propagation simulator and a Path Integral simulator.
+There is an 'extended stabilizer' (based on frames formalism) simulator as well in there, please ignore it as it's work in progress, for now it works only for Clifford gates.
+There is also a Matrix Product Operator simulator (which is a compressed Density Matrix in a similar way as the MPS is a compressed statevector). This one - unlike the other code except maybe some tests - is vibed into existence using Claude Opus 4.8 and GPT-5.5 and although I tried to explain the AI quite detailed my intentions and I used the analogy with MPS, explaining the differences as well, I'm not sure if everything is ok as I didn't check all the code yet. The generated tests do pass, so there are some things that work ok, but I wouldn't still rely on it. We might use it in Maestro and until then I'll check it more carefully.
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://app.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)

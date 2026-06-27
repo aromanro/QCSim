@@ -2,6 +2,7 @@
 
 #include "MPSSimulatorImpl.h"
 
+#include <algorithm>
 #include <functional>
 #include <vector>
 #include <unordered_set>
@@ -37,6 +38,15 @@ namespace QC
 			using MeetingPositionCallback = std::function<IndexType(
 				//const std::vector<IndexType>&,
 				const std::vector<IndexType>&)>;
+
+			static double ClampProbability(double probability)
+			{
+				constexpr double tolerance = 1E-12;
+				if (probability < 0. && probability > -tolerance) return 0.;
+				if (probability > 1. && probability < 1. + tolerance) return 1.;
+
+				return probability;
+			}
 
 			MPSSimulator() = delete;
 
@@ -277,12 +287,12 @@ namespace QC
 
 			double getBasisStateProbability(size_t State) const override
 			{
-				return std::norm(getBasisStateAmplitude(State));
+				return ClampProbability(std::norm(getBasisStateAmplitude(State)));
 			}
 
 			double getBasisStateProbability(std::vector<bool>& State) const override
 			{
-				return std::norm(getBasisStateAmplitude(State));
+				return ClampProbability(std::norm(getBasisStateAmplitude(State)));
 			}
 
 			std::shared_ptr<MPSSimulatorStateInterface> getState() const override

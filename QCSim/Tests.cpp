@@ -740,6 +740,10 @@ bool SimulatorsTests(int option, bool res)
 		res = MPSSimulatorTests();
 
 	if (!res) return false;
+	if (option == 1 || option == 6)
+		res = MPOSimulatorTests();
+
+	if (!res) return false;
 	if (option == 2 || option == 6)
 		res = CliffordSimulatorTests() && CliffordExpectationValuesTests();
 

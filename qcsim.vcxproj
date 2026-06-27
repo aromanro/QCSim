@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <PreferredToolArchitecture>x64</PreferredToolArchitecture>
@@ -295,6 +295,7 @@
     <ClCompile Include="QCSim\ExtStabilizerTests.cpp" />
     <ClCompile Include="QCSim\GamesTests.cpp" />
     <ClCompile Include="QCSim\IsingTests.cpp" />
+    <ClCompile Include="QCSim\MPOSimulatorTests.cpp" />
     <ClCompile Include="QCSim\MPSSimulatorTests.cpp" />
     <ClCompile Include="QCSim\PathIntegralTests.cpp" />
     <ClCompile Include="QCSim\PauliPropagatorTests.cpp" />
@@ -327,6 +328,10 @@
     <ClInclude Include="QCSim\HardyParadox.h" />
     <ClInclude Include="QCSim\IsingModel.h" />
     <ClInclude Include="QCSim\MagicSquare.h" />
+    <ClInclude Include="QCSim\MPOSimulator.h" />
+    <ClInclude Include="QCSim\MPOSimulatorBase.h" />
+    <ClInclude Include="QCSim\MPOSimulatorImpl.h" />
+    <ClInclude Include="QCSim\MPOSimulatorInterface.h" />
     <ClInclude Include="QCSim\MPSSimulator.h" />
     <ClInclude Include="QCSim\MPSSimulatorBase.h" />
     <ClInclude Include="QCSim\MPSSimulatorImpl.h" />

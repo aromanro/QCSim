@@ -1,0 +1,907 @@
+#include <iostream>
+#include <iterator>
+#include <memory>
+#include <vector>
+#include <unordered_map>
+#include <utility>
+#include <array>
+#include <cmath>
+
+#include "Tests.h"
+
+#include "QubitRegister.h"
+#include "MPOSimulator.h"
+
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+
+#define NR_QUBITS_LIMIT_MPO 7
+
+// these mirror the helpers from MPSSimulatorTests.cpp, kept local to avoid coupling the two test files
+static void FillOneQubitGatesMPO(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
+{
+	gates.emplace_back(std::make_shared<QC::Gates::HadamardGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::HyGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SDGGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::TGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::TDGGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::PhaseShiftGate<>>(0.38 * M_PI));
+	gates.emplace_back(std::make_shared<QC::Gates::PauliXGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::PauliYGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::PauliZGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTDagGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::RxGate<>>(M_PI / 3));
+	gates.emplace_back(std::make_shared<QC::Gates::RyGate<>>(M_PI / 7));
+	gates.emplace_back(std::make_shared<QC::Gates::RzGate<>>(M_PI / 5));
+	gates.emplace_back(std::make_shared<QC::Gates::UGate<>>(M_PI / 3, M_PI / 5));
+}
+
+static void FillTwoQubitGatesMPO(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
+{
+	gates.emplace_back(std::make_shared<QC::Gates::SwapGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::iSwapGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::CNOTGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledYGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledZGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledHadamardGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledPhaseShiftGate<>>(M_PI / 3));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledUGate<>>(M_PI / 3, M_PI / 7));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledRxGate<>>(M_PI / 5));
+}
+
+// builds the reference density matrix rho = |psi><psi| from the statevector simulator
+static Eigen::MatrixXcd ReferenceDensityMatrix(const QC::QubitRegister<>& reg)
+{
+	const auto& psi = reg.getRegisterStorage();
+	return psi * psi.adjoint();
+}
+
+static bool CompareDensityMatrices(const Eigen::MatrixXcd& rhoRef, const Eigen::MatrixXcd& rhoMPO, int nrQubits, double err = 1E-3)
+{
+	if (rhoRef.rows() != rhoMPO.rows() || rhoRef.cols() != rhoMPO.cols())
+	{
+		std::cout << "Density matrix dimensions mismatch for the MPO simulator for " << nrQubits << " qubits" << std::endl;
+		return false;
+	}
+
+	for (Eigen::Index r = 0; r < rhoRef.rows(); ++r)
+		for (Eigen::Index c = 0; c < rhoRef.cols(); ++c)
+			if (!approxEqual(rhoRef(r, c), rhoMPO(r, c), err))
+			{
+				std::cout << "Density matrix element (" << r << ", " << c << ") simulation test failed for the MPO simulator for " << nrQubits << " qubits" << std::endl;
+				std::cout << "Reference: " << rhoRef(r, c) << " vs MPO: " << rhoMPO(r, c) << std::endl;
+
+				return false;
+			}
+
+	return true;
+}
+
+// applies the same one and two qubit gates (on adjacent qubits) to both an MPO simulator and a statevector
+// register, comparing the resulting density matrix against |psi><psi| after each gate
+static bool OneAndTwoQubitGatesTestMPO()
+{
+	std::cout << "\nMPO simulator state test for both one and two qubit gates" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(25, 50);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		for (int t = 0; t < 10; ++t)
+		{
+			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+
+			const int lim = nrGatesDistr(gen);
+
+			for (int i = 0; i < lim; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = qubit1 + 1;
+
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				mpo.ApplyGate(*gates[gate], qubit1, qubit2);
+				reg.ApplyGate(*gates[gate], qubit1, qubit2);
+			}
+
+			const Eigen::MatrixXcd rhoRef = ReferenceDensityMatrix(reg);
+			const Eigen::MatrixXcd rhoMPO = mpo.getDensityMatrix();
+
+			if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
+				return false;
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// like the above, but using the higher level MPOSimulator that swaps non adjacent qubits together
+static bool NonAdjacentGatesTestMPO()
+{
+	std::cout << "\nMPO simulator state test with non adjacent two qubit gates" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(25, 50);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+
+		for (int t = 0; t < 10; ++t)
+		{
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+
+			const int lim = nrGatesDistr(gen);
+
+			for (int i = 0; i < lim; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+
+				int qubit1 = qubitDistr(gen);
+				int qubit2 = qubit1;
+				if (twoQubitsGate)
+				{
+					// pick a different qubit, possibly non adjacent
+					while (qubit2 == qubit1)
+						qubit2 = qubitDistr(gen);
+				}
+
+				mpo.ApplyGate(*gates[gate], qubit1, qubit2);
+				reg.ApplyGate(*gates[gate], qubit1, qubit2);
+			}
+
+			const Eigen::MatrixXcd rhoRef = ReferenceDensityMatrix(reg);
+			const Eigen::MatrixXcd rhoMPO = mpo.getDensityMatrix();
+
+			if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
+				return false;
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// checks the trace stays 1 and the per qubit probabilities match the statevector ones
+static bool TraceAndProbabilitiesTestMPO()
+{
+	std::cout << "\nMPO simulator trace and qubit probabilities test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(25, 50);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		for (int t = 0; t < 10; ++t)
+		{
+			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+
+			const int lim = nrGatesDistr(gen);
+
+			for (int i = 0; i < lim; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = qubit1 + 1;
+
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				mpo.ApplyGate(*gates[gate], qubit1, qubit2);
+				reg.ApplyGate(*gates[gate], qubit1, qubit2);
+			}
+
+			const std::complex<double> trace = mpo.Trace();
+			if (!approxEqual(trace, std::complex<double>(1., 0.), 1E-3))
+			{
+				std::cout << "Trace test failed for the MPO simulator for " << nrQubits << " qubits, trace is " << trace << std::endl;
+				return false;
+			}
+
+			for (int q = 0; q < nrQubits; ++q)
+			{
+				const double probMPO = mpo.GetProbability(q, false); // probability for |1>
+				const double probReg = reg.GetQubitProbability(q);
+
+				if (!approxEqual(probMPO, probReg, 1E-3))
+				{
+					std::cout << "Qubit " << q << " probability test failed for the MPO simulator for " << nrQubits << " qubits" << std::endl;
+					std::cout << "Reference: " << probReg << " vs MPO: " << probMPO << std::endl;
+					return false;
+				}
+			}
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// checks the measurement statistics roughly match the statevector ones
+static bool MeasurementsTestMPO()
+{
+	std::cout << "\nMPO simulator measurements test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	const int nrMeasurements = 10000;
+
+	for (int nrQubits = 2; nrQubits < 5; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		// build a fixed random circuit (adjacent gates) to compare statistics on
+		std::vector<QC::Gates::AppliedGate<>> circuit;
+		const int lim = 25;
+		for (int i = 0; i < lim; ++i)
+		{
+			const int gate = gateDistr(gen);
+			const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+			int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+			int qubit2 = qubit1 + 1;
+			if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+			QC::Gates::AppliedGate<> appliedGate(gates[gate]->getRawOperatorMatrix(), qubit1, qubit2);
+			circuit.push_back(std::move(appliedGate));
+		}
+
+		std::unordered_map<std::vector<bool>, int> measurementsRegMap;
+		std::unordered_map<std::vector<bool>, int> measurementsMPOMap;
+
+		for (int t2 = 0; t2 < nrMeasurements; ++t2)
+		{
+			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+
+			for (const auto& gate : circuit)
+			{
+				mpo.ApplyGate(gate);
+				reg.ApplyGate(gate);
+			}
+
+			std::vector<bool> measurementsReg(nrQubits);
+			std::vector<bool> measurementsMPO(nrQubits);
+
+			for (int q = 0; q < nrQubits; ++q)
+			{
+				measurementsReg[q] = reg.MeasureQubit(q);
+				measurementsMPO[q] = mpo.MeasureQubit(q);
+			}
+			++measurementsRegMap[measurementsReg];
+			++measurementsMPOMap[measurementsMPO];
+		}
+
+		std::cout << ".";
+
+		for (const auto& [key, value] : measurementsRegMap)
+		{
+			const double dif = std::abs(static_cast<double>(measurementsMPOMap[key] - value) / nrMeasurements);
+			if (dif > 0.05)
+			{
+				std::cout << "Measurements test failed for the MPO simulator for " << nrQubits << " qubits" << std::endl;
+				std::cout << "Might fail due to the randomness of the measurements\n" << std::endl;
+				std::cout << "Difference: " << dif << std::endl;
+				return false;
+			}
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// builds the reference density matrix for a classical mixture sum_k prob_k |state_k><state_k|
+// directly as a diagonal matrix (the probabilities are normalized to sum to 1)
+static Eigen::MatrixXcd ReferenceMixtureDensityMatrix(const std::vector<std::pair<size_t, double>>& mixture, int nrQubits)
+{
+	const Eigen::Index dim = static_cast<Eigen::Index>(1ULL << nrQubits);
+	Eigen::MatrixXcd rho = Eigen::MatrixXcd::Zero(dim, dim);
+
+	double total = 0.;
+	for (const auto& [state, prob] : mixture)
+		if (prob > 0.) total += prob;
+
+	if (total <= 0.) return rho;
+
+	for (const auto& [state, prob] : mixture)
+		if (prob > 0.)
+			rho(static_cast<Eigen::Index>(state), static_cast<Eigen::Index>(state)) += prob / total;
+
+	return rho;
+}
+
+// checks that setToMixtureOfBasisStates produces the expected diagonal density matrix with unit trace
+static bool MixtureOfBasisStatesTestMPO()
+{
+	std::cout << "\nMPO simulator mixture of basis states test" << std::endl;
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		const size_t nrBasisStates = 1ULL << nrQubits;
+		std::uniform_int_distribution<size_t> stateDistr(0, nrBasisStates - 1);
+
+		for (int t = 0; t < 20; ++t)
+		{
+			// build a random mixture (possibly with repeated states, which should be merged)
+			std::uniform_int_distribution nrTermsDistr(1, static_cast<int>(nrBasisStates));
+			const int nrTerms = nrTermsDistr(gen);
+
+			std::vector<std::pair<size_t, double>> mixture;
+			for (int k = 0; k < nrTerms; ++k)
+				mixture.emplace_back(stateDistr(gen), dist_ampl(gen) + 1.5); // weights in (0.5, 2.5), always positive
+
+			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			mpo.setToMixtureOfBasisStates(mixture);
+
+			const Eigen::MatrixXcd rhoRef = ReferenceMixtureDensityMatrix(mixture, nrQubits);
+			const Eigen::MatrixXcd rhoMPO = mpo.getDensityMatrix();
+
+			if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
+				return false;
+
+			const std::complex<double> trace = mpo.Trace();
+			if (!approxEqual(trace, std::complex<double>(1., 0.), 1E-3))
+			{
+				std::cout << "Trace of the mixture is not 1 for the MPO simulator for " << nrQubits << " qubits, it's " << trace << std::endl;
+				return false;
+			}
+
+			std::cout << ".";
+		}
+	}
+
+	// also exercise the std::vector<bool> overload on a simple known mixture
+	{
+		const int nrQubits = 3;
+		QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+
+		// 0.25 |000><000| + 0.75 |101><101|
+		std::vector<std::pair<std::vector<bool>, double>> mixture;
+		mixture.emplace_back(std::vector<bool>{false, false, false}, 1.0);
+		mixture.emplace_back(std::vector<bool>{true, false, true}, 3.0);
+		mpo.setToMixtureOfBasisStates(mixture);
+
+		const Eigen::MatrixXcd rhoMPO = mpo.getDensityMatrix();
+		Eigen::MatrixXcd rhoRef = Eigen::MatrixXcd::Zero(8, 8);
+		rhoRef(0, 0) = 0.25; // 000
+		rhoRef(5, 5) = 0.75; // 101 = bit0 + bit2 = 1 + 4 = 5
+
+		if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
+			return false;
+
+		std::cout << ".";
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// checks that evolving a mixture under a circuit equals the probability weighted average of evolving
+// each pure component: U (sum_k p_k |s_k><s_k|) U^dagger = sum_k p_k (U|s_k>)(U|s_k>)^dagger
+static bool MixtureEvolutionTestMPO()
+{
+	std::cout << "\nMPO simulator mixture evolution test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(15, 30);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 2; nrQubits < 5; ++nrQubits)
+	{
+		const size_t nrBasisStates = 1ULL << nrQubits;
+		std::uniform_int_distribution<size_t> stateDistr(0, nrBasisStates - 1);
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		for (int t = 0; t < 10; ++t)
+		{
+			// random normalized mixture of distinct basis states
+			std::uniform_int_distribution nrTermsDistr(1, static_cast<int>(nrBasisStates));
+			const int nrTerms = nrTermsDistr(gen);
+
+			std::vector<std::pair<size_t, double>> mixture;
+			double total = 0.;
+			for (int k = 0; k < nrTerms; ++k)
+			{
+				const double w = dist_ampl(gen) + 1.5;
+				mixture.emplace_back(stateDistr(gen), w);
+				total += w;
+			}
+
+			// build a fixed random circuit (adjacent gates) applied to all simulators
+			const int lim = nrGatesDistr(gen);
+			std::vector<QC::Gates::AppliedGate<>> circuit;
+			for (int i = 0; i < lim; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = qubit1 + 1;
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				circuit.emplace_back(gates[gate]->getRawOperatorMatrix(), qubit1, qubit2);
+			}
+
+			// evolve the mixture in the MPO simulator
+			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			mpo.setToMixtureOfBasisStates(mixture);
+			for (const auto& gate : circuit)
+				mpo.ApplyGate(gate);
+			const Eigen::MatrixXcd rhoMPO = mpo.getDensityMatrix();
+
+			// build the reference as the probability weighted average of the evolved pure components
+			const Eigen::Index dim = static_cast<Eigen::Index>(nrBasisStates);
+			Eigen::MatrixXcd rhoRef = Eigen::MatrixXcd::Zero(dim, dim);
+			for (const auto& [state, w] : mixture)
+			{
+				QC::QubitRegister<> reg(nrQubits);
+				reg.setToBasisState(state);
+				for (const auto& gate : circuit)
+					reg.ApplyGate(gate);
+
+				const auto& psi = reg.getRegisterStorage();
+				rhoRef += (w / total) * (psi * psi.adjoint());
+			}
+
+			if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
+				return false;
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// checks a non-unitary multi-Kraus channel against dense density matrix evolution
+static bool KrausOperatorsTestMPO()
+{
+	std::cout << "\nMPO simulator Kraus operators test" << std::endl;
+
+	constexpr int nrQubits = 2;
+	constexpr double gamma = 0.37;
+
+	Eigen::MatrixXcd k0 = Eigen::MatrixXcd::Zero(2, 2);
+	k0(0, 0) = 1.;
+	k0(1, 1) = std::sqrt(1. - gamma);
+
+	Eigen::MatrixXcd k1 = Eigen::MatrixXcd::Zero(2, 2);
+	k1(0, 1) = std::sqrt(gamma);
+
+	QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+	QC::QubitRegister<> reg(nrQubits);
+
+	QC::Gates::HadamardGate<> hGate;
+	QC::Gates::CNOTGate<> cnotGate;
+	mpo.ApplyGate(hGate, 0);
+	mpo.ApplyGate(cnotGate, 1, 0);
+	reg.ApplyGate(hGate, 0);
+	reg.ApplyGate(cnotGate, 1, 0);
+
+	std::vector<Eigen::MatrixXcd> kraus{ k0, k1 };
+	mpo.ApplyKrausOperators(kraus, 0);
+
+	const Eigen::MatrixXcd rho = ReferenceDensityMatrix(reg);
+	const QC::Gates::SingleQubitGate<> k0Gate(k0);
+	const QC::Gates::SingleQubitGate<> k1Gate(k1);
+	const Eigen::MatrixXcd k0Full = k0Gate.getOperatorMatrix(nrQubits, 0);
+	const Eigen::MatrixXcd k1Full = k1Gate.getOperatorMatrix(nrQubits, 0);
+	const Eigen::MatrixXcd rhoRef = k0Full * rho * k0Full.adjoint() + k1Full * rho * k1Full.adjoint();
+
+	if (!CompareDensityMatrices(rhoRef, mpo.getDensityMatrix(), nrQubits))
+		return false;
+
+	const std::complex<double> trace = mpo.Trace();
+	if (!approxEqual(trace, std::complex<double>(1., 0.), 1E-3))
+	{
+		std::cout << "Trace after amplitude damping is not 1 for the MPO simulator, it's " << trace << std::endl;
+		return false;
+	}
+
+	std::cout << ".\nSuccess" << std::endl;
+
+	return true;
+}
+
+// builds a random circuit of adjacent one and two qubit gates (two qubit gates act on qubit and qubit+1,
+// in either order), returned as a list of AppliedGate so it can be replayed on several simulators
+static std::vector<QC::Gates::AppliedGate<>> BuildRandomAdjacentCircuitMPO(const std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates, int nrQubits, int nrGates)
+{
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+	std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+	std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+	std::vector<QC::Gates::AppliedGate<>> circuit;
+	circuit.reserve(nrGates);
+
+	for (int i = 0; i < nrGates; ++i)
+	{
+		const int gate = gateDistr(gen);
+		const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+		int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+		int qubit2 = qubit1 + 1;
+		if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+		circuit.emplace_back(gates[gate]->getRawOperatorMatrix(), qubit1, qubit2);
+	}
+
+	return circuit;
+}
+
+// The truncating SVD path must reproduce the EXACT result when the bond dimension / entanglement
+// limits are set so they never actually drop anything (sz == szm). This exercises the limitSize and
+// limitEntanglement branches in ApplyTwoQubitGate that the other tests never touch.
+static bool CompressionLosslessTestMPO()
+{
+	std::cout << "\nMPO simulator lossless compression test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(25, 50);
+
+	// for up to 6 qubits the operator bond dimension is at most 4^3 = 64, so this limit never truncates
+	const Eigen::Index largeChi = 1 << 14;
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		for (int t = 0; t < 10; ++t)
+		{
+			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
+
+			QC::QubitRegister<> reg(nrQubits);
+			for (const auto& gate : circuit)
+				reg.ApplyGate(gate);
+			const Eigen::MatrixXcd rhoRef = ReferenceDensityMatrix(reg);
+
+			// (a) a high bond dimension limit: truncation code runs but keeps every singular value
+			{
+				QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+				mpo.setLimitBondDimension(largeChi);
+				for (const auto& gate : circuit)
+					mpo.ApplyGate(gate);
+
+				if (!CompareDensityMatrices(rhoRef, mpo.getDensityMatrix(), nrQubits))
+					return false;
+
+				for (const auto bondDim : mpo.getBondDimensions())
+					if (bondDim > largeChi)
+					{
+						std::cout << "Bond dimension " << bondDim << " exceeds the limit " << largeChi << " for " << nrQubits << " qubits" << std::endl;
+						return false;
+					}
+			}
+
+			// (b) a tiny entanglement threshold: drops only numerically negligible singular values
+			{
+				QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+				mpo.setLimitEntanglement(1E-12);
+				for (const auto& gate : circuit)
+					mpo.ApplyGate(gate);
+
+				if (!CompareDensityMatrices(rhoRef, mpo.getDensityMatrix(), nrQubits))
+					return false;
+			}
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// With an aggressive bond dimension limit the represented operator is only an approximation:
+// operator-space MPO truncation does not preserve trace/Hermiticity/positivity (see the simulator's
+// own documentation), so exact values are NOT asserted here (those are covered by the lossless test).
+// Instead this locks the guaranteed invariants: the bond dimension never exceeds the limit and the
+// reconstructed density matrix stays finite (no division-by-(near)-zero blow up).
+static bool CompressionTruncationTestMPO()
+{
+	std::cout << "\nMPO simulator bond dimension cap test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	for (int nrQubits = 4; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		for (int t = 0; t < 10; ++t)
+		{
+			const Eigen::Index chi = 1 + (t % 4); // 1..4, smaller than the untruncated bond (up to 16+)
+
+			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			mpo.setLimitBondDimension(chi);
+
+			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, 60);
+			for (const auto& gate : circuit)
+				mpo.ApplyGate(gate);
+
+			for (const auto bondDim : mpo.getBondDimensions())
+				if (bondDim > chi)
+				{
+					std::cout << "Bond dimension " << bondDim << " exceeds the limit " << chi << " for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+
+			const Eigen::MatrixXcd rho = mpo.getDensityMatrix();
+			for (Eigen::Index r = 0; r < rho.rows(); ++r)
+				for (Eigen::Index c = 0; c < rho.cols(); ++c)
+					if (!std::isfinite(rho(r, c).real()) || !std::isfinite(rho(r, c).imag()))
+					{
+						std::cout << "Non finite density matrix element after truncation at (" << r << ", " << c << ") for " << nrQubits << " qubits" << std::endl;
+						return false;
+					}
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// rho -> A rho A^dagger / Tr(A rho A^dagger) for a non-unitary local operator A (amplitude damping K0)
+static bool ApplyOperatorAndNormalizeTestMPO()
+{
+	std::cout << "\nMPO simulator ApplyOperatorAndNormalize test" << std::endl;
+
+	constexpr int nrQubits = 3;
+	constexpr double gamma = 0.41;
+
+	Eigen::MatrixXcd k0 = Eigen::MatrixXcd::Zero(2, 2);
+	k0(0, 0) = 1.;
+	k0(1, 1) = std::sqrt(1. - gamma);
+
+	const QC::Gates::SingleQubitGate<> k0Gate(k0);
+
+	for (int qubit = 0; qubit < nrQubits; ++qubit)
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		QC::QubitRegister<> reg(nrQubits);
+
+		// some non trivial state with population on every qubit
+		QC::Gates::HadamardGate<> hGate;
+		QC::Gates::CNOTGate<> cnotGate;
+		QC::Gates::RyGate<> ryGate(M_PI / 3);
+
+		std::vector<QC::Gates::AppliedGate<>> circuit;
+		circuit.emplace_back(hGate.getRawOperatorMatrix(), 0);
+		circuit.emplace_back(cnotGate.getRawOperatorMatrix(), 1, 0);
+		circuit.emplace_back(ryGate.getRawOperatorMatrix(), nrQubits - 1);
+		circuit.emplace_back(cnotGate.getRawOperatorMatrix(), nrQubits - 1, nrQubits - 2);
+
+		for (const auto& gate : circuit)
+		{
+			mpo.ApplyGate(gate);
+			reg.ApplyGate(gate);
+		}
+
+		mpo.ApplyOperatorAndNormalize(k0Gate, qubit);
+
+		// reference: dense A rho A^dagger normalized by its trace
+		const Eigen::MatrixXcd rho = ReferenceDensityMatrix(reg);
+		const Eigen::MatrixXcd k0Full = k0Gate.getOperatorMatrix(nrQubits, qubit);
+		Eigen::MatrixXcd rhoRef = k0Full * rho * k0Full.adjoint();
+		rhoRef /= rhoRef.trace();
+
+		if (!CompareDensityMatrices(rhoRef, mpo.getDensityMatrix(), nrQubits))
+			return false;
+
+		const std::complex<double> trace = mpo.Trace();
+		if (!approxEqual(trace, std::complex<double>(1., 0.), 1E-3))
+		{
+			std::cout << "Trace after ApplyOperatorAndNormalize on qubit " << qubit << " is not 1, it's " << trace << std::endl;
+			return false;
+		}
+
+		std::cout << ".";
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// a two qubit Kraus channel rho -> (1-p) rho + p U rho U^dagger, with U a (non symmetric) CNOT.
+// exercises the two qubit ApplyKrausOperators path, including the decorator swaps for non adjacent qubits
+static bool TwoQubitKrausOperatorsTestMPO()
+{
+	std::cout << "\nMPO simulator two qubit Kraus operators test" << std::endl;
+
+	constexpr double p = 0.3;
+
+	QC::Gates::HadamardGate<> hGate;
+	QC::Gates::CNOTGate<> cnotGate;
+	QC::Gates::RyGate<> ryGate(M_PI / 5);
+
+	// {nrQubits, channelQubit, channelControl}, including a non adjacent case to drive the swaps
+	const std::vector<std::array<int, 3>> cases{ {2, 1, 0}, {3, 2, 0} };
+
+	for (const auto& c : cases)
+	{
+		const int nrQubits = c[0];
+		const int channelQubit = c[1];
+		const int channelControl = c[2];
+
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		QC::QubitRegister<> reg(nrQubits);
+
+		// prepare an entangled, non trivial state
+		std::vector<QC::Gates::AppliedGate<>> prep;
+		prep.emplace_back(hGate.getRawOperatorMatrix(), 0);
+		prep.emplace_back(cnotGate.getRawOperatorMatrix(), 1, 0);
+		prep.emplace_back(ryGate.getRawOperatorMatrix(), nrQubits - 1);
+		for (const auto& gate : prep)
+		{
+			mpo.ApplyGate(gate);
+			reg.ApplyGate(gate);
+		}
+
+		const Eigen::MatrixXcd uRaw = cnotGate.getRawOperatorMatrix();
+		const Eigen::MatrixXcd k0 = std::sqrt(1. - p) * Eigen::MatrixXcd::Identity(4, 4);
+		const Eigen::MatrixXcd k1 = std::sqrt(p) * uRaw;
+
+		const std::vector<Eigen::MatrixXcd> kraus{ k0, k1 };
+		mpo.ApplyKrausOperators(kraus, channelQubit, channelControl);
+
+		// reference via the dense full operators, using the SAME gate-to-qubits convention as the simulator
+		const Eigen::MatrixXcd rho = ReferenceDensityMatrix(reg);
+		const QC::Gates::TwoQubitsGate<> k0Gate(k0);
+		const QC::Gates::TwoQubitsGate<> k1Gate(k1);
+		const Eigen::MatrixXcd k0Full = k0Gate.getOperatorMatrix(nrQubits, channelQubit, channelControl);
+		const Eigen::MatrixXcd k1Full = k1Gate.getOperatorMatrix(nrQubits, channelQubit, channelControl);
+		const Eigen::MatrixXcd rhoRef = k0Full * rho * k0Full.adjoint() + k1Full * rho * k1Full.adjoint();
+
+		if (!CompareDensityMatrices(rhoRef, mpo.getDensityMatrix(), nrQubits))
+			return false;
+
+		const std::complex<double> trace = mpo.Trace();
+		if (!approxEqual(trace, std::complex<double>(1., 0.), 1E-3))
+		{
+			std::cout << "Trace after the two qubit Kraus channel is not 1 for " << nrQubits << " qubits, it's " << trace << std::endl;
+			return false;
+		}
+
+		std::cout << ".";
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// getState/setState must snapshot and restore the full state: tensors, bonds and, for the decorator,
+// the logical->physical qubit map produced by the swaps of non adjacent gates
+static bool StateSaveRestoreTestMPO()
+{
+	std::cout << "\nMPO simulator state save/restore test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+
+		for (int t = 0; t < 10; ++t)
+		{
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+
+			// state A: a random circuit including non adjacent gates, so the qubit map gets permuted
+			for (int i = 0; i < 20; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = qubitDistr(gen);
+				int qubit2 = qubit1;
+				if (twoQubitsGate)
+					while (qubit2 == qubit1) qubit2 = qubitDistr(gen);
+
+				mpo.ApplyGate(*gates[gate], qubit1, qubit2);
+			}
+
+			const Eigen::MatrixXcd rhoA = mpo.getDensityMatrix();
+			auto saved = mpo.getState();
+
+			// evolve further into a (almost surely different) state B
+			for (int i = 0; i < 20; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = qubitDistr(gen);
+				int qubit2 = qubit1;
+				if (twoQubitsGate)
+					while (qubit2 == qubit1) qubit2 = qubitDistr(gen);
+
+				mpo.ApplyGate(*gates[gate], qubit1, qubit2);
+			}
+
+			// restore the snapshot and check we are back at A
+			mpo.setState(saved);
+
+			if (!CompareDensityMatrices(rhoA, mpo.getDensityMatrix(), nrQubits))
+				return false;
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+bool MPOSimulatorTests()
+{
+	std::cout << "\nMPO Simulator Tests" << std::endl;
+
+	return OneAndTwoQubitGatesTestMPO() &&
+		NonAdjacentGatesTestMPO() &&
+		TraceAndProbabilitiesTestMPO() &&
+		MixtureOfBasisStatesTestMPO() &&
+		MixtureEvolutionTestMPO() &&
+		KrausOperatorsTestMPO() &&
+		TwoQubitKrausOperatorsTestMPO() &&
+		ApplyOperatorAndNormalizeTestMPO() &&
+		CompressionLosslessTestMPO() &&
+		CompressionTruncationTestMPO() &&
+		StateSaveRestoreTestMPO() &&
+		MeasurementsTestMPO();
+}

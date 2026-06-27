@@ -38,6 +38,8 @@ bool VQETests();
 
 bool MPSSimulatorTests();
 
+bool MPOSimulatorTests();
+
 bool CliffordSimulatorTests();
 bool CliffordExpectationValuesTests();
 

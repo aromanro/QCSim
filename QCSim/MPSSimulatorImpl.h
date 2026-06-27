@@ -62,8 +62,8 @@ namespace QC {
 					throw std::invalid_argument("Qubit index out of bounds");
 
 				const double rndVal = 1. - uniformZeroOne(rng);
-				const double prob0 = GetProbability(qubit);
-				const bool zeroMeasured = rndVal < prob0;
+				const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
+				const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
 
 				MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
 				const QC::Gates::SingleQubitGate projOp(std::move(projMat));
@@ -109,8 +109,8 @@ namespace QC {
 					const auto nextQubit = *it;
 
 					const double rndVal = 1. - uniformZeroOne(rng);
-					const double prob0 = GetProbability(qubit);
-					const bool zeroMeasured = rndVal < prob0;
+					const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
+					const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
 
 					res[qubit] = !zeroMeasured;
 
@@ -253,6 +253,23 @@ namespace QC {
 			}
 
 		private:
+			static double ValidMeasurementProbability(double probability)
+			{
+				constexpr double tolerance = 1E-9;
+				if (probability < -tolerance || probability > 1. + tolerance)
+					throw std::runtime_error("Invalid measurement probability produced by the MPS state");
+
+				return ClampProbability(std::clamp(probability, 0., 1.));
+			}
+
+			static bool PickZeroMeasurement(double rndVal, double prob0)
+			{
+				if (prob0 <= 0.) return false;
+				if (prob0 >= 1.) return true;
+
+				return rndVal < prob0;
+			}
+
 			void MultiplyModGammasWithLambdas(std::vector<GammaType>& modGammas, IndexType minQubit, IndexType nrSites) const
 			{
 				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
@@ -452,6 +469,15 @@ namespace QC {
 
 
 				return result;
+			}
+
+			static IndexType CountNonZeroSingularValues(const LambdaType& singularValues)
+			{
+				IndexType count = 0;
+				while (count < singularValues.size() && singularValues[count] > 0.)
+					++count;
+
+				return count;
 			}
 
 			inline void SetNewGammas(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
@@ -702,11 +728,11 @@ namespace QC {
 					const double allProbability = mq.cwiseProduct(mq.conjugate()).sum().real();
 
 					// to get the probability for the current qubit to be 0, we need to divide by the probability of measuring all the previous qubits
-					const double prob0 = allProbability / totalProb;
+					const double prob0 = ValidMeasurementProbability(allProbability / totalProb);
 
 					// 2. use that probability to measure the qubit
 					const double rndVal = 1. - uniformZeroOne(rng);
-					const bool zeroMeasured = rndVal < prob0;
+					const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
 					res[qubit] = !zeroMeasured;
 
 					// accumulate the probability for measuring the current qubit to whatever was picked by using the random number generator

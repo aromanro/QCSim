@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
 		std::cout << "\n\nPick an option:" << std::endl;
 		std::cout << "0 to exit" << std::endl;
 		std::cout << "1 to run statevector tests" << std::endl;
-		std::cout << "2 to run MPS simulator tests" << std::endl;
+		std::cout << "2 to run MPS and MPO simulators tests" << std::endl;
 		std::cout << "3 to run Clifford simulator tests" << std::endl;
 		std::cout << "4 to run Pauli propagator tests" << std::endl;
 		std::cout << "5 to run path integral tests" << std::endl;
