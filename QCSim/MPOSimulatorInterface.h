@@ -84,6 +84,7 @@ namespace QC {
 			virtual void setLimitEntanglement(double svdThreshold) = 0;
 			virtual void dontLimitBondDimension() = 0;
 			virtual void dontLimitEntanglement() = 0;
+			virtual void Trim() = 0;
 
 			// the analogue of MPS getRegisterStorage(): the full 2^N x 2^N density matrix
 			virtual MatrixClass getDensityMatrix() const = 0;

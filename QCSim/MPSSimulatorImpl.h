@@ -55,6 +55,27 @@ namespace QC {
 					ApplyGate(gate);
 			}
 
+			// Walks over the chain and, wherever a bond dimension is bigger than the currently set
+			// bond dimension limit, contracts the two neighbour sites and re-splits them with a
+			// truncated SVD to bring the bond dimension down to the limit. No gate is applied.
+			// Useful after lowering the bond dimension limit with setLimitBondDimension once the
+			// bonds have already grown beyond the new limit.
+			void Trim() override
+			{
+				if (!limitSize) return; // nothing to trim against
+
+				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
+				{
+					if (lambdas[qubit1].size() <= chi) continue;
+
+					// contract the two neighbour sites (no gate is applied), then re-split with a truncated SVD
+					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+					const MatrixClass thetaMatrix = ReshapeTheta(theta);
+
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+				}
+			}
+
 			// false if measured 0, true if measured 1
 			bool MeasureQubit(IndexType qubit) override
 			{
@@ -372,6 +393,14 @@ namespace QC {
 				// the size is (2 * left bond dim) x (2 * right bond dim)
 				const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
 
+				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
+			}
+
+			// SVD the (already built) theta matrix, truncate it according to the bond dimension / entanglement
+			// limits and write back the two new gammas and the lambda in between.
+			// Shared by the two qubit gate application and by Trim.
+			void DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2)
+			{
 #ifdef USE_FAST_SVD
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
 #endif

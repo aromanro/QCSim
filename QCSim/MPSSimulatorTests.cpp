@@ -806,6 +806,101 @@ bool checkExpectationValuesMPS()
 	return true;
 }
 
+bool TrimTestMPS()
+{
+	std::cout << "\nMPS simulator Trim test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGates(gates);
+	FillTwoQubitGates(gates);
+
+	std::uniform_int_distribution nrGatesDistr(20, 40);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	// a no-op two qubit gate: applying it with truncation enabled on a bond does exactly what Trim
+	// does on that bond (contract the two neighbour sites, apply no gate, SVD with truncation)
+	const QC::Gates::TwoQubitsGate<> identityTwoQubitGate(Eigen::MatrixXcd::Identity(4, 4));
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		for (int t = 0; t < 5; ++t)
+		{
+			// build a random circuit so it can be replayed identically on several simulators
+			std::vector<QC::Gates::AppliedGate<>> circuit;
+			const int lim = nrGatesDistr(gen);
+			for (int i = 0; i < lim; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = twoQubitsGate ? qubit1 + 1 : qubit1;
+
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				circuit.emplace_back(gates[gate]->getRawOperatorMatrix(), qubit1, qubit2);
+			}
+
+			const int chi = 1 + (t % 4); // trim down to a bond dimension between 1 and 4
+
+			// reference: apply the circuit without any limit (exact MPS), then lower the limit and
+			// truncate with the no-op two qubit gate exactly the bonds Trim would touch, that is
+			// only the ones that exceed the (newly lowered) limit. Trimming a bond that is already
+			// within the limit is a state preserving re-gauging that would still change the result
+			// of subsequent truncations, so the reference must skip those bonds just like Trim does.
+			QC::TensorNetworks::MPSSimulatorImpl mpsRef(nrQubits);
+			for (const auto& g : circuit) mpsRef.ApplyGate(g);
+			mpsRef.setLimitBondDimension(chi);
+			const auto refBondDims = mpsRef.getBondDimensions();
+			for (int q = 0; q < nrQubits - 1; ++q)
+				if (refBondDims[q] > chi)
+					mpsRef.ApplyGate(identityTwoQubitGate, q, q + 1);
+
+			// the one under test: apply the same circuit without any limit, then lower the limit and Trim
+			QC::TensorNetworks::MPSSimulatorImpl mpsTrim(nrQubits);
+			for (const auto& g : circuit) mpsTrim.ApplyGate(g);
+			mpsTrim.setLimitBondDimension(chi);
+			mpsTrim.Trim();
+
+			// after trimming, every bond dimension must be within the (newly lowered) limit
+			for (const auto bd : mpsTrim.getBondDimensions())
+				if (bd > chi)
+				{
+					std::cout << "Trim did not reduce a bond dimension to the limit (" << bd << " > " << chi << ") for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+
+			// Trim must produce the same state as the equivalent no-op two qubit gate truncations
+			const auto refState = mpsRef.getRegisterStorage();
+			const auto trimState = mpsTrim.getRegisterStorage();
+
+			for (int s = 0; s < refState.size(); ++s)
+				if (!approxEqual(refState[s], trimState[s], 1E-3))
+				{
+					std::cout << "Trim state " << s << " differs from the reference truncation for " << nrQubits << " qubits" << std::endl;
+					std::cout << "Reference: " << refState[s] << " vs Trim: " << trimState[s] << std::endl;
+					return false;
+				}
+
+			// trimming again should be a no-op since all bonds are already within the limit
+			mpsTrim.Trim();
+			const auto trimState2 = mpsTrim.getRegisterStorage();
+			for (int s = 0; s < trimState.size(); ++s)
+				if (!approxEqual(trimState[s], trimState2[s], 1E-3))
+				{
+					std::cout << "Trim is not idempotent for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -835,7 +930,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return StateSimulationTest() && checkExpectationValuesMPS();
+	return StateSimulationTest() && checkExpectationValuesMPS() && TrimTestMPS();
 }
 
 

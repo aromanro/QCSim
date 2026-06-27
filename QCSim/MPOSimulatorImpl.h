@@ -46,6 +46,27 @@ namespace QC {
 					ApplyGate(gate);
 			}
 
+			// Walks over the chain and, wherever a bond dimension is bigger than the currently set
+			// bond dimension limit, contracts the two neighbour sites and re-splits them with a
+			// truncated SVD to bring the bond dimension down to the limit. No gate is applied.
+			// Useful after lowering the bond dimension limit with setLimitBondDimension once the
+			// bonds have already grown beyond the new limit.
+			void Trim() override
+			{
+				if (!limitSize) return; // nothing to trim against
+
+				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
+				{
+					if (lambdas[qubit1].size() <= chi) continue;
+
+					// contract the two neighbour sites (no gate is applied), then re-split with a truncated SVD
+					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+					const MatrixClass thetaMatrix = ReshapeTheta(theta);
+
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+				}
+			}
+
 			void ApplyOperator(const Gates::AppliedGate<MatrixClass>& op) override
 			{
 				ApplyOperator(op, op.getQubit1(), op.getQubit2());
@@ -207,6 +228,14 @@ namespace QC {
 				// (4 * leftBond) x (4 * rightBond) matrix, the physical dimension per site is 4 = 2 (ket) x 2 (bra)
 				const MatrixClass thetaMatrix = ReshapeThetaBar(thetaBar);
 
+				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
+			}
+
+			// SVD the (already built) theta matrix, truncate it according to the bond dimension / entanglement
+			// limits and write back the two new site tensors and the lambda in between.
+			// Shared by the two qubit gate application and by Trim.
+			void DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2)
+			{
 #ifdef USE_FAST_SVD
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
 #endif
@@ -395,6 +424,38 @@ namespace QC {
 								for (IndexType r = 0; r < R; ++r)
 									for (IndexType l = 0; l < L; ++l)
 										thetaMatrix(p1L + l, p2R + r) = theta(l, r, ket1, ket2, bra1, bra2);
+							}
+					}
+
+				return thetaMatrix;
+			}
+
+			// reshapes the raw two-site contraction (leg order leftBond, ket1, bra1, ket2, bra2, rightBond,
+			// as produced by ContractTwoQubits) into a (4 * leftBond) x (4 * rightBond) matrix for the SVD.
+			// Same target layout as ReshapeThetaBar (physical index per site p = ket * 2 + bra), but for the
+			// no-gate leg order used by Trim.
+			static MatrixClass ReshapeTheta(const Eigen::Tensor<std::complex<double>, 6>& theta)
+			{
+				// theta dims: 0=leftBond, 1=ket1, 2=bra1, 3=ket2, 4=bra2, 5=rightBond
+				const IndexType L = theta.dimension(0);
+				const IndexType R = theta.dimension(5);
+
+				assert(L > 0);
+				assert(R > 0);
+
+				MatrixClass thetaMatrix(4 * L, 4 * R);
+
+				for (IndexType ket1 = 0; ket1 < 2; ++ket1)
+					for (IndexType bra1 = 0; bra1 < 2; ++bra1)
+					{
+						const IndexType p1L = (ket1 * 2 + bra1) * L;
+						for (IndexType ket2 = 0; ket2 < 2; ++ket2)
+							for (IndexType bra2 = 0; bra2 < 2; ++bra2)
+							{
+								const IndexType p2R = (ket2 * 2 + bra2) * R;
+								for (IndexType r = 0; r < R; ++r)
+									for (IndexType l = 0; l < L; ++l)
+										thetaMatrix(p1L + l, p2R + r) = theta(l, ket1, bra1, ket2, bra2, r);
 							}
 					}
 

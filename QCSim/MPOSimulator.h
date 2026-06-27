@@ -109,6 +109,11 @@ namespace QC
 				impl.dontLimitEntanglement();
 			}
 
+			void Trim() override
+			{
+				impl.Trim();
+			}
+
 			MatrixClass getDensityMatrix() const override
 			{
 				const MatrixClass rhoInternal = impl.getDensityMatrix();

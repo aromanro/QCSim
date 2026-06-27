@@ -888,6 +888,86 @@ static bool StateSaveRestoreTestMPO()
 	return true;
 }
 
+static bool TrimTestMPO()
+{
+	std::cout << "\nMPO simulator Trim test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(15, 30);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	// a no-op two qubit gate: applying it with truncation enabled on a bond does exactly what Trim
+	// does on that bond (contract the two neighbour sites, apply no gate, SVD with truncation)
+	const QC::Gates::TwoQubitsGate<> identityTwoQubitGate(Eigen::MatrixXcd::Identity(4, 4));
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		for (int t = 0; t < 5; ++t)
+		{
+			// build a random circuit so it can be replayed identically on several simulators
+			std::vector<QC::Gates::AppliedGate<>> circuit;
+			const int lim = nrGatesDistr(gen);
+			for (int i = 0; i < lim; ++i)
+			{
+				const int gate = gateDistr(gen);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = twoQubitsGate ? qubit1 + 1 : qubit1;
+
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				circuit.emplace_back(gates[gate]->getRawOperatorMatrix(), qubit1, qubit2);
+			}
+
+			const int chi = 1 + (t % 4); // trim down to a bond dimension between 1 and 4
+
+			// reference: apply the circuit without any limit (exact MPO), then lower the limit and
+			// truncate with the no-op two qubit gate exactly the bonds Trim would touch, that is
+			// only the ones that exceed the (newly lowered) limit. Trimming a bond that is already
+			// within the limit is a state preserving re-gauging that would still change the result
+			// of subsequent truncations, so the reference must skip those bonds just like Trim does.
+			QC::TensorNetworks::MPOSimulatorImpl mpoRef(nrQubits);
+			for (const auto& g : circuit) mpoRef.ApplyGate(g);
+			mpoRef.setLimitBondDimension(chi);
+			const auto refBondDims = mpoRef.getBondDimensions();
+			for (int q = 0; q < nrQubits - 1; ++q)
+				if (refBondDims[q] > chi)
+					mpoRef.ApplyGate(identityTwoQubitGate, q, q + 1);
+
+			// the one under test: apply the same circuit without any limit, then lower the limit and Trim
+			QC::TensorNetworks::MPOSimulatorImpl mpoTrim(nrQubits);
+			for (const auto& g : circuit) mpoTrim.ApplyGate(g);
+			mpoTrim.setLimitBondDimension(chi);
+			mpoTrim.Trim();
+
+			// after trimming, every bond dimension must be within the (newly lowered) limit
+			for (const auto bd : mpoTrim.getBondDimensions())
+				if (bd > chi)
+				{
+					std::cout << "Trim did not reduce a bond dimension to the limit (" << bd << " > " << chi << ") for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+
+			// Trim must produce the same density matrix as the equivalent no-op two qubit gate truncations
+			if (!CompareDensityMatrices(mpoRef.getDensityMatrix(), mpoTrim.getDensityMatrix(), nrQubits))
+			{
+				std::cout << "Trim density matrix differs from the reference truncation for " << nrQubits << " qubits" << std::endl;
+				return false;
+			}
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
@@ -903,5 +983,6 @@ bool MPOSimulatorTests()
 		CompressionLosslessTestMPO() &&
 		CompressionTruncationTestMPO() &&
 		StateSaveRestoreTestMPO() &&
-		MeasurementsTestMPO();
+		MeasurementsTestMPO() &&
+		TrimTestMPO();
 }

@@ -121,6 +121,11 @@ namespace QC
 				impl.dontLimitEntanglement();
 			}
 
+			void Trim() override
+			{
+				impl.Trim();
+			}
+
 			VectorClass getRegisterStorage() const override
 			{
 				const auto statev = impl.getRegisterStorage();
