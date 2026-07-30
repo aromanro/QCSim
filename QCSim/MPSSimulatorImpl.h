@@ -431,13 +431,14 @@ namespace QC {
 				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
 				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
-				IndexType szm = computeWithJacobi ? jacobiSVD.nonzeroSingularValues() : SVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
+				// or SvaluesFull.size() for tests
+				IndexType szm = limitEntanglement ? (computeWithJacobi ? jacobiSVD.rank() : SVD.rank()) : (computeWithJacobi ? jacobiSVD.nonzeroSingularValues() : SVD.nonzeroSingularValues());
 #else
 				const MatrixClass& UmatrixFull = jacobiSVD.matrixU();
 				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
 				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
 
-				IndexType szm = jacobiSVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
+				IndexType szm = limitEntanglement ? jacobiSVD.rank() : jacobiSVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
 #endif
 
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
