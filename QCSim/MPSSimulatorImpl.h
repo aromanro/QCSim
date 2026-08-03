@@ -788,7 +788,7 @@ namespace QC {
 			}
 
 #ifdef USE_FAST_SVD
-			constexpr static IndexType blockSizeLimit = 24;
+			constexpr static IndexType blockSizeLimit = 64;
 			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
 #endif
 			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
