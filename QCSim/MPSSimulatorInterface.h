@@ -41,6 +41,7 @@ namespace QC {
 			virtual void dontLimitBondDimension() = 0;
 			virtual void dontLimitEntanglement() = 0;
 			virtual void Trim() = 0;
+			virtual void ReCanonicalize() = 0;
 			virtual VectorClass getRegisterStorage() const = 0;
 			virtual void print() const = 0;
 			virtual void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) = 0;

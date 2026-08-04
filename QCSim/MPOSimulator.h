@@ -114,6 +114,11 @@ namespace QC
 				impl.Trim();
 			}
 
+			void ReCanonicalize() override
+			{
+				impl.ReCanonicalize();
+			}
+
 			MatrixClass getDensityMatrix() const override
 			{
 				const MatrixClass rhoInternal = impl.getDensityMatrix();

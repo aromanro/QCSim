@@ -126,6 +126,11 @@ namespace QC
 				impl.Trim();
 			}
 
+			void ReCanonicalize() override
+			{
+				impl.ReCanonicalize();
+			}
+
 			VectorClass getRegisterStorage() const override
 			{
 				const auto statev = impl.getRegisterStorage();

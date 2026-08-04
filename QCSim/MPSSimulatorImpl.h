@@ -76,6 +76,24 @@ namespace QC {
 				}
 			}
 
+			void ReCanonicalize() override
+			{
+				// left to right
+				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()) - 1; ++qubit1)
+				{
+					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+					const MatrixClass thetaMatrix = ReshapeTheta(theta);
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+				}
+				// right to left
+				for (IndexType qubit1 = static_cast<IndexType>(lambdas.size()) - 1; qubit1 > 0; --qubit1)
+				{
+					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1 - 1);
+					const MatrixClass thetaMatrix = ReshapeTheta(theta);
+					DecomposeAndSetGammas(thetaMatrix, qubit1 - 1, qubit1);
+				}
+			}
+
 			// false if measured 0, true if measured 1
 			bool MeasureQubit(IndexType qubit) override
 			{

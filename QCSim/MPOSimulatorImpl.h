@@ -67,6 +67,24 @@ namespace QC {
 				}
 			}
 
+			void ReCanonicalize() override
+			{
+				// left to right
+				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
+				{
+					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+					const MatrixClass thetaMatrix = ReshapeTheta(theta);
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+				}
+				// right to left
+				for (IndexType qubit1 = static_cast<IndexType>(lambdas.size()) - 1; qubit1 >= 0; --qubit1)
+				{
+					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+					const MatrixClass thetaMatrix = ReshapeTheta(theta);
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+				}
+			}
+
 			void ApplyOperator(const Gates::AppliedGate<MatrixClass>& op) override
 			{
 				ApplyOperator(op, op.getQubit1(), op.getQubit2());
