@@ -39,6 +39,8 @@ namespace QC
 				//const std::vector<IndexType>&,
 				const std::vector<IndexType>&)>;
 
+			using BondDimensionCallback = std::function<void(const std::vector<IndexType>&)>;
+
 			static double ClampProbability(double probability)
 			{
 				constexpr double tolerance = 1E-12;
@@ -222,6 +224,11 @@ namespace QC
 				}
 
 				impl.ApplyGate(gate, qubit1, qubit2);
+
+				if (bondDimensionCallback && gate.getQubitsNumber() > 1)
+				{
+					bondDimensionCallback(impl.getBondDimensions());
+				}
 			}
 
 			void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
@@ -379,6 +386,7 @@ namespace QC
 
 				sim->useOptimalMeetingPosition = useOptimalMeetingPosition;
 				sim->meetingPositionCallback = meetingPositionCallback;
+				sim->bondDimensionCallback = bondDimensionCallback;
 
 				if (savedState) {
 					auto simState = std::static_pointer_cast<MPSSimulatorState>(savedState);
@@ -408,6 +416,14 @@ namespace QC
 			void SetMeetingPositionCallback(MeetingPositionCallback callback)
 			{
 				meetingPositionCallback = std::move(callback);
+			}
+
+			// Set a callback for external lookahead-based bond dimension.
+			// When set, this takes priority over both the heuristic and the
+			// local optimizer.  Pass nullptr to clear.
+			void SetBondDimensionCallback(BondDimensionCallback callback)
+			{
+				bondDimensionCallback = std::move(callback);
 			}
 
 			// Get actual bond dimensions from the underlying simulator
@@ -715,6 +731,8 @@ namespace QC
 			bool useOptimalMeetingPosition = true;
 
 			MeetingPositionCallback meetingPositionCallback;
+			BondDimensionCallback bondDimensionCallback;
+
 
 			std::shared_ptr<MPSSimulatorStateInterface> savedState;
 		};
