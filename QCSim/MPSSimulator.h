@@ -226,9 +226,7 @@ namespace QC
 				impl.ApplyGate(gate, qubit1, qubit2);
 
 				if (bondDimensionCallback && gate.getQubitsNumber() > 1)
-				{
 					bondDimensionCallback(impl.getBondDimensions());
-				}
 			}
 
 			void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
@@ -242,7 +240,10 @@ namespace QC
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
 					throw std::invalid_argument("Qubit index out of bounds");
 
-				return impl.MeasureQubit(qubitsMap[qubit]);
+				const auto result = impl.MeasureQubit(qubitsMap[qubit]);
+				if (bondDimensionCallback)
+					bondDimensionCallback(impl.getBondDimensions());
+				return result;
 			}
 
 			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
@@ -256,6 +257,9 @@ namespace QC
 				std::unordered_map<IndexType, bool> res;
 				for (const auto& [qubit, val] : measuredQubits)
 					res[qubitsMapInv[qubit]] = val;
+
+				if (bondDimensionCallback)
+					bondDimensionCallback(impl.getBondDimensions());
 
 				return res;
 			}
@@ -474,6 +478,9 @@ namespace QC
 					qubitsMapInv[toQubitReal] = logicalQubit;
 					qubitsMapInv[movingQubitReal] = currentLogicalPosQubit;
 
+					if (bondDimensionCallback)
+						bondDimensionCallback(impl.getBondDimensions());
+
 					handledQubits.insert(logicalQubit);
 					if (handledQubits.size() == qubits.size())
 						break;
@@ -593,6 +600,9 @@ namespace QC
 					qubitsMap[movingQubitInv] = toQubitReal;
 					qubitsMapInv[toQubitReal] = movingQubitInv;
 
+					if (bondDimensionCallback)
+						bondDimensionCallback(impl.getBondDimensions());
+
 					movingQubitReal = toQubitReal;
 				} while (movingQubitReal != targetQubitReal);
 
@@ -661,6 +671,9 @@ namespace QC
 						qubitsMap[qubit1] = toReal;
 						qubitsMapInv[toReal] = qubit1;
 
+						if (bondDimensionCallback)
+							bondDimensionCallback(impl.getBondDimensions());
+
 						movingReal = toReal;
 					}
 				}
@@ -680,6 +693,9 @@ namespace QC
 
 						qubitsMap[qubit2] = toReal;
 						qubitsMapInv[toReal] = qubit2;
+
+						if (bondDimensionCallback)
+							bondDimensionCallback(impl.getBondDimensions());
 
 						movingReal = toReal;
 					}
