@@ -290,6 +290,34 @@ namespace QC
 				return res;
 			}
 
+			std::unordered_map<IndexType, bool> MeasureNoCollapse() override
+			{
+				const auto measuredQubits = impl.MeasureNoCollapse();
+
+				std::unordered_map<IndexType, bool> res;
+				for (const auto& [qubit, val] : measuredQubits)
+					res[qubitsMapInv[qubit]] = val;
+
+				return res;
+			}
+
+			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
+			{
+				if (qubits.empty()) return {};
+
+				std::set<IndexType> mappedQubits;
+				for (const auto qubit : qubits)
+					mappedQubits.insert(qubitsMap[qubit]);
+
+				const auto measuredQubits = impl.MeasureNoCollapse(mappedQubits);
+
+				std::unordered_map<IndexType, bool> res;
+				for (const auto& [qubit, val] : measuredQubits)
+					res[qubitsMapInv[qubit]] = val;
+
+				return res;
+			}
+
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))

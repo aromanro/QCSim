@@ -1640,6 +1640,128 @@ static bool MeasurementVsDensityMatrixAndThrowsTestMPO()
 	return true;
 }
 
+// samples the full computational basis state distribution using the MPO MeasureNoCollapse (which does
+// not collapse the state, so the circuit is executed only once) and compares the empirical histogram
+// against the DensityMatrix exact populations for the same prepared state
+static bool SamplingNoCollapseTestMPO()
+{
+	std::cout << "\nMPO simulator - MeasureNoCollapse sampling against the DensityMatrix populations" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	const int nrSamples = 100000;
+
+	for (int nrQubits = 2; nrQubits < 5; ++nrQubits)
+	{
+		// fixed random circuit prepared on both simulators, plus some noise so the state is mixed
+		const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, 25);
+
+		QC::DensityMatrix<> dm(nrQubits);
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		for (const auto& gate : circuit)
+		{
+			dm.ApplyGate(gate);
+			mpo.ApplyGate(gate);
+		}
+
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		const int noisyQubit = qubitDistr(gen);
+		dm.ApplyDepolarizingNoise(noisyQubit, 0.3);
+		mpo.ApplyDepolarizingNoise(noisyQubit, 0.3);
+
+		// exact populations from the DensityMatrix reference
+		const size_t nrBasisStates = dm.getNrBasisStates();
+		std::vector<double> expected(nrBasisStates);
+		for (size_t s = 0; s < nrBasisStates; ++s)
+			expected[s] = dm.getBasisStateProbability(s);
+
+		// sample the MPO state without collapsing it (the circuit is not re-run)
+		std::vector<int> counts(nrBasisStates, 0);
+		for (int m = 0; m < nrSamples; ++m)
+		{
+			const auto measured = mpo.MeasureNoCollapse();
+
+			size_t state = 0;
+			for (const auto& [qubit, val] : measured)
+				if (val) state |= (1ULL << qubit);
+
+			++counts[state];
+		}
+
+		for (size_t s = 0; s < nrBasisStates; ++s)
+		{
+			const double sampled = static_cast<double>(counts[s]) / nrSamples;
+			if (std::abs(sampled - expected[s]) > 0.02)
+			{
+				std::cout << "MPO sampling mismatch for state " << s << " with " << nrQubits << " qubits: "
+					<< expected[s] << " (DensityMatrix) vs " << sampled << " (MPO sampled)" << std::endl;
+				return false;
+			}
+		}
+
+		// subset sampling: sample only a subset of the qubits and compare against the exact marginal
+		{
+			std::set<Eigen::Index> subset;
+			for (int q = 0; q < nrQubits; q += 2) // qubits 0, 2, 4, ...
+				subset.insert(static_cast<Eigen::Index>(q));
+
+			// exact marginal populations over the subset (indexed by the packed subset outcome)
+			const size_t subsetStates = 1ULL << subset.size();
+			std::vector<double> expectedSubset(subsetStates, 0.);
+			for (size_t s = 0; s < nrBasisStates; ++s)
+			{
+				size_t idx = 0;
+				int bit = 0;
+				for (const Eigen::Index q : subset)
+				{
+					if (s & (1ULL << q)) idx |= (1ULL << bit);
+					++bit;
+				}
+				expectedSubset[idx] += expected[s];
+			}
+
+			std::vector<int> subsetCounts(subsetStates, 0);
+			for (int m = 0; m < nrSamples; ++m)
+			{
+				const auto measured = mpo.MeasureNoCollapse(subset);
+				if (measured.size() != subset.size())
+				{
+					std::cout << "MPO subset MeasureNoCollapse returned the wrong number of qubits for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+
+				size_t idx = 0;
+				int bit = 0;
+				for (const Eigen::Index q : subset)
+				{
+					if (measured.at(q)) idx |= (1ULL << bit);
+					++bit;
+				}
+				++subsetCounts[idx];
+			}
+
+			for (size_t s = 0; s < subsetStates; ++s)
+			{
+				const double sampled = static_cast<double>(subsetCounts[s]) / nrSamples;
+				if (std::abs(sampled - expectedSubset[s]) > 0.02)
+				{
+					std::cout << "MPO subset sampling mismatch for outcome " << s << " with " << nrQubits << " qubits: "
+						<< expectedSubset[s] << " (DensityMatrix) vs " << sampled << " (MPO sampled)" << std::endl;
+					return false;
+				}
+			}
+		}
+
+		std::cout << ".";
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
@@ -1664,5 +1786,6 @@ bool MPOSimulatorTests()
 		PauliExpectationVsDensityMatrixMPO() &&
 		InvariantsTestMPO() &&
 		DecoratorVsImplTestMPO() &&
-		MeasurementVsDensityMatrixAndThrowsTestMPO();
+		MeasurementVsDensityMatrixAndThrowsTestMPO() &&
+		SamplingNoCollapseTestMPO();
 }

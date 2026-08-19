@@ -176,6 +176,14 @@ namespace QC {
 			virtual std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) = 0;
 			virtual double GetProbability(IndexType qubit, bool zeroVal = true) const = 0;
 
+			// samples a full computational basis outcome from the density matrix populations without
+			// collapsing the state - useful for repeated sampling that avoids re-executing the circuit.
+			// The map keys are the qubit indices and the values are the sampled measurement results.
+			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse() = 0;
+
+			// samples only the given subset of qubits without collapsing the state.
+			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) = 0;
+
 			// rho is a density matrix, so the basis-state 'amplitude' is a matrix element <row|rho|col>
 			virtual std::complex<double> getBasisStateMatrixElement(size_t row, size_t col) const = 0;
 			virtual std::complex<double> getBasisStateMatrixElement(const std::vector<bool>& row, const std::vector<bool>& col) const = 0;

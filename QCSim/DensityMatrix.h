@@ -8,6 +8,8 @@
 #include <vector>
 #include <complex>
 #include <utility>
+#include <set>
+#include <unordered_map>
 
 // A density-matrix quantum computing simulator.
 //
@@ -275,6 +277,42 @@ namespace QC {
 				for (size_t j = 0; j < NrBasisStates; ++j)
 					if (((i & mask) == 0) != ((j & mask) == 0))
 						rho(i, j) = 0;
+		}
+
+		// sample a full computational basis outcome from the diagonal populations without collapsing
+		// the state - useful for repeated sampling that avoids re-executing the circuit each time.
+		// The returned value is the measured basis state (bit k corresponds to qubit k).
+		size_t MeasureNoCollapse()
+		{
+			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probability
+			double accum = 0;
+			size_t state = NrBasisStates - 1;
+			for (size_t i = 0; i < NrBasisStates; ++i)
+			{
+				accum += rho(i, i).real();
+				if (prob <= accum)
+				{
+					state = i;
+					break;
+				}
+			}
+
+			return state;
+		}
+
+		// sample a subset of qubits from the diagonal populations without collapsing the state.
+		// Internally a full basis outcome is drawn from the exact marginal distribution and only the
+		// requested qubits are reported. The map keys are the qubit indices, the values the outcomes.
+		std::unordered_map<size_t, bool> MeasureNoCollapse(const std::set<size_t>& qubits)
+		{
+			std::unordered_map<size_t, bool> res;
+			if (qubits.empty()) return res;
+
+			const size_t state = MeasureNoCollapse();
+			for (const size_t qubit : qubits)
+				res[qubit] = (state & (1ULL << qubit)) != 0;
+
+			return res;
 		}
 
 		// ---- diagnostics ----

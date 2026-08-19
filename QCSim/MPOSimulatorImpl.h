@@ -213,15 +213,6 @@ namespace QC {
 				gammas = std::move(resultGammas);
 			}
 
-			static double ValidMeasurementProbability(double probability)
-			{
-				constexpr double tolerance = 1E-9;
-				if (probability < -tolerance || probability > 1. + tolerance)
-					std::cerr << "Invalid measurement probability produced by the MPO state" << std::endl;
-
-				return ClampProbability(std::clamp(probability, 0., 1.));
-			}
-
 			void ApplyTwoQubitGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1)
 			{
 				// contract the tensors for the two qubits (folding in the corresponding lambdas)

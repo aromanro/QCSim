@@ -674,6 +674,135 @@ static bool DensityMatrixExpectationExtrasTest()
 	return true;
 }
 
+// samples the full computational basis state distribution using MeasureNoCollapse (which does not
+// collapse the state, so the circuit only needs to be executed once) and compares the empirical
+// histogram against the exact diagonal populations of the density matrix
+static bool DensityMatrixSamplingTest()
+{
+	std::cout << "\nDensity matrix simulator - MeasureNoCollapse sampling against the diagonal populations" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	DM_FillOneQubitGates(gates);
+	DM_FillTwoQubitGates(gates);
+
+	std::uniform_int_distribution nrGatesDistr(15, 25);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	const int nrSamples = 100000;
+
+	for (int nrQubits = 1; nrQubits < 4; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, std::max(0, nrQubits - 2));
+
+		// prepare a fixed random state (unitary circuit plus some noise so it is mixed)
+		QC::DensityMatrix<> dm(nrQubits);
+		const int lim = nrGatesDistr(gen);
+		for (int i = 0; i < lim; ++i)
+		{
+			const int g = gateDistr(gen);
+			const bool twoQubitsGate = gates[g]->getQubitsNumber() == 2;
+			if (twoQubitsGate && nrQubits < 2) continue;
+
+			int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+			int qubit2 = qubit1 + 1;
+			if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+			dm.ApplyGate(*gates[g], qubit1, qubit2);
+		}
+		dm.ApplyDepolarizingNoise(qubitDistr(gen), 0.3);
+
+		// exact populations
+		const size_t nrBasisStates = dm.getNrBasisStates();
+		std::vector<double> expected(nrBasisStates);
+		for (size_t s = 0; s < nrBasisStates; ++s)
+			expected[s] = dm.getBasisStateProbability(s);
+
+		// the density matrix is not changed by MeasureNoCollapse, so we sample from the same state
+		std::vector<int> counts(nrBasisStates, 0);
+		for (int m = 0; m < nrSamples; ++m)
+			++counts[dm.MeasureNoCollapse()];
+
+		for (size_t s = 0; s < nrBasisStates; ++s)
+		{
+			const double sampled = static_cast<double>(counts[s]) / nrSamples;
+			if (std::abs(sampled - expected[s]) > 0.02)
+			{
+				std::cout << "Sampling mismatch for state " << s << " with " << nrQubits << " qubits: "
+					<< expected[s] << " (exact) vs " << sampled << " (sampled)" << std::endl;
+				return false;
+			}
+		}
+
+		// MeasureNoCollapse must not have changed the state
+		for (size_t s = 0; s < nrBasisStates; ++s)
+			if (std::abs(dm.getBasisStateProbability(s) - expected[s]) > 1E-12)
+			{
+				std::cout << "MeasureNoCollapse changed the state for " << nrQubits << " qubits" << std::endl;
+				return false;
+			}
+
+		// subset sampling: sample only a subset of the qubits and compare against the exact marginal
+		{
+			std::set<size_t> subset;
+			for (int q = 0; q < nrQubits; q += 2) // qubits 0, 2, 4, ...
+				subset.insert(static_cast<size_t>(q));
+
+			// exact marginal populations over the subset (indexed by the packed subset outcome)
+			const size_t subsetStates = 1ULL << subset.size();
+			std::vector<double> expectedSubset(subsetStates, 0.);
+			for (size_t s = 0; s < nrBasisStates; ++s)
+			{
+				size_t idx = 0;
+				int bit = 0;
+				for (const size_t q : subset)
+				{
+					if (s & (1ULL << q)) idx |= (1ULL << bit);
+					++bit;
+				}
+				expectedSubset[idx] += expected[s];
+			}
+
+			std::vector<int> subsetCounts(subsetStates, 0);
+			for (int m = 0; m < nrSamples; ++m)
+			{
+				const auto measured = dm.MeasureNoCollapse(subset);
+				if (measured.size() != subset.size())
+				{
+					std::cout << "Subset MeasureNoCollapse returned the wrong number of qubits for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+
+				size_t idx = 0;
+				int bit = 0;
+				for (const size_t q : subset)
+				{
+					if (measured.at(q)) idx |= (1ULL << bit);
+					++bit;
+				}
+				++subsetCounts[idx];
+			}
+
+			for (size_t s = 0; s < subsetStates; ++s)
+			{
+				const double sampled = static_cast<double>(subsetCounts[s]) / nrSamples;
+				if (std::abs(sampled - expectedSubset[s]) > 0.02)
+				{
+					std::cout << "Subset sampling mismatch for outcome " << s << " with " << nrQubits << " qubits: "
+						<< expectedSubset[s] << " (exact) vs " << sampled << " (sampled)" << std::endl;
+					return false;
+				}
+			}
+		}
+
+		std::cout << ".";
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
 // smallest eigenvalue of a Hermitian matrix (used to check positive semidefiniteness)
 static double DM_SmallestEigenvalue(const Eigen::MatrixXcd& rho)
 {
@@ -846,5 +975,5 @@ bool DensityMatrixTests()
 	std::cout << "\nDensity matrix simulator tests" << std::endl;
 
 	return DensityMatrixUnitaryTest() && DensityMatrixChannelsTest() && DensityMatrixMeasurementTest() && DensityMatrixPauliExpectationTest() &&
-		DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() && DensityMatrixExpectationExtrasTest();
+		DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() && DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest();
 }

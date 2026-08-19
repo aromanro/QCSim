@@ -321,7 +321,36 @@ namespace QC {
 				return ClampProbability((num / tr).real());
 			}
 
-			// the basis state 'amplitude' for a density matrix is the matrix element <row|rho|col>
+			// samples a full computational basis outcome from the density matrix populations without
+			// collapsing the state, by sampling qubit after qubit conditioned on the previous outcomes
+			std::unordered_map<IndexType, bool> MeasureNoCollapse() override
+			{
+				const IndexType n = static_cast<IndexType>(gammas.size());
+				if (n == 0) return {};
+
+				return MeasureNoCollapseUpTo(n - 1);
+			}
+
+			// samples a subset of qubits without collapsing the state. As with the MPS simulator, the
+			// sampling proceeds along the chain up to the largest requested qubit; only the requested
+			// qubits are reported. The map keys are the qubit indices, the values the outcomes.
+			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
+			{
+				if (qubits.empty()) return {};
+
+				const auto sampled = MeasureNoCollapseUpTo(*qubits.crbegin());
+
+				std::unordered_map<IndexType, bool> res;
+				for (const IndexType qubit : qubits)
+				{
+					const auto it = sampled.find(qubit);
+					if (it != sampled.end())
+						res[qubit] = it->second;
+				}
+
+				return res;
+			}
+
 			std::complex<double> getBasisStateMatrixElement(size_t row, size_t col) const override
 			{
 				const size_t nrQubits = getNrQubits();
@@ -450,6 +479,66 @@ namespace QC {
 				if (probability > 1. && probability < 1. + tolerance) return 1.;
 
 				return probability;
+			}
+
+			static double ValidMeasurementProbability(double probability)
+			{
+				constexpr double tolerance = 1E-9;
+				if (probability < -tolerance || probability > 1. + tolerance)
+					std::cerr << "Invalid measurement probability produced by the MPO state" << std::endl;
+
+				return ClampProbability(std::clamp(probability, 0., 1.));
+			}
+
+			// samples qubits [0, limit] one after the other, each conditioned on the previous outcomes,
+			// without collapsing the state; the remaining qubits are traced out. Shared by both the
+			// full and the subset MeasureNoCollapse overloads.
+			std::unordered_map<IndexType, bool> MeasureNoCollapseUpTo(IndexType limit)
+			{
+				std::unordered_map<IndexType, bool> res;
+
+				const IndexType n = static_cast<IndexType>(gammas.size());
+				if (n == 0) return res;
+
+				if (limit < 0) limit = 0;
+				if (limit >= n) limit = n - 1;
+
+				const std::complex<double> tr = Trace();
+				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
+					return res;
+
+				std::vector<int> outcomes(n, 0);
+
+				// joint probability that qubits [0, upTo) have the outcomes stored in 'outcomes'
+				// (the remaining qubits are traced out)
+				auto jointProbability = [this, &outcomes, tr](IndexType upTo) -> double {
+					const std::complex<double> num = ContractChain([this, &outcomes, upTo](IndexType q) {
+						if (q < upTo)
+							return SiteSelectMatrix(q, outcomes[q], outcomes[q]);
+						return SiteTraceMatrix(q);
+					});
+
+					return ClampProbability((num / tr).real());
+				};
+
+				double priorProb = 1.;
+				for (IndexType qubit = 0; qubit <= limit; ++qubit)
+				{
+					// conditional probability of measuring 0 on the current qubit given the previous outcomes
+					outcomes[qubit] = 0;
+					const double joint0 = jointProbability(qubit + 1);
+					const double prob0 = ValidMeasurementProbability(priorProb > std::numeric_limits<double>::epsilon() ? joint0 / priorProb : 0.);
+
+					const double rndVal = 1. - uniformZeroOne(rng);
+					const bool zeroMeasured = rndVal < prob0;
+
+					outcomes[qubit] = zeroMeasured ? 0 : 1;
+					res[qubit] = !zeroMeasured;
+
+					priorProb *= zeroMeasured ? prob0 : 1. - prob0;
+				}
+
+				return res;
 			}
 
 			static void SetSiteToBasis(TensorType& gamma, int basis)
