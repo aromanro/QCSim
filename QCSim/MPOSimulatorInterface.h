@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <cmath>
 #include <vector>
 #include <memory>
 #include <complex>
@@ -109,6 +110,68 @@ namespace QC {
 			virtual void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) = 0;
 			virtual void ApplyKrausOperators(const std::vector<MatrixClass>& ops, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
 
+			// ---- predefined single qubit noise channels ----
+			//
+			// Convenience wrappers over ApplyKrausOperators, expressed with the standard Kraus
+			// operators of each channel. They are trace preserving (up to MPO truncation error).
+
+			// bit flip: rho -> (1 - p) rho + p X rho X
+			void ApplyBitFlipNoise(IndexType qubit, double p)
+			{
+				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliX() }, qubit);
+			}
+
+			// phase flip: rho -> (1 - p) rho + p Z rho Z
+			void ApplyPhaseFlipNoise(IndexType qubit, double p)
+			{
+				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliZ() }, qubit);
+			}
+
+			// depolarizing: rho -> (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
+			void ApplyDepolarizingNoise(IndexType qubit, double p)
+			{
+				const double s = std::sqrt(p / 3.);
+				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), s * NoisePauliX(), s * NoisePauliY(), s * NoisePauliZ() }, qubit);
+			}
+
+			// amplitude damping (|1> -> |0> relaxation with probability gamma)
+			void ApplyAmplitudeDamping(IndexType qubit, double gamma)
+			{
+				MatrixClass E0 = MatrixClass::Zero(2, 2);
+				E0(0, 0) = 1.;
+				E0(1, 1) = std::sqrt(1. - gamma);
+
+				MatrixClass E1 = MatrixClass::Zero(2, 2);
+				E1(0, 1) = std::sqrt(gamma);
+
+				ApplyKrausOperators({ E0, E1 }, qubit);
+			}
+
+			// phase damping / dephasing, suppresses the off diagonal coherences by lambda = sqrt(1 - gamma)
+			void ApplyPhaseDamping(IndexType qubit, double gamma)
+			{
+				MatrixClass E0 = MatrixClass::Zero(2, 2);
+				E0(0, 0) = 1.;
+				E0(1, 1) = std::sqrt(1. - gamma);
+
+				MatrixClass E1 = MatrixClass::Zero(2, 2);
+				E1(1, 1) = std::sqrt(gamma);
+
+				ApplyKrausOperators({ E0, E1 }, qubit);
+			}
+
+			// reset a qubit to |0>: E0 = |0><0|, E1 = |0><1|
+			void ApplyReset(IndexType qubit)
+			{
+				MatrixClass E0 = MatrixClass::Zero(2, 2);
+				E0(0, 0) = 1.;
+
+				MatrixClass E1 = MatrixClass::Zero(2, 2);
+				E1(0, 1) = 1.;
+
+				ApplyKrausOperators({ E0, E1 }, qubit);
+			}
+
 			virtual bool MeasureQubit(IndexType qubit) = 0;
 			virtual std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) = 0;
 			virtual double GetProbability(IndexType qubit, bool zeroVal = true) const = 0;
@@ -124,6 +187,38 @@ namespace QC {
 
 			virtual std::shared_ptr<MPOSimulatorStateInterface> getState() const = 0;
 			virtual void setState(const std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
+
+		protected:
+			// single-qubit Pauli matrices used to build the predefined noise channels
+			static MatrixClass NoisePauliI()
+			{
+				MatrixClass m = MatrixClass::Identity(2, 2);
+				return m;
+			}
+
+			static MatrixClass NoisePauliX()
+			{
+				MatrixClass m = MatrixClass::Zero(2, 2);
+				m(0, 1) = 1.;
+				m(1, 0) = 1.;
+				return m;
+			}
+
+			static MatrixClass NoisePauliY()
+			{
+				MatrixClass m = MatrixClass::Zero(2, 2);
+				m(0, 1) = std::complex<double>(0., -1.);
+				m(1, 0) = std::complex<double>(0., 1.);
+				return m;
+			}
+
+			static MatrixClass NoisePauliZ()
+			{
+				MatrixClass m = MatrixClass::Zero(2, 2);
+				m(0, 0) = 1.;
+				m(1, 1) = -1.;
+				return m;
+			}
 		};
 
 	}

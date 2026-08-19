@@ -290,6 +290,7 @@
     <ClCompile Include="C:\Work\Blog\QCSim\QCSim\ParadoxesTests.cpp" />
     <ClCompile Include="C:\Work\Blog\QCSim\QCSim\SimulationTests.cpp" />
     <ClCompile Include="QCSim\CliffordTests.cpp" />
+    <ClCompile Include="QCSim\DensityMatrixTests.cpp" />
     <ClCompile Include="QCSim\DeutschJozsaTests.cpp" />
     <ClCompile Include="QCSim\DistributedTests.cpp" />
     <ClCompile Include="QCSim\ExtStabilizerTests.cpp" />
@@ -311,6 +312,7 @@
     <ClInclude Include="QCSim\CheckCHSHInequality.h" />
     <ClInclude Include="QCSim\Clifford.h" />
     <ClInclude Include="QCSim\CoinFlipping.h" />
+    <ClInclude Include="QCSim\DensityMatrix.h" />
     <ClInclude Include="QCSim\DeutschJozsa.h" />
     <ClInclude Include="QCSim\DistributedCNOT.h" />
     <ClInclude Include="QCSim\DraperAdder.h" />

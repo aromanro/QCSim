@@ -673,6 +673,11 @@ namespace QC {
 			return qr;
 		}
 
+		MatrixClass getDensityMatrix() const
+		{
+			return registerStorage * registerStorage.adjoint();
+		}
+
 	protected:
 		inline void CheckQubits(const GateClass& /*gate*/, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
 		{

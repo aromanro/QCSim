@@ -40,6 +40,8 @@ bool MPSSimulatorTests();
 
 bool MPOSimulatorTests();
 
+bool DensityMatrixTests();
+
 bool CliffordSimulatorTests();
 bool CliffordExpectationValuesTests();
 

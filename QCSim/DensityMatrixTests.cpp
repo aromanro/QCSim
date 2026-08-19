@@ -1,0 +1,305 @@
+#include <iostream>
+#include <memory>
+#include <vector>
+
+#include "Tests.h"
+
+#include "QubitRegister.h"
+#include "DensityMatrix.h"
+
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+#define DM_NR_QUBITS_LIMIT 6
+
+static void DM_FillOneQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
+{
+	gates.emplace_back(std::make_shared<QC::Gates::HadamardGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::HyGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SDGGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::TGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::TDGGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::PhaseShiftGate<>>(0.38 * M_PI));
+	gates.emplace_back(std::make_shared<QC::Gates::PauliXGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::PauliYGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::PauliZGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::SquareRootNOTDagGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::RxGate<>>(M_PI / 3));
+	gates.emplace_back(std::make_shared<QC::Gates::RyGate<>>(M_PI / 7));
+	gates.emplace_back(std::make_shared<QC::Gates::RzGate<>>(M_PI / 5));
+	gates.emplace_back(std::make_shared<QC::Gates::UGate<>>(M_PI / 3, M_PI / 5));
+}
+
+static void DM_FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
+{
+	gates.emplace_back(std::make_shared<QC::Gates::SwapGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::iSwapGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::DecrementGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::CNOTGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledYGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledZGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledHadamardGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledPhaseShiftGate<>>(M_PI / 3));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledUGate<>>(M_PI / 3, M_PI / 7));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledRxGate<>>(M_PI / 5));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledRyGate<>>(M_PI / 3));
+	gates.emplace_back(std::make_shared<QC::Gates::ControlledRzGate<>>(M_PI / 7));
+}
+
+// checks that a density matrix equals the outer product |psi><psi| of the statevector simulator
+static bool CompareWithStatevector(const QC::DensityMatrix<>& dm, const QC::QubitRegister<>& reg, int nrQubits, double eps = 1E-9)
+{
+	const Eigen::MatrixXcd expected = reg.getDensityMatrix();
+	const Eigen::MatrixXcd& got = dm.getDensityMatrix();
+
+	if (expected.rows() != got.rows() || expected.cols() != got.cols())
+	{
+		std::cout << "Density matrix dimensions mismatch for " << nrQubits << " qubits" << std::endl;
+		return false;
+	}
+
+	for (int i = 0; i < expected.rows(); ++i)
+		for (int j = 0; j < expected.cols(); ++j)
+			if (!approxEqual(expected(i, j), got(i, j), eps))
+			{
+				std::cout << "Density matrix element (" << i << ", " << j << ") mismatch for " << nrQubits
+					<< " qubits: " << expected(i, j) << " (statevector) vs " << got(i, j) << " (density matrix)" << std::endl;
+				return false;
+			}
+
+	return true;
+}
+
+// applies random unitary circuits to both a statevector simulator and the density matrix simulator
+// and checks that rho == |psi><psi| after every gate
+static bool DensityMatrixUnitaryTest()
+{
+	std::cout << "\nDensity matrix simulator - unitary circuits compared against the statevector simulator" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	DM_FillOneQubitGates(gates);
+	DM_FillTwoQubitGates(gates);
+
+	std::uniform_int_distribution nrGatesDistr(25, 50);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 1; nrQubits < DM_NR_QUBITS_LIMIT; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, std::max(0, nrQubits - 2));
+
+		for (int t = 0; t < 10; ++t)
+		{
+			QC::DensityMatrix<> dm(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+
+			const int lim = nrGatesDistr(gen);
+
+			for (int i = 0; i < lim; ++i)
+			{
+				const int g = gateDistr(gen);
+				const bool twoQubitsGate = gates[g]->getQubitsNumber() == 2;
+				if (twoQubitsGate && nrQubits < 2) continue;
+
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = qubit1 + 1;
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				dm.ApplyGate(*gates[g], qubit1, qubit2);
+				reg.ApplyGate(*gates[g], qubit1, qubit2);
+
+				if (!CompareWithStatevector(dm, reg, nrQubits))
+					return false;
+			}
+
+			// sanity: a pure state must have unit trace and purity 1
+			if (!approxEqual(dm.Trace().real(), 1., 1E-9) || !approxEqual(dm.Trace().imag(), 0., 1E-9))
+			{
+				std::cout << "Trace is not 1 for a pure state: " << dm.Trace() << std::endl;
+				return false;
+			}
+
+			if (!approxEqual(dm.Purity(), 1., 1E-9))
+			{
+				std::cout << "Purity is not 1 for a pure state: " << dm.Purity() << std::endl;
+				return false;
+			}
+
+			if (!dm.IsHermitian(1E-9))
+			{
+				std::cout << "Density matrix is not Hermitian" << std::endl;
+				return false;
+			}
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
+// checks the noise channels: trace preservation, that noise turns a pure state into a mixed one,
+// and the analytic amplitude damping result
+static bool DensityMatrixChannelsTest()
+{
+	std::cout << "\nDensity matrix simulator - quantum channels" << std::endl;
+
+	// amplitude damping on |1>: rho' = [[gamma, 0], [0, 1 - gamma]]
+	{
+		const double gamma = 0.3;
+		QC::DensityMatrix<> dm(1);
+		QC::Gates::PauliXGate<> x;
+		dm.ApplyGate(x, 0); // |0> -> |1>
+		dm.ApplyAmplitudeDamping(0, gamma);
+
+		const auto& rho = dm.getDensityMatrix();
+		if (!approxEqual(rho(0, 0), std::complex<double>(gamma, 0), 1E-9) ||
+			!approxEqual(rho(1, 1), std::complex<double>(1. - gamma, 0), 1E-9) ||
+			!approxEqual(rho(0, 1), std::complex<double>(0, 0), 1E-9) ||
+			!approxEqual(rho(1, 0), std::complex<double>(0, 0), 1E-9))
+		{
+			std::cout << "Amplitude damping result is wrong:\n" << rho << std::endl;
+			return false;
+		}
+	}
+
+	// dephasing of |+> suppresses the off diagonal coherences while keeping the populations
+	{
+		QC::DensityMatrix<> dm(1);
+		QC::Gates::HadamardGate<> h;
+		dm.ApplyGate(h, 0); // |+>
+
+		dm.ApplyPhaseDamping(0, 1.0); // full dephasing
+
+		const auto& rho = dm.getDensityMatrix();
+		if (!approxEqual(rho(0, 0), std::complex<double>(0.5, 0), 1E-9) ||
+			!approxEqual(rho(1, 1), std::complex<double>(0.5, 0), 1E-9) ||
+			!approxEqual(rho(0, 1), std::complex<double>(0, 0), 1E-9) ||
+			!approxEqual(rho(1, 0), std::complex<double>(0, 0), 1E-9))
+		{
+			std::cout << "Full dephasing result is wrong:\n" << rho << std::endl;
+			return false;
+		}
+
+		if (approxEqual(dm.Purity(), 1., 1E-9))
+		{
+			std::cout << "Dephased state should be mixed but purity is 1" << std::endl;
+			return false;
+		}
+	}
+
+	// depolarizing, bit flip and phase flip must all preserve the trace
+	{
+		std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> oneQubitGates;
+		DM_FillOneQubitGates(oneQubitGates);
+
+		std::uniform_int_distribution gateDistr(0, static_cast<int>(oneQubitGates.size()) - 1);
+
+		for (int nrQubits = 1; nrQubits < 4; ++nrQubits)
+		{
+			std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+
+			QC::DensityMatrix<> dm(nrQubits);
+
+			for (int i = 0; i < 20; ++i)
+			{
+				const int q = qubitDistr(gen);
+				dm.ApplyGate(*oneQubitGates[gateDistr(gen)], q);
+				dm.ApplyDepolarizingNoise(q, 0.1);
+				dm.ApplyBitFlipNoise(q, 0.05);
+				dm.ApplyPhaseFlipNoise(q, 0.05);
+
+				if (!approxEqual(dm.Trace().real(), 1., 1E-9) || !approxEqual(dm.Trace().imag(), 0., 1E-9))
+				{
+					std::cout << "A channel did not preserve the trace: " << dm.Trace() << std::endl;
+					return false;
+				}
+
+				if (!dm.IsHermitian(1E-9))
+				{
+					std::cout << "A channel broke Hermiticity" << std::endl;
+					return false;
+				}
+			}
+		}
+	}
+
+	// reset must always bring a qubit to |0>
+	{
+		QC::DensityMatrix<> dm(1);
+		QC::Gates::HadamardGate<> h;
+		dm.ApplyGate(h, 0);
+		dm.ApplyReset(0);
+
+		if (!approxEqual(dm.GetQubitProbability(0), 0., 1E-9))
+		{
+			std::cout << "Reset did not bring the qubit to |0>: p1 = " << dm.GetQubitProbability(0) << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
+// checks that single qubit measurement probabilities match the statevector simulator
+static bool DensityMatrixMeasurementTest()
+{
+	std::cout << "\nDensity matrix simulator - measurement probabilities compared against the statevector simulator" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	DM_FillOneQubitGates(gates);
+	DM_FillTwoQubitGates(gates);
+
+	std::uniform_int_distribution nrGatesDistr(15, 30);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 1; nrQubits < DM_NR_QUBITS_LIMIT; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, std::max(0, nrQubits - 2));
+
+		for (int t = 0; t < 10; ++t)
+		{
+			QC::DensityMatrix<> dm(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+
+			const int lim = nrGatesDistr(gen);
+			for (int i = 0; i < lim; ++i)
+			{
+				const int g = gateDistr(gen);
+				const bool twoQubitsGate = gates[g]->getQubitsNumber() == 2;
+				if (twoQubitsGate && nrQubits < 2) continue;
+
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = qubit1 + 1;
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				dm.ApplyGate(*gates[g], qubit1, qubit2);
+				reg.ApplyGate(*gates[g], qubit1, qubit2);
+			}
+
+			for (int q = 0; q < nrQubits; ++q)
+				if (!approxEqual(dm.GetQubitProbability(q), reg.GetQubitProbability(q), 1E-9))
+				{
+					std::cout << "Qubit " << q << " probability mismatch for " << nrQubits << " qubits: "
+						<< reg.GetQubitProbability(q) << " (statevector) vs " << dm.GetQubitProbability(q) << " (density matrix)" << std::endl;
+					return false;
+				}
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
+bool DensityMatrixTests()
+{
+	std::cout << "\nDensity matrix simulator tests" << std::endl;
+
+	return DensityMatrixUnitaryTest() && DensityMatrixChannelsTest() && DensityMatrixMeasurementTest();
+}
