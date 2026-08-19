@@ -1357,6 +1357,289 @@ static bool PauliExpectationVsDensityMatrixMPO()
 	return true;
 }
 
+// smallest eigenvalue of a Hermitian matrix, used to check the MPO density matrix stays positive semidefinite
+static double MPO_SmallestEigenvalue(const Eigen::MatrixXcd& rho)
+{
+	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(rho);
+	return solver.eigenvalues().minCoeff();
+}
+
+// physics invariants for the MPO simulator after a random non-adjacent circuit followed by noise:
+// the reconstructed density matrix must be Hermitian, positive semidefinite, unit trace, and its
+// purity must lie within the valid bounds; a single Kraus operator equal to a unitary must match the
+// plain gate application; ReCanonicalize must not change the represented state
+static bool InvariantsTestMPO()
+{
+	std::cout << "\nMPO simulator - physics invariants (trace, hermiticity, positivity, purity, ReCanonicalize)" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(20, 40);
+	std::uniform_int_distribution noiseDistr(0, 5);
+	std::uniform_real_distribution<double> probDistr(0.05, 0.5);
+
+	for (int nrQubits = 2; nrQubits < 5; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+
+		for (int t = 0; t < 5; ++t)
+		{
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+
+			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
+			for (const auto& gate : circuit)
+				mpo.ApplyGate(gate);
+
+			// a few random noise channels
+			for (int n = 0; n < 3; ++n)
+			{
+				const int q = qubitDistr(gen);
+				const double p = probDistr(gen);
+				switch (noiseDistr(gen))
+				{
+				case 0: mpo.ApplyBitFlipNoise(q, p); break;
+				case 1: mpo.ApplyPhaseFlipNoise(q, p); break;
+				case 2: mpo.ApplyDepolarizingNoise(q, p); break;
+				case 3: mpo.ApplyAmplitudeDamping(q, p); break;
+				case 4: mpo.ApplyPhaseDamping(q, p); break;
+				default: mpo.ApplyReset(q); break;
+				}
+			}
+
+			// keep a copy of the state before ReCanonicalize
+			const Eigen::MatrixXcd rhoBefore = mpo.getDensityMatrix();
+
+			// trace must be 1
+			const std::complex<double> trace = mpo.Trace();
+			if (!approxEqual(trace, std::complex<double>(1., 0.), 1E-3))
+			{
+				std::cout << "MPO trace is not 1 after noisy evolution: " << trace << std::endl;
+				return false;
+			}
+
+			// hermiticity
+			if ((rhoBefore - rhoBefore.adjoint()).norm() > 1E-3)
+			{
+				std::cout << "MPO density matrix is not Hermitian after noisy evolution" << std::endl;
+				return false;
+			}
+
+			// positive semidefiniteness (allow numerical / truncation slack)
+			const double minEig = MPO_SmallestEigenvalue(rhoBefore);
+			if (minEig < -1E-3)
+			{
+				std::cout << "MPO density matrix is not positive semidefinite, smallest eigenvalue: " << minEig << std::endl;
+				return false;
+			}
+
+			// purity bounds [1/2^N, 1]
+			const double purity = (rhoBefore * rhoBefore).trace().real();
+			const double minPurity = 1. / static_cast<double>(1ULL << nrQubits);
+			if (purity < minPurity - 1E-3 || purity > 1. + 1E-3)
+			{
+				std::cout << "MPO purity " << purity << " out of bounds for " << nrQubits << " qubits" << std::endl;
+				return false;
+			}
+
+			// ReCanonicalize must preserve the represented state
+			mpo.ReCanonicalize();
+			if (!CompareDensityMatrices(rhoBefore, mpo.getDensityMatrix(), nrQubits))
+			{
+				std::cout << "ReCanonicalize changed the represented MPO state" << std::endl;
+				return false;
+			}
+
+			std::cout << ".";
+		}
+	}
+
+	// a single Kraus operator equal to a unitary must equal the plain gate application
+	{
+		constexpr int nrQubits = 3;
+		QC::TensorNetworks::MPOSimulator mpoGate(nrQubits);
+		QC::TensorNetworks::MPOSimulator mpoKraus(nrQubits);
+
+		QC::Gates::HadamardGate<> h;
+		mpoGate.ApplyGate(h, 0);
+		mpoKraus.ApplyGate(h, 0);
+
+		QC::Gates::PauliYGate<> y;
+		const Eigen::MatrixXcd yMat = y.getRawOperatorMatrix();
+
+		mpoGate.ApplyGate(y, 1);
+		mpoKraus.ApplyKrausOperators(std::vector<Eigen::MatrixXcd>{ yMat }, 1); // single unitary Kraus operator
+
+		if (!CompareDensityMatrices(mpoGate.getDensityMatrix(), mpoKraus.getDensityMatrix(), nrQubits))
+		{
+			std::cout << "Single unitary Kraus operator does not match the plain gate application" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// compares the decorator (MPOSimulator, which remaps logical qubits and inserts swaps) against the
+// adjacent-only implementation (MPOSimulatorImpl) on an equivalent adjacent circuit, ensuring the two
+// layers produce the same density matrix, trace and qubit probabilities
+static bool DecoratorVsImplTestMPO()
+{
+	std::cout << "\nMPO simulator - decorator vs implementation on adjacent circuits" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(25, 50);
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		for (int t = 0; t < 10; ++t)
+		{
+			// adjacent-only circuit so both the decorator and the impl accept it directly
+			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
+
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			QC::TensorNetworks::MPOSimulatorImpl impl(nrQubits);
+
+			for (const auto& gate : circuit)
+			{
+				mpo.ApplyGate(gate);
+				impl.ApplyGate(gate);
+			}
+
+			if (!CompareDensityMatrices(impl.getDensityMatrix(), mpo.getDensityMatrix(), nrQubits))
+			{
+				std::cout << "Decorator and implementation disagree on the density matrix for " << nrQubits << " qubits" << std::endl;
+				return false;
+			}
+
+			if (!approxEqual(mpo.Trace(), impl.Trace(), 1E-3))
+			{
+				std::cout << "Decorator and implementation disagree on the trace for " << nrQubits << " qubits" << std::endl;
+				return false;
+			}
+
+			for (int q = 0; q < nrQubits; ++q)
+				if (!approxEqual(mpo.GetProbability(q, false), impl.GetProbability(q, false), 1E-3))
+				{
+					std::cout << "Decorator and implementation disagree on qubit " << q << " probability for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// compares the sampled measurement statistics of the MPO simulator against the DensityMatrix single
+// qubit probabilities on the same prepared state, and checks the error handling of ExpectationValue,
+// ApplyGate and ApplyKrausOperators for out of range / malformed arguments
+static bool MeasurementVsDensityMatrixAndThrowsTestMPO()
+{
+	std::cout << "\nMPO simulator - measurement statistics vs DensityMatrix and error handling" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	const int nrMeasurements = 20000;
+
+	for (int nrQubits = 2; nrQubits < 5; ++nrQubits)
+	{
+		// fixed random circuit replayed on both simulators
+		const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, 25);
+
+		// analytic single qubit probabilities from the DensityMatrix simulator
+		QC::DensityMatrix<> dm(nrQubits);
+		for (const auto& gate : circuit)
+			dm.ApplyGate(gate);
+
+		std::vector<double> expectedP1(nrQubits);
+		for (int q = 0; q < nrQubits; ++q)
+			expectedP1[q] = dm.GetQubitProbability(q);
+
+		// sample each qubit by re-preparing the MPO state and measuring just that qubit
+		for (int q = 0; q < nrQubits; ++q)
+		{
+			int ones = 0;
+			for (int m = 0; m < nrMeasurements; ++m)
+			{
+				QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+				for (const auto& gate : circuit)
+					mpo.ApplyGate(gate);
+
+				if (mpo.MeasureQubit(q)) ++ones;
+			}
+
+			const double sampled = static_cast<double>(ones) / nrMeasurements;
+			if (std::abs(sampled - expectedP1[q]) > 0.05)
+			{
+				std::cout << "MPO measurement statistics mismatch for qubit " << q << " with " << nrQubits << " qubits: "
+					<< expectedP1[q] << " (DensityMatrix) vs " << sampled << " (MPO sampled)" << std::endl;
+				return false;
+			}
+		}
+
+		std::cout << ".";
+	}
+
+	// error handling on the implementation layer (adjacency and index validation)
+	{
+		QC::TensorNetworks::MPOSimulatorImpl impl(3);
+
+		// ExpectationValue with the wrong Pauli string length must throw
+		bool threw = false;
+		try { impl.ExpectationValue(std::string("XX")); } // 2 chars for 3 qubits
+		catch (const std::invalid_argument&) { threw = true; }
+		if (!threw)
+		{
+			std::cout << "MPO ExpectationValue did not throw on a Pauli string of the wrong length" << std::endl;
+			return false;
+		}
+
+		// a two qubit gate on non-adjacent qubits must throw on the implementation
+		threw = false;
+		try
+		{
+			QC::Gates::CNOTGate<> cnot;
+			impl.ApplyGate(cnot, 2, 0); // non adjacent
+		}
+		catch (const std::invalid_argument&) { threw = true; }
+		if (!threw)
+		{
+			std::cout << "MPO implementation did not throw on a non-adjacent two qubit gate" << std::endl;
+			return false;
+		}
+
+		// Kraus operators of inconsistent size must throw
+		threw = false;
+		try
+		{
+			std::vector<Eigen::MatrixXcd> kraus{ Eigen::MatrixXcd::Identity(2, 2), Eigen::MatrixXcd::Identity(4, 4) };
+			impl.ApplyKrausOperators(kraus, 0);
+		}
+		catch (const std::invalid_argument&) { threw = true; }
+		if (!threw)
+		{
+			std::cout << "MPO implementation did not throw on inconsistent Kraus operator sizes" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
@@ -1378,5 +1661,8 @@ bool MPOSimulatorTests()
 		NoiseChannelsVsDensityMatrixMPO() &&
 		TwoQubitKrausVsDensityMatrixMPO() &&
 		MixtureEvolutionVsDensityMatrixMPO() &&
-		PauliExpectationVsDensityMatrixMPO();
+		PauliExpectationVsDensityMatrixMPO() &&
+		InvariantsTestMPO() &&
+		DecoratorVsImplTestMPO() &&
+		MeasurementVsDensityMatrixAndThrowsTestMPO();
 }
