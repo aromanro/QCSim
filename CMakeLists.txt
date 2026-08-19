@@ -35,7 +35,8 @@ set(SOURCES QCSim/QCSim.cpp
 			QCSim/PauliPropagatorTests.cpp
 			QCSim/PathIntegralTests.cpp
 			QCSim/MPOSimulatorTests.cpp
-			QCSim/ExtStabilizerTests.cpp)
+			QCSim/ExtStabilizerTests.cpp
+			QCSim/DensityMatrixTests.cpp)
 
 if (NOT DEFINED EIGEN5_INCLUDE_DIR)
 	SET( EIGEN5_INCLUDE_DIR "$ENV{EIGEN5_INCLUDE_DIR}" )

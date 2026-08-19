@@ -308,6 +308,69 @@ namespace QC {
 			return (rho * O).trace();
 		}
 
+		// <P> = Tr(rho P) for a Pauli string P = (x) P_i, where character i of the string is
+		// the single qubit Pauli ('I', 'X', 'Y' or 'Z') acting on qubit i (qubit 0 is the
+		// rightmost / least significant bit, character 0 in the string).
+		//
+		// This avoids the full 2^N x 2^N matrix product used by the operator overload: a single
+		// qubit Pauli P_i maps a basis state |i> to a phase times a single other basis state, so
+		// P|k> = phase(k) |k ^ flipMask> and Tr(rho P) = sum_k phase(k) rho(k ^ flipMask, k),
+		// which only touches 2^N entries of rho.
+		std::complex<double> ExpectationValue(const std::string& pauliString) const
+		{
+			if (pauliString.size() != NrQubits)
+				throw std::invalid_argument("Pauli string length must match the number of qubits");
+
+			size_t flipMask = 0; // qubits where X or Y act (the bit flipped by P)
+			size_t signMask = 0; // qubits where Y or Z act (contribute a (-1)^bit sign)
+			size_t yCount = 0;   // number of Y factors (each contributes a factor of i)
+
+			for (size_t i = 0; i < NrQubits; ++i)
+			{
+				const size_t bit = 1ULL << i;
+				switch (toupper(static_cast<unsigned char>(pauliString[i])))
+				{
+				case 'I':
+					break;
+				case 'X':
+					flipMask |= bit;
+					break;
+				case 'Y':
+					flipMask |= bit;
+					signMask |= bit;
+					++yCount;
+					break;
+				case 'Z':
+					signMask |= bit;
+					break;
+				default:
+					throw std::invalid_argument("Invalid operator in the Pauli string");
+				}
+			}
+
+			std::complex<double> result = 0.;
+			for (size_t k = 0; k < NrBasisStates; ++k)
+			{
+				// parity of the sign-contributing bits set in k
+				size_t s = signMask & k;
+				bool negative = false;
+				while (s)
+				{
+					negative = !negative;
+					s &= s - 1;
+				}
+
+				const std::complex<double> term = rho(k, k ^ flipMask);
+				result += negative ? -term : term;
+			}
+
+			// each Y contributed a factor of i, fold i^yCount in at the end
+			static const std::complex<double> iPow[4] = { {1., 0.}, {0., 1.}, {-1., 0.}, {0., -1.} };
+			result *= iPow[yCount & 3];
+
+			return result;
+		}
+
 	protected:
 		// applies a small gate to every column of rho (the ket index). Each column is a fake 'register'
 		// (an Eigen block expression) fed directly to the reused QubitRegisterCalculator kernels; results

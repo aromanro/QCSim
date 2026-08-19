@@ -185,6 +185,12 @@ namespace QC {
 			// trace of the density matrix, should be 1 for a properly normalized state
 			virtual std::complex<double> Trace() const = 0;
 
+			// <P> = Tr(rho P) / Tr(rho) for a Pauli string P = (x) P_i, where character i of the
+			// string is the single qubit Pauli ('I', 'X', 'Y' or 'Z') acting on qubit i (qubit 0
+			// is the rightmost / least significant bit, character 0 in the string).
+			// It contracts the MPO chain site by site, so it avoids building the full density matrix.
+			virtual std::complex<double> ExpectationValue(const std::string& pauliString) const = 0;
+
 			virtual std::shared_ptr<MPOSimulatorStateInterface> getState() const = 0;
 			virtual void setState(const std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
 

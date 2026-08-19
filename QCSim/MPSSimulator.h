@@ -184,11 +184,11 @@ namespace QC
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
 					throw std::invalid_argument("Qubit index out of bounds");
-				else if (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits()))
+				else if (gate.getQubitsNumber() > 1 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits())))
 					throw std::invalid_argument("Qubit index out of bounds");
 
 				IndexType qubit1 = qubitsMap[qubit];
-				IndexType qubit2 = qubitsMap[controllingQubit1];
+				IndexType qubit2 = gate.getQubitsNumber() > 1 ? qubitsMap[controllingQubit1] : qubit1;
 
 				// for two qubit gates:
 				// if the qubits are not adjacent, apply swap gates until they are

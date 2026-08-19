@@ -7,6 +7,8 @@
 #include "QubitRegister.h"
 #include "DensityMatrix.h"
 
+#include <unsupported/Eigen/KroneckerProduct>
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -297,9 +299,146 @@ static bool DensityMatrixMeasurementTest()
 	return true;
 }
 
+// reference Pauli string expectation value <psi|P|psi> computed directly from the statevector,
+// P = (x) P_i where character i acts on qubit i (qubit 0 is the least significant bit)
+static std::complex<double> StatevectorPauliExpectation(const QC::QubitRegister<>& reg, const std::string& pauliString)
+{
+	const size_t nrQubits = reg.getNrQubits();
+	const size_t nrBasisStates = reg.getNrBasisStates();
+
+	size_t flipMask = 0;
+	size_t signMask = 0;
+	size_t yCount = 0;
+	for (size_t i = 0; i < nrQubits; ++i)
+	{
+		const size_t bit = 1ULL << i;
+		switch (toupper(static_cast<unsigned char>(pauliString[i])))
+		{
+		case 'I': break;
+		case 'X': flipMask |= bit; break;
+		case 'Y': flipMask |= bit; signMask |= bit; ++yCount; break;
+		case 'Z': signMask |= bit; break;
+		}
+	}
+
+	std::complex<double> res = 0.;
+	for (size_t k = 0; k < nrBasisStates; ++k)
+	{
+		size_t s = signMask & k;
+		bool negative = false;
+		while (s) { negative = !negative; s &= s - 1; }
+
+		// <psi|P|psi> = sum_k conj(psi_{k^flip}) * phase(k) * psi_k
+		const std::complex<double> term = std::conj(reg.getBasisStateAmplitude(k ^ flipMask)) * reg.getBasisStateAmplitude(k);
+		res += negative ? -term : term;
+	}
+
+	static const std::complex<double> iPow[4] = { {1., 0.}, {0., 1.}, {-1., 0.}, {0., -1.} };
+	res *= iPow[yCount & 3];
+
+	return res;
+}
+
+// builds the full 2^N x 2^N Pauli string matrix (Kronecker product, qubit 0 is the least significant bit)
+static Eigen::MatrixXcd DM_BuildPauliMatrix(const std::string& pauliString)
+{
+	Eigen::Matrix2cd I;
+	I << 1., 0., 0., 1.;
+	Eigen::Matrix2cd X;
+	X << 0., 1., 1., 0.;
+	Eigen::Matrix2cd Y;
+	Y << 0., std::complex<double>(0., -1.), std::complex<double>(0., 1.), 0.;
+	Eigen::Matrix2cd Z;
+	Z << 1., 0., 0., -1.;
+
+	auto single = [&](char c) -> Eigen::Matrix2cd {
+		switch (toupper(static_cast<unsigned char>(c)))
+		{
+		case 'X': return X;
+		case 'Y': return Y;
+		case 'Z': return Z;
+		default: return I;
+		}
+		};
+
+	// qubit 0 is the least significant bit, so it must be the rightmost factor of the Kronecker product
+	Eigen::MatrixXcd result = single(pauliString[0]);
+	for (size_t i = 1; i < pauliString.size(); ++i)
+		result = Eigen::kroneckerProduct(single(pauliString[i]), result).eval();
+
+	return result;
+}
+
+static bool DensityMatrixPauliExpectationTest()
+{
+	std::cout << "\nDensity matrix simulator - Pauli string expectation values compared against the statevector simulator" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	DM_FillOneQubitGates(gates);
+	DM_FillTwoQubitGates(gates);
+
+	std::uniform_int_distribution nrGatesDistr(15, 30);
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	const char paulis[4] = { 'I', 'X', 'Y', 'Z' };
+	std::uniform_int_distribution pauliDistr(0, 3);
+
+	for (int nrQubits = 1; nrQubits < DM_NR_QUBITS_LIMIT; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, std::max(0, nrQubits - 2));
+
+		for (int t = 0; t < 10; ++t)
+		{
+			QC::DensityMatrix<> dm(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+
+			const int lim = nrGatesDistr(gen);
+			for (int i = 0; i < lim; ++i)
+			{
+				const int g = gateDistr(gen);
+				const bool twoQubitsGate = gates[g]->getQubitsNumber() == 2;
+				if (twoQubitsGate && nrQubits < 2) continue;
+
+				int qubit1 = twoQubitsGate ? qubitDistr2(gen) : qubitDistr(gen);
+				int qubit2 = qubit1 + 1;
+				if (twoQubitsGate && dist_bool(gen)) std::swap(qubit1, qubit2);
+
+				dm.ApplyGate(*gates[g], qubit1, qubit2);
+				reg.ApplyGate(*gates[g], qubit1, qubit2);
+			}
+
+			// try a few random Pauli strings
+			for (int s = 0; s < 5; ++s)
+			{
+				std::string pauliString(nrQubits, 'I');
+				for (int q = 0; q < nrQubits; ++q)
+					pauliString[q] = paulis[pauliDistr(gen)];
+
+				const std::complex<double> expected = StatevectorPauliExpectation(reg, pauliString);
+				const std::complex<double> got = dm.ExpectationValue(pauliString);
+
+				// also cross check against the full matrix operator overload
+				const std::complex<double> viaMatrix = dm.ExpectationValue(DM_BuildPauliMatrix(pauliString));
+
+				if (!approxEqual(got, expected, 1E-9) || !approxEqual(got, viaMatrix, 1E-9))
+				{
+					std::cout << "Pauli string " << pauliString << " expectation mismatch for " << nrQubits << " qubits: "
+						<< expected << " (statevector) vs " << got << " (density matrix) vs " << viaMatrix << " (full matrix)" << std::endl;
+					return false;
+				}
+			}
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
 bool DensityMatrixTests()
 {
 	std::cout << "\nDensity matrix simulator tests" << std::endl;
 
-	return DensityMatrixUnitaryTest() && DensityMatrixChannelsTest() && DensityMatrixMeasurementTest();
+	return DensityMatrixUnitaryTest() && DensityMatrixChannelsTest() && DensityMatrixMeasurementTest() && DensityMatrixPauliExpectationTest();
 }

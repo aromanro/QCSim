@@ -158,6 +158,20 @@ namespace QC
 				std::cout << std::endl;
 			}
 
+			// remap the logical Pauli string into the physical (impl) qubit ordering, then delegate
+			std::complex<double> ExpectationValue(const std::string& pauliString) const override
+			{
+				const size_t nrQubits = getNrQubits();
+				if (pauliString.size() != nrQubits)
+					throw std::invalid_argument("Pauli string length must match the number of qubits");
+
+				std::string mapped(nrQubits, 'I');
+				for (size_t i = 0; i < nrQubits; ++i)
+					mapped[static_cast<size_t>(qubitsMap[i])] = pauliString[i];
+
+				return impl.ExpectationValue(mapped);
+			}
+
 			void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) override
 			{
 				ApplyOperator(gate);
@@ -183,11 +197,11 @@ namespace QC
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
 					throw std::invalid_argument("Qubit index out of bounds");
-				else if (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits()))
+				else if (op.getQubitsNumber() > 1 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits())))
 					throw std::invalid_argument("Qubit index out of bounds");
 
 				IndexType qubit1 = qubitsMap[qubit];
-				IndexType qubit2 = qubitsMap[controllingQubit1];
+				IndexType qubit2 = op.getQubitsNumber() > 1 ? qubitsMap[controllingQubit1] : qubit1;
 
 				// for two qubit operators: if the qubits are not adjacent, swap them until they are
 				if (op.getQubitsNumber() > 1 && std::abs(qubit1 - qubit2) > 1)
@@ -217,11 +231,11 @@ namespace QC
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
 					throw std::invalid_argument("Qubit index out of bounds");
-				else if (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits()))
+				else if (op.getQubitsNumber() > 1 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits())))
 					throw std::invalid_argument("Qubit index out of bounds");
 
 				IndexType qubit1 = qubitsMap[qubit];
-				IndexType qubit2 = qubitsMap[controllingQubit1];
+				IndexType qubit2 = op.getQubitsNumber() > 1 ? qubitsMap[controllingQubit1] : qubit1;
 
 				if (op.getQubitsNumber() > 1 && std::abs(qubit1 - qubit2) > 1)
 				{

@@ -578,7 +578,35 @@ static std::vector<QC::Gates::AppliedGate<>> BuildRandomAdjacentCircuitMPO(const
 	return circuit;
 }
 
-// The truncating SVD path must reproduce the EXACT result when the bond dimension / entanglement
+// builds a random circuit where two qubit gates may act on ANY two distinct qubits (not necessarily
+// adjacent), in either order. Only usable with simulators that remap/swap qubits internally (the
+// MPOSimulator decorator), not with MPOSimulatorImpl which requires adjacent two qubit gates.
+static std::vector<QC::Gates::AppliedGate<>> BuildRandomCircuitMPO(const std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates, int nrQubits, int nrGates)
+{
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+	std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+
+	std::vector<QC::Gates::AppliedGate<>> circuit;
+	circuit.reserve(nrGates);
+
+	for (int i = 0; i < nrGates; ++i)
+	{
+		const int gate = gateDistr(gen);
+		const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+
+		int qubit1 = qubitDistr(gen);
+		int qubit2 = qubit1;
+		if (twoQubitsGate)
+		{
+			do { qubit2 = qubitDistr(gen); } while (qubit2 == qubit1);
+		}
+
+		circuit.emplace_back(gates[gate]->getRawOperatorMatrix(), qubit1, qubit2);
+	}
+
+	return circuit;
+}
+
 // limits are set so they never actually drop anything (sz == szm). This exercises the limitSize and
 // limitEntanglement branches in ApplyTwoQubitGate that the other tests never touch.
 static bool CompressionLosslessTestMPO()
@@ -598,7 +626,7 @@ static bool CompressionLosslessTestMPO()
 	{
 		for (int t = 0; t < 10; ++t)
 		{
-			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
+			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
 
 			QC::QubitRegister<> reg(nrQubits);
 			for (const auto& gate : circuit)
@@ -607,7 +635,7 @@ static bool CompressionLosslessTestMPO()
 
 			// (a) a high bond dimension limit: truncation code runs but keeps every singular value
 			{
-				QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+				QC::TensorNetworks::MPOSimulator mpo(nrQubits);
 				mpo.setLimitBondDimension(largeChi);
 				for (const auto& gate : circuit)
 					mpo.ApplyGate(gate);
@@ -625,7 +653,7 @@ static bool CompressionLosslessTestMPO()
 
 			// (b) a tiny entanglement threshold: drops only numerically negligible singular values
 			{
-				QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+				QC::TensorNetworks::MPOSimulator mpo(nrQubits);
 				mpo.setLimitEntanglement(1E-12);
 				for (const auto& gate : circuit)
 					mpo.ApplyGate(gate);
@@ -662,10 +690,10 @@ static bool CompressionTruncationTestMPO()
 		{
 			const Eigen::Index chi = 1 + (t % 4); // 1..4, smaller than the untruncated bond (up to 16+)
 
-			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
 			mpo.setLimitBondDimension(chi);
 
-			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, 60);
+			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, 60);
 			for (const auto& gate : circuit)
 				mpo.ApplyGate(gate);
 
@@ -988,9 +1016,9 @@ static bool UnitaryCircuitVsDensityMatrixMPO()
 	{
 		for (int t = 0; t < 10; ++t)
 		{
-			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
+			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
 
-			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
 			QC::DensityMatrix<> dm(nrQubits);
 
 			for (const auto& gate : circuit)
@@ -1247,10 +1275,10 @@ static bool MixtureEvolutionVsDensityMatrixMPO()
 				mixture.emplace_back(stateDistr(gen), w);
 			}
 
-			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
+			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
 
 			// evolve the mixture in the MPO simulator
-			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
 			mpo.setToMixtureOfBasisStates(mixture);
 			for (const auto& gate : circuit)
 				mpo.ApplyGate(gate);
@@ -1263,6 +1291,62 @@ static bool MixtureEvolutionVsDensityMatrixMPO()
 
 			if (!CompareDensityMatrices(dm.getDensityMatrix(), mpo.getDensityMatrix(), nrQubits))
 				return false;
+
+			std::cout << ".";
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+
+	return true;
+}
+
+// applies a random circuit in both simulators, then compares Pauli string expectation values
+// computed by the MPO ExpectationValue (chain contraction) against the DensityMatrix ones
+static bool PauliExpectationVsDensityMatrixMPO()
+{
+	std::cout << "\nMPO simulator vs DensityMatrix - Pauli string expectation values" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	std::uniform_int_distribution nrGatesDistr(15, 30);
+
+	const char paulis[4] = { 'I', 'X', 'Y', 'Z' };
+	std::uniform_int_distribution pauliDistr(0, 3);
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
+	{
+		for (int t = 0; t < 10; ++t)
+		{
+			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
+
+			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			QC::DensityMatrix<> dm(nrQubits);
+
+			for (const auto& gate : circuit)
+			{
+				mpo.ApplyGate(gate);
+				dm.ApplyGate(gate);
+			}
+
+			for (int s = 0; s < 5; ++s)
+			{
+				std::string pauliString(nrQubits, 'I');
+				for (int q = 0; q < nrQubits; ++q)
+					pauliString[q] = paulis[pauliDistr(gen)];
+
+				const std::complex<double> expected = dm.ExpectationValue(pauliString);
+				const std::complex<double> got = mpo.ExpectationValue(pauliString);
+
+				if (!approxEqual(got, expected, 1E-9))
+				{
+					std::cout << "Pauli string " << pauliString << " expectation mismatch for " << nrQubits << " qubits: "
+						<< expected << " (density matrix) vs " << got << " (MPO)" << std::endl;
+					return false;
+				}
+			}
 
 			std::cout << ".";
 		}
@@ -1293,5 +1377,6 @@ bool MPOSimulatorTests()
 		SingleQubitKrausVsDensityMatrixMPO() &&
 		NoiseChannelsVsDensityMatrixMPO() &&
 		TwoQubitKrausVsDensityMatrixMPO() &&
-		MixtureEvolutionVsDensityMatrixMPO();
+		MixtureEvolutionVsDensityMatrixMPO() &&
+		PauliExpectationVsDensityMatrixMPO();
 }

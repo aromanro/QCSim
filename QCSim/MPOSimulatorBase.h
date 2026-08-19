@@ -281,6 +281,28 @@ namespace QC {
 				return ContractChain([this](IndexType q) { return SiteTraceMatrix(q); });
 			}
 
+			std::complex<double> ExpectationValue(const std::string& pauliString) const override
+			{
+				const size_t nrQubits = getNrQubits();
+				if (pauliString.size() != nrQubits)
+					throw std::invalid_argument("Pauli string length must match the number of qubits");
+
+				// per site single qubit Pauli matrices (index by qubit); identity where the character is 'I'
+				std::vector<MatrixClass> siteOps(nrQubits);
+				for (size_t i = 0; i < nrQubits; ++i)
+					siteOps[i] = PauliMatrixFromChar(pauliString[i]);
+
+				const std::complex<double> num = ContractChain([this, &siteOps](IndexType q) {
+					return SitePauliMatrix(q, siteOps[static_cast<size_t>(q)]);
+				});
+
+				const std::complex<double> tr = Trace();
+				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
+					return 0.;
+
+				return num / tr;
+			}
+
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override
 			{
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
@@ -481,6 +503,55 @@ namespace QC {
 				for (IndexType r = 0; r < R; ++r)
 					for (IndexType l = 0; l < L; ++l)
 						m(l, r) = g(l, ket, bra, r);
+
+				return m;
+			}
+
+			// single qubit Pauli matrix from a character in a Pauli string ('I', 'X', 'Y', 'Z')
+			static MatrixClass PauliMatrixFromChar(char c)
+			{
+				MatrixClass m = MatrixClass::Zero(2, 2);
+				switch (toupper(static_cast<unsigned char>(c)))
+				{
+				case 'I':
+					m(0, 0) = 1.; m(1, 1) = 1.;
+					break;
+				case 'X':
+					m(0, 1) = 1.; m(1, 0) = 1.;
+					break;
+				case 'Y':
+					m(0, 1) = std::complex<double>(0., -1.); m(1, 0) = std::complex<double>(0., 1.);
+					break;
+				case 'Z':
+					m(0, 0) = 1.; m(1, 1) = -1.;
+					break;
+				default:
+					throw std::invalid_argument("Invalid operator in the Pauli string");
+				}
+
+				return m;
+			}
+
+			// matrix (leftBond x rightBond) obtained by contracting a single qubit operator P into
+			// the physical legs of a site: m(l, r) = sum_{ket,bra} g(l, ket, bra, r) P(bra, ket).
+			// With P = Identity this reduces to SiteTraceMatrix.
+			MatrixClass SitePauliMatrix(IndexType q, const MatrixClass& P) const
+			{
+				const auto& g = gammas[q];
+				const IndexType L = g.dimension(0);
+				const IndexType R = g.dimension(3);
+
+				MatrixClass m = MatrixClass::Zero(L, R);
+				for (IndexType ket = 0; ket < 2; ++ket)
+					for (IndexType bra = 0; bra < 2; ++bra)
+					{
+						const std::complex<double> p = P(bra, ket);
+						if (p == std::complex<double>(0., 0.)) continue;
+
+						for (IndexType r = 0; r < R; ++r)
+							for (IndexType l = 0; l < L; ++l)
+								m(l, r) += g(l, ket, bra, r) * p;
+					}
 
 				return m;
 			}
