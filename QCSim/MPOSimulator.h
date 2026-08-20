@@ -6,6 +6,7 @@
 #include <limits>
 #include <vector>
 #include <utility>
+#include <unordered_set>
 
 namespace QC
 {
@@ -316,6 +317,57 @@ namespace QC
 					res[qubitsMapInv[qubit]] = val;
 
 				return res;
+			}
+
+			// moves the given qubits at the beginning of the chain (helps with sampling a subset of qubits faster)
+			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
+			{
+				std::unordered_set<IndexType> handledQubits;
+
+				IndexType currentQubitPos = 0;
+				// skip over all qubits that are already in the right position, that is, at the beginning of the chain
+				for (; currentQubitPos < static_cast<IndexType>(qubitsMap.size()); ++currentQubitPos)
+				{
+					const IndexType logicalQubit = qubitsMapInv[currentQubitPos];
+					if (qubits.find(logicalQubit) == qubits.end())
+						break;
+					handledQubits.insert(logicalQubit);
+				}
+
+				if (handledQubits.size() == qubits.size())
+					return;
+
+				for (IndexType pos = currentQubitPos; pos < static_cast<IndexType>(qubitsMap.size()); ++pos)
+				{
+					const IndexType logicalQubit = qubitsMapInv[pos];
+					// is this a qubit that doesn't need to be moved?
+					if (qubits.find(logicalQubit) == qubits.end())
+						continue;
+
+					// needs to be moved if it's not already in the right position
+					const IndexType currentLogicalPosQubit = qubitsMapInv[currentQubitPos];
+					SwapQubits(currentLogicalPosQubit, logicalQubit);
+
+					// they are brought together, now swap them
+					const IndexType movingQubitReal = qubitsMap[logicalQubit];
+					const IndexType toQubitReal = qubitsMap[currentLogicalPosQubit];
+
+					assert(std::abs(movingQubitReal - toQubitReal) == 1);
+
+					impl.ApplyGate(swapGate, movingQubitReal, toQubitReal);
+
+					// update the maps
+					qubitsMap[logicalQubit] = toQubitReal;
+					qubitsMap[currentLogicalPosQubit] = movingQubitReal;
+					qubitsMapInv[toQubitReal] = logicalQubit;
+					qubitsMapInv[movingQubitReal] = currentLogicalPosQubit;
+
+					handledQubits.insert(logicalQubit);
+					if (handledQubits.size() == qubits.size())
+						break;
+
+					++currentQubitPos;
+				}
 			}
 
 			double GetProbability(IndexType qubit, bool zeroVal = true) const override

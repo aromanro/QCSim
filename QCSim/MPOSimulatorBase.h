@@ -351,6 +351,13 @@ namespace QC {
 				return res;
 			}
 
+			// the impl works directly on the physical chain, so there's nothing to move here;
+			// the qubit reordering is handled by the MPOSimulator decorator
+			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
+			{
+				// do nothing, it's here just to provide an implementation
+			}
+
 			std::complex<double> getBasisStateMatrixElement(size_t row, size_t col) const override
 			{
 				const size_t nrQubits = getNrQubits();

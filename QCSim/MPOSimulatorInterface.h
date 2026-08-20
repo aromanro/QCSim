@@ -184,6 +184,9 @@ namespace QC {
 			// samples only the given subset of qubits without collapsing the state.
 			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) = 0;
 
+			// moves the given qubits at the beginning of the chain (helps with sampling a subset of qubits faster).
+			virtual void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) = 0;
+
 			// rho is a density matrix, so the basis-state 'amplitude' is a matrix element <row|rho|col>
 			virtual std::complex<double> getBasisStateMatrixElement(size_t row, size_t col) const = 0;
 			virtual std::complex<double> getBasisStateMatrixElement(const std::vector<bool>& row, const std::vector<bool>& col) const = 0;
