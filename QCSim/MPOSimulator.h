@@ -3,6 +3,7 @@
 #include "MPOSimulatorImpl.h"
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <vector>
 #include <utility>
@@ -35,6 +36,10 @@ namespace QC
 		class MPOSimulator : public MPOSimulatorInterface
 		{
 		public:
+			// Callback signature: (bondDims) -> meetPosition
+			using MeetingPositionCallback = std::function<IndexType(
+				const std::vector<IndexType>&)>;
+
 			MPOSimulator() = delete;
 
 			MPOSimulator(size_t N, unsigned int addseed = 0)
@@ -207,7 +212,7 @@ namespace QC
 				// for two qubit operators: if the qubits are not adjacent, swap them until they are
 				if (op.getQubitsNumber() > 1 && std::abs(qubit1 - qubit2) > 1)
 				{
-					SwapQubits(qubit, controllingQubit1);
+					BringQubitsTogether(qubit, controllingQubit1);
 
 					qubit1 = qubitsMap[qubit];
 					qubit2 = qubitsMap[controllingQubit1];
@@ -240,7 +245,7 @@ namespace QC
 
 				if (op.getQubitsNumber() > 1 && std::abs(qubit1 - qubit2) > 1)
 				{
-					SwapQubits(qubit, controllingQubit1);
+					BringQubitsTogether(qubit, controllingQubit1);
 
 					qubit1 = qubitsMap[qubit];
 					qubit2 = qubitsMap[controllingQubit1];
@@ -464,6 +469,14 @@ namespace QC
 				return impl.getBondDimensions();
 			}
 
+			// Set a callback for external lookahead-based meeting position.
+			// It is called before routing a non-adjacent two-qubit operation and
+			// takes priority over the default routing heuristic. Pass nullptr to clear.
+			void SetMeetingPositionCallback(MeetingPositionCallback callback)
+			{
+				meetingPositionCallback = std::move(callback);
+			}
+
 		private:
 			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, IndexType qubit, IndexType controllingQubit1)
 			{
@@ -484,7 +497,7 @@ namespace QC
 
 				if (qubitsNumber > 1 && std::abs(qubit1 - qubit2) > 1)
 				{
-					SwapQubits(qubit, controllingQubit1);
+					BringQubitsTogether(qubit, controllingQubit1);
 
 					qubit1 = qubitsMap[qubit];
 					qubit2 = qubitsMap[controllingQubit1];
@@ -537,6 +550,17 @@ namespace QC
 					qubitsMapInv[i] = qubitsMap[i] = i;
 			}
 
+			void BringQubitsTogether(IndexType logical1, IndexType logical2)
+			{
+				if (meetingPositionCallback)
+				{
+					const IndexType meetPosition = meetingPositionCallback(impl.getBondDimensions());
+					SwapQubitsToPosition(logical1, logical2, meetPosition);
+				}
+				else
+					SwapQubits(logical1, logical2);
+			}
+
 			// brings the two logical qubits to adjacent physical positions using nearest neighbour swaps
 			void SwapQubits(IndexType logical1, IndexType logical2)
 			{
@@ -564,10 +588,65 @@ namespace QC
 				}
 			}
 
+			// Swap two logical qubits so they meet at a specified bond position.
+			// meetPosition is expressed in physical chain coordinates; the qubits
+			// finish at meetPosition and meetPosition + 1.
+			void SwapQubitsToPosition(IndexType logical1, IndexType logical2, IndexType meetPosition)
+			{
+				IndexType r1 = qubitsMap[logical1];
+				IndexType r2 = qubitsMap[logical2];
+				if (r1 > r2)
+				{
+					std::swap(r1, r2);
+					std::swap(logical1, logical2);
+				}
+
+				if (r2 - r1 <= 1) return;
+
+				// Fall back to the existing heuristic if the callback returns a bond
+				// outside the interval between the two qubits.
+				if (meetPosition < r1 || meetPosition >= r2)
+				{
+					SwapQubits(logical1, logical2);
+					return;
+				}
+
+				while (r1 < meetPosition)
+				{
+					const IndexType to = r1 + 1;
+					const IndexType displacedLogical = qubitsMapInv[to];
+
+					impl.ApplyGate(swapGate, r1, to);
+
+					qubitsMap[displacedLogical] = r1;
+					qubitsMapInv[r1] = displacedLogical;
+					qubitsMap[logical1] = to;
+					qubitsMapInv[to] = logical1;
+					r1 = to;
+				}
+
+				while (r2 > meetPosition + 1)
+				{
+					const IndexType to = r2 - 1;
+					const IndexType displacedLogical = qubitsMapInv[to];
+
+					impl.ApplyGate(swapGate, to, r2);
+
+					qubitsMap[displacedLogical] = r2;
+					qubitsMapInv[r2] = displacedLogical;
+					qubitsMap[logical2] = to;
+					qubitsMapInv[to] = logical2;
+					r2 = to;
+				}
+
+				assert(std::abs(qubitsMap[logical1] - qubitsMap[logical2]) == 1);
+			}
+
 			MPOSimulatorImpl impl;
 			std::vector<IndexType> qubitsMap;
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
+			MeetingPositionCallback meetingPositionCallback;
 		};
 
 	}

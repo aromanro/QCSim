@@ -189,6 +189,64 @@ static bool NonAdjacentGatesTestMPO()
 	return true;
 }
 
+static bool MeetingPositionCallbackTestMPO()
+{
+	std::cout << "\nMPO simulator meeting position callback test" << std::endl;
+
+	constexpr int nrQubits = 5;
+	QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+	QC::QubitRegister<> reg(nrQubits);
+
+	QC::Gates::HadamardGate<> hGate;
+	QC::Gates::CNOTGate<> cnotGate;
+	mpo.ApplyGate(hGate, 0);
+	reg.ApplyGate(hGate, 0);
+
+	const auto expectedBondDimensions = mpo.getBondDimensions();
+	int callbackCalls = 0;
+	bool receivedExpectedBondDimensions = false;
+	mpo.SetMeetingPositionCallback(
+		[&](const std::vector<Eigen::Index>& bondDimensions)
+		{
+			++callbackCalls;
+			receivedExpectedBondDimensions = bondDimensions == expectedBondDimensions;
+			return Eigen::Index{ 2 };
+		});
+
+	// Logical qubits 0 and 4 start at the chain ends. Meeting at bond 2
+	// moves them to physical positions 2 and 3, respectively.
+	mpo.ApplyGate(cnotGate, 4, 0);
+	reg.ApplyGate(cnotGate, 4, 0);
+
+	if (callbackCalls != 1 || !receivedExpectedBondDimensions)
+	{
+		std::cout << "MPO meeting position callback was not called with the current bond dimensions" << std::endl;
+		return false;
+	}
+
+	const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+	const std::vector<Eigen::Index> expectedMap{ 2, 0, 1, 4, 3 };
+	if (!state || state->qubitsMap != expectedMap)
+	{
+		std::cout << "MPO meeting position callback did not route the qubits to the requested bond" << std::endl;
+		return false;
+	}
+
+	if (!CompareDensityMatrices(ReferenceDensityMatrix(reg), mpo.getDensityMatrix(), nrQubits))
+		return false;
+
+	// Once adjacent, applying another two-qubit gate must not invoke the routing callback.
+	mpo.ApplyGate(cnotGate, 4, 0);
+	if (callbackCalls != 1)
+	{
+		std::cout << "MPO meeting position callback was called for adjacent qubits" << std::endl;
+		return false;
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+	return true;
+}
+
 // checks the trace stays 1 and the per qubit probabilities match the statevector ones
 static bool TraceAndProbabilitiesTestMPO()
 {
@@ -1767,6 +1825,7 @@ bool MPOSimulatorTests()
 	std::cout << "\nMPO Simulator Tests" << std::endl;
 	return OneAndTwoQubitGatesTestMPO() &&
 		NonAdjacentGatesTestMPO() &&
+		MeetingPositionCallbackTestMPO() &&
 		TraceAndProbabilitiesTestMPO() &&
 		MixtureOfBasisStatesTestMPO() &&
 		MixtureEvolutionTestMPO() &&
