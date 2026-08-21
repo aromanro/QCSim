@@ -294,8 +294,9 @@ namespace QC {
 		private:
 			static double ValidMeasurementProbability(double probability)
 			{
-				constexpr double tolerance = 1E-9;
-				if (probability < -tolerance || probability > 1. + tolerance)
+				constexpr double toleranceLow = 1E-9;
+				constexpr double toleranceHigh = 1E-5;
+				if (probability < -toleranceLow || probability > 1. + toleranceHigh)
 					std::cerr << "Invalid measurement probability produced by the MPS state" << std::endl;
 
 				return ClampProbability(std::clamp(probability, 0., 1.));
