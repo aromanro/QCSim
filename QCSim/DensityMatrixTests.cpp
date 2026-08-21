@@ -674,12 +674,11 @@ static bool DensityMatrixExpectationExtrasTest()
 	return true;
 }
 
-// samples the full computational basis state distribution using MeasureNoCollapse (which does not
-// collapse the state, so the circuit only needs to be executed once) and compares the empirical
-// histogram against the exact diagonal populations of the density matrix
+// samples full-register and contiguous-subregister distributions using all four RepeatedMeasure
+// overloads and compares the empirical histograms against the exact diagonal populations
 static bool DensityMatrixSamplingTest()
 {
-	std::cout << "\nDensity matrix simulator - MeasureNoCollapse sampling against the diagonal populations" << std::endl;
+	std::cout << "\nDensity matrix simulator - repeated sampling against the diagonal populations" << std::endl;
 
 	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
 	DM_FillOneQubitGates(gates);
@@ -712,87 +711,77 @@ static bool DensityMatrixSamplingTest()
 		}
 		dm.ApplyDepolarizingNoise(qubitDistr(gen), 0.3);
 
-		// exact populations
+		// exact populations and a snapshot used to verify sampling does not change the state
 		const size_t nrBasisStates = dm.getNrBasisStates();
 		std::vector<double> expected(nrBasisStates);
 		for (size_t s = 0; s < nrBasisStates; ++s)
 			expected[s] = dm.getBasisStateProbability(s);
+		const Eigen::MatrixXcd stateBeforeSampling = dm.getDensityMatrix();
 
-		// the density matrix is not changed by MeasureNoCollapse, so we sample from the same state
-		std::vector<int> counts(nrBasisStates, 0);
-		for (int m = 0; m < nrSamples; ++m)
-			++counts[dm.MeasureNoCollapse()];
-
-		for (size_t s = 0; s < nrBasisStates; ++s)
+		auto checkHistogram = [nrSamples](const auto& counts, const std::vector<double>& probabilities,
+			const std::string& description) -> bool
 		{
-			const double sampled = static_cast<double>(counts[s]) / nrSamples;
-			if (std::abs(sampled - expected[s]) > 0.02)
+			size_t total = 0;
+			for (const auto& measurement : counts)
+				total += measurement.second;
+			if (total != static_cast<size_t>(nrSamples))
 			{
-				std::cout << "Sampling mismatch for state " << s << " with " << nrQubits << " qubits: "
-					<< expected[s] << " (exact) vs " << sampled << " (sampled)" << std::endl;
+				std::cout << description << " returned " << total << " samples instead of " << nrSamples << std::endl;
 				return false;
 			}
+
+			for (size_t s = 0; s < probabilities.size(); ++s)
+			{
+				const auto it = counts.find(s);
+				const size_t count = it == counts.end() ? 0 : it->second;
+				const double sampled = static_cast<double>(count) / nrSamples;
+				if (std::abs(sampled - probabilities[s]) > 0.02)
+				{
+					std::cout << description << " mismatch for outcome " << s << ": "
+						<< probabilities[s] << " (exact) vs " << sampled << " (sampled)" << std::endl;
+					return false;
+				}
+			}
+
+			return true;
+		};
+
+		const auto orderedCounts = dm.RepeatedMeasure(nrSamples);
+		if (!checkHistogram(orderedCounts, expected, "Ordered full-register sampling")) return false;
+
+		const auto unorderedCounts = dm.RepeatedMeasureUnordered(nrSamples);
+		if (!checkHistogram(unorderedCounts, expected, "Unordered full-register sampling")) return false;
+
+		// sample a contiguous subregister and compare against its exact marginal. Starting at qubit one
+		// when possible also checks that the returned outcomes are shifted and packed correctly.
+		{
+			const size_t firstQubit = nrQubits > 1 ? 1 : 0;
+			const size_t secondQubit = static_cast<size_t>(nrQubits - 1);
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << (secondQubit + 1)) - 1 - firstPartMask;
+			const size_t subregisterStates = 1ULL << (secondQubit - firstQubit + 1);
+			std::vector<double> expectedSubregister(subregisterStates, 0.);
+			for (size_t s = 0; s < nrBasisStates; ++s)
+				expectedSubregister[(s & measuredPartMask) >> firstQubit] += expected[s];
+
+			const auto orderedSubregisterCounts = dm.RepeatedMeasure(firstQubit, secondQubit, nrSamples);
+			if (!checkHistogram(orderedSubregisterCounts, expectedSubregister, "Ordered subregister sampling")) return false;
+
+			const auto unorderedSubregisterCounts = dm.RepeatedMeasureUnordered(firstQubit, secondQubit, nrSamples);
+			if (!checkHistogram(unorderedSubregisterCounts, expectedSubregister, "Unordered subregister sampling")) return false;
 		}
 
-		// MeasureNoCollapse must not have changed the state
-		for (size_t s = 0; s < nrBasisStates; ++s)
-			if (std::abs(dm.getBasisStateProbability(s) - expected[s]) > 1E-12)
-			{
-				std::cout << "MeasureNoCollapse changed the state for " << nrQubits << " qubits" << std::endl;
-				return false;
-			}
-
-		// subset sampling: sample only a subset of the qubits and compare against the exact marginal
+		if (!dm.RepeatedMeasure(0).empty() || !dm.RepeatedMeasureUnordered(0).empty() ||
+			!dm.RepeatedMeasure(0, 0, 0).empty() || !dm.RepeatedMeasureUnordered(0, 0, 0).empty())
 		{
-			std::set<size_t> subset;
-			for (int q = 0; q < nrQubits; q += 2) // qubits 0, 2, 4, ...
-				subset.insert(static_cast<size_t>(q));
+			std::cout << "Zero-shot sampling returned a non-empty histogram" << std::endl;
+			return false;
+		}
 
-			// exact marginal populations over the subset (indexed by the packed subset outcome)
-			const size_t subsetStates = 1ULL << subset.size();
-			std::vector<double> expectedSubset(subsetStates, 0.);
-			for (size_t s = 0; s < nrBasisStates; ++s)
-			{
-				size_t idx = 0;
-				int bit = 0;
-				for (const size_t q : subset)
-				{
-					if (s & (1ULL << q)) idx |= (1ULL << bit);
-					++bit;
-				}
-				expectedSubset[idx] += expected[s];
-			}
-
-			std::vector<int> subsetCounts(subsetStates, 0);
-			for (int m = 0; m < nrSamples; ++m)
-			{
-				const auto measured = dm.MeasureNoCollapse(subset);
-				if (measured.size() != subset.size())
-				{
-					std::cout << "Subset MeasureNoCollapse returned the wrong number of qubits for " << nrQubits << " qubits" << std::endl;
-					return false;
-				}
-
-				size_t idx = 0;
-				int bit = 0;
-				for (const size_t q : subset)
-				{
-					if (measured.at(q)) idx |= (1ULL << bit);
-					++bit;
-				}
-				++subsetCounts[idx];
-			}
-
-			for (size_t s = 0; s < subsetStates; ++s)
-			{
-				const double sampled = static_cast<double>(subsetCounts[s]) / nrSamples;
-				if (std::abs(sampled - expectedSubset[s]) > 0.02)
-				{
-					std::cout << "Subset sampling mismatch for outcome " << s << " with " << nrQubits << " qubits: "
-						<< expectedSubset[s] << " (exact) vs " << sampled << " (sampled)" << std::endl;
-					return false;
-				}
-			}
+		if ((dm.getDensityMatrix() - stateBeforeSampling).norm() > 1E-12)
+		{
+			std::cout << "Repeated sampling changed the state for " << nrQubits << " qubits" << std::endl;
+			return false;
 		}
 
 		std::cout << ".";

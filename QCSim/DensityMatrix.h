@@ -8,6 +8,8 @@
 #include <vector>
 #include <complex>
 #include <utility>
+#include <algorithm>
+#include <map>
 #include <set>
 #include <unordered_map>
 
@@ -315,6 +317,34 @@ namespace QC {
 			return res;
 		}
 
+		// repeatedly sample the full computational basis distribution without collapsing the state.
+		// The cumulative distribution is built once, then reused for every shot.
+		std::map<size_t, size_t> RepeatedMeasure(size_t nrTimes = 1000)
+		{
+			return RepeatedMeasureImpl<std::map<size_t, size_t>>(0, NrBasisStates - 1, nrTimes);
+		}
+
+		std::unordered_map<size_t, size_t> RepeatedMeasureUnordered(size_t nrTimes = 1000)
+		{
+			return RepeatedMeasureImpl<std::unordered_map<size_t, size_t>>(0, NrBasisStates - 1, nrTimes);
+		}
+
+		// repeatedly sample a contiguous subregister. The returned outcomes are packed so firstQubit
+		// becomes bit zero, matching the statevector simulator's RepeatedMeasure overloads.
+		std::map<size_t, size_t> RepeatedMeasure(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
+		{
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << (secondQubit + 1)) - 1 - firstPartMask;
+			return RepeatedMeasureImpl<std::map<size_t, size_t>>(firstQubit, measuredPartMask, nrTimes);
+		}
+
+		std::unordered_map<size_t, size_t> RepeatedMeasureUnordered(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
+		{
+			const size_t firstPartMask = (1ULL << firstQubit) - 1;
+			const size_t measuredPartMask = (1ULL << (secondQubit + 1)) - 1 - firstPartMask;
+			return RepeatedMeasureImpl<std::unordered_map<size_t, size_t>>(firstQubit, measuredPartMask, nrTimes);
+		}
+
 		// ---- diagnostics ----
 
 		std::complex<double> Trace() const
@@ -410,6 +440,40 @@ namespace QC {
 		}
 
 	protected:
+		template<class Measurements>
+		Measurements RepeatedMeasureImpl(size_t firstQubit, size_t measuredPartMask, size_t nrTimes)
+		{
+			Measurements measurements;
+			if (nrTimes == 0) return measurements;
+
+			if (nrTimes == 1)
+			{
+				const size_t state = MeasureNoCollapse();
+				++measurements[(state & measuredPartMask) >> firstQubit];
+				return measurements;
+			}
+
+			std::vector<double> cumulativeProbabilities(NrBasisStates);
+			double cumulativeProbability = 0.;
+			for (size_t state = 0; state < NrBasisStates; ++state)
+			{
+				cumulativeProbability += rho(state, state).real();
+				cumulativeProbabilities[state] = cumulativeProbability;
+			}
+
+			for (size_t shot = 0; shot < nrTimes; ++shot)
+			{
+				const double probability = 1. - uniformZeroOne(rng); // exclude zero as a probability
+				const auto it = std::lower_bound(cumulativeProbabilities.begin(), cumulativeProbabilities.end(), probability);
+				const size_t state = it == cumulativeProbabilities.end()
+					? NrBasisStates - 1
+					: static_cast<size_t>(it - cumulativeProbabilities.begin());
+				++measurements[(state & measuredPartMask) >> firstQubit];
+			}
+
+			return measurements;
+		}
+
 		// applies a small gate to every column of rho (the ket index). Each column is a fake 'register'
 		// (an Eigen block expression) fed directly to the reused QubitRegisterCalculator kernels; results
 		// go in place or into the matching column of the target buffer, which is then swapped in - so no
