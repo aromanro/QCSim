@@ -9,6 +9,7 @@
 #include <complex>
 #include <utility>
 #include <algorithm>
+#include <memory>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -86,6 +87,35 @@ namespace QC {
 		void Reset()
 		{
 			setToBasisState(0);
+		}
+
+		void SaveState()
+		{
+			savedStateStorage = rho;
+		}
+
+		void RestoreState()
+		{
+			if (savedStateStorage.size() == 0) return;
+
+			rho = savedStateStorage;
+		}
+
+		void RestoreStateDestructive()
+		{
+			if (savedStateStorage.size() == 0) return;
+
+			rho.swap(savedStateStorage);
+			savedStateStorage.resize(0, 0);
+		}
+
+		std::unique_ptr<DensityMatrix<VectorClass, MatrixClass>> Clone() const
+		{
+			auto sim = std::make_unique<DensityMatrix<VectorClass, MatrixClass>>(NrQubits);
+			sim->rho = rho;
+			sim->savedStateStorage = savedStateStorage;
+
+			return sim;
 		}
 
 		// initialize rho = |psi><psi| from a statevector, very convenient for comparing against
@@ -604,6 +634,7 @@ namespace QC {
 
 		MatrixClass rho;
 		MatrixClass target; // reused scratch buffer, swapped in place of rho when a kernel needs a target
+		MatrixClass savedStateStorage;
 
 		// stateless calculators held as member objects (composition instead of inheritance)
 		ColCalculator colCalculator;

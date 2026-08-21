@@ -792,6 +792,85 @@ static bool DensityMatrixSamplingTest()
 	return true;
 }
 
+static bool DensityMatrixStateSaveRestoreCloneTest()
+{
+	std::cout << "\nDensity matrix simulator - state save, restore and clone" << std::endl;
+
+	QC::DensityMatrix<> dm(3);
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+	dm.ApplyGate(h, 0);
+	dm.ApplyGate(cnot, 2, 0);
+	dm.ApplyDepolarizingNoise(1, 0.3);
+
+	const Eigen::MatrixXcd savedState = dm.getDensityMatrix();
+	dm.SaveState();
+
+	dm.setToBasisState(7);
+	const Eigen::MatrixXcd stateAtClone = dm.getDensityMatrix();
+	auto clone = dm.Clone();
+	if ((clone->getDensityMatrix() - stateAtClone).norm() > 1E-12)
+	{
+		std::cout << "Density matrix clone did not copy the current state" << std::endl;
+		return false;
+	}
+
+	// A regular restore keeps the snapshot available for later restores.
+	dm.RestoreState();
+	if ((dm.getDensityMatrix() - savedState).norm() > 1E-12)
+	{
+		std::cout << "Density matrix RestoreState did not restore the snapshot" << std::endl;
+		return false;
+	}
+	dm.setToBasisState(7);
+	dm.RestoreState();
+	if ((dm.getDensityMatrix() - savedState).norm() > 1E-12)
+	{
+		std::cout << "Density matrix RestoreState consumed the snapshot" << std::endl;
+		return false;
+	}
+
+	// A destructive restore consumes the original's snapshot.
+	dm.setToBasisState(7);
+	dm.RestoreStateDestructive();
+	if ((dm.getDensityMatrix() - savedState).norm() > 1E-12)
+	{
+		std::cout << "Density matrix RestoreStateDestructive did not restore the snapshot" << std::endl;
+		return false;
+	}
+	dm.setToBasisState(0);
+	const Eigen::MatrixXcd stateWithoutSnapshot = dm.getDensityMatrix();
+	dm.RestoreStateDestructive();
+	if ((dm.getDensityMatrix() - stateWithoutSnapshot).norm() > 1E-12)
+	{
+		std::cout << "Density matrix destructive restore did not consume the snapshot" << std::endl;
+		return false;
+	}
+
+	// The clone owns an independent copy of both the current state and the saved snapshot.
+	clone->RestoreState();
+	if ((clone->getDensityMatrix() - savedState).norm() > 1E-12)
+	{
+		std::cout << "Density matrix clone did not copy the saved snapshot" << std::endl;
+		return false;
+	}
+	clone->setToBasisState(7);
+	if ((dm.getDensityMatrix() - stateWithoutSnapshot).norm() > 1E-12)
+	{
+		std::cout << "Changing a density matrix clone changed the original" << std::endl;
+		return false;
+	}
+	clone->RestoreStateDestructive();
+	if ((clone->getDensityMatrix() - savedState).norm() > 1E-12)
+	{
+		std::cout << "Density matrix clone's destructive restore failed" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 // smallest eigenvalue of a Hermitian matrix (used to check positive semidefiniteness)
 static double DM_SmallestEigenvalue(const Eigen::MatrixXcd& rho)
 {
@@ -964,5 +1043,6 @@ bool DensityMatrixTests()
 	std::cout << "\nDensity matrix simulator tests" << std::endl;
 
 	return DensityMatrixUnitaryTest() && DensityMatrixChannelsTest() && DensityMatrixMeasurementTest() && DensityMatrixPauliExpectationTest() &&
-		DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() && DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest();
+		DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() && DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
+		DensityMatrixStateSaveRestoreCloneTest();
 }

@@ -204,6 +204,7 @@ namespace QC {
 
 			virtual std::shared_ptr<MPOSimulatorStateInterface> getState() const = 0;
 			virtual void setState(const std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
+			virtual void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
 
 		protected:
 			// single-qubit Pauli matrices used to build the predefined noise channels

@@ -442,7 +442,7 @@ namespace QC {
 				gammas = stateRef->gammas;
 			}
 
-			void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state)
+			void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) override
 			{
 				if (!state) return;
 

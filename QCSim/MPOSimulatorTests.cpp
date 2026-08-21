@@ -910,11 +910,11 @@ static bool TwoQubitKrausOperatorsTestMPO()
 	return true;
 }
 
-// getState/setState must snapshot and restore the full state: tensors, bonds and, for the decorator,
-// the logical->physical qubit map produced by the swaps of non adjacent gates
+// SaveState/RestoreState and Clone must preserve the full state: tensors, bonds and, for the
+// decorator, the logical->physical qubit map produced by swaps of non adjacent gates.
 static bool StateSaveRestoreTestMPO()
 {
-	std::cout << "\nMPO simulator state save/restore test" << std::endl;
+	std::cout << "\nMPO simulator state save, restore and clone test" << std::endl;
 
 	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
 	FillOneQubitGatesMPO(gates);
@@ -944,29 +944,80 @@ static bool StateSaveRestoreTestMPO()
 			}
 
 			const Eigen::MatrixXcd rhoA = mpo.getDensityMatrix();
-			auto saved = mpo.getState();
+			mpo.SaveState();
 
-			// evolve further into a (almost surely different) state B
-			for (int i = 0; i < 20; ++i)
-			{
-				const int gate = gateDistr(gen);
-				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
-				int qubit1 = qubitDistr(gen);
-				int qubit2 = qubit1;
-				if (twoQubitsGate)
-					while (qubit2 == qubit1) qubit2 = qubitDistr(gen);
+			// Move to a known different state, then clone. The clone must copy this current state while
+			// also receiving its own independent copy of the earlier saved snapshot.
+			const size_t allOnes = (1ULL << nrQubits) - 1;
+			mpo.setToBasisState(allOnes);
+			const Eigen::MatrixXcd rhoB = mpo.getDensityMatrix();
+			auto clone = mpo.Clone();
+			if (!CompareDensityMatrices(rhoB, clone->getDensityMatrix(), nrQubits))
+				return false;
 
-				mpo.ApplyGate(*gates[gate], qubit1, qubit2);
-			}
-
-			// restore the snapshot and check we are back at A
-			mpo.setState(saved);
-
+			// A regular restore is reusable.
+			mpo.RestoreState();
 			if (!CompareDensityMatrices(rhoA, mpo.getDensityMatrix(), nrQubits))
+				return false;
+			mpo.setToBasisState(allOnes);
+			mpo.RestoreState();
+			if (!CompareDensityMatrices(rhoA, mpo.getDensityMatrix(), nrQubits))
+				return false;
+
+			// A destructive restore consumes the original snapshot.
+			mpo.setToBasisState(allOnes);
+			mpo.RestoreStateDestructive();
+			if (!CompareDensityMatrices(rhoA, mpo.getDensityMatrix(), nrQubits))
+				return false;
+			mpo.setToBasisState(0);
+			const Eigen::MatrixXcd rhoWithoutSnapshot = mpo.getDensityMatrix();
+			mpo.RestoreStateDestructive();
+			if (!CompareDensityMatrices(rhoWithoutSnapshot, mpo.getDensityMatrix(), nrQubits))
+				return false;
+
+			// Consuming the original snapshot must not affect the clone's saved snapshot.
+			clone->RestoreState();
+			if (!CompareDensityMatrices(rhoA, clone->getDensityMatrix(), nrQubits))
+				return false;
+			clone->setToBasisState(allOnes);
+			if (!CompareDensityMatrices(rhoWithoutSnapshot, mpo.getDensityMatrix(), nrQubits))
+				return false;
+			clone->RestoreStateDestructive();
+			if (!CompareDensityMatrices(rhoA, clone->getDensityMatrix(), nrQubits))
 				return false;
 
 			std::cout << ".";
 		}
+	}
+
+	// Clone also preserves simulation limits and the routing callback.
+	{
+		QC::TensorNetworks::MPOSimulator mpo(4);
+		mpo.setLimitBondDimension(1);
+		int callbackCalls = 0;
+		mpo.SetMeetingPositionCallback([&callbackCalls](const std::vector<Eigen::Index>&) {
+			++callbackCalls;
+			return Eigen::Index(1);
+		});
+
+		auto clone = mpo.Clone();
+		QC::Gates::HadamardGate<> h;
+		QC::Gates::CNOTGate<> cnot;
+		clone->ApplyGate(h, 0);
+		clone->ApplyGate(cnot, 0, 3);
+
+		if (callbackCalls != 1)
+		{
+			std::cout << "MPO clone did not copy the routing callback" << std::endl;
+			return false;
+		}
+
+		for (const Eigen::Index dimension : clone->getBondDimensions())
+			if (dimension > 1)
+			{
+				std::cout << "MPO clone did not copy the bond dimension limit" << std::endl;
+				return false;
+			}
 	}
 
 	std::cout << "\nSuccess" << std::endl;

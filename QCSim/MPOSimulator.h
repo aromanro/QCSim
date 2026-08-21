@@ -464,6 +464,63 @@ namespace QC
 				qubitsMapInv = simState->qubitsMapInv;
 			}
 
+			void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) override
+			{
+				if (!state) return;
+
+				impl.setStateDestructive(state);
+
+				auto simState = std::static_pointer_cast<MPOSimulatorState>(state);
+				qubitsMap.swap(simState->qubitsMap);
+				qubitsMapInv.swap(simState->qubitsMapInv);
+
+				state.reset();
+			}
+
+			void SaveState()
+			{
+				savedState = getState();
+			}
+
+			void RestoreState()
+			{
+				setState(savedState);
+			}
+
+			void RestoreStateDestructive()
+			{
+				setStateDestructive(savedState);
+			}
+
+			std::unique_ptr<MPOSimulator> Clone() const
+			{
+				auto sim = std::make_unique<MPOSimulator>(getNrQubits());
+
+				sim->qubitsMap = qubitsMap;
+				sim->qubitsMapInv = qubitsMapInv;
+				sim->impl.limitSize = impl.limitSize;
+				sim->impl.limitEntanglement = impl.limitEntanglement;
+				sim->impl.chi = impl.chi;
+				sim->impl.singularValueThreshold = impl.singularValueThreshold;
+				sim->impl.lambdas = impl.lambdas;
+				sim->impl.gammas = impl.gammas;
+
+				sim->meetingPositionCallback = meetingPositionCallback;
+
+				if (savedState)
+				{
+					const auto state = std::static_pointer_cast<MPOSimulatorState>(savedState);
+					auto stateClone = std::make_shared<MPOSimulatorState>();
+					stateClone->gammas = state->gammas;
+					stateClone->lambdas = state->lambdas;
+					stateClone->qubitsMap = state->qubitsMap;
+					stateClone->qubitsMapInv = state->qubitsMapInv;
+					sim->savedState = stateClone;
+				}
+
+				return sim;
+			}
+
 			std::vector<IndexType> getBondDimensions() const
 			{
 				return impl.getBondDimensions();
@@ -647,6 +704,8 @@ namespace QC
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
 			MeetingPositionCallback meetingPositionCallback;
+
+			std::shared_ptr<MPOSimulatorStateInterface> savedState;
 		};
 
 	}
