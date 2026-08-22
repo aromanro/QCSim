@@ -7,6 +7,14 @@
 #include <random>
 #include <vector>
 #include <complex>
+#include <chrono>
+#include <cctype>
+#include <cassert>
+#include <cstdint>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+#include <string>
 #include <utility>
 #include <algorithm>
 #include <memory>
@@ -46,13 +54,11 @@ namespace QC {
 		using RowCalculator = QubitRegisterCalculator<RowXpr, MatrixClass>;
 
 		DensityMatrix(size_t N = 3, unsigned int addseed = 0)
-			: NrQubits(N), NrBasisStates(1ULL << N),
+			: NrQubits(N), NrBasisStates(CheckedBasisStateCount(N)),
 			rho(MatrixClass::Zero(NrBasisStates, NrBasisStates)),
 			target(MatrixClass::Zero(NrBasisStates, NrBasisStates)),
 			uniformZeroOne(0, 1)
 		{
-			assert(N > 0);
-
 			if (addseed == 0)
 			{
 				std::random_device rdl;
@@ -69,6 +75,9 @@ namespace QC {
 		size_t getNrQubits() const { return NrQubits; }
 		size_t getNrBasisStates() const { return NrBasisStates; }
 
+		// Allows simulations and statistical tests to be reproduced exactly.
+		void SetRandomSeed(uint64_t seed) { rng.seed(seed); }
+
 		const MatrixClass& getDensityMatrix() const { return rho; }
 
 		void Clear()
@@ -78,7 +87,8 @@ namespace QC {
 
 		void setToBasisState(size_t State)
 		{
-			if (State >= NrBasisStates) return;
+			if (State >= NrBasisStates)
+				throw std::invalid_argument("Basis state is outside the register");
 
 			rho.setZero();
 			rho(State, State) = 1.;
@@ -114,24 +124,35 @@ namespace QC {
 			auto sim = std::make_unique<DensityMatrix<VectorClass, MatrixClass>>(NrQubits);
 			sim->rho = rho;
 			sim->savedStateStorage = savedStateStorage;
+			sim->rng = rng;
+			sim->uniformZeroOne = uniformZeroOne;
 
 			return sim;
 		}
 
-		// initialize rho = |psi><psi| from a statevector, very convenient for comparing against
-		// the statevector simulator
+		// Initialize rho = |psi><psi| from a statevector, normalizing any finite non-zero input.
+		// This is very convenient for comparing against the statevector simulator.
 		void setFromStatevector(const VectorClass& psi)
 		{
-			assert(static_cast<size_t>(psi.size()) == NrBasisStates);
+			if (psi.size() < 0 || static_cast<size_t>(psi.size()) != NrBasisStates)
+				throw std::invalid_argument("Statevector dimension does not match the register");
+			if (!psi.allFinite())
+				throw std::invalid_argument("Statevector contains a non-finite value");
 
-			rho = psi * psi.adjoint();
+			const double normSquared = psi.squaredNorm();
+			if (!std::isfinite(normSquared) || normSquared <= 1E-20)
+				throw std::invalid_argument("Statevector must have a finite non-zero norm");
+
+			rho = (psi * psi.adjoint()) / normSquared;
 		}
 
 		// set the whole density matrix directly (the caller is responsible for it being a valid state:
 		// Hermitian, positive semidefinite and unit trace)
 		void setDensityMatrix(const MatrixClass& newRho)
 		{
-			assert(static_cast<size_t>(newRho.rows()) == NrBasisStates && static_cast<size_t>(newRho.cols()) == NrBasisStates);
+			if (newRho.rows() < 0 || newRho.cols() < 0 ||
+				static_cast<size_t>(newRho.rows()) != NrBasisStates || static_cast<size_t>(newRho.cols()) != NrBasisStates)
+				throw std::invalid_argument("Density matrix dimensions do not match the register");
 
 			rho = newRho;
 		}
@@ -140,13 +161,18 @@ namespace QC {
 		// the weights are normalized to sum to 1 (negative or zero weights are ignored)
 		void setToMixtureOfBasisStates(const std::vector<std::pair<size_t, double>>& mixture)
 		{
-			rho.setZero();
-
 			double total = 0.;
 			for (const auto& [state, weight] : mixture)
+			{
+				if (!std::isfinite(weight))
+					throw std::invalid_argument("Mixture weights must be finite");
 				if (weight > 0. && state < NrBasisStates) total += weight;
+			}
 
-			if (total <= 0.) return;
+			if (!std::isfinite(total) || total <= 0.)
+				throw std::invalid_argument("Mixture must contain at least one valid positive weight");
+
+			rho.setZero();
 
 			for (const auto& [state, weight] : mixture)
 				if (weight > 0. && state < NrBasisStates)
@@ -156,7 +182,7 @@ namespace QC {
 		// rho' = U rho U^dagger
 		void ApplyGate(const GateClass& gate, size_t qubit, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0)
 		{
-			const size_t gateQubits = gate.getQubitsNumber();
+			const size_t gateQubits = ValidateGateAndQubits(gate, qubit, controllingQubit1, controllingQubit2);
 			const MatrixClass& U = gate.getRawOperatorMatrix();
 			const MatrixClass Uconj = U.conjugate(); // small, cheap to conjugate
 
@@ -179,19 +205,40 @@ namespace QC {
 				ApplyGate(gate);
 		}
 
-		// Generic completely positive trace preserving channel: rho' = sum_k E_k rho E_k^dagger
+		// Generic completely positive trace preserving channel: rho' = sum_k E_k rho E_k^dagger.
+		// The completeness relation sum_k E_k^dagger E_k = I is validated before changing the state.
 		// The Kraus operators are small matrices (2x2 for a single qubit, 4x4 for two qubits) acting
 		// on the given qubit(s). This is the fundamental non-unitary operation; a unitary gate is just
 		// the special case of a single Kraus operator E_0 = U.
 		void ApplyChannel(const std::vector<MatrixClass>& kraus, size_t qubit, size_t controllingQubit1 = 0)
 		{
+			if (kraus.empty())
+				throw std::invalid_argument("A channel must contain at least one Kraus operator");
+
+			const size_t gateQubits = GetOperatorQubits(kraus.front(), 2);
+			ValidateQubits(gateQubits, qubit, controllingQubit1, 0);
+			const Eigen::Index operatorDimension = kraus.front().rows();
+			MatrixClass completeness = MatrixClass::Zero(operatorDimension, operatorDimension);
+			for (const auto& E : kraus)
+			{
+				if (GetOperatorQubits(E, 2) != gateQubits || E.rows() != operatorDimension)
+					throw std::invalid_argument("All Kraus operators must have the same dimensions");
+				if (!E.allFinite())
+					throw std::invalid_argument("Kraus operators must contain only finite values");
+				completeness.noalias() += E.adjoint() * E;
+			}
+
+			const MatrixClass identity = MatrixClass::Identity(operatorDimension, operatorDimension);
+			const double completenessTolerance = 1E-10 * std::max<Eigen::Index>(1, operatorDimension);
+			if ((completeness - identity).norm() > completenessTolerance)
+				throw std::invalid_argument("Kraus operators do not define a trace-preserving channel");
+
 			const MatrixClass original = rho;
 			MatrixClass acc = MatrixClass::Zero(NrBasisStates, NrBasisStates);
 
 			for (const auto& E : kraus)
 			{
 				const Gates::AppliedGate<MatrixClass> gate(E);
-				const size_t gateQubits = gate.getQubitsNumber();
 				const MatrixClass Econj = E.conjugate();
 
 				rho = original;
@@ -212,18 +259,21 @@ namespace QC {
 		// bit flip: rho' = (1 - p) rho + p X rho X
 		void ApplyBitFlipNoise(size_t qubit, double p)
 		{
+			ValidateProbability(p, "Bit-flip probability");
 			ApplyChannel({ std::sqrt(1. - p) * PauliI(), std::sqrt(p) * PauliX() }, qubit);
 		}
 
 		// phase flip: rho' = (1 - p) rho + p Z rho Z
 		void ApplyPhaseFlipNoise(size_t qubit, double p)
 		{
+			ValidateProbability(p, "Phase-flip probability");
 			ApplyChannel({ std::sqrt(1. - p) * PauliI(), std::sqrt(p) * PauliZ() }, qubit);
 		}
 
 		// depolarizing: rho' = (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
 		void ApplyDepolarizingNoise(size_t qubit, double p)
 		{
+			ValidateProbability(p, "Depolarizing probability");
 			const double s = std::sqrt(p / 3.);
 			ApplyChannel({ std::sqrt(1. - p) * PauliI(), s * PauliX(), s * PauliY(), s * PauliZ() }, qubit);
 		}
@@ -231,6 +281,7 @@ namespace QC {
 		// amplitude damping (|1> -> |0> relaxation with probability gamma)
 		void ApplyAmplitudeDamping(size_t qubit, double gamma)
 		{
+			ValidateProbability(gamma, "Amplitude-damping probability");
 			MatrixClass E0 = MatrixClass::Zero(2, 2);
 			E0(0, 0) = 1.;
 			E0(1, 1) = std::sqrt(1. - gamma);
@@ -244,6 +295,7 @@ namespace QC {
 		// phase damping / dephasing, suppresses the off diagonal coherences by lambda = sqrt(1 - gamma)
 		void ApplyPhaseDamping(size_t qubit, double gamma)
 		{
+			ValidateProbability(gamma, "Phase-damping probability");
 			MatrixClass E0 = MatrixClass::Zero(2, 2);
 			E0(0, 0) = 1.;
 			E0(1, 1) = std::sqrt(1. - gamma);
@@ -270,6 +322,7 @@ namespace QC {
 
 		double GetQubitProbability(size_t qubit) const
 		{
+			ValidateQubit(qubit);
 			const size_t mask = 1ULL << qubit;
 
 			double p1 = 0;
@@ -283,16 +336,25 @@ namespace QC {
 		// sample a computational basis outcome for a single qubit and collapse
 		size_t MeasureQubit(size_t qubit)
 		{
+			ValidateQubit(qubit);
 			const size_t mask = 1ULL << qubit;
 
 			double p0 = 0;
+			double p1 = 0;
 			for (size_t i = 0; i < NrBasisStates; ++i)
-				if ((i & mask) == 0)
-					p0 += rho(i, i).real();
+			{
+				const double population = ValidatedPopulation(i);
+				if ((i & mask) == 0) p0 += population;
+				else p1 += population;
+			}
 
-			const double r = uniformZeroOne(rng);
+			const double total = p0 + p1;
+			if (!std::isfinite(total) || total <= 1E-20)
+				throw std::domain_error("Cannot measure a state with no probability mass");
+
+			const double r = std::min(uniformZeroOne(rng) * total, std::nextafter(total, 0.));
 			const size_t result = (r < p0) ? 0 : 1;
-			const double pm = (result == 0) ? p0 : 1. - p0;
+			const double pm = (result == 0) ? p0 : p1;
 
 			CollapseQubit(qubit, result, pm);
 
@@ -303,6 +365,7 @@ namespace QC {
 		// destroys the coherence between the two measurement sectors but keeps the populations
 		void DephaseMeasure(size_t qubit)
 		{
+			ValidateQubit(qubit);
 			const size_t mask = 1ULL << qubit;
 
 			for (size_t i = 0; i < NrBasisStates; ++i)
@@ -316,20 +379,13 @@ namespace QC {
 		// The returned value is the measured basis state (bit k corresponds to qubit k).
 		size_t MeasureNoCollapse()
 		{
-			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probability
-			double accum = 0;
-			size_t state = NrBasisStates - 1;
-			for (size_t i = 0; i < NrBasisStates; ++i)
-			{
-				accum += rho(i, i).real();
-				if (prob <= accum)
-				{
-					state = i;
-					break;
-				}
-			}
-
-			return state;
+			std::vector<double> cumulativeProbabilities;
+			const double total = BuildCumulativeProbabilities(cumulativeProbabilities);
+			const double probability = std::min(uniformZeroOne(rng) * total, std::nextafter(total, 0.));
+			const auto it = std::upper_bound(cumulativeProbabilities.begin(), cumulativeProbabilities.end(), probability);
+			return it == cumulativeProbabilities.end()
+				? NrBasisStates - 1
+				: static_cast<size_t>(it - cumulativeProbabilities.begin());
 		}
 
 		// sample a subset of qubits from the diagonal populations without collapsing the state.
@@ -339,6 +395,9 @@ namespace QC {
 		{
 			std::unordered_map<size_t, bool> res;
 			if (qubits.empty()) return res;
+
+			for (const size_t qubit : qubits)
+				ValidateQubit(qubit);
 
 			const size_t state = MeasureNoCollapse();
 			for (const size_t qubit : qubits)
@@ -363,6 +422,7 @@ namespace QC {
 		// becomes bit zero, matching the statevector simulator's RepeatedMeasure overloads.
 		std::map<size_t, size_t> RepeatedMeasure(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
 		{
+			ValidateMeasurementRange(firstQubit, secondQubit);
 			const size_t firstPartMask = (1ULL << firstQubit) - 1;
 			const size_t measuredPartMask = (1ULL << (secondQubit + 1)) - 1 - firstPartMask;
 			return RepeatedMeasureImpl<std::map<size_t, size_t>>(firstQubit, measuredPartMask, nrTimes);
@@ -370,6 +430,7 @@ namespace QC {
 
 		std::unordered_map<size_t, size_t> RepeatedMeasureUnordered(size_t firstQubit, size_t secondQubit, size_t nrTimes = 1000)
 		{
+			ValidateMeasurementRange(firstQubit, secondQubit);
 			const size_t firstPartMask = (1ULL << firstQubit) - 1;
 			const size_t measuredPartMask = (1ULL << (secondQubit + 1)) - 1 - firstPartMask;
 			return RepeatedMeasureImpl<std::unordered_map<size_t, size_t>>(firstQubit, measuredPartMask, nrTimes);
@@ -385,7 +446,8 @@ namespace QC {
 		// Tr(rho^2), equals 1 for a pure state, < 1 for a mixed one
 		double Purity() const
 		{
-			return (rho * rho).trace().real();
+			// For a Hermitian density matrix Tr(rho^2) is its squared Frobenius norm.
+			return rho.squaredNorm();
 		}
 
 		bool IsHermitian(double eps = 1E-10) const
@@ -403,7 +465,10 @@ namespace QC {
 		// <O> = Tr(rho O), the caller should ensure O is Hermitian and take the real part
 		std::complex<double> ExpectationValue(const MatrixClass& O) const
 		{
-			return (rho * O).trace();
+			if (O.rows() != rho.rows() || O.cols() != rho.cols())
+				throw std::invalid_argument("Observable dimensions do not match the density matrix");
+
+			return rho.cwiseProduct(O.transpose()).sum();
 		}
 
 		// <P> = Tr(rho P) for a Pauli string P = (x) P_i, where character i of the string is
@@ -483,18 +548,13 @@ namespace QC {
 				return measurements;
 			}
 
-			std::vector<double> cumulativeProbabilities(NrBasisStates);
-			double cumulativeProbability = 0.;
-			for (size_t state = 0; state < NrBasisStates; ++state)
-			{
-				cumulativeProbability += rho(state, state).real();
-				cumulativeProbabilities[state] = cumulativeProbability;
-			}
+			std::vector<double> cumulativeProbabilities;
+			const double total = BuildCumulativeProbabilities(cumulativeProbabilities);
 
 			for (size_t shot = 0; shot < nrTimes; ++shot)
 			{
-				const double probability = 1. - uniformZeroOne(rng); // exclude zero as a probability
-				const auto it = std::lower_bound(cumulativeProbabilities.begin(), cumulativeProbabilities.end(), probability);
+				const double probability = std::min(uniformZeroOne(rng) * total, std::nextafter(total, 0.));
+				const auto it = std::upper_bound(cumulativeProbabilities.begin(), cumulativeProbabilities.end(), probability);
 				const size_t state = it == cumulativeProbabilities.end()
 					? NrBasisStates - 1
 					: static_cast<size_t>(it - cumulativeProbabilities.begin());
@@ -502,6 +562,115 @@ namespace QC {
 			}
 
 			return measurements;
+		}
+
+		static size_t CheckedBasisStateCount(size_t nrQubits)
+		{
+			if (nrQubits == 0)
+				throw std::invalid_argument("Qubit number must be positive");
+			if (nrQubits >= std::numeric_limits<size_t>::digits)
+				throw std::invalid_argument("Qubit number is too large for basis-state indexing");
+
+			const size_t nrBasisStates = size_t{ 1 } << nrQubits;
+			if (nrBasisStates > static_cast<size_t>(std::numeric_limits<Eigen::Index>::max()))
+				throw std::length_error("Register dimension exceeds Eigen's index range");
+			const size_t maxElements = std::numeric_limits<size_t>::max() / sizeof(typename MatrixClass::Scalar);
+			if (nrBasisStates > maxElements / nrBasisStates)
+				throw std::length_error("Density-matrix storage size overflows size_t");
+
+			return nrBasisStates;
+		}
+
+		static size_t GetOperatorQubits(const MatrixClass& op, size_t maxQubits = 3)
+		{
+			if (op.rows() <= 0 || op.cols() <= 0 || op.rows() != op.cols())
+				throw std::invalid_argument("Operator must be a non-empty square matrix");
+
+			const size_t dimension = static_cast<size_t>(op.rows());
+			if ((dimension & (dimension - 1)) != 0)
+				throw std::invalid_argument("Operator dimension must be a power of two");
+
+			size_t qubits = 0;
+			for (size_t value = dimension; value > 1; value >>= 1) ++qubits;
+			if (qubits == 0 || qubits > maxQubits)
+				throw std::invalid_argument("Operator acts on an unsupported number of qubits");
+
+			return qubits;
+		}
+
+		size_t ValidateGateAndQubits(const GateClass& gate, size_t qubit, size_t controllingQubit1, size_t controllingQubit2) const
+		{
+			const MatrixClass& op = gate.getRawOperatorMatrix();
+			const size_t gateQubits = GetOperatorQubits(op);
+			if (gate.getQubitsNumber() != gateQubits)
+				throw std::invalid_argument("Gate arity does not match its operator matrix");
+			if (!op.allFinite())
+				throw std::invalid_argument("Gate operator contains a non-finite value");
+
+			ValidateQubits(gateQubits, qubit, controllingQubit1, controllingQubit2);
+			return gateQubits;
+		}
+
+		void ValidateQubits(size_t gateQubits, size_t qubit, size_t controllingQubit1, size_t controllingQubit2) const
+		{
+			ValidateQubit(qubit);
+			if (gateQubits >= 2)
+			{
+				ValidateQubit(controllingQubit1);
+				if (qubit == controllingQubit1)
+					throw std::invalid_argument("Gate qubits must be distinct");
+			}
+			if (gateQubits == 3)
+			{
+				ValidateQubit(controllingQubit2);
+				if (qubit == controllingQubit2 || controllingQubit1 == controllingQubit2)
+					throw std::invalid_argument("Gate qubits must be distinct");
+			}
+		}
+
+		void ValidateQubit(size_t qubit) const
+		{
+			if (qubit >= NrQubits)
+				throw std::invalid_argument("Qubit number is outside the register");
+		}
+
+		void ValidateMeasurementRange(size_t firstQubit, size_t secondQubit) const
+		{
+			if (firstQubit > secondQubit)
+				throw std::invalid_argument("First measured qubit must not exceed the second");
+			ValidateQubit(secondQubit);
+		}
+
+		static void ValidateProbability(double probability, const char* name)
+		{
+			if (!std::isfinite(probability) || probability < 0. || probability > 1.)
+				throw std::invalid_argument(std::string(name) + " must be finite and in [0, 1]");
+		}
+
+		double ValidatedPopulation(size_t state) const
+		{
+			const auto diagonal = rho(state, state);
+			const double population = diagonal.real();
+			if (!std::isfinite(population) || !std::isfinite(diagonal.imag()) || std::abs(diagonal.imag()) > 1E-10)
+				throw std::domain_error("Density-matrix populations must be finite and real");
+			if (population < -1E-12)
+				throw std::domain_error("Density-matrix populations must be non-negative");
+			return std::max(0., population);
+		}
+
+		double BuildCumulativeProbabilities(std::vector<double>& cumulativeProbabilities) const
+		{
+			cumulativeProbabilities.resize(NrBasisStates);
+			double cumulativeProbability = 0.;
+			for (size_t state = 0; state < NrBasisStates; ++state)
+			{
+				cumulativeProbability += ValidatedPopulation(state);
+				cumulativeProbabilities[state] = cumulativeProbability;
+			}
+
+			if (!std::isfinite(cumulativeProbability) || cumulativeProbability <= 1E-20)
+				throw std::domain_error("Cannot sample a state with no probability mass");
+			return cumulativeProbability;
 		}
 
 		// applies a small gate to every column of rho (the ket index). Each column is a fake 'register'

@@ -1,4 +1,7 @@
 #include <iostream>
+#include <array>
+#include <functional>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -38,6 +41,7 @@ static void DM_FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumG
 {
 	gates.emplace_back(std::make_shared<QC::Gates::SwapGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::iSwapGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::iSwapDagGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::DecrementGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::CNOTGate<>>());
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledYGate<>>());
@@ -48,6 +52,68 @@ static void DM_FillTwoQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumG
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRxGate<>>(M_PI / 5));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRyGate<>>(M_PI / 3));
 	gates.emplace_back(std::make_shared<QC::Gates::ControlledRzGate<>>(M_PI / 7));
+}
+
+static Eigen::MatrixXcd DM_FourierMatrix(Eigen::Index dimension)
+{
+	Eigen::MatrixXcd fourier(dimension, dimension);
+	const double scale = 1. / std::sqrt(static_cast<double>(dimension));
+	for (Eigen::Index row = 0; row < dimension; ++row)
+		for (Eigen::Index col = 0; col < dimension; ++col)
+			fourier(row, col) = scale * std::polar(1., 2. * M_PI * static_cast<double>(row * col) / static_cast<double>(dimension));
+	return fourier;
+}
+
+static void DM_FillThreeQubitGates(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
+{
+	gates.emplace_back(std::make_shared<QC::Gates::ToffoliGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::FredkinGate<>>());
+	gates.emplace_back(std::make_shared<QC::Gates::CCZGate<>>());
+
+	// A dense complex gate exercises the generic three-qubit kernel rather than a specialized path.
+	gates.emplace_back(std::make_shared<QC::Gates::ThreeQubitsGate<>>(DM_FourierMatrix(8)));
+}
+
+template<class Callable>
+static bool DM_ExpectInvalidArgument(Callable&& callable, const char* description)
+{
+	try
+	{
+		callable();
+	}
+	catch (const std::invalid_argument&)
+	{
+		return true;
+	}
+	catch (const std::exception& ex)
+	{
+		std::cout << description << " threw the wrong exception: " << ex.what() << std::endl;
+		return false;
+	}
+
+	std::cout << description << " did not throw std::invalid_argument" << std::endl;
+	return false;
+}
+
+template<class Callable>
+static bool DM_ExpectDomainError(Callable&& callable, const char* description)
+{
+	try
+	{
+		callable();
+	}
+	catch (const std::domain_error&)
+	{
+		return true;
+	}
+	catch (const std::exception& ex)
+	{
+		std::cout << description << " threw the wrong exception: " << ex.what() << std::endl;
+		return false;
+	}
+
+	std::cout << description << " did not throw std::domain_error" << std::endl;
+	return false;
 }
 
 // checks that a density matrix equals the outer product |psi><psi| of the statevector simulator
@@ -139,6 +205,170 @@ static bool DensityMatrixUnitaryTest()
 
 	std::cout << "Success" << std::endl;
 
+	return true;
+}
+
+// Independently embeds a small operator in the full Hilbert space. Local bit zero corresponds to
+// qubits[0], local bit one to qubits[1], and so on, matching the simulator's gate convention.
+static Eigen::MatrixXcd DM_EmbedOperator(const Eigen::MatrixXcd& op, const std::vector<size_t>& qubits, size_t nrQubits)
+{
+	const size_t nrBasisStates = 1ULL << nrQubits;
+	size_t operatedMask = 0;
+	for (const size_t qubit : qubits) operatedMask |= 1ULL << qubit;
+	const size_t unaffectedMask = (nrBasisStates - 1) ^ operatedMask;
+
+	Eigen::MatrixXcd embedded = Eigen::MatrixXcd::Zero(static_cast<Eigen::Index>(nrBasisStates), static_cast<Eigen::Index>(nrBasisStates));
+	for (size_t row = 0; row < nrBasisStates; ++row)
+		for (size_t col = 0; col < nrBasisStates; ++col)
+		{
+			if ((row & unaffectedMask) != (col & unaffectedMask)) continue;
+
+			size_t localRow = 0;
+			size_t localCol = 0;
+			for (size_t localQubit = 0; localQubit < qubits.size(); ++localQubit)
+			{
+				localRow |= ((row >> qubits[localQubit]) & 1ULL) << localQubit;
+				localCol |= ((col >> qubits[localQubit]) & 1ULL) << localQubit;
+			}
+			embedded(static_cast<Eigen::Index>(row), static_cast<Eigen::Index>(col)) =
+				op(static_cast<Eigen::Index>(localRow), static_cast<Eigen::Index>(localCol));
+		}
+
+	return embedded;
+}
+
+static Eigen::MatrixXcd DM_DeterministicMixedState(size_t nrQubits)
+{
+	const Eigen::Index dimension = static_cast<Eigen::Index>(1ULL << nrQubits);
+	Eigen::VectorXcd psi1(dimension);
+	Eigen::VectorXcd psi2(dimension);
+	for (Eigen::Index i = 0; i < dimension; ++i)
+	{
+		psi1(i) = std::complex<double>(static_cast<double>(i + 1), static_cast<double>(i % 3) - 1.);
+		psi2(i) = std::complex<double>(static_cast<double>((2 * i + 1) % 7) - 3., static_cast<double>((3 * i + 2) % 5) - 2.);
+	}
+	psi1.normalize();
+	psi2.normalize();
+	return 0.37 * (psi1 * psi1.adjoint()) + 0.63 * (psi2 * psi2.adjoint());
+}
+
+// Cross-checks the column/row gate kernels against an independently embedded dense operator on a
+// genuinely mixed state. Both specialized gate objects and recorded AppliedGate objects are used.
+static bool DensityMatrixDenseGateReferenceTest()
+{
+	std::cout << "\nDensity matrix simulator - gates compared against independently embedded dense operators" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> oneQubitGates;
+	oneQubitGates.emplace_back(std::make_shared<QC::Gates::HadamardGate<>>());
+	oneQubitGates.emplace_back(std::make_shared<QC::Gates::UGate<>>(M_PI / 5., M_PI / 7.));
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> twoQubitGates;
+	twoQubitGates.emplace_back(std::make_shared<QC::Gates::CNOTGate<>>());
+	twoQubitGates.emplace_back(std::make_shared<QC::Gates::iSwapGate<>>());
+	twoQubitGates.emplace_back(std::make_shared<QC::Gates::iSwapDagGate<>>());
+	twoQubitGates.emplace_back(std::make_shared<QC::Gates::TwoQubitsGate<>>(DM_FourierMatrix(4)));
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> threeQubitGates;
+	DM_FillThreeQubitGates(threeQubitGates);
+
+	constexpr size_t nrQubits = 4;
+	const Eigen::MatrixXcd initial = DM_DeterministicMixedState(nrQubits);
+	auto checkPlacement = [&](const QC::Gates::QuantumGateWithOp<>& gate, const std::vector<size_t>& qubits) -> bool
+	{
+		const Eigen::MatrixXcd embedded = DM_EmbedOperator(gate.getRawOperatorMatrix(), qubits, nrQubits);
+		const Eigen::MatrixXcd expected = embedded * initial * embedded.adjoint();
+
+		QC::DensityMatrix<> direct(nrQubits);
+		direct.setDensityMatrix(initial);
+		direct.ApplyGate(gate, qubits[0], qubits.size() > 1 ? qubits[1] : 0, qubits.size() > 2 ? qubits[2] : 0);
+
+		QC::DensityMatrix<> recorded(nrQubits);
+		recorded.setDensityMatrix(initial);
+		recorded.ApplyGate(QC::Gates::AppliedGate<>(gate.getRawOperatorMatrix(), qubits[0],
+			qubits.size() > 1 ? qubits[1] : 0, qubits.size() > 2 ? qubits[2] : 0));
+
+		if ((direct.getDensityMatrix() - expected).norm() > 1E-9 ||
+			(recorded.getDensityMatrix() - expected).norm() > 1E-9)
+		{
+			std::cout << "Dense gate reference mismatch for a " << qubits.size() << "-qubit gate on";
+			for (const size_t qubit : qubits) std::cout << " " << qubit;
+			std::cout << std::endl;
+			return false;
+		}
+		return true;
+	};
+
+	for (const auto& gate : oneQubitGates)
+		for (size_t q1 = 0; q1 < nrQubits; ++q1)
+			if (!checkPlacement(*gate, { q1 })) return false;
+
+	for (const auto& gate : twoQubitGates)
+		for (size_t q1 = 0; q1 < nrQubits; ++q1)
+			for (size_t q2 = 0; q2 < nrQubits; ++q2)
+				if (q1 != q2 && !checkPlacement(*gate, { q1, q2 })) return false;
+
+	for (const auto& gate : threeQubitGates)
+		for (size_t q1 = 0; q1 < nrQubits; ++q1)
+			for (size_t q2 = 0; q2 < nrQubits; ++q2)
+				for (size_t q3 = 0; q3 < nrQubits; ++q3)
+					if (q1 != q2 && q1 != q3 && q2 != q3 && !checkPlacement(*gate, { q1, q2, q3 })) return false;
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+// Exercises every specialized three-qubit path plus a dense complex 8x8 gate. Every ordered
+// placement is checked, including non-adjacent placements in registers larger than three qubits.
+static bool DensityMatrixThreeQubitGateTest()
+{
+	std::cout << "\nDensity matrix simulator - three qubit gates compared against the statevector simulator" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	DM_FillThreeQubitGates(gates);
+
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::RyGate<> ry(M_PI / 7.);
+	QC::Gates::CNOTGate<> cnot;
+
+	for (int nrQubits = 3; nrQubits <= 5; ++nrQubits)
+	{
+		for (const auto& gate : gates)
+		{
+			for (int q1 = 0; q1 < nrQubits; ++q1)
+				for (int q2 = 0; q2 < nrQubits; ++q2)
+					for (int q3 = 0; q3 < nrQubits; ++q3)
+					{
+						if (q1 == q2 || q1 == q3 || q2 == q3) continue;
+
+						QC::DensityMatrix<> dm(nrQubits);
+						QC::QubitRegister<> reg(nrQubits);
+						for (int q = 0; q < nrQubits; ++q)
+						{
+							if (q % 2 == 0)
+							{
+								dm.ApplyGate(h, q);
+								reg.ApplyGate(h, q);
+							}
+							else
+							{
+								dm.ApplyGate(ry, q);
+								reg.ApplyGate(ry, q);
+							}
+						}
+						for (int q = 1; q < nrQubits; ++q)
+						{
+							dm.ApplyGate(cnot, q, q - 1);
+							reg.ApplyGate(cnot, q, q - 1);
+						}
+
+						dm.ApplyGate(*gate, q1, q2, q3);
+						reg.ApplyGate(*gate, q1, q2, q3);
+						if (!CompareWithStatevector(dm, reg, nrQubits)) return false;
+					}
+		}
+	}
+
+	std::cout << "Success" << std::endl;
 	return true;
 }
 
@@ -244,6 +474,206 @@ static bool DensityMatrixChannelsTest()
 
 	std::cout << "Success" << std::endl;
 
+	return true;
+}
+
+static bool DensityMatrixGenericChannelTest()
+{
+	std::cout << "\nDensity matrix simulator - generic Kraus channels against explicit dense evolution" << std::endl;
+
+	// One-qubit amplitude damping embedded in the middle of a three-qubit mixed state.
+	{
+		QC::DensityMatrix<> dm(3);
+		const Eigen::MatrixXcd before = DM_DeterministicMixedState(3);
+		dm.setDensityMatrix(before);
+
+		constexpr double gamma = 0.29;
+		Eigen::MatrixXcd k0 = Eigen::MatrixXcd::Zero(2, 2);
+		k0(0, 0) = 1.;
+		k0(1, 1) = std::sqrt(1. - gamma);
+		Eigen::MatrixXcd k1 = Eigen::MatrixXcd::Zero(2, 2);
+		k1(0, 1) = std::sqrt(gamma);
+
+		const Eigen::MatrixXcd fullK0 = DM_EmbedOperator(k0, { 1 }, 3);
+		const Eigen::MatrixXcd fullK1 = DM_EmbedOperator(k1, { 1 }, 3);
+		const Eigen::MatrixXcd expected = fullK0 * before * fullK0.adjoint() + fullK1 * before * fullK1.adjoint();
+		dm.ApplyChannel({ k0, k1 }, 1);
+		if ((dm.getDensityMatrix() - expected).norm() > 1E-10)
+		{
+			std::cout << "Generic one-qubit Kraus evolution does not match the explicit matrix result" << std::endl;
+			return false;
+		}
+	}
+
+	// A correlated channel on non-adjacent qubits zero and two.
+	{
+		QC::DensityMatrix<> dm(3);
+		const Eigen::MatrixXcd before = DM_DeterministicMixedState(3);
+		dm.setDensityMatrix(before);
+		QC::Gates::CNOTGate<> cnot;
+		constexpr double p = 0.37;
+		const Eigen::MatrixXcd k0 = std::sqrt(1. - p) * Eigen::MatrixXcd::Identity(4, 4);
+		const Eigen::MatrixXcd k1 = std::sqrt(p) * cnot.getRawOperatorMatrix();
+		const Eigen::MatrixXcd fullK0 = DM_EmbedOperator(k0, { 0, 2 }, 3);
+		const Eigen::MatrixXcd fullK1 = DM_EmbedOperator(k1, { 0, 2 }, 3);
+		const Eigen::MatrixXcd expected = fullK0 * before * fullK0.adjoint() + fullK1 * before * fullK1.adjoint();
+
+		dm.ApplyChannel({ k0, k1 }, 0, 2);
+		if ((dm.getDensityMatrix() - expected).norm() > 1E-10 ||
+			!approxEqual(dm.Trace(), std::complex<double>(1., 0.), 1E-10) || !dm.IsHermitian(1E-10))
+		{
+			std::cout << "Generic non-adjacent two-qubit Kraus evolution does not match the explicit matrix result" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+static bool DensityMatrixInitializationAndValidationTest()
+{
+	std::cout << "\nDensity matrix simulator - initialization and invalid input handling" << std::endl;
+
+	if (!DM_ExpectInvalidArgument([] { QC::DensityMatrix<> invalid(0); }, "Zero-qubit construction") ||
+		!DM_ExpectInvalidArgument([] { QC::DensityMatrix<> invalid(std::numeric_limits<size_t>::digits); }, "Oversized-qubit construction"))
+		return false;
+	try
+	{
+		QC::DensityMatrix<> overflow(std::numeric_limits<size_t>::digits / 2);
+		std::cout << "Overflowing density-matrix storage construction did not throw" << std::endl;
+		return false;
+	}
+	catch (const std::length_error&)
+	{
+	}
+
+	QC::DensityMatrix<> dm(2);
+	QC::Gates::PauliXGate<> x;
+	QC::Gates::CNOTGate<> cnot;
+	QC::Gates::ToffoliGate<> toffoli;
+	const Eigen::MatrixXcd original = dm.getDensityMatrix();
+
+	Eigen::MatrixXcd malformed = Eigen::MatrixXcd::Identity(3, 3);
+	QC::Gates::AppliedGate<> malformedGate(malformed, 0);
+	Eigen::MatrixXcd tooLarge = Eigen::MatrixXcd::Identity(16, 16);
+	QC::Gates::AppliedGate<> tooLargeGate(tooLarge, 0, 1);
+	Eigen::MatrixXcd nonFiniteGateMatrix = Eigen::MatrixXcd::Identity(2, 2);
+	nonFiniteGateMatrix(0, 0) = std::numeric_limits<double>::quiet_NaN();
+	QC::Gates::AppliedGate<> nonFiniteGate(nonFiniteGateMatrix, 0);
+
+	if (!DM_ExpectInvalidArgument([&] { dm.ApplyGate(x, 2); }, "Out-of-range gate qubit") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyGate(cnot, 0, 0); }, "Duplicate two-qubit gate arguments") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyGate(toffoli, 0, 1, 1); }, "Duplicate three-qubit gate arguments") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyGate(malformedGate); }, "Non-power-of-two gate matrix") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyGate(tooLargeGate); }, "Unsupported four-qubit gate") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyGate(nonFiniteGate); }, "Non-finite gate matrix") ||
+		!DM_ExpectInvalidArgument([&] { dm.GetQubitProbability(2); }, "Out-of-range probability qubit") ||
+		!DM_ExpectInvalidArgument([&] { dm.MeasureQubit(2); }, "Out-of-range measured qubit") ||
+		!DM_ExpectInvalidArgument([&] { dm.DephaseMeasure(2); }, "Out-of-range dephased qubit") ||
+		!DM_ExpectInvalidArgument([&] { dm.MeasureNoCollapse(std::set<size_t>{ 0, 2 }); }, "Out-of-range subset qubit") ||
+		!DM_ExpectInvalidArgument([&] { dm.RepeatedMeasure(1, 0, 1); }, "Reversed measurement range") ||
+		!DM_ExpectInvalidArgument([&] { dm.RepeatedMeasureUnordered(0, 2, 1); }, "Out-of-range measurement range"))
+		return false;
+
+	if (!DM_ExpectInvalidArgument([&] { dm.ApplyBitFlipNoise(0, -0.1); }, "Negative noise probability") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyAmplitudeDamping(0, 1.1); }, "Noise probability above one") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyPhaseDamping(0, std::numeric_limits<double>::quiet_NaN()); }, "NaN noise probability"))
+		return false;
+
+	const Eigen::MatrixXcd i2 = Eigen::MatrixXcd::Identity(2, 2);
+	const Eigen::MatrixXcd i4 = Eigen::MatrixXcd::Identity(4, 4);
+	const Eigen::MatrixXcd i8 = Eigen::MatrixXcd::Identity(8, 8);
+	Eigen::MatrixXcd nonFiniteKraus = i2;
+	nonFiniteKraus(1, 1) = std::numeric_limits<double>::infinity();
+	if (!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({}, 0); }, "Empty Kraus channel") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({ 0.5 * i2 }, 0); }, "Non trace-preserving Kraus channel") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({ i2, i4 }, 0); }, "Mismatched Kraus dimensions") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({ i4 }, 0, 0); }, "Duplicate two-qubit channel arguments") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({ i2 }, 2); }, "Out-of-range channel qubit") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({ i8 }, 0); }, "Unsupported three-qubit channel") ||
+		!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({ nonFiniteKraus }, 0); }, "Non-finite Kraus operator"))
+		return false;
+
+	Eigen::VectorXcd wrongVector = Eigen::VectorXcd::Zero(3);
+	Eigen::VectorXcd zeroVector = Eigen::VectorXcd::Zero(4);
+	Eigen::VectorXcd nonFiniteVector = Eigen::VectorXcd::Ones(4);
+	nonFiniteVector(2) = std::numeric_limits<double>::quiet_NaN();
+	Eigen::MatrixXcd wrongMatrix = Eigen::MatrixXcd::Identity(2, 2);
+	if (!DM_ExpectInvalidArgument([&] { dm.setFromStatevector(wrongVector); }, "Wrong statevector dimension") ||
+		!DM_ExpectInvalidArgument([&] { dm.setFromStatevector(zeroVector); }, "Zero statevector") ||
+		!DM_ExpectInvalidArgument([&] { dm.setFromStatevector(nonFiniteVector); }, "Non-finite statevector") ||
+		!DM_ExpectInvalidArgument([&] { dm.setDensityMatrix(wrongMatrix); }, "Wrong density-matrix dimension") ||
+		!DM_ExpectInvalidArgument([&] { dm.ExpectationValue(wrongMatrix); }, "Wrong observable dimension") ||
+		!DM_ExpectInvalidArgument([&] { dm.ExpectationValue(std::string("IA")); }, "Invalid Pauli operator") ||
+		!DM_ExpectInvalidArgument([&] { dm.setToBasisState(4); }, "Out-of-range basis state") ||
+		!DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({}); }, "Empty basis-state mixture") ||
+		!DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({ { 0, 0. }, { 7, 1. } }); }, "Mixture without a valid positive weight") ||
+		!DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({ { 0, std::numeric_limits<double>::infinity() } }); }, "Non-finite mixture weight"))
+		return false;
+
+	if ((dm.getDensityMatrix() - original).norm() > 1E-12)
+	{
+		std::cout << "An invalid operation changed the density matrix" << std::endl;
+		return false;
+	}
+
+	// Non-normalized finite vectors are accepted and normalized into a unit-trace pure state.
+	Eigen::VectorXcd psi(4);
+	psi << 1., std::complex<double>(0., 2.), -1., 0.5;
+	dm.setFromStatevector(psi);
+	if (!approxEqual(dm.Trace(), std::complex<double>(1., 0.), 1E-12) || !approxEqual(dm.Purity(), 1., 1E-12))
+	{
+		std::cout << "setFromStatevector did not normalize a finite non-zero vector" << std::endl;
+		return false;
+	}
+
+	// Duplicate valid states accumulate; non-positive and out-of-range entries are ignored.
+	dm.setToMixtureOfBasisStates({ { 1, 1. }, { 1, 2. }, { 3, 1. }, { 0, -4. }, { 7, 9. } });
+	if (!approxEqual(dm.getBasisStateProbability(1), 0.75, 1E-12) ||
+		!approxEqual(dm.getBasisStateProbability(3), 0.25, 1E-12) ||
+		!approxEqual(dm.Trace(), std::complex<double>(1., 0.), 1E-12) || !approxEqual(dm.Purity(), 0.625, 1E-12))
+	{
+		std::cout << "Basis-state mixture normalization or duplicate accumulation is wrong" << std::endl;
+		return false;
+	}
+
+	// All closed-interval endpoints are valid for every predefined noise channel.
+	for (const double probability : { 0., 1. })
+	{
+		QC::DensityMatrix<> boundary(1);
+		boundary.ApplyGate(QC::Gates::HadamardGate<>(), 0);
+		boundary.ApplyBitFlipNoise(0, probability);
+		boundary.ApplyPhaseFlipNoise(0, probability);
+		boundary.ApplyDepolarizingNoise(0, probability);
+		boundary.ApplyAmplitudeDamping(0, probability);
+		boundary.ApplyPhaseDamping(0, probability);
+		if (!boundary.getDensityMatrix().allFinite() || !boundary.IsHermitian(1E-10) ||
+			!approxEqual(boundary.Trace(), std::complex<double>(1., 0.), 1E-10))
+		{
+			std::cout << "A noise channel failed at probability endpoint " << probability << std::endl;
+			return false;
+		}
+	}
+
+	QC::DensityMatrix<> cleared(1);
+	cleared.Clear();
+	if (!DM_ExpectDomainError([&] { cleared.MeasureNoCollapse(); }, "Sampling an empty state")) return false;
+
+	QC::DensityMatrix<> negativePopulation(1);
+	Eigen::MatrixXcd invalidRho = Eigen::MatrixXcd::Zero(2, 2);
+	invalidRho(0, 0) = 1.1;
+	invalidRho(1, 1) = -0.1;
+	negativePopulation.setDensityMatrix(invalidRho);
+	if (!DM_ExpectDomainError([&] { negativePopulation.RepeatedMeasure(2); }, "Sampling a negative population")) return false;
+
+	QC::DensityMatrix<> complexPopulation(1);
+	invalidRho.setZero();
+	invalidRho(0, 0) = std::complex<double>(1., 0.01);
+	complexPopulation.setDensityMatrix(invalidRho);
+	if (!DM_ExpectDomainError([&] { complexPopulation.MeasureQubit(0); }, "Measuring a non-real population")) return false;
+
+	std::cout << "Success" << std::endl;
 	return true;
 }
 
@@ -488,6 +918,7 @@ static bool DensityMatrixMeasurementStatisticsTest()
 			for (int m = 0; m < nrMeasurements; ++m)
 			{
 				QC::DensityMatrix<> dm(nrQubits);
+				dm.SetRandomSeed(0xD3A51000ULL + static_cast<uint64_t>(nrQubits * nrMeasurements + q * nrMeasurements + m));
 				for (const auto& gate : circuit)
 					dm.ApplyGate(gate);
 
@@ -538,6 +969,78 @@ static bool DensityMatrixMeasurementStatisticsTest()
 	return true;
 }
 
+// Verifies the state update, not just measurement frequencies: rho -> P_m rho P_m / p_m.
+static bool DensityMatrixCollapseTest()
+{
+	std::cout << "\nDensity matrix simulator - projective measurement collapse" << std::endl;
+
+	auto checkProjection = [](QC::DensityMatrix<>& dm, size_t measuredQubit, uint64_t seed,
+		const char* description, size_t& result) -> bool
+	{
+		const Eigen::MatrixXcd before = dm.getDensityMatrix();
+		dm.SetRandomSeed(seed);
+		result = dm.MeasureQubit(measuredQubit);
+		const size_t mask = 1ULL << measuredQubit;
+
+		double probability = 0.;
+		for (size_t state = 0; state < dm.getNrBasisStates(); ++state)
+			if (((state & mask) != 0) == (result != 0)) probability += before(state, state).real();
+
+		Eigen::MatrixXcd expected = before;
+		for (size_t row = 0; row < dm.getNrBasisStates(); ++row)
+			for (size_t col = 0; col < dm.getNrBasisStates(); ++col)
+				if (((row & mask) != 0) != (result != 0) || ((col & mask) != 0) != (result != 0))
+					expected(row, col) = 0.;
+				else
+					expected(row, col) /= probability;
+
+		if ((dm.getDensityMatrix() - expected).norm() > 1E-10 ||
+			!approxEqual(dm.Trace(), std::complex<double>(1., 0.), 1E-10) || !dm.IsHermitian(1E-10))
+		{
+			std::cout << description << " collapse does not equal P_m rho P_m / p_m" << std::endl;
+			return false;
+		}
+		return true;
+	};
+
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::RyGate<> ry(M_PI / 5.);
+	QC::Gates::CNOTGate<> cnot;
+	size_t ignoredResult = 0;
+
+	// Pure separable state.
+	QC::DensityMatrix<> pure(2);
+	pure.ApplyGate(h, 0);
+	pure.ApplyGate(ry, 1);
+	if (!checkProjection(pure, 1, 0x5011DULL, "Pure-state", ignoredResult)) return false;
+
+	// Mixed state containing both classical populations and coherences.
+	QC::DensityMatrix<> mixed(3);
+	mixed.ApplyGate(h, 0);
+	mixed.ApplyGate(cnot, 2, 0);
+	mixed.ApplyGate(h, 1);
+	mixed.ApplyAmplitudeDamping(2, 0.23);
+	mixed.ApplyPhaseDamping(1, 0.31);
+	if (approxEqual(mixed.Purity(), 1., 1E-10) ||
+		!checkProjection(mixed, 1, 0xC011A95EULL, "Mixed-state", ignoredResult)) return false;
+
+	// Entangled Bell state: verify both the projected matrix and the subsequent correlation.
+	QC::DensityMatrix<> bell(2);
+	bell.ApplyGate(h, 0);
+	bell.ApplyGate(cnot, 1, 0);
+	size_t q0 = 0;
+	if (!checkProjection(bell, 0, 0xBE11ULL, "Entangled-state", q0)) return false;
+	const size_t q1 = bell.MeasureQubit(1);
+	if (q0 != q1)
+	{
+		std::cout << "Sequential measurements broke an entangled-qubit correlation" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 // checks the general Hermitian-observable ExpectationValue overload against a direct Tr(rho O)
 // computation, verifies a few analytic Pauli expectation edge cases, that setFromStatevector and
 // setDensityMatrix reproduce the reference matrix element, and that ExpectationValue throws on a
@@ -584,7 +1087,10 @@ static bool DensityMatrixExpectationExtrasTest()
 			const Eigen::MatrixXcd O = M + M.adjoint();
 
 			const std::complex<double> got = dm.ExpectationValue(O);
-			const std::complex<double> expected = (dm.getDensityMatrix() * O).trace();
+			std::complex<double> expected = 0.;
+			for (Eigen::Index row = 0; row < dim; ++row)
+				for (Eigen::Index col = 0; col < dim; ++col)
+					expected += dm.getDensityMatrix()(row, col) * O(col, row);
 
 			if (!approxEqual(got, expected, 1E-9))
 			{
@@ -710,6 +1216,7 @@ static bool DensityMatrixSamplingTest()
 			dm.ApplyGate(*gates[g], qubit1, qubit2);
 		}
 		dm.ApplyDepolarizingNoise(qubitDistr(gen), 0.3);
+		dm.SetRandomSeed(0x5A6D1100ULL + static_cast<uint64_t>(nrQubits));
 
 		// exact populations and a snapshot used to verify sampling does not change the state
 		const size_t nrBasisStates = dm.getNrBasisStates();
@@ -864,6 +1371,18 @@ static bool DensityMatrixStateSaveRestoreCloneTest()
 	if ((clone->getDensityMatrix() - savedState).norm() > 1E-12)
 	{
 		std::cout << "Density matrix clone's destructive restore failed" << std::endl;
+		return false;
+	}
+
+	// A clone is a complete simulator snapshot, including the random-engine position.
+	QC::DensityMatrix<> sampler(1);
+	sampler.ApplyGate(h, 0);
+	sampler.SetRandomSeed(0xC10EULL);
+	(void)sampler.MeasureNoCollapse(); // advance the engine before cloning
+	auto samplerClone = sampler.Clone();
+	if (sampler.RepeatedMeasure(2000) != samplerClone->RepeatedMeasure(2000))
+	{
+		std::cout << "Density matrix clone did not preserve the random-engine state" << std::endl;
 		return false;
 	}
 
@@ -1042,7 +1561,12 @@ bool DensityMatrixTests()
 {
 	std::cout << "\nDensity matrix simulator tests" << std::endl;
 
-	return DensityMatrixUnitaryTest() && DensityMatrixChannelsTest() && DensityMatrixMeasurementTest() && DensityMatrixPauliExpectationTest() &&
-		DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() && DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
-		DensityMatrixStateSaveRestoreCloneTest();
+	const std::mt19937 savedGenerator = gen;
+	gen.seed(0xD35A17U);
+	const bool result = DensityMatrixUnitaryTest() && DensityMatrixDenseGateReferenceTest() && DensityMatrixThreeQubitGateTest() && DensityMatrixChannelsTest() &&
+		DensityMatrixGenericChannelTest() && DensityMatrixInitializationAndValidationTest() && DensityMatrixMeasurementTest() &&
+		DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() &&
+		DensityMatrixCollapseTest() && DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() && DensityMatrixStateSaveRestoreCloneTest();
+	gen = savedGenerator;
+	return result;
 }
