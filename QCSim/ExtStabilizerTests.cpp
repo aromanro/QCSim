@@ -415,6 +415,318 @@ static bool TestExtStabilizerClone()
 			"Original restore changed the clone"))
 		return false;
 
+	// A simulator clone also duplicates the random stream, so identical future
+	// measurement sequences produce identical outcomes.
+	QC::ExtendedStabilizer stochasticSimulator(32);
+	for (size_t qubit = 0; qubit < 32; ++qubit)
+		stochasticSimulator.ApplyH(qubit);
+	auto stochasticClone = stochasticSimulator.Clone();
+	for (size_t qubit = 0; qubit < 32; ++qubit)
+		if (stochasticSimulator.Measure(qubit)
+			!= stochasticClone->Measure(qubit))
+		{
+			std::cout << "\nClone did not preserve the measurement random stream"
+				<< std::endl;
+			return false;
+		}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+
+static bool TestExtStabilizerCanonicalRotations()
+{
+	std::cout << "\nExtended Stabilizer Clifford-equivalent rotation tests" << std::endl;
+
+	const double pi = std::acos(-1.0);
+	const std::vector<long long> turns{ -8, -5, -4, -3, -2, -1,
+		1, 2, 3, 4, 5, 8 };
+	for (int axis = 0; axis < 3; ++axis)
+		for (const long long quarterTurns : turns)
+		{
+			QC::QubitRegister<> qubitRegister(3);
+			QC::ExtendedStabilizer simulator(3);
+			ApplyExtStabilizerTestGate(qubitRegister, simulator, 0, 0);
+			ApplyExtStabilizerTestGate(qubitRegister, simulator, 9, 1, 0);
+			ApplyExtStabilizerTestGate(qubitRegister, simulator, 15, 2, 0, 0.37);
+			ApplyExtStabilizerTestGate(qubitRegister, simulator, 17, 0, 0, -0.29);
+
+			const size_t componentsBefore =
+				simulator.GetFrames().front().GetFrameSize();
+			const int gateCode = 15 + axis;
+			const size_t qubit = static_cast<size_t>(axis);
+			const double angle = static_cast<double>(quarterTurns) * pi / 2.0;
+			ApplyExtStabilizerTestGate(qubitRegister, simulator,
+				gateCode, qubit, 0, angle);
+
+			const auto& frame = simulator.GetFrames().front();
+			if (frame.GetFrameSize() != componentsBefore
+				|| !frame.cliffordBasis.IsConsistent()
+				|| !CheckExtStabilizerState(qubitRegister, simulator,
+					"Clifford-equivalent rotation"))
+			{
+				std::cout << "\nCanonical rotation failed for axis " << axis
+					<< " and " << quarterTurns << " quarter turns" << std::endl;
+				return false;
+			}
+		}
+
+	// The moving basis uses C_P = exp(i*pi/4) R_P(pi/2), so the exact
+	// canonical-rotation global phase is retained in the sole coefficient.
+	for (const long long quarterTurns : turns)
+	{
+		QC::ExtendedStabilizer simulator(1);
+		simulator.ApplyRx(0, static_cast<double>(quarterTurns) * pi / 2.0);
+		const auto expected = std::polar(1.0,
+			-static_cast<double>(quarterTurns) * pi / 4.0);
+		const auto& frame = simulator.GetFrames().front();
+		if (frame.GetFrameSize() != 1
+			|| std::abs(frame.amplitudes.front() - expected) > 1E-12)
+		{
+			std::cout << "\nCanonical rotation global phase was not retained for "
+				<< quarterTurns << " quarter turns" << std::endl;
+			return false;
+		}
+	}
+
+	// An angle merely close to pi/2 remains a genuine non-Clifford rotation.
+	QC::ExtendedStabilizer nearbyRotation(1);
+	nearbyRotation.ApplyRx(0, pi / 2.0 + 1E-10);
+	if (nearbyRotation.GetFrames().front().GetFrameSize() != 2)
+	{
+		std::cout << "\nA non-canonical nearby angle was incorrectly snapped" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+
+static bool TestExtStabilizerApproximationPolicy()
+{
+	std::cout << "\nExtended Stabilizer approximation-policy tests" << std::endl;
+
+	auto frameNorm = [](const QC::ExtendedFrame& frame)
+	{
+		double norm = 0.0;
+		for (const auto& amplitude : frame.amplitudes)
+			norm += std::norm(amplitude);
+		return norm;
+	};
+
+	// Exact is the default and must not silently remove a nonzero coefficient,
+	// even when it is far below the former hard-coded tolerance.
+	{
+		QC::ExtendedStabilizer simulator(1);
+		simulator.ApplyRx(0, 1E-16);
+		const auto& policy = simulator.GetApproximationPolicy();
+		const auto& statistics = simulator.GetApproximationStatistics();
+		if (policy.mode != QC::ExtendedStabilizerApproximationMode::Exact
+			|| policy.amplitudeTolerance != 0.0 || policy.maxComponents != 0
+			|| simulator.GetFrames().front().GetFrameSize() != 2
+			|| statistics.discardedComponents != 0
+			|| statistics.cumulativeDiscardedWeight != 0.0
+			|| statistics.traceDistanceErrorBound != 0.0)
+		{
+			std::cout << "\nExact mode silently approximated a tiny rotation" << std::endl;
+			return false;
+		}
+	}
+
+	// Tolerance is expressed in normalized amplitude units. Pruning records the
+	// discarded squared norm, exposes its trace-distance contribution, and
+	// leaves the retained state normalized.
+	{
+		const double angle = 1E-4;
+		QC::ExtendedStabilizer simulator(1,
+			QC::ExtendedStabilizerApproximationPolicy::Approximate(1E-3));
+		simulator.ApplyRy(0, angle);
+		const auto& frame = simulator.GetFrames().front();
+		const auto& statistics = simulator.GetApproximationStatistics();
+		const double expectedDiscardedWeight =
+			std::pow(std::sin(angle / 2.0), 2);
+		if (frame.GetFrameSize() != 1
+			|| !approxEqual(frameNorm(frame), 1.0, 1E-12)
+			|| !approxEqual(simulator.GetQubitProbability(0), 0.0, 1E-12)
+			|| statistics.discardedComponents != 1
+			|| statistics.pruningEvents != 1
+			|| !approxEqual(statistics.cumulativeDiscardedWeight,
+				expectedDiscardedWeight, 1E-16)
+			|| !approxEqual(statistics.traceDistanceErrorBound,
+				std::sqrt(expectedDiscardedWeight), 1E-12))
+		{
+			std::cout << "\nTolerance pruning or error accounting failed" << std::endl;
+			return false;
+		}
+	}
+
+	// A hard cap keeps the largest components deterministically and remains
+	// normalized. Projector-probability errors must fit the exposed bound.
+	{
+		QC::QubitRegister<> qubitRegister(2);
+		QC::ExtendedStabilizer simulator(2,
+			QC::ExtendedStabilizerApproximationPolicy::Approximate(0.0, 2));
+		ApplyExtStabilizerTestGate(qubitRegister, simulator, 15, 0, 0, 0.7);
+		ApplyExtStabilizerTestGate(qubitRegister, simulator, 16, 1, 0, 0.9);
+		const auto& frame = simulator.GetFrames().front();
+		const auto& statistics = simulator.GetApproximationStatistics();
+		if (frame.GetFrameSize() != 2
+			|| !approxEqual(frameNorm(frame), 1.0, 1E-12)
+			|| statistics.discardedComponents != 2
+			|| statistics.pruningEvents != 1
+			|| statistics.traceDistanceErrorBound <= 0.0
+			|| std::abs(simulator.GetQubitProbability(0)
+				- qubitRegister.GetQubitProbability(0))
+				> statistics.traceDistanceErrorBound + 1E-12
+			|| std::abs(simulator.GetQubitProbability(1)
+				- qubitRegister.GetQubitProbability(1))
+				> statistics.traceDistanceErrorBound + 1E-12)
+		{
+			std::cout << "\nMaximum-component approximation failed" << std::endl;
+			return false;
+		}
+	}
+
+	// Even an intentionally extreme tolerance retains and normalizes the largest
+	// component instead of deleting the state.
+	{
+		QC::ExtendedStabilizer simulator(1,
+			QC::ExtendedStabilizerApproximationPolicy::Approximate(2.0));
+		simulator.ApplyRx(0, 0.7);
+		if (simulator.GetFrames().front().GetFrameSize() != 1
+			|| !approxEqual(frameNorm(simulator.GetFrames().front()), 1.0, 1E-12)
+			|| simulator.GetApproximationStatistics().discardedComponents != 1)
+		{
+			std::cout << "\nApproximation removed the final component" << std::endl;
+			return false;
+		}
+	}
+
+	// Policy changes prune the current state. Statistics belong to the saved
+	// state, clones copy them, and Reset clears them while retaining the policy.
+	{
+		QC::ExtendedStabilizer simulator(3);
+		simulator.ApplyRx(0, 0.61);
+		simulator.ApplyRy(1, 0.73);
+		simulator.SetApproximationPolicy(
+			QC::ExtendedStabilizerApproximationPolicy::Approximate(0.0, 2));
+		if (simulator.GetFrames().front().GetFrameSize() != 2)
+			return false;
+		simulator.SaveState();
+		const auto savedStatistics = simulator.GetApproximationStatistics();
+		auto clone = simulator.Clone();
+		simulator.ApplyRx(2, 0.47);
+		if (simulator.GetApproximationStatistics().pruningEvents
+			<= savedStatistics.pruningEvents)
+		{
+			std::cout << "\nApproximation statistics did not accumulate" << std::endl;
+			return false;
+		}
+		simulator.RestoreState();
+		if (simulator.GetApproximationStatistics().pruningEvents
+			!= savedStatistics.pruningEvents
+			|| clone->GetApproximationStatistics().pruningEvents
+				!= savedStatistics.pruningEvents)
+		{
+			std::cout << "\nSave, restore, or clone lost approximation statistics"
+				<< std::endl;
+			return false;
+		}
+		simulator.Reset(2);
+		if (simulator.GetApproximationPolicy().mode
+				!= QC::ExtendedStabilizerApproximationMode::Approximate
+			|| simulator.GetApproximationPolicy().maxComponents != 2
+			|| simulator.GetApproximationStatistics().pruningEvents != 0)
+		{
+			std::cout << "\nReset did not preserve policy and clear statistics"
+				<< std::endl;
+			return false;
+		}
+	}
+
+	// A saved state owns its execution policy as well as its frame data. Changing
+	// policy after SaveState must not make RestoreState violate that snapshot.
+	{
+		QC::ExtendedStabilizer simulator(2);
+		simulator.ApplyRx(0, 0.61);
+		simulator.ApplyRy(1, 0.73);
+		simulator.SaveState();
+		simulator.SetApproximationPolicy(
+			QC::ExtendedStabilizerApproximationPolicy::Approximate(0.0, 2));
+		if (simulator.GetFrames().front().GetFrameSize() != 2)
+			return false;
+		simulator.RestoreState();
+		if (simulator.GetApproximationPolicy().mode
+				!= QC::ExtendedStabilizerApproximationMode::Exact
+			|| simulator.GetFrames().front().GetFrameSize() != 4
+			|| simulator.GetApproximationStatistics().pruningEvents != 0)
+		{
+			std::cout << "\nRestore did not recover the saved approximation policy"
+				<< std::endl;
+			return false;
+		}
+	}
+
+	// Repeated off-diagonal measurements exercise the reusable collapse buffers.
+	{
+		QC::ExtendedStabilizer simulator(3,
+			QC::ExtendedStabilizerApproximationPolicy::Approximate(1E-8, 3));
+		simulator.ApplyRx(0, 0.37);
+		simulator.ApplyRy(1, -0.41);
+		simulator.ApplyRx(2, 0.29);
+		simulator.ApplyH(0);
+		simulator.ApplyCX(1, 0);
+		if (simulator.GetApproximationErrorBound() <= 0.0
+			|| simulator.GetApproximationErrorBound() >= 1.0)
+		{
+			std::cout << "\nApproximation did not expose a useful pre-measurement bound"
+				<< std::endl;
+			return false;
+		}
+		for (size_t qubit = 0; qubit < 3; ++qubit)
+		{
+			const bool outcome = simulator.Measure(qubit);
+			const auto& frame = simulator.GetFrames().front();
+			if (frame.GetFrameSize() > 3
+				|| !approxEqual(frameNorm(frame), 1.0, 1E-12)
+				|| !approxEqual(simulator.GetQubitProbability(qubit),
+					outcome ? 1.0 : 0.0, 1E-12)
+				|| simulator.GetApproximationErrorBound() != 1.0
+				|| simulator.Measure(qubit) != outcome)
+			{
+				std::cout << "\nApproximate measurement collapse failed" << std::endl;
+				return false;
+			}
+		}
+	}
+
+	// Invalid or meaningless policies are rejected.
+	for (const auto& invalidPolicy : {
+		QC::ExtendedStabilizerApproximationPolicy{
+			QC::ExtendedStabilizerApproximationMode::Exact, 1E-3, 0 },
+		QC::ExtendedStabilizerApproximationPolicy::Approximate(0.0, 0),
+		QC::ExtendedStabilizerApproximationPolicy::Approximate(-1.0, 1),
+		QC::ExtendedStabilizerApproximationPolicy::Approximate(
+			std::numeric_limits<double>::quiet_NaN(), 1) })
+	{
+		bool rejected = false;
+		try
+		{
+			QC::ExtendedStabilizer simulator(1, invalidPolicy);
+		}
+		catch (const std::invalid_argument&)
+		{
+			rejected = true;
+		}
+		if (!rejected)
+		{
+			std::cout << "\nAn invalid approximation policy was accepted" << std::endl;
+			return false;
+		}
+	}
+
 	std::cout << "Success" << std::endl;
 	return true;
 }
@@ -1116,6 +1428,10 @@ bool TestExtStabilizer()
 	if (!TestExtStabilizerLargerMixedCircuits())
 		return false;
 	if (!TestExtStabilizerClone())
+		return false;
+	if (!TestExtStabilizerCanonicalRotations())
+		return false;
+	if (!TestExtStabilizerApproximationPolicy())
 		return false;
 	if (!TestExtStabilizerLogicalBasisInvariance())
 		return false;
