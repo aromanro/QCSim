@@ -21,6 +21,12 @@ namespace QC {
 		Approximate
 	};
 
+	// Approximate pruning first removes components satisfying
+	// |amplitude| / ||state|| <= amplitudeTolerance, then keeps at most the
+	// largest maxComponents amplitudes. Equal magnitudes retain their earlier
+	// component index, at least one component always survives, and the result is
+	// renormalized. Switching back to Exact only disables future pruning: it
+	// cannot restore discarded components or clear the historical error bound.
 	struct ExtendedStabilizerApproximationPolicy {
 		ExtendedStabilizerApproximationMode mode =
 			ExtendedStabilizerApproximationMode::Exact;
@@ -60,9 +66,15 @@ namespace QC {
 	// that basis, while non-Clifford rotations update the coefficients inside it.
 	// Multiple ExtendedFrame objects are retained for a future multiframe implementation;
 	// the coherent operations below intentionally implement one frame.
+	// Simulator instances are not thread-safe, including concurrent const queries,
+	// because lookup tables and packed Pauli workspaces are reused internally.
 	class ExtendedStabilizer {
+		struct CloneTag {};
+
 	public:
 		ExtendedStabilizer() = delete;
+		ExtendedStabilizer(const ExtendedStabilizer&) = delete;
+		ExtendedStabilizer& operator=(const ExtendedStabilizer&) = delete;
 
 		explicit ExtendedStabilizer(size_t nrQubits)
 			: ExtendedStabilizer(nrQubits,
@@ -93,6 +105,13 @@ namespace QC {
 			savedApproximationStatistics = {};
 			savedApproximationPolicy = approximationPolicy;
 			frames.emplace_back(nrQubits);
+		}
+
+		// Primarily useful for reproducible measurement runs and regression tests.
+		void SetRandomSeed(std::mt19937::result_type seed)
+		{
+			gen.seed(seed);
+			dist.reset();
 		}
 
 		void ApplyH(size_t qubit)
@@ -318,17 +337,8 @@ namespace QC {
 
 		std::unique_ptr<ExtendedStabilizer> Clone() const
 		{
-			auto simulator = std::make_unique<ExtendedStabilizer>(
-				GetNrQubits(), approximationPolicy);
-			simulator->frames = frames;
-			simulator->savedFrames = savedFrames;
-			simulator->savedApproximationPolicy = savedApproximationPolicy;
-			simulator->approximationStatistics = approximationStatistics;
-			simulator->savedApproximationStatistics =
-				savedApproximationStatistics;
-			simulator->gen = gen;
-			simulator->dist = dist;
-			return simulator;
+			return std::unique_ptr<ExtendedStabilizer>(
+				new ExtendedStabilizer(*this, CloneTag{}));
 		}
 
 		const std::vector<ExtendedFrame>& GetFrames() const noexcept
@@ -364,6 +374,42 @@ namespace QC {
 		}
 
 	private:
+		struct ScaledNormAccumulator {
+			void Add(double magnitude) noexcept
+			{
+				if (magnitude == 0.0) return;
+				if (scale < magnitude)
+				{
+					const double ratio = scale / magnitude;
+					sumSquares = 1.0 + sumSquares * ratio * ratio;
+					scale = magnitude;
+				}
+				else
+				{
+					const double ratio = magnitude / scale;
+					sumSquares += ratio * ratio;
+				}
+			}
+
+			double Value() const noexcept
+			{
+				return scale == 0.0 ? 0.0 : scale * std::sqrt(sumSquares);
+			}
+
+			double scale = 0.0;
+			double sumSquares = 1.0;
+		};
+
+		ExtendedStabilizer(const ExtendedStabilizer& other, CloneTag)
+			: frames(other.frames), savedFrames(other.savedFrames),
+			approximationPolicy(other.approximationPolicy),
+			savedApproximationPolicy(other.savedApproximationPolicy),
+			approximationStatistics(other.approximationStatistics),
+			savedApproximationStatistics(other.savedApproximationStatistics),
+			gen(other.gen), dist(other.dist)
+		{
+		}
+
 		void AccountForMeasurementConditioning() noexcept
 		{
 			if (approximationStatistics.traceDistanceErrorBound > 0.0)
@@ -373,6 +419,9 @@ namespace QC {
 		static void ValidateApproximationPolicy(
 			const ExtendedStabilizerApproximationPolicy& policy)
 		{
+			if (policy.mode != ExtendedStabilizerApproximationMode::Exact
+				&& policy.mode != ExtendedStabilizerApproximationMode::Approximate)
+				throw std::invalid_argument("Unknown approximation mode");
 			if (!std::isfinite(policy.amplitudeTolerance)
 				|| policy.amplitudeTolerance < 0.0)
 				throw std::invalid_argument(
@@ -699,28 +748,29 @@ namespace QC {
 			const size_t notFound = PackedComponentIndex::NotFound;
 			const double inverseSqrtTwo = 1.0 / std::sqrt(2.0);
 
-			// Since x[pivot] is one, every logical label belongs to a unique
-			// pair {r, r xor x} with r[pivot] == 0.  Process each such pair once,
-			// including pairs whose zero-pivot member is absent from the frame.
-			auto visitPairs = [&](const auto& visitor)
+			// Since x[pivot] is one, every logical label belongs to a unique pair
+			// {r, r xor x} with r[pivot] == 0. Cache the pairs in frame-owned
+			// storage: repeated measurements allocate nothing at steady state and
+			// the probability/collapse passes share one set of hash lookups.
+			auto& pairs = frame.measurementPairs;
+			pairs.clear();
+			pairs.reserve(frame.GetFrameSize());
+			for (size_t component = 0;
+				component < frame.GetFrameSize(); ++component)
 			{
-				for (size_t component = 0;
-					component < frame.GetFrameSize(); ++component)
+				const auto* componentLabel = frame.signs.LabelWords(component);
+				const size_t partner = frame.FindXorComponent(componentLabel,
+					action.flipMask);
+				size_t root = component;
+				size_t target = partner;
+				if (frame.signs.Get(component, pivot))
 				{
-					const auto* componentLabel = frame.signs.LabelWords(component);
-					const size_t partner = frame.FindXorComponent(componentLabel,
-						action.flipMask);
-					size_t root = component;
-					size_t target = partner;
-					if (frame.signs.Get(component, pivot))
-					{
-						if (partner != notFound) continue;
-						root = notFound;
-						target = component;
-					}
-					visitor(root, target);
+					if (partner != notFound) continue;
+					root = notFound;
+					target = component;
 				}
-			};
+				pairs.emplace_back(root, target);
+			}
 
 			auto pairAmplitudes = [&](size_t root, size_t target)
 			{
@@ -745,14 +795,16 @@ namespace QC {
 
 			double probabilityZero = 0.0;
 			double probabilityOne = 0.0;
-			visitPairs([&](size_t root, size_t target)
+			for (const auto& pair : pairs)
 			{
+				const size_t root = pair.first;
+				const size_t target = pair.second;
 				const auto amplitudes = pairAmplitudes(root, target);
 				const auto& outcomeZeroAmplitude = amplitudes.first;
 				const auto& outcomeOneAmplitude = amplitudes.second;
 				probabilityZero += std::norm(outcomeZeroAmplitude);
 				probabilityOne += std::norm(outcomeOneAmplitude);
-			});
+			}
 
 			const double totalProbability = probabilityZero + probabilityOne;
 			if (totalProbability <= 0.0)
@@ -776,12 +828,15 @@ namespace QC {
 			collapsedSigns.clear();
 			collapsedAmplitudes.reserve(frame.GetFrameSize());
 			collapsedSigns.reserve(frame.GetFrameSize());
-			visitPairs([&](size_t root, size_t target)
+			for (const auto& pair : pairs)
 			{
+				const size_t root = pair.first;
+				const size_t target = pair.second;
 				const auto amplitudes = pairAmplitudes(root, target);
 				const auto amplitude = (outcome ? amplitudes.second : amplitudes.first)
 					* inverseOutcomeNorm;
-				if (std::norm(amplitude) == 0.0) return;
+				if (amplitude.real() == 0.0 && amplitude.imag() == 0.0)
+					continue;
 				collapsedAmplitudes.push_back(amplitude);
 				if (root != notFound)
 					collapsedSigns.Append(frame.signs.LabelWords(root));
@@ -789,7 +844,7 @@ namespace QC {
 					collapsedSigns.AppendXor(frame.signs.LabelWords(target),
 						action.flipMask);
 				collapsedSigns.Set(collapsedSigns.size() - 1, pivot, outcome);
-			});
+			}
 
 			if (collapsedAmplitudes.empty())
 				throw std::runtime_error(
@@ -807,40 +862,73 @@ namespace QC {
 		{
 			const bool approximate = approximationPolicy.mode
 				== ExtendedStabilizerApproximationMode::Approximate;
-			const double toleranceSquared = approximate
-				? approximationPolicy.amplitudeTolerance
-					* approximationPolicy.amplitudeTolerance
-				: 0.0;
 			const size_t originalSize = frame.GetFrameSize();
+
+			// Exact mode removes only coefficients whose real and imaginary parts are
+			// both zero. Squaring a tiny but representable coefficient can underflow,
+			// so std::norm must not decide exact liveness.
+			if (!approximate)
+			{
+				size_t write = 0;
+				for (size_t component = 0; component < originalSize; ++component)
+				{
+					const auto amplitude = frame.amplitudes[component];
+					if (amplitude.real() == 0.0 && amplitude.imag() == 0.0)
+						continue;
+					if (write != component)
+					{
+						frame.amplitudes[write] = amplitude;
+						frame.signs.CopyLabel(write, component);
+					}
+					++write;
+				}
+				if (write == 0)
+					throw std::runtime_error(
+						"A frame operation cancelled every component");
+				if (write != originalSize)
+				{
+					frame.amplitudes.resize(write);
+					frame.signs.resize(write);
+					frame.InvalidateComponentIndex();
+				}
+				return;
+			}
+
 			auto& retained = frame.componentOrderWorkspace;
 			retained.clear();
 			retained.reserve(originalSize);
+			auto& magnitudes = frame.componentMagnitudeWorkspace;
+			magnitudes.resize(originalSize);
 
-			double totalWeight = 0.0;
-			double largestWeight = -1.0;
+			ScaledNormAccumulator totalNormAccumulator;
+			double largestMagnitude = -1.0;
 			size_t largestComponent = 0;
 			size_t positiveComponents = 0;
 			for (size_t component = 0; component < originalSize; ++component)
 			{
-				const double weight = std::norm(frame.amplitudes[component]);
-				totalWeight += weight;
-				if (weight <= 0.0) continue;
+				const double magnitude = std::abs(frame.amplitudes[component]);
+				magnitudes[component] = magnitude;
+				if (!std::isfinite(magnitude))
+					throw std::runtime_error("A frame contains a non-finite amplitude");
+				totalNormAccumulator.Add(magnitude);
+				if (magnitude == 0.0) continue;
 				++positiveComponents;
-				if (weight > largestWeight)
+				if (magnitude > largestMagnitude)
 				{
-					largestWeight = weight;
+					largestMagnitude = magnitude;
 					largestComponent = component;
 				}
 			}
 
-			if (totalWeight <= 0.0 || positiveComponents == 0)
+			const double totalNorm = totalNormAccumulator.Value();
+			if (totalNorm <= 0.0 || positiveComponents == 0)
 				throw std::runtime_error("A frame operation cancelled every component");
-			const double normalizedCutoff = toleranceSquared * totalWeight;
+			const double amplitudeCutoff =
+				approximationPolicy.amplitudeTolerance * totalNorm;
 			for (size_t component = 0; component < originalSize; ++component)
 			{
-				const double weight = std::norm(frame.amplitudes[component]);
-				if (weight > 0.0
-					&& (!approximate || weight > normalizedCutoff))
+				const double magnitude = magnitudes[component];
+				if (magnitude > amplitudeCutoff)
 					retained.push_back(component);
 			}
 			// Approximation is never allowed to erase the complete state.
@@ -850,12 +938,12 @@ namespace QC {
 				? approximationPolicy.maxComponents : 0;
 			if (componentLimit != 0 && retained.size() > componentLimit)
 			{
-				auto heavier = [&frame](size_t left, size_t right)
+				auto heavier = [&magnitudes](size_t left, size_t right)
 				{
-					const double leftWeight = std::norm(frame.amplitudes[left]);
-					const double rightWeight = std::norm(frame.amplitudes[right]);
-					return leftWeight != rightWeight
-						? leftWeight > rightWeight : left < right;
+					const double leftMagnitude = magnitudes[left];
+					const double rightMagnitude = magnitudes[right];
+					return leftMagnitude != rightMagnitude
+						? leftMagnitude > rightMagnitude : left < right;
 				};
 				std::nth_element(retained.begin(),
 					retained.begin() + componentLimit, retained.end(), heavier);
@@ -863,10 +951,27 @@ namespace QC {
 				std::sort(retained.begin(), retained.end());
 			}
 
-			double retainedWeight = 0.0;
-			for (const size_t component : retained)
-				retainedWeight += std::norm(frame.amplitudes[component]);
-			if (retainedWeight <= 0.0)
+			// Sum retained and discarded norms independently. Subtracting two totals
+			// loses small discarded branches to catastrophic cancellation and can turn
+			// a real approximation error into a reported zero bound.
+			ScaledNormAccumulator retainedNormAccumulator;
+			ScaledNormAccumulator discardedNormAccumulator;
+			size_t retainedPosition = 0;
+			for (size_t component = 0; component < originalSize; ++component)
+			{
+				const double magnitude = magnitudes[component];
+				if (retainedPosition < retained.size()
+					&& retained[retainedPosition] == component)
+				{
+					retainedNormAccumulator.Add(magnitude);
+					++retainedPosition;
+				}
+				else if (magnitude != 0.0)
+					discardedNormAccumulator.Add(magnitude);
+			}
+			const double retainedNorm = retainedNormAccumulator.Value();
+			const double discardedNorm = discardedNormAccumulator.Value();
+			if (retainedNorm <= 0.0)
 				throw std::runtime_error("Approximation retained a zero-norm state");
 
 			if (retained.size() != originalSize)
@@ -883,22 +988,25 @@ namespace QC {
 				frame.InvalidateComponentIndex();
 			}
 
-			const size_t approximateDiscardedComponents = approximate
-				? positiveComponents - retained.size() : 0;
+			const size_t approximateDiscardedComponents =
+				positiveComponents - retained.size();
 			if (approximateDiscardedComponents == 0) return;
 
-			const double inverseNorm = 1.0 / std::sqrt(retainedWeight);
+			const double inverseNorm = 1.0 / retainedNorm;
 			for (auto& amplitude : frame.amplitudes)
 				amplitude *= inverseNorm;
-			const double discardedWeight = std::max(0.0,
-				totalWeight - retainedWeight);
-			const double localDiscardedFraction = std::min(1.0,
-				discardedWeight / totalWeight);
+			const double localTraceDistance = std::min(1.0,
+				std::nextafter(discardedNorm / totalNorm,
+					std::numeric_limits<double>::infinity()));
+			const double localDiscardedFraction =
+				localTraceDistance * localTraceDistance;
 			approximationStatistics.cumulativeDiscardedWeight +=
 				localDiscardedFraction;
 			approximationStatistics.traceDistanceErrorBound = std::min(1.0,
-				approximationStatistics.traceDistanceErrorBound
-					+ std::sqrt(localDiscardedFraction));
+				std::nextafter(
+					approximationStatistics.traceDistanceErrorBound
+						+ localTraceDistance,
+					std::numeric_limits<double>::infinity()));
 			approximationStatistics.discardedComponents +=
 				approximateDiscardedComponents;
 			++approximationStatistics.pruningEvents;
@@ -1052,14 +1160,17 @@ namespace QC {
 				// are joined later.  Read the packed Pauli directly so this fast
 				// path does not allocate a PauliAction and its two masks.
 				size_t nrY = 0;
-				bool negate = observable.GetPhaseSign() != outcome;
-				for (size_t logical = 0; logical < nrQubits; ++logical)
+				unsigned labelParity = 0;
+				const auto* labelWords = frame.signs.LabelWords(0);
+				for (size_t word = 0; word < observable.GetNrWords(); ++word)
 				{
-					const bool hasX = observable.X(logical);
-					const bool hasZ = observable.Z(logical);
-					if (hasX && hasZ) ++nrY;
-					if (hasZ && frame.signs.Get(0, logical)) negate = !negate;
+					const auto xBits = observable.GetXWords()[word];
+					const auto zBits = observable.GetZWords()[word];
+					nrY += PopCount(xBits & zBits);
+					labelParity ^= PopCount(zBits & labelWords[word]) & 1U;
 				}
+				bool negate = observable.GetPhaseSign() != outcome;
+				if (labelParity != 0) negate = !negate;
 
 				std::complex<double> phase;
 				switch (nrY % 4)

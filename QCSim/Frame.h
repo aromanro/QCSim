@@ -153,7 +153,13 @@ namespace QC {
 		void Build(const PackedComponentLabels& labels, size_t expectedLabels = 0)
 		{
 			const size_t required = std::max(labels.size(), expectedLabels);
-			EnsureCapacity(required);
+			const size_t slotsNeeded = SlotsFor(required);
+			if (slots.size() < slotsNeeded)
+				slots.resize(slotsNeeded, NotFound);
+			else if (slots.size() / slotsNeeded > 4)
+				// Retain the allocation but drop a stale peak logical size. This keeps
+				// later rebuild clears proportional to a frame that collapsed sharply.
+				slots.resize(slotsNeeded);
 			std::fill(slots.begin(), slots.end(), NotFound);
 			for (size_t component = 0; component < labels.size(); ++component)
 				Insert(labels, component);
@@ -224,13 +230,20 @@ namespace QC {
 			return true;
 		}
 
-		void EnsureCapacity(size_t labels)
+		static size_t SlotsFor(size_t labels)
 		{
+			const size_t minimumLabels = std::max<size_t>(labels, 1);
+			if (minimumLabels > std::numeric_limits<size_t>::max() / 2)
+				throw std::length_error("Too many packed component labels");
+			const size_t minimumSlots = 2 * minimumLabels;
 			size_t slotsNeeded = 8;
-			while (slotsNeeded < 2 * std::max<size_t>(labels, 1))
+			while (slotsNeeded < minimumSlots)
+			{
+				if (slotsNeeded > std::numeric_limits<size_t>::max() / 2)
+					throw std::length_error("Packed component index is too large");
 				slotsNeeded *= 2;
-			if (slots.size() < slotsNeeded)
-				slots.resize(slotsNeeded, NotFound);
+			}
+			return slotsNeeded;
 		}
 
 		std::vector<size_t> slots;
@@ -1061,7 +1074,9 @@ namespace QC {
 			componentIndexValid = false;
 			nextAmplitudes.clear();
 			nextSigns.Reset(other.GetNrQubits());
+			measurementPairs.clear();
 			componentOrderWorkspace.clear();
+			componentMagnitudeWorkspace.clear();
 			return *this;
 		}
 
@@ -1115,7 +1130,9 @@ namespace QC {
 		mutable bool componentIndexValid = false;
 		std::vector<std::complex<double>> nextAmplitudes;
 		PackedComponentLabels nextSigns;
+		std::vector<std::pair<size_t, size_t>> measurementPairs;
 		std::vector<size_t> componentOrderWorkspace;
+		std::vector<double> componentMagnitudeWorkspace;
 	};
 
 }
