@@ -60,7 +60,7 @@ int main(int argc, char* argv[])
 		std::cout << "5 to run Pauli propagator tests" << std::endl;
 		std::cout << "6 to run path integral tests" << std::endl;
 		std::cout << "7 to run density matrix tests" << std::endl;
-		std::cout << "8 to run extended stabilizer tests (not yet fully implemented, works only with clifford gates)" << std::endl;
+		std::cout << "8 to run extended stabilizer tests (single-frame Clifford and rotation support)" << std::endl;
 		std::cout << "9 to run all tests" << std::endl;
 		std::cout << "Command: ";
 		std::string dummy;

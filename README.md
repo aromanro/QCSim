@@ -1,9 +1,14 @@
 # QCSim
 Quantum computation simulator
 
-Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator, a Clifford gates simulator using the stabilizer formalism, a Pauli propagation simulator and a Path Integral simulator.
-There is an 'extended stabilizer' (based on frames formalism) simulator as well in there, please ignore it as it's work in progress, for now it works only for Clifford gates.
-There is also a Matrix Product Operator simulator (which is a compressed Density Matrix in a similar way as the MPS is a compressed statevector). This one - unlike the other code except maybe some tests - is vibed into existence using Claude Opus 4.8 and GPT-5.5 and although I tried to explain the AI quite detailed my intentions and I used the analogy with MPS, explaining the differences as well, I'm not sure if everything is ok as I didn't check all the code yet. The generated tests do pass, so there are some things that work ok, but I wouldn't still rely on it. We might use it in Maestro and until then I'll check it more carefully.
+Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator, a Clifford gates simulator using the stabilizer formalism, a Pauli propagation simulator and a Path Integral simulator. Those are implemented 'from scratch' with no help from AI whatsoever (maybe some of the tests were generated).
+
+There is also an 'extended stabilizer' simulator based on the frames formalism. Its single-frame implementation supports Clifford gates and arbitrary single-qubit X, Y and Z rotations. Multiframe coalescing is still work in progress (postponed indefinitely). 
+I started to implement it with no AI help and got it working up to executing Clifford gates, then got bored and resumed the work on it with Chat GPT (5.6 Sol Ultra). 
+It worked from the first try, but I had to look over the code, spot issues and prompt for refactoring (there was quite a bit of redundancy)... in the end I've to code almost twice as fast as the initial one.
+
+There is also a Matrix Product Operator simulator (which is a compressed Density Matrix in a similar way as the MPS is a compressed statevector). This one is vibed into existence using Claude Opus 4.8 and GPT-5.5 and although I tried to explain the AI quite detailed my intentions and I used the analogy with MPS, explaining the differences as well, I'm not sure if everything is ok as I didn't check all the code yet. The generated tests do pass, so there are some things that work ok, but I wouldn't still rely on it. We might use it in Maestro and until then I'll check it more carefully.
+
 I also added a DensityMatrix simulator and although I added it with AI as well, it should be good as it's based on the statevector 'calculator' and pretty straightforward (although Claude did some mistakes affecting performance which I had to correct by additional prompting).
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://app.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
