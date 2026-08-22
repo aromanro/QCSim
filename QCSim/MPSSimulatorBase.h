@@ -4,6 +4,7 @@
 #include <iostream>
 #include <algorithm>
 #include <limits>
+#include <stdexcept>
 
 #include <unsupported/Eigen/CXX11/Tensor>
 
@@ -112,8 +113,8 @@ namespace QC {
 
 			void setToBasisState(size_t State) override
 			{
-				const size_t NrBasisStates = gammas.size() > sizeof(size_t) * 8 ? 64 : (1ULL << gammas.size());
-				if (State >= NrBasisStates) return;
+				constexpr size_t stateBits = std::numeric_limits<size_t>::digits;
+				if (gammas.size() < stateBits && State >= (size_t{ 1 } << gammas.size())) return;
 
 				Clear();
 
@@ -132,7 +133,8 @@ namespace QC {
 
 			void setToBasisState(const std::vector<bool>& State) override
 			{
-				if (State.size() > gammas.size()) return;
+				if (State.size() > gammas.size())
+					throw std::invalid_argument("Basis state has more bits than the MPS register");
 
 				Clear();
 

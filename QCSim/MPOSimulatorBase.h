@@ -8,6 +8,8 @@
 #include <utility>
 #include <limits>
 #include <algorithm>
+#include <stdexcept>
+#include <typeinfo>
 
 #include <unsupported/Eigen/CXX11/Tensor>
 
@@ -128,8 +130,8 @@ namespace QC {
 
 			void setToBasisState(size_t State) override
 			{
-				const size_t NrBasisStates = gammas.size() > sizeof(size_t) * 8 ? 64 : (1ULL << gammas.size());
-				if (State >= NrBasisStates) return;
+				constexpr size_t stateBits = std::numeric_limits<size_t>::digits;
+				if (gammas.size() < stateBits && State >= (size_t{ 1 } << gammas.size())) return;
 
 				Clear();
 
@@ -146,7 +148,8 @@ namespace QC {
 
 			void setToBasisState(const std::vector<bool>& State) override
 			{
-				if (State.size() > gammas.size()) return;
+				if (State.size() > gammas.size())
+					throw std::invalid_argument("Basis state has more bits than the MPO register");
 
 				Clear();
 
@@ -160,15 +163,21 @@ namespace QC {
 			void setToMixtureOfBasisStates(const std::vector<std::pair<size_t, double>>& mixture) override
 			{
 				const size_t nrQubits = gammas.size();
+				constexpr size_t stateBits = std::numeric_limits<size_t>::digits;
 
 				std::vector<std::pair<std::vector<bool>, double>> bitMixture;
 				bitMixture.reserve(mixture.size());
 
 				for (const auto& [state, prob] : mixture)
 				{
+					if (!std::isfinite(prob))
+						throw std::invalid_argument("Mixture weights must be finite");
+					if (prob <= 0.) continue;
+					if (nrQubits < stateBits && state >= (size_t{ 1 } << nrQubits)) continue;
+
 					std::vector<bool> bits(nrQubits, false);
 					size_t s = state;
-					for (size_t i = 0; i < nrQubits; ++i)
+					for (size_t i = 0; i < nrQubits && i < stateBits; ++i)
 					{
 						bits[i] = (s & 1) == 1;
 						s >>= 1;
@@ -191,28 +200,41 @@ namespace QC {
 			{
 				const size_t nrQubits = gammas.size();
 
-				// merge duplicate basis states and accumulate their probabilities,
-				// dropping non positive weights
+				// Validate the complete input before building replacement storage. Oversized
+				// bit vectors describe out-of-range states and, like out-of-range integer
+				// states, are ignored. Shorter vectors are zero-extended.
+				double maxWeight = 0.;
+				for (const auto& [state, prob] : mixture)
+				{
+					if (!std::isfinite(prob))
+						throw std::invalid_argument("Mixture weights must be finite");
+					if (prob > 0. && state.size() <= nrQubits)
+						maxWeight = std::max(maxWeight, prob);
+				}
+
+				if (maxWeight <= 0.)
+					throw std::invalid_argument("Mixture must contain at least one valid positive weight");
+
+				// Scale by the largest usable weight before accumulation. This keeps both
+				// subnormal-only and near-DBL_MAX mixtures normalizable without underflowing
+				// the total to zero or overflowing it to infinity.
 				std::map<std::vector<bool>, double> merged;
 				double total = 0.;
 				for (const auto& [state, prob] : mixture)
 				{
-					if (prob <= 0.) continue;
+					if (prob <= 0. || state.size() > nrQubits) continue;
 
 					std::vector<bool> bits(nrQubits, false);
-					for (size_t i = 0; i < nrQubits && i < state.size(); ++i)
+					for (size_t i = 0; i < state.size(); ++i)
 						bits[i] = state[i];
 
-					merged[bits] += prob;
-					total += prob;
+					const double scaledWeight = prob / maxWeight;
+					merged[bits] += scaledWeight;
+					total += scaledWeight;
 				}
 
-				// fall back to |0...0><0...0| if there is nothing usable
-				if (merged.empty() || total <= std::numeric_limits<double>::epsilon())
-				{
-					Clear();
-					return;
-				}
+				if (merged.empty() || !std::isfinite(total) || total <= 0.)
+					throw std::invalid_argument("Mixture must contain at least one valid positive weight");
 
 				const IndexType nrTerms = static_cast<IndexType>(merged.size());
 
@@ -226,9 +248,11 @@ namespace QC {
 					probs.push_back(prob / total); // normalize so Tr(rho) = 1
 				}
 
-				// the bond dimension is the number of distinct mixture terms; each lambda is all ones
-				for (size_t b = 0; b < lambdas.size(); ++b)
-					lambdas[b] = LambdaType::Ones(nrTerms);
+				// Build the complete replacement before mutating the simulator, so invalid
+				// input and allocation failures leave the existing state untouched.
+				std::vector<LambdaType> newLambdas(lambdas.size(), LambdaType::Ones(nrTerms));
+				std::vector<TensorType> newGammas;
+				newGammas.reserve(nrQubits);
 
 				// each site is diagonal in the bond index k: gamma(k, bit_i(k), bit_i(k), k).
 				// the first site folds in the probabilities so the chain contraction reproduces
@@ -250,18 +274,27 @@ namespace QC {
 						gamma(l, bit, bit, r) = val;
 					}
 
-					gammas[i] = std::move(gamma);
+					newGammas.emplace_back(std::move(gamma));
 				}
+
+				lambdas.swap(newLambdas);
+				gammas.swap(newGammas);
 			}
 
 			void setLimitBondDimension(IndexType chival) override
 			{
+				if (chival <= 0)
+					throw std::invalid_argument("Bond dimension limit must be positive");
+
 				limitSize = true;
 				chi = chival;
 			}
 
 			void setLimitEntanglement(double svdThreshold) override
 			{
+				if (!std::isfinite(svdThreshold) || svdThreshold < 0.)
+					throw std::invalid_argument("Singular-value threshold must be finite and non-negative");
+
 				limitEntanglement = true;
 				singularValueThreshold = svdThreshold;
 			}
@@ -337,6 +370,9 @@ namespace QC {
 			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
 			{
 				if (qubits.empty()) return {};
+				for (const IndexType qubit : qubits)
+					if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+						throw std::invalid_argument("Qubit index out of bounds");
 
 				const auto sampled = MeasureNoCollapseUpTo(*qubits.crbegin());
 
@@ -355,6 +391,10 @@ namespace QC {
 			// the qubit reordering is handled by the MPOSimulator decorator
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
 			{
+				for (const IndexType qubit : qubits)
+					if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+						throw std::invalid_argument("Qubit index out of bounds");
+
 				// do nothing, it's here just to provide an implementation
 			}
 
@@ -437,16 +477,18 @@ namespace QC {
 			{
 				if (!state) return;
 
-				auto stateRef = std::static_pointer_cast<MPOSimulatorBaseState>(state);
-				lambdas = stateRef->lambdas;
-				gammas = stateRef->gammas;
+				const auto stateRef = CheckedBaseState(state);
+				std::vector<LambdaType> newLambdas = stateRef->lambdas;
+				std::vector<TensorType> newGammas = stateRef->gammas;
+				lambdas.swap(newLambdas);
+				gammas.swap(newGammas);
 			}
 
 			void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) override
 			{
 				if (!state) return;
 
-				auto stateRef = std::static_pointer_cast<MPOSimulatorBaseState>(state);
+				auto stateRef = CheckedBaseState(state);
 				lambdas.swap(stateRef->lambdas);
 				gammas.swap(stateRef->gammas);
 			}
@@ -479,6 +521,45 @@ namespace QC {
 			}
 
 		protected:
+			std::shared_ptr<MPOSimulatorBaseState> CheckedBaseState(const std::shared_ptr<MPOSimulatorStateInterface>& state) const
+			{
+				if (typeid(*state) != typeid(MPOSimulatorBaseState))
+					throw std::invalid_argument("State type is incompatible with MPOSimulatorImpl");
+
+				auto baseState = std::dynamic_pointer_cast<MPOSimulatorBaseState>(state);
+				if (!baseState || baseState->gammas.size() != gammas.size() || baseState->lambdas.size() != lambdas.size())
+					throw std::invalid_argument("MPO state dimensions do not match the simulator");
+
+				const size_t n = baseState->gammas.size();
+				for (size_t q = 0; q < n; ++q)
+				{
+					const auto& gamma = baseState->gammas[q];
+					const IndexType leftBond = gamma.dimension(0);
+					const IndexType rightBond = gamma.dimension(3);
+					if (leftBond <= 0 || rightBond <= 0 || gamma.dimension(1) != 2 || gamma.dimension(2) != 2 ||
+						(q == 0 && leftBond != 1) || (q + 1 == n && rightBond != 1))
+						throw std::invalid_argument("MPO state contains an invalid site tensor");
+
+					for (IndexType i = 0; i < gamma.size(); ++i)
+					{
+						const auto value = gamma.data()[i];
+						if (!std::isfinite(value.real()) || !std::isfinite(value.imag()))
+							throw std::invalid_argument("MPO state contains a non-finite tensor value");
+					}
+
+					if (q + 1 < n)
+					{
+						const auto& lambda = baseState->lambdas[q];
+						if (lambda.size() <= 0 || rightBond != lambda.size() ||
+							baseState->gammas[q + 1].dimension(0) != rightBond || !lambda.allFinite() ||
+							(lambda.array() < 0.).any())
+							throw std::invalid_argument("MPO state contains an invalid bond");
+					}
+				}
+
+				return baseState;
+			}
+
 			static double ClampProbability(double probability)
 			{
 				constexpr double tolerance = 1E-12;

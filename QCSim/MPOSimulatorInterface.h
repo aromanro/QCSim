@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <complex>
+#include <stdexcept>
 #include <utility>
 #include <unordered_map>
 
@@ -72,12 +73,15 @@ namespace QC {
 			virtual void InitOnesState() = 0;
 			virtual void setToQubitState(IndexType q) = 0;
 			virtual void setToBasisState(size_t State) = 0;
+			// Bit i selects qubit i. This overload also represents basis states wider
+			// than size_t; shorter vectors are zero-extended and oversized vectors are rejected.
 			virtual void setToBasisState(const std::vector<bool>& State) = 0;
 
 			// Unlike a state vector, a density matrix can represent a statistical
 			// (classical) mixture of pure states. These set rho to a mixture of basis
-			// states: rho = sum_i prob_i |state_i><state_i|. The probabilities should
-			// be non negative; they are normalized so that Tr(rho) = 1.
+			// states: rho = sum_i prob_i |state_i><state_i|. Weights must be finite;
+			// non-positive weights and out-of-range states are ignored, and at least one
+			// usable positive term is required. Weights are normalized so Tr(rho) = 1.
 			virtual void setToMixtureOfBasisStates(const std::vector<std::pair<size_t, double>>& mixture) = 0;
 			virtual void setToMixtureOfBasisStates(const std::vector<std::pair<std::vector<bool>, double>>& mixture) = 0;
 
@@ -118,18 +122,21 @@ namespace QC {
 			// bit flip: rho -> (1 - p) rho + p X rho X
 			void ApplyBitFlipNoise(IndexType qubit, double p)
 			{
+				ValidateNoiseProbability(p);
 				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliX() }, qubit);
 			}
 
 			// phase flip: rho -> (1 - p) rho + p Z rho Z
 			void ApplyPhaseFlipNoise(IndexType qubit, double p)
 			{
+				ValidateNoiseProbability(p);
 				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliZ() }, qubit);
 			}
 
 			// depolarizing: rho -> (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
 			void ApplyDepolarizingNoise(IndexType qubit, double p)
 			{
+				ValidateNoiseProbability(p);
 				const double s = std::sqrt(p / 3.);
 				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), s * NoisePauliX(), s * NoisePauliY(), s * NoisePauliZ() }, qubit);
 			}
@@ -137,6 +144,7 @@ namespace QC {
 			// amplitude damping (|1> -> |0> relaxation with probability gamma)
 			void ApplyAmplitudeDamping(IndexType qubit, double gamma)
 			{
+				ValidateNoiseProbability(gamma);
 				MatrixClass E0 = MatrixClass::Zero(2, 2);
 				E0(0, 0) = 1.;
 				E0(1, 1) = std::sqrt(1. - gamma);
@@ -150,6 +158,7 @@ namespace QC {
 			// phase damping / dephasing, suppresses the off diagonal coherences by lambda = sqrt(1 - gamma)
 			void ApplyPhaseDamping(IndexType qubit, double gamma)
 			{
+				ValidateNoiseProbability(gamma);
 				MatrixClass E0 = MatrixClass::Zero(2, 2);
 				E0(0, 0) = 1.;
 				E0(1, 1) = std::sqrt(1. - gamma);
@@ -207,6 +216,12 @@ namespace QC {
 			virtual void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
 
 		protected:
+			static void ValidateNoiseProbability(double probability)
+			{
+				if (!std::isfinite(probability) || probability < 0. || probability > 1.)
+					throw std::invalid_argument("Noise probability must be finite and in [0, 1]");
+			}
+
 			// single-qubit Pauli matrices used to build the predefined noise channels
 			static MatrixClass NoisePauliI()
 			{

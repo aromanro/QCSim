@@ -6,6 +6,9 @@
 #include <utility>
 #include <array>
 #include <cmath>
+#include <functional>
+#include <limits>
+#include <set>
 
 #include "Tests.h"
 
@@ -18,6 +21,62 @@
 
 
 #define NR_QUBITS_LIMIT_MPO 7
+
+template<class Callable>
+static bool MPO_ExpectInvalidArgument(Callable&& callable, const char* description)
+{
+	try
+	{
+		callable();
+	}
+	catch (const std::invalid_argument&)
+	{
+		return true;
+	}
+	catch (const std::exception& ex)
+	{
+		std::cout << description << " threw the wrong exception: " << ex.what() << std::endl;
+		return false;
+	}
+
+	std::cout << description << " did not throw std::invalid_argument" << std::endl;
+	return false;
+}
+
+template<class Callable>
+static bool MPO_ExpectRuntimeError(Callable&& callable, const char* description)
+{
+	try
+	{
+		callable();
+	}
+	catch (const std::runtime_error&)
+	{
+		return true;
+	}
+	catch (const std::exception& ex)
+	{
+		std::cout << description << " threw the wrong exception: " << ex.what() << std::endl;
+		return false;
+	}
+
+	std::cout << description << " did not throw std::runtime_error" << std::endl;
+	return false;
+}
+
+class MPOWrongDeclaredArityGate final : public QC::Gates::AppliedGate<>
+{
+public:
+	explicit MPOWrongDeclaredArityGate(const Eigen::MatrixXcd& op)
+		: QC::Gates::AppliedGate<>(op)
+	{
+	}
+
+	size_t getQubitsNumber() const override
+	{
+		return 1;
+	}
+};
 
 // these mirror the helpers from MPSSimulatorTests.cpp, kept local to avoid coupling the two test files
 static void FillOneQubitGatesMPO(std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>>& gates)
@@ -1871,10 +1930,379 @@ static bool SamplingNoCollapseTestMPO()
 	return true;
 }
 
+// Locks the public API validation contract. Invalid calls must throw before changing either the
+// represented logical state or the decorator's logical-to-physical qubit permutation.
+static bool ValidationAndStateCompatibilityTestMPO()
+{
+	std::cout << "\nMPO simulator - validation and state compatibility" << std::endl;
+
+	QC::TensorNetworks::MPOSimulator mpo(4);
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(h, 0);
+	mpo.ApplyGate(cnot, 3, 0); // also make the decorator map non-identity
+
+	const Eigen::MatrixXcd before = mpo.getDensityMatrix();
+	const auto beforeState = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+	if (!beforeState)
+	{
+		std::cout << "MPO getState returned an unexpected state type" << std::endl;
+		return false;
+	}
+
+	Eigen::MatrixXcd empty(0, 0);
+	Eigen::MatrixXcd rectangular = Eigen::MatrixXcd::Zero(2, 1);
+	Eigen::MatrixXcd three = Eigen::MatrixXcd::Identity(3, 3);
+	Eigen::MatrixXcd eight = Eigen::MatrixXcd::Identity(8, 8);
+	Eigen::MatrixXcd nonFinite = Eigen::MatrixXcd::Identity(2, 2);
+	nonFinite(0, 0) = std::numeric_limits<double>::quiet_NaN();
+	const Eigen::MatrixXcd i2 = Eigen::MatrixXcd::Identity(2, 2);
+	const Eigen::MatrixXcd i4 = Eigen::MatrixXcd::Identity(4, 4);
+	const MPOWrongDeclaredArityGate wrongDeclaredArity(i4);
+
+	if (!MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::AppliedGate<>(empty, 0)); }, "Empty operator matrix") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::AppliedGate<>(rectangular, 0)); }, "Rectangular operator matrix") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::AppliedGate<>(three, 0)); }, "Non-power-of-two operator matrix") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::AppliedGate<>(eight, 3, 0)); }, "Unsupported three-qubit operator") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::AppliedGate<>(nonFinite, 0)); }, "Non-finite operator matrix") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(wrongDeclaredArity, 3, 0); }, "Operator with mismatched declared arity") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::TwoQubitsGate<>(i4), 0, 0); }, "Duplicate operator qubits") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({ i2, i4 }, 0); }, "Mismatched Kraus dimensions") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({ i2, nonFinite }, 0); }, "Non-finite Kraus operator") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({ i4 }, 0, 0); }, "Duplicate Kraus qubits"))
+		return false;
+
+	using MPOIndex = QC::TensorNetworks::MPOSimulatorInterface::IndexType;
+	if (!MPO_ExpectInvalidArgument([&] { mpo.MeasureQubits(std::set<MPOIndex>{ -1 }); }, "Negative measured qubit") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.MeasureQubits(std::set<MPOIndex>{ 0, 4 }); }, "Out-of-range measured qubit") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.MeasureNoCollapse(std::set<MPOIndex>{ 4 }); }, "Out-of-range sampled qubit") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.MoveAtBeginningOfChain(std::set<MPOIndex>{ -1, 0 }); }, "Invalid moved qubit") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setLimitBondDimension(0); }, "Zero bond dimension limit") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setLimitBondDimension(-2); }, "Negative bond dimension limit") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setLimitEntanglement(-1E-6); }, "Negative singular-value threshold") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setLimitEntanglement(std::numeric_limits<double>::infinity()); }, "Infinite singular-value threshold"))
+		return false;
+
+	if (!MPO_ExpectInvalidArgument([&] { mpo.ApplyBitFlipNoise(0, -0.1); }, "Negative bit-flip probability") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyDepolarizingNoise(0, 1.1); }, "Depolarizing probability above one") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.ApplyAmplitudeDamping(0, std::numeric_limits<double>::quiet_NaN()); }, "NaN damping probability"))
+		return false;
+
+	const auto afterInvalidOperations = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+	if (!afterInvalidOperations || beforeState->qubitsMap != afterInvalidOperations->qubitsMap ||
+		beforeState->qubitsMapInv != afterInvalidOperations->qubitsMapInv ||
+		(mpo.getDensityMatrix() - before).norm() > 1E-12)
+	{
+		std::cout << "An invalid MPO operation changed the state or qubit map" << std::endl;
+		return false;
+	}
+
+	// States are implementation-specific: accepting a decorator state in the adjacent implementation
+	// would silently discard its qubit map, while downcasting an implementation state is unsafe.
+	QC::TensorNetworks::MPOSimulatorImpl adjacent(4);
+	adjacent.ApplyGate(h, 0);
+	const Eigen::MatrixXcd adjacentBeforeInvalidMeasurement = adjacent.getDensityMatrix();
+	if (!MPO_ExpectInvalidArgument([&] { adjacent.MeasureQubits(std::set<MPOIndex>{ 0, 4 }); }, "Implementation subset with an invalid measured qubit") ||
+		!MPO_ExpectInvalidArgument([&] { adjacent.MeasureNoCollapse(std::set<MPOIndex>{ 4 }); }, "Implementation subset with an invalid sampled qubit") ||
+		!MPO_ExpectInvalidArgument([&] { adjacent.MoveAtBeginningOfChain(std::set<MPOIndex>{ -1 }); }, "Implementation move with an invalid qubit"))
+		return false;
+	if ((adjacent.getDensityMatrix() - adjacentBeforeInvalidMeasurement).norm() > 1E-12)
+	{
+		std::cout << "An invalid implementation measurement partially collapsed the MPO" << std::endl;
+		return false;
+	}
+
+	auto adjacentState = adjacent.getState();
+	if (!MPO_ExpectInvalidArgument([&] { mpo.setState(adjacentState); }, "Implementation state restored into decorator"))
+		return false;
+
+	auto decoratedState = mpo.getState();
+	if (!MPO_ExpectInvalidArgument([&] { adjacent.setState(decoratedState); }, "Decorator state restored into implementation"))
+		return false;
+
+	QC::TensorNetworks::MPOSimulator otherSize(3);
+	auto otherSizeState = otherSize.getState();
+	if (!MPO_ExpectInvalidArgument([&] { mpo.setState(otherSizeState); }, "Wrong-size MPO state"))
+		return false;
+
+	auto malformedState = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+	malformedState->qubitsMap[0] = malformedState->qubitsMap[1];
+	if (!MPO_ExpectInvalidArgument([&] { mpo.setState(malformedState); }, "Malformed MPO qubit map"))
+		return false;
+
+	if ((mpo.getDensityMatrix() - before).norm() > 1E-12)
+	{
+		std::cout << "Rejected state restoration changed the MPO" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+// Positive mixture weights are scale-free and finite. Very small or very large common scales must
+// therefore produce the same normalized state, while unusable mixtures must be rejected atomically.
+static bool MixtureValidationAndScalingTestMPO()
+{
+	std::cout << "\nMPO simulator - mixture validation and stable normalization" << std::endl;
+
+	for (const double scale : { 1E-300, std::numeric_limits<double>::max() / 4. })
+	{
+		QC::TensorNetworks::MPOSimulator mpo(2);
+		mpo.setToMixtureOfBasisStates({ { 0, scale }, { 1, 2. * scale } });
+		if (!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12) ||
+			!approxEqual(mpo.getBasisStateProbability(0), 1. / 3., 1E-12) ||
+			!approxEqual(mpo.getBasisStateProbability(1), 2. / 3., 1E-12))
+		{
+			std::cout << "MPO mixture normalization is not scale invariant" << std::endl;
+			return false;
+		}
+	}
+
+	QC::TensorNetworks::MPOSimulator mpo(2);
+	mpo.setToBasisState(3);
+	const Eigen::MatrixXcd before = mpo.getDensityMatrix();
+	if (!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{}); }, "Empty MPO mixture") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates({ { 0, std::numeric_limits<double>::infinity() } }); }, "Infinite MPO mixture weight") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates({ { 7, 1. }, { 0, 0. } }); }, "MPO mixture without a valid positive term") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates(std::vector<std::pair<std::vector<bool>, double>>{ { std::vector<bool>{ true, false, true }, 1. } }); }, "Oversized vector MPO mixture state"))
+		return false;
+
+	if ((mpo.getDensityMatrix() - before).norm() > 1E-12)
+	{
+		std::cout << "An invalid MPO mixture changed the state" << std::endl;
+		return false;
+	}
+
+	// Invalid and non-positive entries are ignored when at least one usable term remains.
+	mpo.setToMixtureOfBasisStates({ { 1, 1. }, { 7, 9. }, { 2, -4. } });
+	if (!approxEqual(mpo.getBasisStateProbability(1), 1., 1E-12) ||
+		!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12))
+	{
+		std::cout << "MPO did not ignore unusable mixture entries consistently" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+// The size_t state overload remains useful for wide tensor networks. In particular it must not
+// evaluate a width-sized shift when N equals the number of bits in size_t. The vector overload
+// must be able to initialize qubits whose indices cannot be represented in a size_t bit mask.
+static bool WideBasisInitializationTestMPO()
+{
+	std::cout << "\nMPO simulator - wide basis-state initialization" << std::endl;
+
+	const size_t digits = std::numeric_limits<size_t>::digits;
+	const size_t allBits = std::numeric_limits<size_t>::max();
+	for (const size_t nrQubits : { digits, digits + 1 })
+	{
+		QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+		mpo.setToBasisState(allBits);
+
+		if (!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12) ||
+			!approxEqual(mpo.GetProbability(0, false), 1., 1E-12) ||
+			!approxEqual(mpo.GetProbability(static_cast<Eigen::Index>(digits - 1), false), 1., 1E-12))
+		{
+			std::cout << "Wide MPO basis initialization lost a representable size_t bit" << std::endl;
+			return false;
+		}
+
+		if (nrQubits > digits && !approxEqual(mpo.GetProbability(static_cast<Eigen::Index>(digits), true), 1., 1E-12))
+		{
+			std::cout << "Wide MPO basis initialization did not zero-extend the state" << std::endl;
+			return false;
+		}
+	}
+
+	const size_t vectorQubits = digits + 3;
+	std::vector<bool> vectorStateBits(vectorQubits, false);
+	vectorStateBits[0] = true;
+	vectorStateBits[digits - 1] = true;
+	vectorStateBits[digits] = true;
+	vectorStateBits[vectorQubits - 1] = true;
+	const std::vector<bool> vectorState = std::move(vectorStateBits);
+
+	QC::TensorNetworks::MPOSimulator vectorMpo(vectorQubits);
+	QC::TensorNetworks::MPOSimulatorInterface& vectorMpoApi = vectorMpo;
+	vectorMpoApi.setToBasisState(vectorState);
+
+	if (!approxEqual(vectorMpo.Trace(), std::complex<double>(1., 0.), 1E-12))
+	{
+		std::cout << "Vector-initialized wide MPO does not have unit trace" << std::endl;
+		return false;
+	}
+
+	for (size_t q = 0; q < vectorQubits; ++q)
+	{
+		const double expectedOneProbability = vectorState[q] ? 1. : 0.;
+		if (!approxEqual(vectorMpo.GetProbability(static_cast<Eigen::Index>(q), false), expectedOneProbability, 1E-12))
+		{
+			std::cout << "Vector MPO basis initialization set qubit " << q << " incorrectly" << std::endl;
+			return false;
+		}
+	}
+
+	const std::vector<bool> shortState{ true, false, true };
+	vectorMpoApi.setToBasisState(shortState);
+	if (!approxEqual(vectorMpo.GetProbability(0, false), 1., 1E-12) ||
+		!approxEqual(vectorMpo.GetProbability(1, false), 0., 1E-12) ||
+		!approxEqual(vectorMpo.GetProbability(2, false), 1., 1E-12) ||
+		!approxEqual(vectorMpo.GetProbability(static_cast<Eigen::Index>(vectorQubits - 1), false), 0., 1E-12))
+	{
+		std::cout << "Short MPO basis vector was not zero-extended" << std::endl;
+		return false;
+	}
+
+	const std::vector<bool> emptyState;
+	vectorMpoApi.setToBasisState(emptyState);
+	if (!approxEqual(vectorMpo.GetProbability(0, false), 0., 1E-12) ||
+		!approxEqual(vectorMpo.GetProbability(static_cast<Eigen::Index>(vectorQubits - 1), false), 0., 1E-12))
+	{
+		std::cout << "Empty MPO basis vector did not initialize the all-zero state" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulator mappedMpo(3);
+	mappedMpo.setToBasisState(std::vector<bool>{ true, false, true });
+	mappedMpo.MoveAtBeginningOfChain({ 2 });
+	const auto stateBeforeInvalidCall = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mappedMpo.getState());
+	const std::vector<Eigen::Index> identityMap{ 0, 1, 2 };
+	if (!stateBeforeInvalidCall || stateBeforeInvalidCall->qubitsMap == identityMap)
+	{
+		std::cout << "MPO test setup did not create a non-identity logical qubit mapping" << std::endl;
+		return false;
+	}
+
+	if (!MPO_ExpectInvalidArgument([&] { mappedMpo.setToBasisState(std::vector<bool>(4, false)); }, "Oversized MPO basis vector"))
+		return false;
+
+	const auto stateAfterInvalidCall = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mappedMpo.getState());
+	if (!stateAfterInvalidCall || stateAfterInvalidCall->qubitsMap != stateBeforeInvalidCall->qubitsMap ||
+		stateAfterInvalidCall->qubitsMapInv != stateBeforeInvalidCall->qubitsMapInv ||
+		!approxEqual(mappedMpo.GetProbability(0, false), 1., 1E-12) ||
+		!approxEqual(mappedMpo.GetProbability(1, false), 0., 1E-12) ||
+		!approxEqual(mappedMpo.GetProbability(2, false), 1., 1E-12))
+	{
+		std::cout << "Rejected MPO basis initialization changed the state or logical qubit mapping" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+// Kraus summation must not direct-sum every bond. With compression enabled the configured cap is a
+// hard invariant, and a local channel on a product state should not create remote virtual bonds.
+static bool KrausBondLimitAndLocalityTestMPO()
+{
+	std::cout << "\nMPO simulator - Kraus bond limits and locality" << std::endl;
+
+	{
+		QC::TensorNetworks::MPOSimulator product(5);
+		for (int i = 0; i < 4; ++i)
+			product.ApplyDepolarizingNoise(2, 0.2 + 0.1 * i);
+
+		for (const Eigen::Index bond : product.getBondDimensions())
+			if (bond != 1)
+			{
+				std::cout << "A local channel grew a remote/product-state MPO bond to " << bond << std::endl;
+				return false;
+			}
+	}
+
+	QC::TensorNetworks::MPOSimulator mpo(4);
+	mpo.setLimitBondDimension(1);
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(h, 0);
+	mpo.ApplyGate(cnot, 3, 0);
+
+	const Eigen::MatrixXcd cnotMatrix = cnot.getRawOperatorMatrix();
+	const Eigen::MatrixXcd k0 = std::sqrt(0.6) * Eigen::MatrixXcd::Identity(4, 4);
+	const Eigen::MatrixXcd k1 = std::sqrt(0.4) * cnotMatrix;
+	for (int i = 0; i < 3; ++i)
+	{
+		mpo.ApplyAmplitudeDamping(i, 0.25);
+		mpo.ApplyDepolarizingNoise(3 - i, 0.3);
+		mpo.ApplyKrausOperators({ k0, k1 }, 3, 0);
+
+		for (const Eigen::Index bond : mpo.getBondDimensions())
+			if (bond > 1)
+			{
+				std::cout << "Kraus application exceeded the configured MPO bond limit: " << bond << std::endl;
+				return false;
+			}
+	}
+
+	const Eigen::MatrixXcd rho = mpo.getDensityMatrix();
+	if (!rho.allFinite() || !std::isfinite(mpo.Trace().real()) || !std::isfinite(mpo.Trace().imag()))
+	{
+		std::cout << "Kraus evolution with a bond cap produced a non-finite MPO" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+// Measurement probabilities are computed relative to the current trace, but a collapsed density
+// matrix must itself be normalized. Impossible normalized operations must fail atomically.
+static bool CollapseNormalizationAndAtomicFailureTestMPO()
+{
+	std::cout << "\nMPO simulator - collapse normalization and atomic failure" << std::endl;
+
+	QC::TensorNetworks::MPOSimulator mpo(2);
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(h, 0);
+	mpo.ApplyGate(cnot, 1, 0);
+
+	const double scale = 0.37;
+	mpo.ApplyOperator(QC::Gates::SingleQubitGate<>(std::sqrt(scale) * Eigen::MatrixXcd::Identity(2, 2)), 0);
+	if (!approxEqual(mpo.Trace(), std::complex<double>(scale, 0.), 1E-12))
+	{
+		std::cout << "Non-unitary setup did not produce the expected MPO trace" << std::endl;
+		return false;
+	}
+
+	const bool outcome = mpo.MeasureQubit(0);
+	const Eigen::MatrixXcd collapsed = mpo.getDensityMatrix();
+	const size_t expectedState = outcome ? 3 : 0;
+	if (!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-10) ||
+		!approxEqual(collapsed(static_cast<Eigen::Index>(expectedState), static_cast<Eigen::Index>(expectedState)), std::complex<double>(1., 0.), 1E-10) ||
+		(collapsed - collapsed.adjoint()).norm() > 1E-10)
+	{
+		std::cout << "MPO measurement did not produce the normalized projected state" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulatorImpl impossible(1);
+	const Eigen::MatrixXcd before = impossible.getDensityMatrix();
+	Eigen::MatrixXcd projectOne = Eigen::MatrixXcd::Zero(2, 2);
+	projectOne(1, 1) = 1.;
+	if (!MPO_ExpectRuntimeError([&] { impossible.ApplyOperatorAndNormalize(QC::Gates::SingleQubitGate<>(projectOne), 0); }, "Impossible normalized MPO operation"))
+		return false;
+	if ((impossible.getDensityMatrix() - before).norm() > 1E-12)
+	{
+		std::cout << "An impossible normalized MPO operation corrupted the original state" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
-	return OneAndTwoQubitGatesTestMPO() &&
+	return ValidationAndStateCompatibilityTestMPO() &&
+		MixtureValidationAndScalingTestMPO() &&
+		WideBasisInitializationTestMPO() &&
+		KrausBondLimitAndLocalityTestMPO() &&
+		CollapseNormalizationAndAtomicFailureTestMPO() &&
+		OneAndTwoQubitGatesTestMPO() &&
 		NonAdjacentGatesTestMPO() &&
 		MeetingPositionCallbackTestMPO() &&
 		TraceAndProbabilitiesTestMPO() &&

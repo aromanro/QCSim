@@ -35,6 +35,8 @@ namespace QC {
 			virtual void InitOnesState() = 0;
 			virtual void setToQubitState(IndexType q) = 0;
 			virtual void setToBasisState(size_t State) = 0;
+			// Bit i selects qubit i. This overload also represents basis states wider
+			// than size_t; shorter vectors are zero-extended and oversized vectors are rejected.
 			virtual void setToBasisState(const std::vector<bool>& State) = 0;
 			virtual void setLimitBondDimension(IndexType chival) = 0;
 			virtual void setLimitEntanglement(double svdThreshold) = 0;

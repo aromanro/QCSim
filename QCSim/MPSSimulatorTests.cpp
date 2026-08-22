@@ -1,5 +1,6 @@
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <memory>
 
 
@@ -901,6 +902,136 @@ bool TrimTestMPS()
 	return true;
 }
 
+static bool WideBasisInitializationTestMPS()
+{
+	std::cout << "\nMPS simulator - wide vector basis-state initialization" << std::endl;
+
+	const size_t digits = std::numeric_limits<size_t>::digits;
+	const size_t nrQubits = digits + 5;
+	std::vector<bool> stateBits(nrQubits, false);
+	stateBits[0] = true;
+	stateBits[digits - 1] = true;
+	stateBits[digits] = true;
+	stateBits[nrQubits - 1] = true;
+	const std::vector<bool> state = std::move(stateBits);
+
+	auto checkSimulator = [&state, digits, nrQubits](QC::TensorNetworks::MPSSimulatorInterface& simulator, const char* simulatorName)
+		{
+			simulator.setToBasisState(state);
+
+			for (size_t q = 0; q < nrQubits; ++q)
+			{
+				const double expectedOneProbability = state[q] ? 1. : 0.;
+				if (!approxEqual(simulator.GetProbability(static_cast<Eigen::Index>(q), false), expectedOneProbability, 1E-12))
+				{
+					std::cout << simulatorName << " initialized qubit " << q << " incorrectly" << std::endl;
+					return false;
+				}
+			}
+
+			std::vector<bool> matchingState = state;
+			if (!approxEqual(simulator.getBasisStateAmplitude(matchingState), std::complex<double>(1., 0.), 1E-12))
+			{
+				std::cout << simulatorName << " did not initialize the requested wide basis state" << std::endl;
+				return false;
+			}
+
+			std::vector<bool> differentState = state;
+			differentState[digits] = !differentState[digits];
+			if (!approxEqual(simulator.getBasisStateAmplitude(differentState), std::complex<double>(0., 0.), 1E-12))
+			{
+				std::cout << simulatorName << " initialized more than one basis amplitude" << std::endl;
+				return false;
+			}
+
+			const std::vector<bool> shortState{ true, false, true };
+			simulator.setToBasisState(shortState);
+			if (!approxEqual(simulator.GetProbability(0, false), 1., 1E-12) ||
+				!approxEqual(simulator.GetProbability(1, false), 0., 1E-12) ||
+				!approxEqual(simulator.GetProbability(2, false), 1., 1E-12) ||
+				!approxEqual(simulator.GetProbability(static_cast<Eigen::Index>(nrQubits - 1), false), 0., 1E-12))
+			{
+				std::cout << simulatorName << " did not zero-extend a short basis vector" << std::endl;
+				return false;
+			}
+
+			return true;
+		};
+
+	QC::TensorNetworks::MPSSimulatorImpl directSimulator(nrQubits);
+	QC::TensorNetworks::MPSSimulator mappedSimulator(nrQubits);
+	if (!checkSimulator(directSimulator, "Direct MPS simulator") ||
+		!checkSimulator(mappedSimulator, "Mapped MPS simulator"))
+		return false;
+
+	const size_t allBits = std::numeric_limits<size_t>::max();
+	for (const size_t scalarQubitCount : { digits, digits + 1 })
+	{
+		auto checkScalarSimulator = [allBits, digits, scalarQubitCount](QC::TensorNetworks::MPSSimulatorInterface& simulator, const char* simulatorName)
+			{
+				simulator.setToBasisState(allBits);
+
+				for (size_t q = 0; q < scalarQubitCount; ++q)
+				{
+					const double expectedOneProbability = q < digits ? 1. : 0.;
+					if (!approxEqual(simulator.GetProbability(static_cast<Eigen::Index>(q), false), expectedOneProbability, 1E-12))
+					{
+						std::cout << simulatorName << " initialized size_t bit " << q << " incorrectly for "
+							<< scalarQubitCount << " qubits" << std::endl;
+						return false;
+					}
+				}
+
+				return true;
+			};
+
+		QC::TensorNetworks::MPSSimulatorImpl directScalarSimulator(scalarQubitCount);
+		QC::TensorNetworks::MPSSimulator mappedScalarSimulator(scalarQubitCount);
+		if (!checkScalarSimulator(directScalarSimulator, "Direct MPS simulator") ||
+			!checkScalarSimulator(mappedScalarSimulator, "Mapped MPS simulator"))
+			return false;
+	}
+
+	QC::TensorNetworks::MPSSimulator mappedValidationSimulator(3);
+	mappedValidationSimulator.setToBasisState(std::vector<bool>{ true, false, true });
+	mappedValidationSimulator.MoveAtBeginningOfChain({ 2 });
+	const auto stateBeforeInvalidCall = std::dynamic_pointer_cast<QC::TensorNetworks::MPSSimulatorState>(mappedValidationSimulator.getState());
+	const std::vector<Eigen::Index> identityMap{ 0, 1, 2 };
+	if (!stateBeforeInvalidCall || stateBeforeInvalidCall->qubitsMap == identityMap)
+	{
+		std::cout << "MPS test setup did not create a non-identity logical qubit mapping" << std::endl;
+		return false;
+	}
+
+	bool oversizedStateRejected = false;
+	try
+	{
+		mappedValidationSimulator.setToBasisState(std::vector<bool>(4, false));
+	}
+	catch (const std::invalid_argument&)
+	{
+		oversizedStateRejected = true;
+	}
+	catch (...)
+	{
+	}
+
+	const auto stateAfterInvalidCall = std::dynamic_pointer_cast<QC::TensorNetworks::MPSSimulatorState>(mappedValidationSimulator.getState());
+	if (!oversizedStateRejected || !stateAfterInvalidCall ||
+		stateAfterInvalidCall->qubitsMap != stateBeforeInvalidCall->qubitsMap ||
+		stateAfterInvalidCall->qubitsMapInv != stateBeforeInvalidCall->qubitsMapInv ||
+		!approxEqual(mappedValidationSimulator.GetProbability(0, false), 1., 1E-12) ||
+		!approxEqual(mappedValidationSimulator.GetProbability(1, false), 0., 1E-12) ||
+		!approxEqual(mappedValidationSimulator.GetProbability(2, false), 1., 1E-12))
+	{
+		std::cout << "Rejected MPS basis initialization changed the state or logical qubit mapping" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -930,7 +1061,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return StateSimulationTest() && checkExpectationValuesMPS() && TrimTestMPS();
+	return WideBasisInitializationTestMPS() && StateSimulationTest() && checkExpectationValuesMPS() && TrimTestMPS();
 }
 
 

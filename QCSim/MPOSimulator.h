@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 #include <utility>
 #include <unordered_set>
@@ -196,30 +197,17 @@ namespace QC
 
 			void ApplyOperator(const Gates::AppliedGate<MatrixClass>& op) override
 			{
-				ApplyOperator(op, op.getQubit1(), op.getQubit2());
+				const size_t qubitsNumber = ValidateOperator(op);
+				const IndexType qubit = CheckedAppliedQubit(op.getQubit1());
+				const IndexType controllingQubit1 = qubitsNumber > 1 ? CheckedAppliedQubit(op.getQubit2()) : 0;
+
+				ApplyValidatedOperator(op, qubit, controllingQubit1, qubitsNumber);
 			}
 
 			void ApplyOperator(const GateClass& op, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
-				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::invalid_argument("Qubit index out of bounds");
-				else if (op.getQubitsNumber() > 1 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits())))
-					throw std::invalid_argument("Qubit index out of bounds");
-
-				IndexType qubit1 = qubitsMap[qubit];
-				IndexType qubit2 = op.getQubitsNumber() > 1 ? qubitsMap[controllingQubit1] : qubit1;
-
-				// for two qubit operators: if the qubits are not adjacent, swap them until they are
-				if (op.getQubitsNumber() > 1 && std::abs(qubit1 - qubit2) > 1)
-				{
-					BringQubitsTogether(qubit, controllingQubit1);
-
-					qubit1 = qubitsMap[qubit];
-					qubit2 = qubitsMap[controllingQubit1];
-					assert(std::abs(qubit1 - qubit2) == 1);
-				}
-
-				impl.ApplyOperator(op, qubit1, qubit2);
+				const size_t qubitsNumber = ValidateOperator(op);
+				ApplyValidatedOperator(op, qubit, controllingQubit1, qubitsNumber);
 			}
 
 			void ApplyOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) override
@@ -230,41 +218,37 @@ namespace QC
 
 			void ApplyOperatorAndNormalize(const Gates::AppliedGate<MatrixClass>& op) override
 			{
-				ApplyOperatorAndNormalize(op, op.getQubit1(), op.getQubit2());
+				const size_t qubitsNumber = ValidateOperator(op);
+				const IndexType qubit = CheckedAppliedQubit(op.getQubit1());
+				const IndexType controllingQubit1 = qubitsNumber > 1 ? CheckedAppliedQubit(op.getQubit2()) : 0;
+
+				ApplyValidatedOperatorAndNormalize(op, qubit, controllingQubit1, qubitsNumber);
 			}
 
 			void ApplyOperatorAndNormalize(const GateClass& op, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
-				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::invalid_argument("Qubit index out of bounds");
-				else if (op.getQubitsNumber() > 1 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits())))
-					throw std::invalid_argument("Qubit index out of bounds");
-
-				IndexType qubit1 = qubitsMap[qubit];
-				IndexType qubit2 = op.getQubitsNumber() > 1 ? qubitsMap[controllingQubit1] : qubit1;
-
-				if (op.getQubitsNumber() > 1 && std::abs(qubit1 - qubit2) > 1)
-				{
-					BringQubitsTogether(qubit, controllingQubit1);
-
-					qubit1 = qubitsMap[qubit];
-					qubit2 = qubitsMap[controllingQubit1];
-					assert(std::abs(qubit1 - qubit2) == 1);
-				}
-
-				impl.ApplyOperatorAndNormalize(op, qubit1, qubit2);
+				const size_t qubitsNumber = ValidateOperator(op);
+				ApplyValidatedOperatorAndNormalize(op, qubit, controllingQubit1, qubitsNumber);
 			}
 
 			void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) override
 			{
 				if (ops.empty()) return;
 
-				const size_t qubit = ops.front().getQubit1();
-				const size_t controllingQubit1 = ops.front().getQubit2();
+				const size_t qubitsNumber = ValidateOperator(ops.front());
+				const size_t rawQubit = ops.front().getQubit1();
+				const size_t rawControllingQubit1 = ops.front().getQubit2();
 				for (const auto& op : ops)
-					if (op.getQubit1() != qubit || op.getQubit2() != controllingQubit1)
+				{
+					if (ValidateOperator(op) != qubitsNumber)
+						throw std::invalid_argument("All Kraus operators need to have the same number of qubits");
+					if (op.getQubit1() != rawQubit ||
+						(qubitsNumber > 1 && op.getQubit2() != rawControllingQubit1))
 						throw std::invalid_argument("All Kraus operators need to act on the same qubits");
+				}
 
+				const IndexType qubit = CheckedAppliedQubit(rawQubit);
+				const IndexType controllingQubit1 = qubitsNumber > 1 ? CheckedAppliedQubit(rawControllingQubit1) : 0;
 				ApplyKrausOperatorsImpl(ops, qubit, controllingQubit1);
 			}
 
@@ -283,6 +267,8 @@ namespace QC
 
 			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
 			{
+				ValidateQubitSet(qubits);
+
 				std::set<IndexType> mappedQubits;
 				for (const auto qubit : qubits)
 					mappedQubits.insert(qubitsMap[qubit]);
@@ -310,6 +296,7 @@ namespace QC
 			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
 			{
 				if (qubits.empty()) return {};
+				ValidateQubitSet(qubits);
 
 				std::set<IndexType> mappedQubits;
 				for (const auto qubit : qubits)
@@ -327,6 +314,8 @@ namespace QC
 			// moves the given qubits at the beginning of the chain (helps with sampling a subset of qubits faster)
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
 			{
+				ValidateQubitSet(qubits);
+
 				std::unordered_set<IndexType> handledQubits;
 
 				IndexType currentQubitPos = 0;
@@ -441,8 +430,9 @@ namespace QC
 
 			std::shared_ptr<MPOSimulatorStateInterface> getState() const override
 			{
-				auto baseState = std::static_pointer_cast<MPOSimulatorBaseState>(impl.getState());
-				if (!baseState) return nullptr;
+				auto baseState = std::dynamic_pointer_cast<MPOSimulatorBaseState>(impl.getState());
+				if (!baseState)
+					throw std::logic_error("MPO implementation returned an incompatible state type");
 
 				auto state = std::make_shared<MPOSimulatorState>();
 				state->gammas.swap(baseState->gammas);
@@ -456,24 +446,60 @@ namespace QC
 			{
 				if (!state) return;
 
-				auto baseState = std::static_pointer_cast<MPOSimulatorBaseState>(state);
-				impl.setState(baseState);
+				const auto simState = std::dynamic_pointer_cast<const MPOSimulatorState>(state);
+				if (!simState)
+					throw std::invalid_argument("State is not compatible with MPOSimulator");
+				ValidateStateStructure(*simState);
 
-				auto simState = std::static_pointer_cast<MPOSimulatorState>(state);
-				qubitsMap = simState->qubitsMap;
-				qubitsMapInv = simState->qubitsMapInv;
+				// Complete every allocation before changing either the MPO or its logical mapping.
+				auto implState = MakeImplStateCopy(*simState);
+				auto newQubitsMap = simState->qubitsMap;
+				auto newQubitsMapInv = simState->qubitsMapInv;
+				std::shared_ptr<MPOSimulatorStateInterface> implStateInterface = implState;
+
+				// The temporary has the exact base-state type expected by MPOSimulatorImpl.
+				// Destructive restore avoids a second tensor copy while leaving the caller's
+				// non-destructive state untouched.
+				impl.setStateDestructive(implStateInterface);
+				qubitsMap.swap(newQubitsMap);
+				qubitsMapInv.swap(newQubitsMapInv);
 			}
 
 			void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) override
 			{
 				if (!state) return;
 
-				impl.setStateDestructive(state);
+				auto simState = std::dynamic_pointer_cast<MPOSimulatorState>(state);
+				if (!simState)
+					throw std::invalid_argument("State is not compatible with MPOSimulator");
+				ValidateStateStructure(*simState);
 
-				auto simState = std::static_pointer_cast<MPOSimulatorState>(state);
+				// Allocate the exact base-state wrapper before moving anything out of the
+				// caller's state. From this point onward only noexcept vector swaps occur.
+				auto implState = std::make_shared<MPOSimulatorBaseState>();
+				implState->gammas.swap(simState->gammas);
+				implState->lambdas.swap(simState->lambdas);
+				std::shared_ptr<MPOSimulatorStateInterface> implStateInterface = implState;
+
+				try
+				{
+					impl.setStateDestructive(implStateInterface);
+				}
+				catch (...)
+				{
+					// A conforming implementation validates before mutation. Restore the source
+					// as well so a rejected destructive restore has strong exception safety.
+					simState->gammas.swap(implState->gammas);
+					simState->lambdas.swap(implState->lambdas);
+					throw;
+				}
+
 				qubitsMap.swap(simState->qubitsMap);
 				qubitsMapInv.swap(simState->qubitsMapInv);
-
+				// Preserve the previous destructive semantics for any outstanding aliases:
+				// they observe the simulator state which was replaced.
+				simState->gammas.swap(implState->gammas);
+				simState->lambdas.swap(implState->lambdas);
 				state.reset();
 			}
 
@@ -509,7 +535,11 @@ namespace QC
 
 				if (savedState)
 				{
-					const auto state = std::static_pointer_cast<MPOSimulatorState>(savedState);
+					const auto state = std::dynamic_pointer_cast<const MPOSimulatorState>(savedState);
+					if (!state)
+						throw std::logic_error("Saved MPO state has an incompatible type");
+					ValidateStateStructure(*state);
+
 					auto stateClone = std::make_shared<MPOSimulatorState>();
 					stateClone->gammas = state->gammas;
 					stateClone->lambdas = state->lambdas;
@@ -535,22 +565,101 @@ namespace QC
 			}
 
 		private:
+			static size_t ValidateOperatorMatrix(const MatrixClass& op)
+			{
+				if (op.rows() != op.cols() || (op.rows() != 2 && op.rows() != 4))
+					throw std::invalid_argument("MPO operators must be finite 2x2 or 4x4 matrices");
+				if (!op.allFinite())
+					throw std::invalid_argument("MPO operator contains a non-finite value");
+
+				return op.rows() == 2 ? 1 : 2;
+			}
+
+			static size_t ValidateOperator(const GateClass& op)
+			{
+				const size_t matrixQubits = ValidateOperatorMatrix(op.getRawOperatorMatrix());
+				if (op.getQubitsNumber() != matrixQubits)
+					throw std::invalid_argument("Operator matrix dimensions do not match its declared arity");
+				return matrixQubits;
+			}
+
+			static IndexType CheckedAppliedQubit(size_t qubit)
+			{
+				if (qubit > static_cast<size_t>(std::numeric_limits<IndexType>::max()))
+					throw std::invalid_argument("Qubit index out of bounds");
+				return static_cast<IndexType>(qubit);
+			}
+
+			void ValidateLogicalQubit(IndexType qubit) const
+			{
+				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
+					throw std::invalid_argument("Qubit index out of bounds");
+			}
+
+			void ValidateOperatorQubits(size_t qubitsNumber, IndexType qubit, IndexType controllingQubit1) const
+			{
+				ValidateLogicalQubit(qubit);
+				if (qubitsNumber > 1)
+				{
+					ValidateLogicalQubit(controllingQubit1);
+					if (qubit == controllingQubit1)
+						throw std::invalid_argument("Two-qubit operators require distinct qubits");
+				}
+			}
+
+			void ValidateQubitSet(const std::set<IndexType>& qubits) const
+			{
+				// Validate the complete set before the caller reads or changes either map.
+				for (const IndexType qubit : qubits)
+					ValidateLogicalQubit(qubit);
+			}
+
+			std::pair<IndexType, IndexType> RouteOperatorQubits(
+				IndexType qubit, IndexType controllingQubit1, size_t qubitsNumber)
+			{
+				ValidateOperatorQubits(qubitsNumber, qubit, controllingQubit1);
+
+				IndexType qubit1 = qubitsMap[qubit];
+				IndexType qubit2 = qubitsNumber > 1 ? qubitsMap[controllingQubit1] : qubit1;
+
+				if (qubitsNumber > 1 && std::abs(qubit1 - qubit2) > 1)
+				{
+					BringQubitsTogether(qubit, controllingQubit1);
+					qubit1 = qubitsMap[qubit];
+					qubit2 = qubitsMap[controllingQubit1];
+					assert(std::abs(qubit1 - qubit2) == 1);
+				}
+
+				return { qubit1, qubit2 };
+			}
+
+			void ApplyValidatedOperator(const GateClass& op, IndexType qubit,
+				IndexType controllingQubit1, size_t qubitsNumber)
+			{
+				const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
+				impl.ApplyOperator(op, qubit1, qubit2);
+			}
+
+			void ApplyValidatedOperatorAndNormalize(const GateClass& op, IndexType qubit,
+				IndexType controllingQubit1, size_t qubitsNumber)
+			{
+				const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
+				impl.ApplyOperatorAndNormalize(op, qubit1, qubit2);
+			}
+
 			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, IndexType qubit, IndexType controllingQubit1)
 			{
 				if (ops.empty()) return;
 
-				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::invalid_argument("Qubit index out of bounds");
-				else if (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits()))
-					throw std::invalid_argument("Qubit index out of bounds");
-
-				const size_t qubitsNumber = KrausOperatorQubitsNumber(ops.front());
+				// Validate every matrix and every relevant target before routing performs swaps.
+				const size_t qubitsNumber = ValidateOperatorMatrix(KrausOperatorMatrix(ops.front()));
 				for (const auto& op : ops)
-					if (KrausOperatorQubitsNumber(op) != qubitsNumber)
+					if (ValidateOperatorMatrix(KrausOperatorMatrix(op)) != qubitsNumber)
 						throw std::invalid_argument("All Kraus operators need to have the same number of qubits");
+				ValidateOperatorQubits(qubitsNumber, qubit, controllingQubit1);
 
 				IndexType qubit1 = qubitsMap[qubit];
-				IndexType qubit2 = qubitsMap[controllingQubit1];
+				IndexType qubit2 = qubitsNumber > 1 ? qubitsMap[controllingQubit1] : qubit1;
 
 				if (qubitsNumber > 1 && std::abs(qubit1 - qubit2) > 1)
 				{
@@ -569,16 +678,6 @@ namespace QC
 				impl.ApplyKrausOperators(mappedOps, qubit1, qubit2);
 			}
 
-			static size_t KrausOperatorQubitsNumber(const Gates::AppliedGate<MatrixClass>& op)
-			{
-				return op.getQubitsNumber();
-			}
-
-			static size_t KrausOperatorQubitsNumber(const MatrixClass& op)
-			{
-				return static_cast<size_t>(std::log2(op.rows()));
-			}
-
 			static const MatrixClass& KrausOperatorMatrix(const Gates::AppliedGate<MatrixClass>& op)
 			{
 				return op.getRawOperatorMatrix();
@@ -587,6 +686,72 @@ namespace QC
 			static const MatrixClass& KrausOperatorMatrix(const MatrixClass& op)
 			{
 				return op;
+			}
+
+			void ValidateStateStructure(const MPOSimulatorState& state) const
+			{
+				const size_t nrQubits = getNrQubits();
+				const size_t nrBonds = nrQubits > 0 ? nrQubits - 1 : 0;
+
+				if (state.gammas.size() != nrQubits || state.lambdas.size() != nrBonds)
+					throw std::invalid_argument("MPO state qubit or bond count does not match the simulator");
+				if (state.qubitsMap.size() != nrQubits || state.qubitsMapInv.size() != nrQubits)
+					throw std::invalid_argument("MPO state qubit-map size does not match the simulator");
+
+				for (size_t q = 0; q < nrQubits; ++q)
+				{
+					const auto& gamma = state.gammas[q];
+					if (gamma.dimension(0) <= 0 || gamma.dimension(1) != 2 ||
+						gamma.dimension(2) != 2 || gamma.dimension(3) <= 0)
+						throw std::invalid_argument("MPO state contains an invalid site tensor");
+					if ((q == 0 && gamma.dimension(0) != 1) ||
+						(q + 1 == nrQubits && gamma.dimension(3) != 1))
+						throw std::invalid_argument("MPO state has invalid boundary bond dimensions");
+
+					for (IndexType i = 0; i < gamma.size(); ++i)
+					{
+						const auto value = gamma.data()[i];
+						if (!std::isfinite(value.real()) || !std::isfinite(value.imag()))
+							throw std::invalid_argument("MPO state contains a non-finite tensor value");
+					}
+				}
+
+				for (size_t bond = 0; bond < nrBonds; ++bond)
+				{
+					const IndexType dimension = state.lambdas[bond].size();
+					if (dimension <= 0 || state.gammas[bond].dimension(3) != dimension ||
+						state.gammas[bond + 1].dimension(0) != dimension ||
+						!state.lambdas[bond].allFinite() || (state.lambdas[bond].array() < 0.).any())
+						throw std::invalid_argument("MPO state has inconsistent bond dimensions");
+				}
+
+				std::vector<bool> seenPhysical(nrQubits, false);
+				std::vector<bool> seenLogical(nrQubits, false);
+				for (size_t logical = 0; logical < nrQubits; ++logical)
+				{
+					const IndexType physical = state.qubitsMap[logical];
+					if (physical < 0 || static_cast<size_t>(physical) >= nrQubits || seenPhysical[physical])
+						throw std::invalid_argument("MPO state qubit map is not a permutation");
+					seenPhysical[physical] = true;
+				}
+
+				for (size_t physical = 0; physical < nrQubits; ++physical)
+				{
+					const IndexType logical = state.qubitsMapInv[physical];
+					if (logical < 0 || static_cast<size_t>(logical) >= nrQubits || seenLogical[logical])
+						throw std::invalid_argument("MPO state inverse qubit map is not a permutation");
+					seenLogical[logical] = true;
+					if (state.qubitsMap[logical] != static_cast<IndexType>(physical))
+						throw std::invalid_argument("MPO state qubit maps are not inverses");
+				}
+			}
+
+			static std::shared_ptr<MPOSimulatorBaseState> MakeImplStateCopy(const MPOSimulatorState& state)
+			{
+				auto implState = std::make_shared<MPOSimulatorBaseState>();
+				implState->gammas = state.gammas;
+				implState->lambdas = state.lambdas;
+				return implState;
 			}
 
 			static double ClampProbability(double probability)

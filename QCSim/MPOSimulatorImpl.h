@@ -87,23 +87,22 @@ namespace QC {
 
 			void ApplyOperator(const Gates::AppliedGate<MatrixClass>& op) override
 			{
-				ApplyOperator(op, op.getQubit1(), op.getQubit2());
+				const size_t operatorQubits = ValidateOperator(op);
+				ValidateQubits(operatorQubits, op.getQubit1(), op.getQubit2());
+
+				ApplyValidatedOperator(op.getRawOperatorMatrix(), operatorQubits,
+					static_cast<IndexType>(op.getQubit1()),
+					operatorQubits > 1 ? static_cast<IndexType>(op.getQubit2()) : 0);
 			}
 
 			// three qubit operators not supported, two qubit operators need to act on adjacent qubits
 			// (the higher level MPOSimulator swaps qubits around to satisfy this)
 			void ApplyOperator(const GateClass& op, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
-				if (op.getQubitsNumber() > 2) throw std::invalid_argument("Three qubit operators not supported");
-				else if ((qubit < 0 || qubit >= static_cast<IndexType>(gammas.size())) || (op.getQubitsNumber() == 2 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(gammas.size()))))
-					throw std::invalid_argument("Qubit index out of bounds");
-				else if (op.getQubitsNumber() == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
-					throw std::invalid_argument("Two qubit operators need to act on adjacent qubits");
+				const size_t operatorQubits = ValidateOperator(op);
+				ValidateQubits(operatorQubits, qubit, controllingQubit1);
 
-				if (op.getQubitsNumber() == 1)
-					ApplySingleQubitGate(gammas[qubit], op);
-				else
-					ApplyTwoQubitGate(op, qubit, controllingQubit1);
+				ApplyValidatedOperator(op.getRawOperatorMatrix(), operatorQubits, qubit, controllingQubit1);
 			}
 
 			void ApplyOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) override
@@ -114,13 +113,20 @@ namespace QC {
 
 			void ApplyOperatorAndNormalize(const Gates::AppliedGate<MatrixClass>& op) override
 			{
-				ApplyOperatorAndNormalize(op, op.getQubit1(), op.getQubit2());
+				const size_t operatorQubits = ValidateOperator(op);
+				ValidateQubits(operatorQubits, op.getQubit1(), op.getQubit2());
+
+				ApplyValidatedOperatorAndNormalize(op.getRawOperatorMatrix(), operatorQubits,
+					static_cast<IndexType>(op.getQubit1()),
+					operatorQubits > 1 ? static_cast<IndexType>(op.getQubit2()) : 0);
 			}
 
 			void ApplyOperatorAndNormalize(const GateClass& op, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
-				ApplyOperator(op, qubit, controllingQubit1);
-				NormalizeByTrace();
+				const size_t operatorQubits = ValidateOperator(op);
+				ValidateQubits(operatorQubits, qubit, controllingQubit1);
+
+				ApplyValidatedOperatorAndNormalize(op.getRawOperatorMatrix(), operatorQubits, qubit, controllingQubit1);
 			}
 
 			void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) override
@@ -129,21 +135,37 @@ namespace QC {
 
 				const size_t qubit = ops.front().getQubit1();
 				const size_t controllingQubit1 = ops.front().getQubit2();
+				const size_t operatorQubits = ValidateOperator(ops.front());
+
+				// Validate the complete channel before changing any tensor.
 				for (const auto& op : ops)
-					if (op.getQubit1() != qubit || op.getQubit2() != controllingQubit1)
+				{
+					if (ValidateOperator(op) != operatorQubits)
+						throw std::invalid_argument("All Kraus operators need to have the same arity");
+				}
+
+				ValidateQubits(operatorQubits, qubit, controllingQubit1);
+				for (const auto& op : ops)
+					if (op.getQubit1() != qubit ||
+						(operatorQubits > 1 && op.getQubit2() != controllingQubit1))
 						throw std::invalid_argument("All Kraus operators need to act on the same qubits");
 
-				ApplyKrausOperatorsImpl(ops, qubit, controllingQubit1);
+				ApplyKrausOperatorsImpl(ops, operatorQubits,
+					static_cast<IndexType>(qubit),
+					operatorQubits > 1 ? static_cast<IndexType>(controllingQubit1) : 0);
 			}
 
 			void ApplyKrausOperators(const std::vector<MatrixClass>& ops, IndexType qubit, IndexType controllingQubit1 = 0) override
 			{
-				std::vector<Gates::AppliedGate<MatrixClass>> appliedOps;
-				appliedOps.reserve(ops.size());
-				for (const auto& op : ops)
-					appliedOps.emplace_back(op, qubit, controllingQubit1);
+				if (ops.empty()) return;
 
-				ApplyKrausOperatorsImpl(appliedOps, qubit, controllingQubit1);
+				const size_t operatorQubits = ValidateOperatorMatrix(ops.front());
+				for (const auto& op : ops)
+					if (ValidateOperatorMatrix(op) != operatorQubits)
+						throw std::invalid_argument("All Kraus operators need to have the same arity");
+
+				ValidateQubits(operatorQubits, qubit, controllingQubit1);
+				ApplyKrausOperatorsImpl(ops, operatorQubits, qubit, controllingQubit1);
 			}
 
 			// false if measured 0, true if measured 1
@@ -152,26 +174,36 @@ namespace QC {
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
 					throw std::invalid_argument("Qubit index out of bounds");
 
-				const double rndVal = 1. - uniformZeroOne(rng);
 				const double prob0 = ValidMeasurementProbability(GetProbability(qubit, true));
-				const bool zeroMeasured = rndVal < prob0;
+				const bool zeroMeasured = uniformZeroOne(rng) < prob0;
 
 				// for a density matrix, the post measurement state is P rho P (suitably normalized)
 				// P acts only on the measured site, so this is a purely local operation - no need to
 				// propagate the collapse along the chain like the MPS simulator does
 				const MatrixClass& projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() : oneProjection.getRawOperatorMatrix();
-				ApplySingleQubitGate(gammas[qubit], projMat);
+				TensorType collapsedGamma = gammas[qubit];
+				ApplySingleQubitGate(collapsedGamma, projMat);
 
-				// Tr(P rho P) is the outcome probability; rescaling a single site tensor rescales the whole trace
-				const double prob = zeroMeasured ? prob0 : 1. - prob0;
-				if (prob > std::numeric_limits<double>::epsilon())
-					ScaleSite(qubit, 1. / prob);
+				// Normalize by the actual post-projection trace, rather than by the probability
+				// normalized against the input trace. This also handles deliberately unnormalized MPOs.
+				const std::complex<double> postTrace = ContractChain([this, qubit, &collapsedGamma](IndexType q) {
+					return q == qubit ? TraceSiteTensor(collapsedGamma) : SiteTraceMatrix(q);
+				});
+				if (!IsFinite(postTrace) || std::abs(postTrace) <= std::numeric_limits<double>::epsilon())
+					throw std::runtime_error("Cannot collapse an MPO state onto a zero-probability outcome");
+
+				ScaleTensor(collapsedGamma, 1. / postTrace);
+				gammas[qubit] = std::move(collapsedGamma);
 
 				return !zeroMeasured;
 			}
 
 			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
 			{
+				for (const IndexType qubit : qubits)
+					if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+						throw std::invalid_argument("Qubit index out of bounds");
+
 				std::unordered_map<IndexType, bool> res;
 				for (const auto qubit : qubits)
 					res[qubit] = MeasureQubit(qubit);
@@ -180,40 +212,200 @@ namespace QC {
 			}
 
 		private:
-			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, IndexType qubit, IndexType controllingQubit1)
+			static bool IsFinite(const std::complex<double>& value)
 			{
-				if (ops.empty()) return;
+				return std::isfinite(value.real()) && std::isfinite(value.imag());
+			}
 
+			static size_t ValidateOperatorMatrix(const MatrixClass& matrix)
+			{
+				if (matrix.rows() <= 0 || matrix.cols() <= 0 || matrix.rows() != matrix.cols())
+					throw std::invalid_argument("Operator matrix must be a non-empty square matrix");
+				if (matrix.rows() != 2 && matrix.rows() != 4)
+					throw std::invalid_argument("MPO operators must have dimensions 2x2 or 4x4");
+
+				for (IndexType col = 0; col < matrix.cols(); ++col)
+					for (IndexType row = 0; row < matrix.rows(); ++row)
+						if (!IsFinite(matrix(row, col)))
+							throw std::invalid_argument("Operator matrix elements must be finite");
+
+				return matrix.rows() == 2 ? 1 : 2;
+			}
+
+			static size_t ValidateOperator(const GateClass& op)
+			{
+				const size_t matrixQubits = ValidateOperatorMatrix(op.getRawOperatorMatrix());
+				if (op.getQubitsNumber() != matrixQubits)
+					throw std::invalid_argument("Operator matrix dimensions do not match its declared arity");
+				return matrixQubits;
+			}
+
+			void ValidateQubits(size_t operatorQubits, IndexType qubit, IndexType controllingQubit1) const
+			{
+				const IndexType nrQubits = static_cast<IndexType>(gammas.size());
+				if (qubit < 0 || qubit >= nrQubits ||
+					(operatorQubits == 2 && (controllingQubit1 < 0 || controllingQubit1 >= nrQubits)))
+					throw std::invalid_argument("Qubit index out of bounds");
+				if (operatorQubits == 2 && qubit == controllingQubit1)
+					throw std::invalid_argument("Two qubit operators require distinct qubits");
+				if (operatorQubits == 2 && std::abs(qubit - controllingQubit1) != 1)
+					throw std::invalid_argument("Two qubit operators need to act on adjacent qubits");
+			}
+
+			void ValidateQubits(size_t operatorQubits, size_t qubit, size_t controllingQubit1) const
+			{
+				const size_t nrQubits = gammas.size();
+				if (qubit >= nrQubits || (operatorQubits == 2 && controllingQubit1 >= nrQubits))
+					throw std::invalid_argument("Qubit index out of bounds");
+				if (operatorQubits == 2 && qubit == controllingQubit1)
+					throw std::invalid_argument("Two qubit operators require distinct qubits");
+				if (operatorQubits == 2 && qubit + 1 != controllingQubit1 && controllingQubit1 + 1 != qubit)
+					throw std::invalid_argument("Two qubit operators need to act on adjacent qubits");
+			}
+
+			static const MatrixClass& GetOperatorMatrix(const MatrixClass& op)
+			{
+				return op;
+			}
+
+			static const MatrixClass& GetOperatorMatrix(const GateClass& op)
+			{
+				return op.getRawOperatorMatrix();
+			}
+
+			static MatrixClass TraceSiteTensor(const TensorType& gamma)
+			{
+				const IndexType L = gamma.dimension(0);
+				const IndexType R = gamma.dimension(3);
+				MatrixClass result = MatrixClass::Zero(L, R);
+
+				for (IndexType state = 0; state < 2; ++state)
+					for (IndexType r = 0; r < R; ++r)
+						for (IndexType l = 0; l < L; ++l)
+							result(l, r) += gamma(l, state, state, r);
+
+				return result;
+			}
+
+			static void ScaleTensor(TensorType& gamma, std::complex<double> factor)
+			{
+				for (IndexType r = 0; r < gamma.dimension(3); ++r)
+					for (IndexType bra = 0; bra < 2; ++bra)
+						for (IndexType ket = 0; ket < 2; ++ket)
+							for (IndexType l = 0; l < gamma.dimension(0); ++l)
+								gamma(l, ket, bra, r) *= factor;
+			}
+
+			void ApplyValidatedOperator(const MatrixClass& op, size_t operatorQubits, IndexType qubit, IndexType controllingQubit1)
+			{
+				if (operatorQubits == 1)
+					ApplySingleQubitGate(gammas[qubit], op);
+				else
+					ApplyTwoQubitGate(op, qubit, controllingQubit1);
+			}
+
+			void ApplyValidatedOperatorAndNormalize(const MatrixClass& op, size_t operatorQubits, IndexType qubit, IndexType controllingQubit1)
+			{
 				const auto originalLambdas = lambdas;
 				const auto originalGammas = gammas;
-				std::vector<LambdaType> resultLambdas;
-				std::vector<TensorType> resultGammas;
-				bool hasResult = false;
 
-				for (const auto& op : ops)
+				try
+				{
+					ApplyValidatedOperator(op, operatorQubits, qubit, controllingQubit1);
+					const std::complex<double> trace = Trace();
+					if (!IsFinite(trace) || std::abs(trace) <= std::numeric_limits<double>::epsilon())
+						throw std::runtime_error("Cannot normalize an MPO state with zero or non-finite trace");
+					ScaleSite(0, 1. / trace);
+				}
+				catch (...)
 				{
 					lambdas = originalLambdas;
 					gammas = originalGammas;
-
-					ApplyOperator(op, qubit, controllingQubit1);
-
-					if (!hasResult)
-					{
-						resultLambdas = lambdas;
-						resultGammas = gammas;
-						hasResult = true;
-					}
-					else
-					{
-						AddState(resultLambdas, resultGammas, lambdas, gammas);
-					}
+					throw;
 				}
-
-				lambdas = std::move(resultLambdas);
-				gammas = std::move(resultGammas);
 			}
 
-			void ApplyTwoQubitGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1)
+			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, size_t operatorQubits, IndexType qubit, IndexType controllingQubit1)
+			{
+				if (operatorQubits == 1)
+					ApplySingleQubitChannel(ops, qubit);
+				else
+					ApplyTwoQubitChannel(ops, qubit, controllingQubit1);
+			}
+
+			template<class OperatorsContainer> void ApplySingleQubitChannel(const OperatorsContainer& ops, IndexType qubit)
+			{
+				const TensorType& original = gammas[qubit];
+				const IndexType L = original.dimension(0);
+				const IndexType R = original.dimension(3);
+				TensorType result(L, 2, 2, R);
+				result.setZero();
+
+				for (const auto& op : ops)
+				{
+					const MatrixClass& E = GetOperatorMatrix(op);
+					for (IndexType ketOut = 0; ketOut < 2; ++ketOut)
+						for (IndexType braOut = 0; braOut < 2; ++braOut)
+							for (IndexType ketIn = 0; ketIn < 2; ++ketIn)
+								for (IndexType braIn = 0; braIn < 2; ++braIn)
+								{
+									const std::complex<double> factor = E(ketOut, ketIn) * std::conj(E(braOut, braIn));
+									if (factor == std::complex<double>(0., 0.)) continue;
+
+									for (IndexType r = 0; r < R; ++r)
+										for (IndexType l = 0; l < L; ++l)
+											result(l, ketOut, braOut, r) += factor * original(l, ketIn, braIn, r);
+								}
+				}
+
+				gammas[qubit] = std::move(result);
+			}
+
+			template<class OperatorsContainer> void ApplyTwoQubitChannel(const OperatorsContainer& ops, IndexType qubit, IndexType controllingQubit1)
+			{
+				IndexType qubit1 = controllingQubit1;
+				IndexType qubit2 = qubit;
+				bool reversed = false;
+				if (qubit1 > qubit2)
+				{
+					std::swap(qubit1, qubit2);
+					reversed = true;
+				}
+
+				const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+				const IndexType L = theta.dimension(0);
+				const IndexType R = theta.dimension(5);
+				Eigen::Tensor<std::complex<double>, 6> result(L, R, 2, 2, 2, 2);
+				result.setZero();
+
+				for (const auto& op : ops)
+				{
+					const TwoQubitsGateTensor E = GetTwoQubitsGateTensor(GetOperatorMatrix(op), reversed);
+					for (IndexType ket1Out = 0; ket1Out < 2; ++ket1Out)
+						for (IndexType ket2Out = 0; ket2Out < 2; ++ket2Out)
+							for (IndexType bra1Out = 0; bra1Out < 2; ++bra1Out)
+								for (IndexType bra2Out = 0; bra2Out < 2; ++bra2Out)
+									for (IndexType ket1In = 0; ket1In < 2; ++ket1In)
+										for (IndexType ket2In = 0; ket2In < 2; ++ket2In)
+											for (IndexType bra1In = 0; bra1In < 2; ++bra1In)
+												for (IndexType bra2In = 0; bra2In < 2; ++bra2In)
+												{
+													const std::complex<double> factor = E(ket1Out, ket2Out, ket1In, ket2In) *
+														std::conj(E(bra1Out, bra2Out, bra1In, bra2In));
+													if (factor == std::complex<double>(0., 0.)) continue;
+
+													for (IndexType r = 0; r < R; ++r)
+														for (IndexType l = 0; l < L; ++l)
+															result(l, r, ket1Out, ket2Out, bra1Out, bra2Out) += factor *
+																theta(l, ket1In, bra1In, ket2In, bra2In, r);
+												}
+				}
+
+				const MatrixClass thetaMatrix = ReshapeThetaBar(result);
+				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
+			}
+
+			void ApplyTwoQubitGate(const MatrixClass& gate, IndexType qubit, IndexType controllingQubit1)
 			{
 				// contract the tensors for the two qubits (folding in the corresponding lambdas)
 				// apply the gate on the kets and its conjugate on the bras (rho -> U rho U^dagger)
@@ -304,11 +496,9 @@ namespace QC {
 				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, L, sz, R);
 			}
 
-			static TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass& gate, bool reversed)
+			static TwoQubitsGateTensor GetTwoQubitsGateTensor(const MatrixClass& gateMat, bool reversed)
 			{
 				TwoQubitsGateTensor result;
-
-				const auto& gateMat = gate.getRawOperatorMatrix();
 
 				if (reversed)
 					for (int q0l = 0; q0l < 2; ++q0l)
