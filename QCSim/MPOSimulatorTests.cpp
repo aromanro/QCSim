@@ -2049,7 +2049,7 @@ static bool MixtureValidationAndScalingTestMPO()
 	for (const double scale : { 1E-300, std::numeric_limits<double>::max() / 4. })
 	{
 		QC::TensorNetworks::MPOSimulator mpo(2);
-		mpo.setToMixtureOfBasisStates({ { 0, scale }, { 1, 2. * scale } });
+		mpo.setToMixtureOfBasisStates({ std::pair<size_t, double>{ 0, scale }, std::pair<size_t, double>{ 1, 2. * scale } });
 		if (!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12) ||
 			!approxEqual(mpo.getBasisStateProbability(0), 1. / 3., 1E-12) ||
 			!approxEqual(mpo.getBasisStateProbability(1), 2. / 3., 1E-12))
@@ -2063,8 +2063,8 @@ static bool MixtureValidationAndScalingTestMPO()
 	mpo.setToBasisState(3);
 	const Eigen::MatrixXcd before = mpo.getDensityMatrix();
 	if (!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{}); }, "Empty MPO mixture") ||
-		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates({ { 0, std::numeric_limits<double>::infinity() } }); }, "Infinite MPO mixture weight") ||
-		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates({ { 7, 1. }, { 0, 0. } }); }, "MPO mixture without a valid positive term") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates({ std::pair<size_t, double>{ 0, std::numeric_limits<double>::infinity() } }); }, "Infinite MPO mixture weight") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates({ std::pair<size_t, double>{ 7, 1. }, std::pair<size_t, double>{ 0, 0. } }); }, "MPO mixture without a valid positive term") ||
 		!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates(std::vector<std::pair<std::vector<bool>, double>>{ { std::vector<bool>{ true, false, true }, 1. } }); }, "Oversized vector MPO mixture state"))
 		return false;
 
@@ -2075,7 +2075,7 @@ static bool MixtureValidationAndScalingTestMPO()
 	}
 
 	// Invalid and non-positive entries are ignored when at least one usable term remains.
-	mpo.setToMixtureOfBasisStates({ { 1, 1. }, { 7, 9. }, { 2, -4. } });
+	mpo.setToMixtureOfBasisStates({ std::pair<size_t, double>{ 1, 1. }, std::pair<size_t, double>{ 7, 9. }, std::pair<size_t, double>{ 2, -4. } });
 	if (!approxEqual(mpo.getBasisStateProbability(1), 1., 1E-12) ||
 		!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12))
 	{

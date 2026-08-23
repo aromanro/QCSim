@@ -98,7 +98,7 @@ bool CheckResults(int shots, int nrQubits, std::unordered_map<size_t, size_t>& s
 
 bool CheckProbability(int nrQubits, QC::PauliPropagator& pauliSimulator, QC::QubitRegister<>& qubitRegister)
 {
-	for (size_t q = 0; q < nrQubits; ++q)
+	for (size_t q = 0; q < static_cast<size_t>(nrQubits); ++q)
 	{
 		const auto p0 = qubitRegister.GetQubitProbability(q);
 		const auto p1 = 1. - pauliSimulator.Probability0(static_cast<int>(q));
@@ -140,7 +140,7 @@ std::unordered_map<size_t, size_t> CollectSampledResults(QC::PauliPropagator& pa
 		auto res = pauliSimulator.Sample(measQubits);
 
 		size_t result = 0;
-		for (size_t q = 0; q < nrQubits; ++q)
+		for (size_t q = 0; q < static_cast<size_t>(nrQubits); ++q)
 		{
 			if (res[q])
 			{
@@ -164,7 +164,7 @@ std::unordered_map<size_t, size_t> CollectMeasuredResults(QC::PauliPropagator& p
 		auto res = pauliSimulator.Measure(measQubits);
 
 		size_t result = 0;
-		for (size_t q = 0; q < nrQubits; ++q)
+		for (size_t q = 0; q < static_cast<size_t>(nrQubits); ++q)
 		{
 			if (res[q])
 			{
