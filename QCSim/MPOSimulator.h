@@ -382,8 +382,12 @@ namespace QC
 				for (size_t i = 0; i < nrQubits; ++i)
 				{
 					rowState[i] = (row & 1) == 1;
-					colState[i] = (col & 1) == 1;
 					row >>= 1;
+				}
+
+				for (size_t i = 0; i < nrQubits; ++i)
+				{
+					colState[i] = (col & 1) == 1;
 					col >>= 1;
 				}
 

@@ -217,14 +217,17 @@ namespace QC {
 
 			const size_t gateQubits = GetOperatorQubits(kraus.front(), 2);
 			ValidateQubits(gateQubits, qubit, controllingQubit1, 0);
+
 			const Eigen::Index operatorDimension = kraus.front().rows();
 			MatrixClass completeness = MatrixClass::Zero(operatorDimension, operatorDimension);
 			for (const auto& E : kraus)
 			{
 				if (GetOperatorQubits(E, 2) != gateQubits || E.rows() != operatorDimension)
 					throw std::invalid_argument("All Kraus operators must have the same dimensions");
+
 				if (!E.allFinite())
 					throw std::invalid_argument("Kraus operators must contain only finite values");
+
 				completeness.noalias() += E.adjoint() * E;
 			}
 

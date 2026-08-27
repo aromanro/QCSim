@@ -2094,8 +2094,8 @@ static bool WideBasisInitializationTestMPO()
 {
 	std::cout << "\nMPO simulator - wide basis-state initialization" << std::endl;
 
-	const size_t digits = std::numeric_limits<size_t>::digits;
-	const size_t allBits = std::numeric_limits<size_t>::max();
+	constexpr size_t digits = std::numeric_limits<size_t>::digits;
+	constexpr size_t allBits = std::numeric_limits<size_t>::max();
 	for (const size_t nrQubits : { digits, digits + 1 })
 	{
 		QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);

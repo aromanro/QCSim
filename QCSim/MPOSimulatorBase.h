@@ -408,8 +408,12 @@ namespace QC {
 				for (size_t i = 0; i < nrQubits; ++i)
 				{
 					rowState[i] = (row & 1) == 1;
-					colState[i] = (col & 1) == 1;
 					row >>= 1;
+				}
+
+				for (size_t i = 0; i < nrQubits; ++i)
+				{
+					colState[i] = (col & 1) == 1;
 					col >>= 1;
 				}
 
@@ -447,7 +451,13 @@ namespace QC {
 			}
 
 			// this is costly (it builds the full 2^N x 2^N matrix) and it's meant only
-			// for comparing the results against other simulators, not for simulation
+			// for comparing the results against other simulators, not for simulation.
+			//
+			// The result is divided by the trace, matching what every probability and
+			// expectation-value accessor here does. Without it a truncated MPO - whose
+			// trace drifts away from one - would hand back an operator inconsistent with
+			// the numbers the same object reports through getBasisStateProbability() and
+			// ExpectationValue(). Normalizing cannot restore positivity, only the scale.
 			MatrixClass getDensityMatrix() const override
 			{
 				const size_t sz = gammas.size();
@@ -460,6 +470,10 @@ namespace QC {
 				for (size_t r = 0; r < NrBasisStates; ++r)
 					for (size_t c = 0; c < NrBasisStates; ++c)
 						rho(r, c) = getBasisStateMatrixElement(r, c);
+
+				const std::complex<double> tr = Trace();
+				if (std::abs(tr) >= std::numeric_limits<double>::epsilon())
+					rho /= tr;
 
 				return rho;
 			}
