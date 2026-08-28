@@ -348,6 +348,201 @@ static bool MeetingPositionCallbackTestMPO()
 	return true;
 }
 
+static bool OptimalMeetingPositionTestMPO()
+{
+	std::cout << "\nMPO simulator optimal meeting position test" << std::endl;
+
+	constexpr int nrQubits = 5;
+	QC::Gates::HadamardGate<> hGate;
+	QC::Gates::CNOTGate<> cnotGate;
+
+	auto prepareUnevenBonds = [&](QC::TensorNetworks::MPOSimulator& mpo, QC::QubitRegister<>* reg)
+	{
+		mpo.ApplyGate(hGate, 0);
+		mpo.ApplyGate(cnotGate, 1, 0);
+		mpo.ApplyGate(hGate, 4);
+		mpo.ApplyGate(cnotGate, 3, 4);
+		if (reg)
+		{
+			reg->ApplyGate(hGate, 0);
+			reg->ApplyGate(cnotGate, 1, 0);
+			reg->ApplyGate(hGate, 4);
+			reg->ApplyGate(cnotGate, 3, 4);
+		}
+	};
+
+	QC::TensorNetworks::MPOSimulator probe(nrQubits);
+	prepareUnevenBonds(probe, nullptr);
+	const auto bondDimensions = probe.getBondDimensions();
+	if (bondDimensions.size() != 4 || bondDimensions[0] <= bondDimensions[1] ||
+		bondDimensions[3] <= bondDimensions[1] || bondDimensions[1] != bondDimensions[2])
+	{
+		std::cout << "MPO optimal meeting position test could not prepare uneven bond dimensions" << std::endl;
+		return false;
+	}
+
+	const std::vector<Eigen::Index> expectedOptimalMap{ 1, 0, 3, 4, 2 };
+	// Product-state heuristic: qubits 0 and 4 straddle the chain middle, so they
+	// meet there rather than at the lower qubit. The swap-up case moves qubit 0
+	// toward qubit 2 because qubit 2 is closer to the far end.
+	const std::vector<Eigen::Index> expectedHeuristicMap{ 1, 0, 3, 4, 2 };
+	const std::vector<Eigen::Index> expectedHeuristicSwapUpMap{ 1, 0, 2, 3, 4 };
+
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		QC::QubitRegister<> reg(nrQubits);
+		prepareUnevenBonds(mpo, &reg);
+
+		mpo.ApplyGate(cnotGate, 4, 0);
+		reg.ApplyGate(cnotGate, 4, 0);
+
+		const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+		if (!state || state->qubitsMap != expectedOptimalMap)
+		{
+			std::cout << "MPO default optimal meeting position did not meet at the cheapest bond" << std::endl;
+			return false;
+		}
+		if (!CompareDensityMatrices(ReferenceDensityMatrix(reg), mpo.getDensityMatrix(), nrQubits))
+			return false;
+	}
+
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		mpo.SetUseOptimalMeetingPosition(false);
+		mpo.ApplyGate(cnotGate, 4, 0);
+
+		const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+		if (!state || state->qubitsMap != expectedHeuristicMap)
+		{
+			std::cout << "MPO midpoint heuristic was not used after disabling optimal meeting position" << std::endl;
+			return false;
+		}
+	}
+
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		mpo.SetUseOptimalMeetingPosition(false);
+		mpo.ApplyGate(cnotGate, 2, 0);
+
+		const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+		if (!state || state->qubitsMap != expectedHeuristicSwapUpMap)
+		{
+			std::cout << "MPO heuristic did not move the nearer-end qubit toward the other" << std::endl;
+			return false;
+		}
+	}
+
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		prepareUnevenBonds(mpo, nullptr);
+		mpo.SetMeetingPositionCallback([](const std::vector<Eigen::Index>&) { return Eigen::Index{ 2 }; });
+		mpo.ApplyGate(cnotGate, 4, 0);
+
+		const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+		const std::vector<Eigen::Index> expectedCallbackMap{ 2, 0, 1, 4, 3 };
+		if (!state || state->qubitsMap != expectedCallbackMap)
+		{
+			std::cout << "MPO meeting position callback did not take priority over the local optimizer" << std::endl;
+			return false;
+		}
+	}
+
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		prepareUnevenBonds(mpo, nullptr);
+		mpo.SetMeetingPositionCallback([](const std::vector<Eigen::Index>&) { return Eigen::Index{ -1 }; });
+		mpo.ApplyGate(cnotGate, 4, 0);
+
+		const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+		if (!state || state->qubitsMap != expectedOptimalMap)
+		{
+			std::cout << "MPO invalid meeting position did not fall back to the local optimizer" << std::endl;
+			return false;
+		}
+	}
+
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		mpo.SetUseOptimalMeetingPosition(false);
+		mpo.SetMeetingPositionCallback([](const std::vector<Eigen::Index>&) { return Eigen::Index{ -1 }; });
+		mpo.ApplyGate(cnotGate, 4, 0);
+
+		const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+		if (!state || state->qubitsMap != expectedHeuristicMap)
+		{
+			std::cout << "MPO invalid meeting position did not fall back to the routing heuristic" << std::endl;
+			return false;
+		}
+	}
+
+	{
+		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		mpo.SetUseOptimalMeetingPosition(false);
+		auto clone = mpo.Clone();
+		clone->ApplyGate(cnotGate, 4, 0);
+
+		const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(clone->getState());
+		if (!state || state->qubitsMap != expectedHeuristicMap)
+		{
+			std::cout << "MPO clone did not copy the optimal meeting position flag" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+	return true;
+}
+
+static bool InitialQubitsMapTestMPO()
+{
+	std::cout << "\nMPO simulator initial qubits map test" << std::endl;
+
+	constexpr int nrQubits = 4;
+	QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+	QC::QubitRegister<> reg(nrQubits);
+	const std::vector<long long int> initialMap{ 2, 0, 3, 1 };
+	mpo.SetInitialQubitsMap(initialMap);
+
+	const auto mappedState = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+	const std::vector<Eigen::Index> expectedMap{ 2, 0, 3, 1 };
+	const std::vector<Eigen::Index> expectedInverse{ 1, 3, 0, 2 };
+	if (!mappedState || mappedState->qubitsMap != expectedMap || mappedState->qubitsMapInv != expectedInverse)
+	{
+		std::cout << "MPO initial qubits map or its inverse was set incorrectly" << std::endl;
+		return false;
+	}
+
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(h, 0);
+	mpo.ApplyGate(cnot, 3, 0);
+	reg.ApplyGate(h, 0);
+	reg.ApplyGate(cnot, 3, 0);
+	if (!CompareDensityMatrices(ReferenceDensityMatrix(reg), mpo.getDensityMatrix(), nrQubits))
+		return false;
+
+	const Eigen::MatrixXcd beforeInvalidMap = mpo.getDensityMatrix();
+	const auto stateBeforeInvalidMap = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+	if (!MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({ 0, 1, 2 }); }, "Wrong-size initial MPO qubit map") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({ 0, 1, 1, 3 }); }, "Duplicate entry in initial MPO qubit map") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({ 0, 1, 2, -1 }); }, "Negative entry in initial MPO qubit map") ||
+		!MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({ 0, 1, 2, 4 }); }, "Out-of-range entry in initial MPO qubit map"))
+		return false;
+
+	const auto stateAfterInvalidMap = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
+	if (!stateBeforeInvalidMap || !stateAfterInvalidMap ||
+		stateAfterInvalidMap->qubitsMap != stateBeforeInvalidMap->qubitsMap ||
+		stateAfterInvalidMap->qubitsMapInv != stateBeforeInvalidMap->qubitsMapInv ||
+		(mpo.getDensityMatrix() - beforeInvalidMap).norm() > 1E-12)
+	{
+		std::cout << "A rejected initial MPO qubit map changed the simulator" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 static bool BondDimensionCallbackTestMPO()
 {
 	std::cout << "\nMPO simulator bond dimension callback test" << std::endl;
@@ -2417,6 +2612,7 @@ bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
 	return ValidationAndStateCompatibilityTestMPO() &&
+		InitialQubitsMapTestMPO() &&
 		MixtureValidationAndScalingTestMPO() &&
 		WideBasisInitializationTestMPO() &&
 		KrausBondLimitAndLocalityTestMPO() &&
@@ -2425,6 +2621,7 @@ bool MPOSimulatorTests()
 		NonAdjacentGatesTestMPO() &&
 		NumericalRankStabilityTestMPO() &&
 		MeetingPositionCallbackTestMPO() &&
+		OptimalMeetingPositionTestMPO() &&
 		BondDimensionCallbackTestMPO() &&
 		TraceAndProbabilitiesTestMPO() &&
 		MixtureOfBasisStatesTestMPO() &&

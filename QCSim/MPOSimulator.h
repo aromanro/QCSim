@@ -98,6 +98,31 @@ namespace QC
 				InitQubitsMap();
 			}
 
+			void SetInitialQubitsMap(const std::vector<long long int>& initialMap)
+			{
+				const size_t nrQubits = getNrQubits();
+				if (initialMap.size() != nrQubits)
+					throw std::invalid_argument("Initial qubit-map size must match the number of qubits");
+
+				std::vector<IndexType> newQubitsMap(nrQubits);
+				std::vector<IndexType> newQubitsMapInv(nrQubits);
+				std::vector<bool> seenPhysical(nrQubits, false);
+				for (size_t logical = 0; logical < nrQubits; ++logical)
+				{
+					const long long int physical = initialMap[logical];
+					if (physical < 0 || static_cast<unsigned long long>(physical) >= nrQubits ||
+						seenPhysical[static_cast<size_t>(physical)])
+						throw std::invalid_argument("Initial qubit map must be a permutation");
+
+					seenPhysical[static_cast<size_t>(physical)] = true;
+					newQubitsMap[logical] = static_cast<IndexType>(physical);
+					newQubitsMapInv[static_cast<size_t>(physical)] = static_cast<IndexType>(logical);
+				}
+
+				qubitsMap.swap(newQubitsMap);
+				qubitsMapInv.swap(newQubitsMapInv);
+			}
+
 			void setLimitBondDimension(IndexType chival) override
 			{
 				impl.setLimitBondDimension(chival);
@@ -348,7 +373,7 @@ namespace QC
 
 					// needs to be moved if it's not already in the right position
 					const IndexType currentLogicalPosQubit = qubitsMapInv[currentQubitPos];
-					SwapQubits(currentLogicalPosQubit, logicalQubit);
+					SwapQubits(currentLogicalPosQubit, logicalQubit, true);
 
 					// they are brought together, now swap them
 					const IndexType movingQubitReal = qubitsMap[logicalQubit];
@@ -546,6 +571,7 @@ namespace QC
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
 
+				sim->useOptimalMeetingPosition = useOptimalMeetingPosition;
 				sim->meetingPositionCallback = meetingPositionCallback;
 				sim->bondDimensionCallback = bondDimensionCallback;
 
@@ -572,9 +598,16 @@ namespace QC
 				return impl.getBondDimensions();
 			}
 
+			// Enable/disable immediate meeting position optimization
+			// using actual bond dimensions (no lookahead, just cheapest path)
+			void SetUseOptimalMeetingPosition(bool enable)
+			{
+				useOptimalMeetingPosition = enable;
+			}
+
 			// Set a callback for external lookahead-based meeting position.
-			// It is called before routing a non-adjacent two-qubit operation and
-			// takes priority over the default routing heuristic. Pass nullptr to clear.
+			// When set, this takes priority over both the heuristic and the
+			// local optimizer. Pass nullptr to clear.
 			void SetMeetingPositionCallback(MeetingPositionCallback callback)
 			{
 				meetingPositionCallback = std::move(callback);
@@ -808,38 +841,70 @@ namespace QC
 					const IndexType meetPosition = meetingPositionCallback(impl.getBondDimensions());
 					SwapQubitsToPosition(logical1, logical2, meetPosition);
 				}
+				else if (useOptimalMeetingPosition)
+				{
+					const IndexType meetPosition = FindBestMeetingPositionLocal(logical1, logical2);
+					SwapQubitsToPosition(logical1, logical2, meetPosition);
+				}
 				else
 					SwapQubits(logical1, logical2);
 			}
 
-			// brings the two logical qubits to adjacent physical positions using nearest neighbour swaps
-			void SwapQubits(IndexType logical1, IndexType logical2)
+			// Brings the two logical qubits to adjacent physical positions using nearest
+			// neighbour swaps. The default heuristic prefers the chain middle when the
+			// qubits straddle it, otherwise it moves the qubit that is closer to an end.
+			void SwapQubits(IndexType qubit1, IndexType qubit2, bool forceSwapDown = false)
 			{
-				IndexType r1 = qubitsMap[logical1];
-				IndexType r2 = qubitsMap[logical2];
-				if (r1 > r2)
-					std::swap(r1, r2);
-
-				// move the qubit at physical position r2 down until it sits right next to r1
-				while (r2 > r1 + 1)
+				IndexType realq1 = qubitsMap[qubit1];
+				IndexType realq2 = qubitsMap[qubit2];
+				if (realq1 > realq2)
 				{
-					const IndexType from = r2;
-					const IndexType to = r2 - 1;
+					std::swap(realq1, realq2);
+					std::swap(qubit1, qubit2);
+				}
 
-					impl.ApplyGate(swapGate, from, to);
+				if (realq2 - realq1 <= 1) return;
 
-					const IndexType lFrom = qubitsMapInv[from];
-					const IndexType lTo = qubitsMapInv[to];
+				if (!forceSwapDown)
+				{
+					const IndexType mid = (qubitsMap.size() - 1) >> 1;
+					if (realq1 < mid && realq2 > mid) // is the middle between the two qubits?
+					{
+						const IndexType mappedMid = qubitsMapInv[mid];
+						SwapQubits(qubit1, mappedMid); // this brings qubit1 near the middle
+						realq1 = qubitsMap[qubit1];
+						// the other qubit is above the middle, so it won't be affected by the swap
+						// the code that follows will bring qubit2 in the middle
+					} // otherwise the qubit that's near an end of the chain will be moved towards the other qubit
+				}
 
-					std::swap(qubitsMap[lFrom], qubitsMap[lTo]);
-					qubitsMapInv[from] = lTo;
-					qubitsMapInv[to] = lFrom;
+				// this is just a heuristic, better solutions that minimize the number of swaps would be possible
+				const bool swapDown = forceSwapDown ? true : static_cast<IndexType>(qubitsMap.size()) - realq2 <= realq1;
+
+				const IndexType targetQubitReal = swapDown ? realq1 + 1 : realq2 - 1;
+				IndexType movingQubitReal = swapDown ? realq2 : realq1;
+				const IndexType movingQubitInv = swapDown ? qubit2 : qubit1;
+
+				do
+				{
+					const IndexType toQubitReal = movingQubitReal + (swapDown ? -1 : 1);
+					const IndexType toQubitInv = qubitsMapInv[toQubitReal];
+
+					impl.ApplyGate(swapGate, movingQubitReal, toQubitReal);
+
+					qubitsMap[toQubitInv] = movingQubitReal;
+					qubitsMapInv[movingQubitReal] = toQubitInv;
+
+					qubitsMap[movingQubitInv] = toQubitReal;
+					qubitsMapInv[toQubitReal] = movingQubitInv;
 
 					if (bondDimensionCallback)
 						bondDimensionCallback(impl.getBondDimensions());
 
-					r2 = to;
-				}
+					movingQubitReal = toQubitReal;
+				} while (movingQubitReal != targetQubitReal);
+
+				assert(std::abs(qubitsMap[qubit1] - qubitsMap[qubit2]) == 1);
 			}
 
 			// Swap two logical qubits so they meet at a specified bond position.
@@ -857,12 +922,17 @@ namespace QC
 
 				if (r2 - r1 <= 1) return;
 
-				// Fall back to the existing heuristic if the callback returns a bond
-				// outside the interval between the two qubits.
+				// Fall back to the local optimizer or the existing heuristic if the
+				// callback returns a bond outside the interval between the two qubits.
 				if (meetPosition < r1 || meetPosition >= r2)
 				{
-					SwapQubits(logical1, logical2);
-					return;
+					if (useOptimalMeetingPosition)
+						meetPosition = FindBestMeetingPositionLocal(logical1, logical2);
+					else
+					{
+						SwapQubits(logical1, logical2);
+						return;
+					}
 				}
 
 				while (r1 < meetPosition)
@@ -902,10 +972,40 @@ namespace QC
 				assert(std::abs(qubitsMap[logical1] - qubitsMap[logical2]) == 1);
 			}
 
+			// Heuristic: swap towards positions in chain with smaller bond dimensions,
+			// the cost of a generic gate is bigger than the cost of a swap
+			IndexType FindBestMeetingPositionLocal(IndexType logicalQ1, IndexType logicalQ2) const
+			{
+				IndexType realq1 = qubitsMap[logicalQ1];
+				IndexType realq2 = qubitsMap[logicalQ2];
+				if (realq1 > realq2) std::swap(realq1, realq2);
+
+				if (realq2 - realq1 <= 1) return realq1;
+
+				const auto bondDims = impl.getBondDimensions();
+
+				IndexType bestPos = realq1;
+				IndexType bestBond = bondDims[realq1];
+
+				for (IndexType m = realq1 + 1; m < realq2; ++m)
+				{
+					if (bondDims[m] < bestBond)
+					{
+						bestBond = bondDims[m];
+						bestPos = m;
+					}
+				}
+
+				return bestPos;
+			}
+
 			MPOSimulatorImpl impl;
 			std::vector<IndexType> qubitsMap;
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
+
+			bool useOptimalMeetingPosition = true;
+
 			MeetingPositionCallback meetingPositionCallback;
 			BondDimensionCallback bondDimensionCallback;
 
