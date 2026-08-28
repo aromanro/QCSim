@@ -306,6 +306,83 @@ static bool MeetingPositionCallbackTestMPO()
 	return true;
 }
 
+static bool BondDimensionCallbackTestMPO()
+{
+	std::cout << "\nMPO simulator bond dimension callback test" << std::endl;
+
+	QC::TensorNetworks::MPOSimulator mpo(4);
+	QC::Gates::HadamardGate<> hGate;
+	QC::Gates::CNOTGate<> cnotGate;
+
+	int callbackCalls = 0;
+	std::vector<Eigen::Index> lastBondDimensions;
+	mpo.SetBondDimensionCallback(
+		[&](const std::vector<Eigen::Index>& bondDimensions)
+		{
+			++callbackCalls;
+			lastBondDimensions = bondDimensions;
+		});
+
+	// One-qubit operations cannot change a bond dimension and do not notify.
+	mpo.ApplyGate(hGate, 0);
+	if (callbackCalls != 0)
+	{
+		std::cout << "MPO bond dimension callback was called for a one-qubit operation" << std::endl;
+		return false;
+	}
+
+	// Routing qubits 0 and 3 requires two swaps, followed by the two-qubit operation.
+	mpo.ApplyGate(cnotGate, 3, 0);
+	if (callbackCalls != 3 || lastBondDimensions != mpo.getBondDimensions())
+	{
+		std::cout << "MPO bond dimension callback did not report routing and gate updates" << std::endl;
+		return false;
+	}
+
+	// Collapsing measurements notify as in MPSSimulator; sampling without collapse does not.
+	mpo.MeasureQubit(0);
+	if (callbackCalls != 4 || lastBondDimensions != mpo.getBondDimensions())
+	{
+		std::cout << "MPO bond dimension callback did not report a measurement update" << std::endl;
+		return false;
+	}
+	mpo.MeasureNoCollapse();
+	if (callbackCalls != 4)
+	{
+		std::cout << "MPO bond dimension callback was called for sampling without collapse" << std::endl;
+		return false;
+	}
+
+	// MPO-specific two-qubit mutation paths notify too.
+	mpo.ApplyOperatorAndNormalize(cnotGate, 3, 0);
+	std::vector<Eigen::MatrixXcd> identityChannel{ Eigen::MatrixXcd::Identity(4, 4) };
+	mpo.ApplyKrausOperators(identityChannel, 3, 0);
+	if (callbackCalls != 6 || lastBondDimensions != mpo.getBondDimensions())
+	{
+		std::cout << "MPO bond dimension callback did not report normalized or Kraus updates" << std::endl;
+		return false;
+	}
+
+	// Clones preserve the callback, and passing nullptr clears it.
+	auto clone = mpo.Clone();
+	clone->ApplyGate(cnotGate, 3, 0);
+	if (callbackCalls != 7 || lastBondDimensions != clone->getBondDimensions())
+	{
+		std::cout << "MPO clone did not preserve the bond dimension callback" << std::endl;
+		return false;
+	}
+	clone->SetBondDimensionCallback(nullptr);
+	clone->ApplyGate(cnotGate, 3, 0);
+	if (callbackCalls != 7)
+	{
+		std::cout << "MPO bond dimension callback was not cleared" << std::endl;
+		return false;
+	}
+
+	std::cout << "\nSuccess" << std::endl;
+	return true;
+}
+
 // checks the trace stays 1 and the per qubit probabilities match the statevector ones
 static bool TraceAndProbabilitiesTestMPO()
 {
@@ -2305,6 +2382,7 @@ bool MPOSimulatorTests()
 		OneAndTwoQubitGatesTestMPO() &&
 		NonAdjacentGatesTestMPO() &&
 		MeetingPositionCallbackTestMPO() &&
+		BondDimensionCallbackTestMPO() &&
 		TraceAndProbabilitiesTestMPO() &&
 		MixtureOfBasisStatesTestMPO() &&
 		MixtureEvolutionTestMPO() &&

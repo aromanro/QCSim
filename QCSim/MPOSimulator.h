@@ -41,6 +41,8 @@ namespace QC
 			using MeetingPositionCallback = std::function<IndexType(
 				const std::vector<IndexType>&)>;
 
+			using BondDimensionCallback = std::function<void(const std::vector<IndexType>&)>;
+
 			MPOSimulator() = delete;
 
 			MPOSimulator(size_t N, unsigned int addseed = 0)
@@ -262,7 +264,10 @@ namespace QC
 				if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
 					throw std::invalid_argument("Qubit index out of bounds");
 
-				return impl.MeasureQubit(qubitsMap[qubit]);
+				const bool result = impl.MeasureQubit(qubitsMap[qubit]);
+				if (bondDimensionCallback)
+					bondDimensionCallback(impl.getBondDimensions());
+				return result;
 			}
 
 			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
@@ -278,6 +283,9 @@ namespace QC
 				std::unordered_map<IndexType, bool> res;
 				for (const auto& [qubit, val] : measuredQubits)
 					res[qubitsMapInv[qubit]] = val;
+
+				if (bondDimensionCallback)
+					bondDimensionCallback(impl.getBondDimensions());
 
 				return res;
 			}
@@ -355,6 +363,9 @@ namespace QC
 					qubitsMap[currentLogicalPosQubit] = movingQubitReal;
 					qubitsMapInv[toQubitReal] = logicalQubit;
 					qubitsMapInv[movingQubitReal] = currentLogicalPosQubit;
+
+					if (bondDimensionCallback)
+						bondDimensionCallback(impl.getBondDimensions());
 
 					handledQubits.insert(logicalQubit);
 					if (handledQubits.size() == qubits.size())
@@ -536,6 +547,7 @@ namespace QC
 				sim->impl.gammas = impl.gammas;
 
 				sim->meetingPositionCallback = meetingPositionCallback;
+				sim->bondDimensionCallback = bondDimensionCallback;
 
 				if (savedState)
 				{
@@ -566,6 +578,13 @@ namespace QC
 			void SetMeetingPositionCallback(MeetingPositionCallback callback)
 			{
 				meetingPositionCallback = std::move(callback);
+			}
+
+			// Set a callback that receives the current bond dimensions after an
+			// operation that can change them. Pass nullptr to clear.
+			void SetBondDimensionCallback(BondDimensionCallback callback)
+			{
+				bondDimensionCallback = std::move(callback);
 			}
 
 		private:
@@ -642,6 +661,8 @@ namespace QC
 			{
 				const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
 				impl.ApplyOperator(op, qubit1, qubit2);
+				if (bondDimensionCallback && qubitsNumber > 1)
+					bondDimensionCallback(impl.getBondDimensions());
 			}
 
 			void ApplyValidatedOperatorAndNormalize(const GateClass& op, IndexType qubit,
@@ -649,6 +670,8 @@ namespace QC
 			{
 				const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
 				impl.ApplyOperatorAndNormalize(op, qubit1, qubit2);
+				if (bondDimensionCallback && qubitsNumber > 1)
+					bondDimensionCallback(impl.getBondDimensions());
 			}
 
 			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, IndexType qubit, IndexType controllingQubit1)
@@ -680,6 +703,8 @@ namespace QC
 					mappedOps.push_back(KrausOperatorMatrix(op));
 
 				impl.ApplyKrausOperators(mappedOps, qubit1, qubit2);
+				if (bondDimensionCallback && qubitsNumber > 1)
+					bondDimensionCallback(impl.getBondDimensions());
 			}
 
 			static const MatrixClass& KrausOperatorMatrix(const Gates::AppliedGate<MatrixClass>& op)
@@ -810,6 +835,9 @@ namespace QC
 					qubitsMapInv[from] = lTo;
 					qubitsMapInv[to] = lFrom;
 
+					if (bondDimensionCallback)
+						bondDimensionCallback(impl.getBondDimensions());
+
 					r2 = to;
 				}
 			}
@@ -848,6 +876,9 @@ namespace QC
 					qubitsMapInv[r1] = displacedLogical;
 					qubitsMap[logical1] = to;
 					qubitsMapInv[to] = logical1;
+
+					if (bondDimensionCallback)
+						bondDimensionCallback(impl.getBondDimensions());
 					r1 = to;
 				}
 
@@ -862,6 +893,9 @@ namespace QC
 					qubitsMapInv[r2] = displacedLogical;
 					qubitsMap[logical2] = to;
 					qubitsMapInv[to] = logical2;
+
+					if (bondDimensionCallback)
+						bondDimensionCallback(impl.getBondDimensions());
 					r2 = to;
 				}
 
@@ -873,6 +907,7 @@ namespace QC
 			std::vector<IndexType> qubitsMapInv;
 			QC::Gates::SwapGate<MatrixClass> swapGate;
 			MeetingPositionCallback meetingPositionCallback;
+			BondDimensionCallback bondDimensionCallback;
 
 			std::shared_ptr<MPOSimulatorStateInterface> savedState;
 		};
