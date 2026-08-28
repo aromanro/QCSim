@@ -35,9 +35,12 @@ namespace QC {
 		// so the gate tensor is contracted with the ket legs and its adjoint (the
 		// conjugate gate tensor) is contracted with the bra legs.
 		//
-		// Compression caveat: with no SVD truncation this is an exact MPO representation
-		// of the density matrix. When bond dimension or singular-value truncation is
-		// enabled, the simulator becomes an approximate operator-space MPO simulator.
+		// Compression caveat: without user-requested compression this is an MPO
+		// representation of the density matrix that is exact to numerical precision.
+		// SVD sectors below the scale-relative numerical rank floor are treated as zero
+		// to keep the Vidal pseudoinverse stable. When bond dimension or larger
+		// singular-value truncation is enabled, the simulator becomes an approximate
+		// operator-space MPO simulator.
 		// The compressed operator is not guaranteed to remain a physical density matrix:
 		// trace may drift, Hermiticity may be approximate and positivity is not preserved
 		// by ordinary MPO SVD truncation.

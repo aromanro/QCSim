@@ -386,6 +386,62 @@ bool OneAndTwoQubitGatesTestMapped()
 	return true;
 }
 
+bool NumericalRankStabilityTestMPS()
+{
+	std::cout << "\nMPS simulator numerical rank stability test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGates(gates);
+	FillTwoQubitGates(gates);
+
+	// This fixed seed contains a mapped circuit that creates roundoff-only
+	// Schmidt values and subsequently routes gates across them. Without a
+	// numerical rank floor, the Vidal pseudoinverse amplifies that SVD noise
+	// into percent-level state-vector errors.
+	std::mt19937 stabilityGenerator(544);
+	std::bernoulli_distribution stabilityBool;
+	std::uniform_int_distribution nrGatesDistribution(25, 50);
+	std::uniform_int_distribution gateDistribution(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 3; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistribution(0, nrQubits - 1);
+		std::uniform_int_distribution secondQubitDistribution(0, nrQubits - 2);
+
+		for (int trial = 0; trial < 10; ++trial)
+		{
+			QC::TensorNetworks::MPSSimulator mps(nrQubits);
+			QC::QubitRegister<> reg(nrQubits);
+			const int nrGates = nrGatesDistribution(stabilityGenerator);
+
+			for (int i = 0; i < nrGates; ++i)
+			{
+				const int gate = gateDistribution(stabilityGenerator);
+				const bool twoQubitsGate = gates[gate]->getQubitsNumber() == 2;
+				int qubit1 = qubitDistribution(stabilityGenerator);
+				int qubit2 = (qubit1 + 1 + secondQubitDistribution(stabilityGenerator)) % nrQubits;
+				if (twoQubitsGate && stabilityBool(stabilityGenerator)) std::swap(qubit1, qubit2);
+
+				mps.ApplyGate(*gates[gate], qubit1, qubit2);
+				reg.ApplyGate(*gates[gate], qubit1, qubit2);
+
+				const auto& reference = reg.getRegisterStorage();
+				const auto actual = mps.getRegisterStorage();
+				for (Eigen::Index state = 0; state < reference.size(); ++state)
+					if (!approxEqual(reference[state], actual[state], 1E-10))
+					{
+						std::cout << "MPS numerical-rank filtering did not prevent roundoff amplification for "
+							<< nrQubits << " qubits" << std::endl;
+						return false;
+					}
+			}
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 void PrintMeasurements(int nrMeasurements, const std::unordered_map<std::vector<bool>, int>& measurements)
 {
 	for (const auto& [k, v] : measurements)
@@ -1061,7 +1117,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return WideBasisInitializationTestMPS() && StateSimulationTest() && checkExpectationValuesMPS() && TrimTestMPS();
+	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS();
 }
 
 

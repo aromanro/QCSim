@@ -248,6 +248,48 @@ static bool NonAdjacentGatesTestMPO()
 	return true;
 }
 
+static bool NumericalRankStabilityTestMPO()
+{
+	std::cout << "\nMPO simulator numerical rank stability test" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	struct CircuitStep
+	{
+		size_t gate;
+		Eigen::Index qubit1;
+		Eigen::Index qubit2;
+	};
+
+	// This circuit creates roundoff-only singular values and then routes a gate
+	// across them. Retaining those values makes the Vidal pseudoinverse amplify
+	// SVD noise into percent-level density-matrix errors.
+	const std::array<CircuitStep, 11> circuit{ {
+		{ 2, 0, 0 }, { 24, 2, 4 }, { 22, 0, 1 }, { 18, 0, 3 },
+		{ 0, 4, 4 }, { 23, 0, 4 }, { 1, 3, 3 }, { 5, 3, 3 },
+		{ 0, 5, 5 }, { 11, 0, 0 }, { 22, 4, 1 }
+	} };
+
+	QC::TensorNetworks::MPOSimulator mpo(6);
+	QC::QubitRegister<> reg(6);
+	for (const auto& step : circuit)
+	{
+		mpo.ApplyGate(*gates[step.gate], step.qubit1, step.qubit2);
+		reg.ApplyGate(*gates[step.gate], step.qubit1, step.qubit2);
+	}
+
+	if (!CompareDensityMatrices(ReferenceDensityMatrix(reg), mpo.getDensityMatrix(), 6, 1E-10))
+	{
+		std::cout << "MPO numerical-rank filtering did not prevent roundoff amplification" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 static bool MeetingPositionCallbackTestMPO()
 {
 	std::cout << "\nMPO simulator meeting position callback test" << std::endl;
@@ -2381,6 +2423,7 @@ bool MPOSimulatorTests()
 		CollapseNormalizationAndAtomicFailureTestMPO() &&
 		OneAndTwoQubitGatesTestMPO() &&
 		NonAdjacentGatesTestMPO() &&
+		NumericalRankStabilityTestMPO() &&
 		MeetingPositionCallbackTestMPO() &&
 		BondDimensionCallbackTestMPO() &&
 		TraceAndProbabilitiesTestMPO() &&

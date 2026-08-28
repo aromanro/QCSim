@@ -48,9 +48,11 @@ namespace QC {
 		//
 		// IMPORTANT difference from the MPS simulator: the singular values (lambdas)
 		// are NOT renormalized after the SVD. The trace is linear in rho, so keeping
-		// the raw singular values keeps Tr(rho) = 1 exactly under unitary evolution
-		// when the SVD is not truncated (L2-normalizing them, as the MPS does to keep
-		// <psi|psi> = 1, would instead rescale the trace).
+		// the raw singular values keeps Tr(rho) = 1 to numerical precision under
+		// unitary evolution when user-requested compression is disabled. Numerically
+		// null SVD sectors are still removed to keep the Vidal pseudoinverse stable
+		// (L2-normalizing the lambdas, as the MPS does to keep <psi|psi> = 1, would
+		// instead rescale the trace).
 		//
 		// Compression caveat: limiting the bond dimension or dropping singular values
 		// is ordinary operator-space MPO truncation. It minimizes a local SVD error, but

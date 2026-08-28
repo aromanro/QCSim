@@ -424,17 +424,20 @@ namespace QC {
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
 #endif
 
-				if (limitEntanglement)
-				{
+				// Eigen's default rank threshold is close enough to machine epsilon that
+				// roundoff-only singular values can survive and later make the Vidal
+				// pseudoinverse ill-conditioned. Keep a scale-relative numerical floor
+				// even when user-requested compression is disabled.
+				const double effectiveThreshold = limitEntanglement ?
+					std::max(singularValueThreshold, numericalRankThreshold) : numericalRankThreshold;
 #ifdef USE_FAST_SVD
-					if (computeWithJacobi)
+				if (computeWithJacobi)
 #endif
-						jacobiSVD.setThreshold(singularValueThreshold);
+					jacobiSVD.setThreshold(effectiveThreshold);
 #ifdef USE_FAST_SVD
-					else
-						SVD.setThreshold(singularValueThreshold);
+				else
+					SVD.setThreshold(effectiveThreshold);
 #endif
-				}
 
 				// n x p is decomposed into U = n x n, singular vals diagonal matrix = n x p, V^t = p x p
 				// the thin version U = n x min(n, p), singular vals diagonal matrix = min(n,p) x min(n,p), V^t = min(n,p) x p
@@ -450,15 +453,15 @@ namespace QC {
 				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
 				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
-				// or SvaluesFull.size() for tests
-				IndexType szm = limitEntanglement ? (computeWithJacobi ? jacobiSVD.rank() : SVD.rank()) : (computeWithJacobi ? jacobiSVD.nonzeroSingularValues() : SVD.nonzeroSingularValues());
+				const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
 #else
 				const MatrixClass& UmatrixFull = jacobiSVD.matrixU();
 				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
 				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
 
-				IndexType szm = limitEntanglement ? jacobiSVD.rank() : jacobiSVD.nonzeroSingularValues(); // or SvaluesFull.size() for tests
+				const IndexType numericalRank = jacobiSVD.rank();
 #endif
+				IndexType szm = numericalRank;
 
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
@@ -602,19 +605,23 @@ namespace QC {
 				if (qubit1 != 0)
 				{
 					const IndexType prev = qubit1 - 1;
+					// Treat numerically null Schmidt sectors as zero when applying the
+					// pseudoinverse instead of amplifying SVD roundoff through division.
+					const double threshold = numericalRankThreshold * lambdas[prev][0];
 					for (IndexType k = 0; k < sz; ++k)
 						for (IndexType j = 0; j < 2; ++j)
 							for (IndexType i = 0; i < szl; ++i)
-								if (lambdas[prev][i] > std::numeric_limits<double>::epsilon() * 1E-10) gammas[qubit1](i, j, k) /= lambdas[prev][i];
+								if (lambdas[prev][i] > threshold) gammas[qubit1](i, j, k) /= lambdas[prev][i];
 								else gammas[qubit1](i, j, k) = 0;
 				}
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
+					const double threshold = numericalRankThreshold * lambdas[qubit2][0];
 					for (IndexType k = 0; k < szr; ++k)
 						for (IndexType j = 0; j < 2; ++j)
 							for (IndexType i = 0; i < sz; ++i)
-								if (lambdas[qubit2][k] > std::numeric_limits<double>::epsilon() * 1E-10) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
+								if (lambdas[qubit2][k] > threshold) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
 								else gammas[qubit2](i, j, k) = 0;
 				}
 			}
@@ -810,6 +817,7 @@ namespace QC {
 			constexpr static IndexType blockSizeLimit = 64;
 			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
 #endif
+			constexpr static double numericalRankThreshold = 1E-12;
 			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
 		};
 
