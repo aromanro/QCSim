@@ -578,6 +578,7 @@ namespace QC
 				sim->impl.limitEntanglement = impl.limitEntanglement;
 				sim->impl.chi = impl.chi;
 				sim->impl.singularValueThreshold = impl.singularValueThreshold;
+				sim->impl.truncationMode = impl.truncationMode;
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
 

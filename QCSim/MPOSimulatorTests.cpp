@@ -1315,6 +1315,35 @@ static bool TruncationModeTestMPO()
 	return true;
 }
 
+// Regression test for a real bug found during review: MPOSimulator::Clone() copies
+// limitSize/limitEntanglement/chi/singularValueThreshold but, before this test existed,
+// silently forgot to copy truncationMode - a clone would always come back at the default
+// (DiscardedWeight) even if the original had explicitly opted into RelativeToMax.
+static bool CloneTestMPO()
+{
+	using TruncationMode = QC::TensorNetworks::MPOSimulatorInterface::TruncationMode;
+
+	std::cout << "\nMPO simulator clone preserves truncation mode" << std::endl;
+
+	QC::TensorNetworks::MPOSimulator mpo(2);
+	if (!mpo.setTruncationMode(TruncationMode::RelativeToMax))
+	{
+		std::cout << "Failed to set RelativeToMax on the original simulator" << std::endl;
+		return false;
+	}
+
+	const auto cloned = mpo.Clone();
+	if (cloned->getTruncationMode() != TruncationMode::RelativeToMax)
+	{
+		std::cout << "Clone did not preserve the RelativeToMax truncation mode (got DiscardedWeight instead)" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
 // rho -> A rho A^dagger / Tr(A rho A^dagger) for a non-unitary local operator A (amplitude damping K0)
 static bool ApplyOperatorAndNormalizeTestMPO()
 {
@@ -2794,6 +2823,7 @@ bool MPOSimulatorTests()
 		CompressionLosslessTestMPO() &&
 		CompressionTruncationTestMPO() &&
 		TruncationModeTestMPO() &&
+		CloneTestMPO() &&
 		StateSaveRestoreTestMPO() &&
 		MeasurementsTestMPO() &&
 		TrimTestMPO() &&

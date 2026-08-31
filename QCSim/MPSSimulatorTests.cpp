@@ -1124,6 +1124,35 @@ bool TruncationModeTestMPS()
 	return true;
 }
 
+// Regression test for a real bug found during review: MPSSimulator::Clone() copies
+// limitSize/limitEntanglement/chi/singularValueThreshold but, before this test existed,
+// silently forgot to copy truncationMode - a clone would always come back at the default
+// (DiscardedWeight) even if the original had explicitly opted into RelativeToMax.
+bool CloneTestMPS()
+{
+	using TruncationMode = QC::TensorNetworks::MPSSimulatorInterface::TruncationMode;
+
+	std::cout << "\nMPS simulator clone preserves truncation mode" << std::endl;
+
+	QC::TensorNetworks::MPSSimulator mps(2);
+	if (!mps.setTruncationMode(TruncationMode::RelativeToMax))
+	{
+		std::cout << "Failed to set RelativeToMax on the original simulator" << std::endl;
+		return false;
+	}
+
+	const auto cloned = mps.Clone();
+	if (cloned->getTruncationMode() != TruncationMode::RelativeToMax)
+	{
+		std::cout << "Clone did not preserve the RelativeToMax truncation mode (got DiscardedWeight instead)" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
 static bool WideBasisInitializationTestMPS()
 {
 	std::cout << "\nMPS simulator - wide vector basis-state initialization" << std::endl;
@@ -1283,7 +1312,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS();
+	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS();
 }
 
 
