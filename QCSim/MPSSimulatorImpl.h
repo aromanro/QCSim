@@ -426,17 +426,17 @@ namespace QC {
 
 				// Eigen's default rank threshold is close enough to machine epsilon that
 				// roundoff-only singular values can survive and later make the Vidal
-				// pseudoinverse ill-conditioned. Keep a scale-relative numerical floor
-				// even when user-requested compression is disabled.
-				const double effectiveThreshold = limitEntanglement ?
-					std::max(singularValueThreshold, numericalRankThreshold) : numericalRankThreshold;
+				// pseudoinverse ill-conditioned. Always filter those out first with the fixed
+				// scale-relative floor, regardless of the requested truncation mode or whether
+				// user-requested compression (limitEntanglement) is enabled at all - compression
+				// selection, below, is a separate step applied on top of this floor.
 #ifdef USE_FAST_SVD
 				if (computeWithJacobi)
 #endif
-					jacobiSVD.setThreshold(effectiveThreshold);
+					jacobiSVD.setThreshold(numericalRankThreshold);
 #ifdef USE_FAST_SVD
 				else
-					SVD.setThreshold(effectiveThreshold);
+					SVD.setThreshold(numericalRankThreshold);
 #endif
 
 				// n x p is decomposed into U = n x n, singular vals diagonal matrix = n x p, V^t = p x p
@@ -453,15 +453,19 @@ namespace QC {
 				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
 				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
-				const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
+				const IndexType floorRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
 #else
 				const MatrixClass& UmatrixFull = jacobiSVD.matrixU();
 				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
 				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
 
-				const IndexType numericalRank = jacobiSVD.rank();
+				const IndexType floorRank = jacobiSVD.rank();
 #endif
-				IndexType szm = numericalRank;
+				// If user-requested compression is enabled, further reduce the rank according to
+				// the configured truncation mode, applied on top of the already floor-filtered
+				// (still descending-sorted) singular values.
+				IndexType szm = limitEntanglement ?
+					ComputeCompressedRank(SvaluesFull, floorRank, truncationMode, singularValueThreshold) : floorRank;
 
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
@@ -487,6 +491,48 @@ namespace QC {
 				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
 			}
 
+			// Given the (descending-sorted, already roundoff-floor-filtered) singular values and a
+			// user-requested compression threshold, returns how many of them to keep according to
+			// the selected truncation mode. Always keeps at least the largest singular value.
+			static IndexType ComputeCompressedRank(const LambdaType& sortedDescendingSVs, IndexType rank, TruncationMode mode, double threshold)
+			{
+				if (rank <= 1) return rank;
+
+				if (mode == TruncationMode::RelativeToMax)
+				{
+					// Reproduces Eigen::SVDBase::rank() exactly: a singular value is kept iff it is
+					// strictly greater than threshold * sigma_max (with the same guard against a
+					// zero sigma_max that Eigen's own premultiplied threshold uses). This is this
+					// simulator's original (pre-mode-switch) truncation behavior.
+					const double effectiveThreshold = std::max(threshold, numericalRankThreshold);
+					const double premultipliedThreshold = std::max(effectiveThreshold * sortedDescendingSVs[0], std::numeric_limits<double>::min());
+					IndexType i = rank - 1;
+					while (i >= 0 && sortedDescendingSVs[i] < premultipliedThreshold) --i;
+					return i + 1;
+				}
+
+				// DiscardedWeight: discard the smallest singular values while the cumulative sum of
+				// their squares, normalized by the sum of squares of all of them (at this bond),
+				// stays below the threshold. Matches Qiskit Aer's reduce_zeros (see
+				// build/qiskit-aer/src/simulators/matrix_product_state/svd.cpp in the maestro repo)
+				// and ITensor's default 'cutoff'. Never discards the largest singular value.
+				const double effectiveThreshold = std::max(threshold, numericalRankThresholdDiscardedWeight);
+				const double total = sortedDescendingSVs.head(rank).squaredNorm();
+				if (total <= 0.) return rank;
+
+				double discarded = 0.;
+				IndexType keep = rank;
+				for (IndexType i = rank - 1; i > 0; --i)
+				{
+					const double sq = sortedDescendingSVs[i] * sortedDescendingSVs[i];
+					if ((discarded + sq) / total >= effectiveThreshold) break;
+
+					discarded += sq;
+					keep = i;
+				}
+
+				return keep;
+			}
 
 			static TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass& gate, bool reversed)
 			{
@@ -818,6 +864,12 @@ namespace QC {
 			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
 #endif
 			constexpr static double numericalRankThreshold = 1E-12;
+			// Equivalent roundoff floor for DiscardedWeight mode: a single singular value at the
+			// RelativeToMax floor scale (1E-12 * sigma_max) contributes ~(1E-12)^2 to the
+			// normalized sum-of-squares weight, so this floor is squared, not reused as-is -
+			// reusing numericalRankThreshold directly here would discard non-negligible singular
+			// values as if they were roundoff.
+			constexpr static double numericalRankThresholdDiscardedWeight = numericalRankThreshold * numericalRankThreshold;
 			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
 		};
 

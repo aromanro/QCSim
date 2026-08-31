@@ -958,6 +958,172 @@ bool TrimTestMPS()
 	return true;
 }
 
+bool TruncationModeTestMPS()
+{
+	using TruncationMode = QC::TensorNetworks::MPSSimulatorInterface::TruncationMode;
+	using MPSState = QC::TensorNetworks::MPSSimulatorBaseState;
+
+	std::cout << "\nMPS simulator truncation mode test" << std::endl;
+
+	// The default must be DiscardedWeight (Qiskit Aer's / ITensor's convention) - a deliberate
+	// default-behavior change from what every earlier version of this simulator did.
+	{
+		QC::TensorNetworks::MPSSimulatorImpl defaultMps(2);
+		if (defaultMps.getTruncationMode() != TruncationMode::DiscardedWeight)
+		{
+			std::cout << "Default truncation mode is not DiscardedWeight" << std::endl;
+			return false;
+		}
+	}
+
+	// getter/setter round trip for both modes
+	{
+		QC::TensorNetworks::MPSSimulatorImpl mps(2);
+		if (!mps.setTruncationMode(TruncationMode::RelativeToMax) || mps.getTruncationMode() != TruncationMode::RelativeToMax)
+		{
+			std::cout << "Truncation mode round trip failed for RelativeToMax" << std::endl;
+			return false;
+		}
+
+		if (!mps.setTruncationMode(TruncationMode::DiscardedWeight) || mps.getTruncationMode() != TruncationMode::DiscardedWeight)
+		{
+			std::cout << "Truncation mode round trip failed for DiscardedWeight" << std::endl;
+			return false;
+		}
+	}
+
+	// Build two Bell pairs (qubits 0-1 and 2-3), each with two well-separated singular values
+	// (1/sqrt2, 1/sqrt2) far above any threshold used below, then join qubits 1 and 2 with a
+	// generic two qubit unitary. Because the Bell-pair bonds are never close to the threshold,
+	// they are truncated identically (untouched) in every run below, so the joining gate's theta
+	// matrix - and therefore its raw SVD spectrum - is identical between the exact reference and
+	// every truncation-mode run. This isolates the truncation SELECTION step (the only thing this
+	// test wants to exercise) from the SVD itself.
+	const QC::Gates::HadamardGate<> hGate;
+	const QC::Gates::CNOTGate<> cnotGate;
+	// A fixed, hand-picked (not block-diagonal / not control-structured) complex matrix, turned
+	// into a genuinely generic unitary via QR - deliberately avoiding gates built from
+	// "controlled-X" structure, which turned out to leave this particular Bell-pair setup at
+	// Schmidt rank 2 regardless of rotation angle.
+	Eigen::MatrixXcd seed(4, 4);
+	seed << std::complex<double>(0.3, 0.7), std::complex<double>(-0.5, 0.2), std::complex<double>(0.4, -0.6), std::complex<double>(0.1, 0.9),
+		std::complex<double>(-0.8, 0.1), std::complex<double>(0.6, 0.5), std::complex<double>(0.2, 0.3), std::complex<double>(-0.4, 0.7),
+		std::complex<double>(0.5, -0.3), std::complex<double>(0.9, -0.1), std::complex<double>(-0.6, 0.4), std::complex<double>(0.2, 0.2),
+		std::complex<double>(-0.2, 0.6), std::complex<double>(0.3, -0.8), std::complex<double>(0.7, 0.1), std::complex<double>(-0.5, -0.3);
+	const Eigen::MatrixXcd joinGate = Eigen::HouseholderQR<Eigen::MatrixXcd>(seed).householderQ();
+
+	auto buildCircuit = [&](QC::TensorNetworks::MPSSimulatorImpl& mps)
+	{
+		mps.ApplyGate(hGate, 0);
+		mps.ApplyGate(cnotGate, 1, 0);
+		mps.ApplyGate(hGate, 2);
+		mps.ApplyGate(cnotGate, 3, 2);
+		mps.ApplyGate(QC::Gates::AppliedGate<>(joinGate, 2, 1));
+	};
+
+	constexpr Eigen::Index bondIndex = 1; // the bond between qubit 1 and qubit 2, joined last above
+
+	QC::TensorNetworks::MPSSimulatorImpl mpsRef(4);
+	buildCircuit(mpsRef);
+
+	const auto refState = std::static_pointer_cast<MPSState>(mpsRef.getState());
+	const Eigen::VectorXd spectrum = refState->lambdas[bondIndex]; // descending-sorted, per Eigen's SVD
+
+	if (spectrum.size() < 3)
+	{
+		std::cout << "Test setup did not produce a rich enough spectrum (" << spectrum.size() << " singular values)" << std::endl;
+		return false;
+	}
+
+	const double threshold = 0.3;
+
+	// Independently compute, from the exact spectrum, how many singular values each mode should
+	// keep - deliberately not calling MPSSimulatorImpl::ComputeCompressedRank, so this checks the
+	// SPECIFICATION (as documented on MPSSimulatorInterface::TruncationMode), not just that the
+	// implementation agrees with itself.
+	Eigen::Index expectedRelative;
+	{
+		const double cutoffValue = threshold * spectrum[0];
+		Eigen::Index i = spectrum.size() - 1;
+		while (i >= 0 && spectrum[i] < cutoffValue) --i;
+		expectedRelative = std::max<Eigen::Index>(i + 1, 1);
+	}
+
+	Eigen::Index expectedDiscardedWeight;
+	{
+		const double total = spectrum.squaredNorm();
+		double discarded = 0.;
+		Eigen::Index keep = spectrum.size();
+		for (Eigen::Index i = spectrum.size() - 1; i > 0; --i)
+		{
+			const double sq = spectrum[i] * spectrum[i];
+			if ((discarded + sq) / total >= threshold) break;
+
+			discarded += sq;
+			keep = i;
+		}
+		expectedDiscardedWeight = keep;
+	}
+
+	if (expectedRelative == expectedDiscardedWeight)
+	{
+		std::cout << "Test setup does not discriminate between the two truncation modes at threshold "
+			<< threshold << " (both would keep " << expectedRelative << ")" << std::endl;
+		return false;
+	}
+
+	// RelativeToMax explicitly requested must match the independently-computed expectation - this
+	// is the regression test for "RelativeToMax still reproduces the original behavior".
+	{
+		QC::TensorNetworks::MPSSimulatorImpl mpsRel(4);
+		mpsRel.setTruncationMode(TruncationMode::RelativeToMax);
+		mpsRel.setLimitEntanglement(threshold);
+		buildCircuit(mpsRel);
+
+		const auto bondDims = mpsRel.getBondDimensions();
+		if (bondDims[bondIndex] != expectedRelative)
+		{
+			std::cout << "RelativeToMax kept " << bondDims[bondIndex] << " singular values, expected " << expectedRelative << std::endl;
+			return false;
+		}
+	}
+
+	// DiscardedWeight explicitly requested must match the independently-computed expectation.
+	{
+		QC::TensorNetworks::MPSSimulatorImpl mpsWeight(4);
+		mpsWeight.setTruncationMode(TruncationMode::DiscardedWeight);
+		mpsWeight.setLimitEntanglement(threshold);
+		buildCircuit(mpsWeight);
+
+		const auto bondDims = mpsWeight.getBondDimensions();
+		if (bondDims[bondIndex] != expectedDiscardedWeight)
+		{
+			std::cout << "DiscardedWeight kept " << bondDims[bondIndex] << " singular values, expected " << expectedDiscardedWeight << std::endl;
+			return false;
+		}
+	}
+
+	// No explicit mode set: must match DiscardedWeight (the default), not RelativeToMax - this is
+	// the regression test guarding the default-flip decision.
+	{
+		QC::TensorNetworks::MPSSimulatorImpl mpsDefault(4);
+		mpsDefault.setLimitEntanglement(threshold);
+		buildCircuit(mpsDefault);
+
+		const auto bondDims = mpsDefault.getBondDimensions();
+		if (bondDims[bondIndex] != expectedDiscardedWeight)
+		{
+			std::cout << "Default truncation mode did not match DiscardedWeight (kept " << bondDims[bondIndex]
+				<< ", expected " << expectedDiscardedWeight << ")" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
 static bool WideBasisInitializationTestMPS()
 {
 	std::cout << "\nMPS simulator - wide vector basis-state initialization" << std::endl;
@@ -1117,7 +1283,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS();
+	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS();
 }
 
 

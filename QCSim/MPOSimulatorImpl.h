@@ -443,17 +443,17 @@ namespace QC {
 
 				// Eigen's default rank threshold is close enough to machine epsilon that
 				// roundoff-only singular values can survive and later make the Vidal
-				// pseudoinverse ill-conditioned. Keep a scale-relative numerical floor
-				// even when user-requested compression is disabled.
-				const double effectiveThreshold = limitEntanglement ?
-					std::max(singularValueThreshold, numericalRankThreshold) : numericalRankThreshold;
+				// pseudoinverse ill-conditioned. Always filter those out first with the fixed
+				// scale-relative floor, regardless of the requested truncation mode or whether
+				// user-requested compression (limitEntanglement) is enabled at all - compression
+				// selection, below, is a separate step applied on top of this floor.
 #ifdef USE_FAST_SVD
 				if (computeWithJacobi)
 #endif
-					jacobiSVD.setThreshold(effectiveThreshold);
+					jacobiSVD.setThreshold(numericalRankThreshold);
 #ifdef USE_FAST_SVD
 				else
-					SVD.setThreshold(effectiveThreshold);
+					SVD.setThreshold(numericalRankThreshold);
 #endif
 
 #ifdef USE_FAST_SVD
@@ -468,15 +468,19 @@ namespace QC {
 				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
 				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
-				const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
+				const IndexType floorRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
 #else
 				const MatrixClass& UmatrixFull = jacobiSVD.matrixU();
 				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
 				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
 
-				const IndexType numericalRank = jacobiSVD.rank();
+				const IndexType floorRank = jacobiSVD.rank();
 #endif
-				IndexType szm = numericalRank;
+				// If user-requested compression is enabled, further reduce the rank according to
+				// the configured truncation mode, applied on top of the already floor-filtered
+				// (still descending-sorted) singular values.
+				IndexType szm = limitEntanglement ?
+					ComputeCompressedRank(SvaluesFull, floorRank, truncationMode, singularValueThreshold) : floorRank;
 
 				if (szm == 0) szm = 1;
 
@@ -497,6 +501,41 @@ namespace QC {
 				lambdas[qubit1] = SvaluesFull.head(sz);
 
 				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, L, sz, R);
+			}
+
+			// See MPSSimulatorImpl::ComputeCompressedRank for the full explanation of both modes -
+			// identical logic, duplicated here per this codebase's per-file convention (no shared
+			// header between the MPS and MPO impls today). Always keeps at least the largest
+			// singular value.
+			static IndexType ComputeCompressedRank(const LambdaType& sortedDescendingSVs, IndexType rank, TruncationMode mode, double threshold)
+			{
+				if (rank <= 1) return rank;
+
+				if (mode == TruncationMode::RelativeToMax)
+				{
+					const double effectiveThreshold = std::max(threshold, numericalRankThreshold);
+					const double premultipliedThreshold = std::max(effectiveThreshold * sortedDescendingSVs[0], std::numeric_limits<double>::min());
+					IndexType i = rank - 1;
+					while (i >= 0 && sortedDescendingSVs[i] < premultipliedThreshold) --i;
+					return i + 1;
+				}
+
+				const double effectiveThreshold = std::max(threshold, numericalRankThresholdDiscardedWeight);
+				const double total = sortedDescendingSVs.head(rank).squaredNorm();
+				if (total <= 0.) return rank;
+
+				double discarded = 0.;
+				IndexType keep = rank;
+				for (IndexType i = rank - 1; i > 0; --i)
+				{
+					const double sq = sortedDescendingSVs[i] * sortedDescendingSVs[i];
+					if ((discarded + sq) / total >= effectiveThreshold) break;
+
+					discarded += sq;
+					keep = i;
+				}
+
+				return keep;
 			}
 
 			static TwoQubitsGateTensor GetTwoQubitsGateTensor(const MatrixClass& gateMat, bool reversed)
@@ -741,6 +780,9 @@ namespace QC {
 			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
 #endif
 			constexpr static double numericalRankThreshold = 1E-12;
+			// See MPSSimulatorImpl::numericalRankThresholdDiscardedWeight for why this is squared
+			// rather than reusing numericalRankThreshold as-is.
+			constexpr static double numericalRankThresholdDiscardedWeight = numericalRankThreshold * numericalRankThreshold;
 			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
 		};
 

@@ -169,12 +169,18 @@ namespace QC {
 
 			void setLimitBondDimension(IndexType chival) override
 			{
+				if (chival <= 0)
+					throw std::invalid_argument("Bond dimension limit must be positive");
+
 				limitSize = true;
 				chi = chival;
 			}
 
 			void setLimitEntanglement(double svdThreshold) override
 			{
+				if (!std::isfinite(svdThreshold) || svdThreshold < 0.)
+					throw std::invalid_argument("Singular-value threshold must be finite and non-negative");
+
 				limitEntanglement = true;
 				singularValueThreshold = svdThreshold;
 			}
@@ -187,6 +193,24 @@ namespace QC {
 			void dontLimitEntanglement() override
 			{
 				limitEntanglement = false;
+			}
+
+			bool setTruncationMode(TruncationMode mode) override
+			{
+				switch (mode)
+				{
+				case TruncationMode::RelativeToMax:
+				case TruncationMode::DiscardedWeight:
+					truncationMode = mode;
+					return true;
+				default:
+					throw std::invalid_argument("Unrecognized truncation mode");
+				}
+			}
+
+			TruncationMode getTruncationMode() const override
+			{
+				return truncationMode;
 			}
 
 			// this is for 'compatibility' with the statevector simulator (QubitRegister)
@@ -629,6 +653,12 @@ namespace QC {
 			bool limitEntanglement = false;
 			IndexType chi = 10; // if limitSize is true
 			double singularValueThreshold = 0.; // if limitEntanglement is true
+
+			// Default is DiscardedWeight (Qiskit Aer's / ITensor's convention), NOT RelativeToMax -
+			// see MPSSimulatorInterface::TruncationMode. This is a deliberate default-behavior
+			// change: bond-dimension growth under setLimitEntanglement now differs from what every
+			// earlier version of this simulator produced unless RelativeToMax is requested explicitly.
+			TruncationMode truncationMode = TruncationMode::DiscardedWeight;
 
 			std::vector<LambdaType> lambdas;
 			std::vector<GammaType> gammas;

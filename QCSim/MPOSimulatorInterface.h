@@ -68,6 +68,17 @@ namespace QC {
 			using OneQubitGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2>>;
 			using TwoQubitsGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>>;
 
+			// See MPSSimulatorInterface::TruncationMode for the full explanation - same two modes,
+			// same DiscardedWeight default (set in MPOSimulatorBase), same rationale. Declared
+			// separately here (rather than shared with MPSSimulatorInterface) to keep each
+			// interface self-contained, matching how IndexType/LambdaType/etc. are already
+			// declared per-interface in this codebase.
+			enum class TruncationMode
+			{
+				RelativeToMax,
+				DiscardedWeight
+			};
+
 			MPOSimulatorInterface() = default;
 			virtual ~MPOSimulatorInterface() = default;
 
@@ -92,6 +103,9 @@ namespace QC {
 			virtual void setLimitEntanglement(double svdThreshold) = 0;
 			virtual void dontLimitBondDimension() = 0;
 			virtual void dontLimitEntanglement() = 0;
+			// See MPSSimulatorInterface::setTruncationMode for the return-value contract.
+			virtual bool setTruncationMode(TruncationMode mode) = 0;
+			virtual TruncationMode getTruncationMode() const = 0;
 			virtual void Trim() = 0;
 			virtual void ReCanonicalize() = 0;
 

@@ -1153,6 +1153,168 @@ static bool CompressionTruncationTestMPO()
 	return true;
 }
 
+static bool TruncationModeTestMPO()
+{
+	using TruncationMode = QC::TensorNetworks::MPOSimulatorInterface::TruncationMode;
+	using MPOState = QC::TensorNetworks::MPOSimulatorBaseState;
+
+	std::cout << "\nMPO simulator truncation mode test" << std::endl;
+
+	// The default must be DiscardedWeight (Qiskit Aer's / ITensor's convention) - a deliberate
+	// default-behavior change from what every earlier version of this simulator did. Same
+	// rationale and API contract as MPSSimulatorInterface::TruncationMode; see MPSSimulatorTests.cpp's
+	// TruncationModeTestMPS for the full explanation of the test strategy below.
+	{
+		QC::TensorNetworks::MPOSimulatorImpl defaultMpo(2);
+		if (defaultMpo.getTruncationMode() != TruncationMode::DiscardedWeight)
+		{
+			std::cout << "Default truncation mode is not DiscardedWeight" << std::endl;
+			return false;
+		}
+	}
+
+	// getter/setter round trip for both modes
+	{
+		QC::TensorNetworks::MPOSimulatorImpl mpo(2);
+		if (!mpo.setTruncationMode(TruncationMode::RelativeToMax) || mpo.getTruncationMode() != TruncationMode::RelativeToMax)
+		{
+			std::cout << "Truncation mode round trip failed for RelativeToMax" << std::endl;
+			return false;
+		}
+
+		if (!mpo.setTruncationMode(TruncationMode::DiscardedWeight) || mpo.getTruncationMode() != TruncationMode::DiscardedWeight)
+		{
+			std::cout << "Truncation mode round trip failed for DiscardedWeight" << std::endl;
+			return false;
+		}
+	}
+
+	// Same construction as the MPS version: two Bell pairs (qubits 0-1 and 2-3) joined by a
+	// generic two qubit unitary on qubits 1 and 2. The Bell-pair bonds stay far above any
+	// threshold used below in every run, so the joining gate's theta matrix - and therefore its
+	// raw SVD spectrum - is identical between the exact reference and every truncation-mode run.
+	const QC::Gates::HadamardGate<> hGate;
+	const QC::Gates::CNOTGate<> cnotGate;
+
+	Eigen::MatrixXcd seed(4, 4);
+	seed << std::complex<double>(0.3, 0.7), std::complex<double>(-0.5, 0.2), std::complex<double>(0.4, -0.6), std::complex<double>(0.1, 0.9),
+		std::complex<double>(-0.8, 0.1), std::complex<double>(0.6, 0.5), std::complex<double>(0.2, 0.3), std::complex<double>(-0.4, 0.7),
+		std::complex<double>(0.5, -0.3), std::complex<double>(0.9, -0.1), std::complex<double>(-0.6, 0.4), std::complex<double>(0.2, 0.2),
+		std::complex<double>(-0.2, 0.6), std::complex<double>(0.3, -0.8), std::complex<double>(0.7, 0.1), std::complex<double>(-0.5, -0.3);
+	const Eigen::MatrixXcd joinGate = Eigen::HouseholderQR<Eigen::MatrixXcd>(seed).householderQ();
+
+	auto buildCircuit = [&](QC::TensorNetworks::MPOSimulatorImpl& mpo)
+	{
+		mpo.ApplyGate(hGate, 0);
+		mpo.ApplyGate(cnotGate, 1, 0);
+		mpo.ApplyGate(hGate, 2);
+		mpo.ApplyGate(cnotGate, 3, 2);
+		mpo.ApplyGate(QC::Gates::AppliedGate<>(joinGate, 2, 1));
+	};
+
+	constexpr Eigen::Index bondIndex = 1; // the bond between qubit 1 and qubit 2, joined last above
+
+	QC::TensorNetworks::MPOSimulatorImpl mpoRef(4);
+	buildCircuit(mpoRef);
+
+	const auto refState = std::static_pointer_cast<MPOState>(mpoRef.getState());
+	const Eigen::VectorXd spectrum = refState->lambdas[bondIndex]; // descending-sorted, per Eigen's SVD
+
+	if (spectrum.size() < 3)
+	{
+		std::cout << "Test setup did not produce a rich enough spectrum (" << spectrum.size() << " singular values)" << std::endl;
+		return false;
+	}
+
+	const double threshold = 0.3;
+
+	// Independently compute, from the exact spectrum, how many singular values each mode should
+	// keep - deliberately not calling MPOSimulatorImpl::ComputeCompressedRank, so this checks the
+	// SPECIFICATION (as documented on MPOSimulatorInterface::TruncationMode), not just that the
+	// implementation agrees with itself.
+	Eigen::Index expectedRelative;
+	{
+		const double cutoffValue = threshold * spectrum[0];
+		Eigen::Index i = spectrum.size() - 1;
+		while (i >= 0 && spectrum[i] < cutoffValue) --i;
+		expectedRelative = std::max<Eigen::Index>(i + 1, 1);
+	}
+
+	Eigen::Index expectedDiscardedWeight;
+	{
+		const double total = spectrum.squaredNorm();
+		double discarded = 0.;
+		Eigen::Index keep = spectrum.size();
+		for (Eigen::Index i = spectrum.size() - 1; i > 0; --i)
+		{
+			const double sq = spectrum[i] * spectrum[i];
+			if ((discarded + sq) / total >= threshold) break;
+
+			discarded += sq;
+			keep = i;
+		}
+		expectedDiscardedWeight = keep;
+	}
+
+	if (expectedRelative == expectedDiscardedWeight)
+	{
+		std::cout << "Test setup does not discriminate between the two truncation modes at threshold "
+			<< threshold << " (both would keep " << expectedRelative << ")" << std::endl;
+		return false;
+	}
+
+	// RelativeToMax explicitly requested must match the independently-computed expectation - this
+	// is the regression test for "RelativeToMax still reproduces the original behavior".
+	{
+		QC::TensorNetworks::MPOSimulatorImpl mpoRel(4);
+		mpoRel.setTruncationMode(TruncationMode::RelativeToMax);
+		mpoRel.setLimitEntanglement(threshold);
+		buildCircuit(mpoRel);
+
+		const auto bondDims = mpoRel.getBondDimensions();
+		if (bondDims[bondIndex] != expectedRelative)
+		{
+			std::cout << "RelativeToMax kept " << bondDims[bondIndex] << " singular values, expected " << expectedRelative << std::endl;
+			return false;
+		}
+	}
+
+	// DiscardedWeight explicitly requested must match the independently-computed expectation.
+	{
+		QC::TensorNetworks::MPOSimulatorImpl mpoWeight(4);
+		mpoWeight.setTruncationMode(TruncationMode::DiscardedWeight);
+		mpoWeight.setLimitEntanglement(threshold);
+		buildCircuit(mpoWeight);
+
+		const auto bondDims = mpoWeight.getBondDimensions();
+		if (bondDims[bondIndex] != expectedDiscardedWeight)
+		{
+			std::cout << "DiscardedWeight kept " << bondDims[bondIndex] << " singular values, expected " << expectedDiscardedWeight << std::endl;
+			return false;
+		}
+	}
+
+	// No explicit mode set: must match DiscardedWeight (the default), not RelativeToMax - this is
+	// the regression test guarding the default-flip decision.
+	{
+		QC::TensorNetworks::MPOSimulatorImpl mpoDefault(4);
+		mpoDefault.setLimitEntanglement(threshold);
+		buildCircuit(mpoDefault);
+
+		const auto bondDims = mpoDefault.getBondDimensions();
+		if (bondDims[bondIndex] != expectedDiscardedWeight)
+		{
+			std::cout << "Default truncation mode did not match DiscardedWeight (kept " << bondDims[bondIndex]
+				<< ", expected " << expectedDiscardedWeight << ")" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+
+	return true;
+}
+
 // rho -> A rho A^dagger / Tr(A rho A^dagger) for a non-unitary local operator A (amplitude damping K0)
 static bool ApplyOperatorAndNormalizeTestMPO()
 {
@@ -2631,6 +2793,7 @@ bool MPOSimulatorTests()
 		ApplyOperatorAndNormalizeTestMPO() &&
 		CompressionLosslessTestMPO() &&
 		CompressionTruncationTestMPO() &&
+		TruncationModeTestMPO() &&
 		StateSaveRestoreTestMPO() &&
 		MeasurementsTestMPO() &&
 		TrimTestMPO() &&

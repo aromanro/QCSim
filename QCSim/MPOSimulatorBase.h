@@ -311,6 +311,24 @@ namespace QC {
 				limitEntanglement = false;
 			}
 
+			bool setTruncationMode(TruncationMode mode) override
+			{
+				switch (mode)
+				{
+				case TruncationMode::RelativeToMax:
+				case TruncationMode::DiscardedWeight:
+					truncationMode = mode;
+					return true;
+				default:
+					throw std::invalid_argument("Unrecognized truncation mode");
+				}
+			}
+
+			TruncationMode getTruncationMode() const override
+			{
+				return truncationMode;
+			}
+
 			std::complex<double> Trace() const override
 			{
 				return ContractChain([this](IndexType q) { return SiteTraceMatrix(q); });
@@ -902,6 +920,14 @@ namespace QC {
 			bool limitEntanglement = false;
 			IndexType chi = 10; // if limitSize is true
 			double singularValueThreshold = 0.; // if limitEntanglement is true
+
+			// Default is DiscardedWeight, not RelativeToMax - see MPSSimulatorBase's identical
+			// field for the full rationale. Applies equally to the MPO simulator: the selection
+			// criterion normalizes against this bond's own pre-truncation Schmidt weight
+			// regardless of the fact that MPO does not renormalize the *kept* lambdas afterward
+			// (that is a separate, unrelated choice made to keep Tr(rho) stable - see the class
+			// comment above and DecomposeAndSetGammas in MPOSimulatorImpl.h).
+			TruncationMode truncationMode = TruncationMode::DiscardedWeight;
 
 			std::vector<LambdaType> lambdas;
 			std::vector<TensorType> gammas;

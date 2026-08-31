@@ -123,6 +123,16 @@ namespace QC
 				impl.dontLimitEntanglement();
 			}
 
+			bool setTruncationMode(TruncationMode mode) override
+			{
+				return impl.setTruncationMode(mode);
+			}
+
+			TruncationMode getTruncationMode() const override
+			{
+				return impl.getTruncationMode();
+			}
+
 			void Trim() override
 			{
 				impl.Trim();
