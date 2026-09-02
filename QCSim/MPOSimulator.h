@@ -6,6 +6,7 @@
 #include <functional>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <vector>
 #include <utility>
 #include <unordered_set>
@@ -153,6 +154,36 @@ namespace QC
 				return impl.getTruncationMode();
 			}
 
+			bool setKrausCompletenessCheck(KrausCompletenessCheck mode) override
+			{
+				return impl.setKrausCompletenessCheck(mode);
+			}
+
+			KrausCompletenessCheck getKrausCompletenessCheck() const override
+			{
+				return impl.getKrausCompletenessCheck();
+			}
+
+			void setRestoreTraceAfterTruncation(bool enable) override
+			{
+				impl.setRestoreTraceAfterTruncation(enable);
+			}
+
+			bool getRestoreTraceAfterTruncation() const override
+			{
+				return impl.getRestoreTraceAfterTruncation();
+			}
+
+			void setHermitizeAfterTruncation(bool enable) override
+			{
+				impl.setHermitizeAfterTruncation(enable);
+			}
+
+			bool getHermitizeAfterTruncation() const override
+			{
+				return impl.getHermitizeAfterTruncation();
+			}
+
 			void Trim() override
 			{
 				impl.Trim();
@@ -163,33 +194,24 @@ namespace QC
 				impl.ReCanonicalize();
 			}
 
+			void RestoreTrace() override
+			{
+				impl.RestoreTrace();
+			}
+
+			void Hermitize() override
+			{
+				impl.Hermitize();
+			}
+
 			MatrixClass getDensityMatrix() const override
 			{
-				const MatrixClass rhoInternal = impl.getDensityMatrix();
-				const IndexType n = rhoInternal.rows();
+				return RemapPhysicalDensityMatrix(impl.getDensityMatrix());
+			}
 
-				// the logical qubits are actually in some other physical positions,
-				// the correspondence is in qubitsMap; translate the basis state indices
-				std::vector<IndexType> mapState(n);
-				for (IndexType s = 0; s < n; ++s)
-				{
-					size_t tmp = static_cast<size_t>(s);
-					size_t mapped = 0;
-					for (IndexType i = 0; i < static_cast<IndexType>(getNrQubits()); ++i)
-					{
-						if (tmp & 1ULL)
-							mapped |= (1ULL << qubitsMap[i]);
-						tmp >>= 1;
-					}
-					mapState[s] = static_cast<IndexType>(mapped);
-				}
-
-				MatrixClass rho(n, n);
-				for (IndexType r = 0; r < n; ++r)
-					for (IndexType c = 0; c < n; ++c)
-						rho(r, c) = rhoInternal(mapState[r], mapState[c]);
-
-				return rho;
+			MatrixClass getUnnormalizedDensityMatrix() const override
+			{
+				return RemapPhysicalDensityMatrix(impl.getUnnormalizedDensityMatrix());
 			}
 
 			void print() const override
@@ -205,15 +227,12 @@ namespace QC
 			// remap the logical Pauli string into the physical (impl) qubit ordering, then delegate
 			std::complex<double> ExpectationValue(const std::string& pauliString) const override
 			{
-				const size_t nrQubits = getNrQubits();
-				if (pauliString.size() != nrQubits)
-					throw std::invalid_argument("Pauli string length must match the number of qubits");
+				return impl.ExpectationValue(MapPauliString(pauliString));
+			}
 
-				std::string mapped(nrQubits, 'I');
-				for (size_t i = 0; i < nrQubits; ++i)
-					mapped[static_cast<size_t>(qubitsMap[i])] = pauliString[i];
-
-				return impl.ExpectationValue(mapped);
+			std::complex<double> UnnormalizedExpectationValue(const std::string& pauliString) const override
+			{
+				return impl.UnnormalizedExpectationValue(MapPauliString(pauliString));
 			}
 
 			void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) override
@@ -478,6 +497,26 @@ namespace QC
 				return impl.Trace();
 			}
 
+			std::complex<double> TraceOfSquare() const override
+			{
+				return impl.TraceOfSquare();
+			}
+
+			double Purity() const override
+			{
+				return impl.Purity();
+			}
+
+			double HermiticityResidual() const override
+			{
+				return impl.HermiticityResidual();
+			}
+
+			bool IsHermitian(double eps = 1E-10) const override
+			{
+				return impl.IsHermitian(eps);
+			}
+
 			std::shared_ptr<MPOSimulatorStateInterface> getState() const override
 			{
 				auto baseState = std::dynamic_pointer_cast<MPOSimulatorBaseState>(impl.getState());
@@ -579,6 +618,9 @@ namespace QC
 				sim->impl.chi = impl.chi;
 				sim->impl.singularValueThreshold = impl.singularValueThreshold;
 				sim->impl.truncationMode = impl.truncationMode;
+				sim->impl.krausCompletenessCheck = impl.krausCompletenessCheck;
+				sim->impl.restoreTraceAfterTruncation = impl.restoreTraceAfterTruncation;
+				sim->impl.hermitizeAfterTruncation = impl.hermitizeAfterTruncation;
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
 
@@ -843,6 +885,45 @@ namespace QC
 
 				for (IndexType i = 0; i < static_cast<IndexType>(getNrQubits()); ++i)
 					qubitsMapInv[i] = qubitsMap[i] = i;
+			}
+
+			std::string MapPauliString(const std::string& pauliString) const
+			{
+				const size_t nrQubits = getNrQubits();
+				if (pauliString.size() != nrQubits)
+					throw std::invalid_argument("Pauli string length must match the number of qubits");
+
+				std::string mapped(nrQubits, 'I');
+				for (size_t i = 0; i < nrQubits; ++i)
+					mapped[static_cast<size_t>(qubitsMap[i])] = pauliString[i];
+
+				return mapped;
+			}
+
+			MatrixClass RemapPhysicalDensityMatrix(const MatrixClass& rhoInternal) const
+			{
+				const IndexType n = rhoInternal.rows();
+
+				std::vector<IndexType> mapState(n);
+				for (IndexType s = 0; s < n; ++s)
+				{
+					size_t tmp = static_cast<size_t>(s);
+					size_t mapped = 0;
+					for (IndexType i = 0; i < static_cast<IndexType>(getNrQubits()); ++i)
+					{
+						if (tmp & 1ULL)
+							mapped |= (1ULL << qubitsMap[i]);
+						tmp >>= 1;
+					}
+					mapState[s] = static_cast<IndexType>(mapped);
+				}
+
+				MatrixClass rho(n, n);
+				for (IndexType r = 0; r < n; ++r)
+					for (IndexType c = 0; c < n; ++c)
+						rho(r, c) = rhoInternal(mapState[r], mapState[c]);
+
+				return rho;
 			}
 
 			void BringQubitsTogether(IndexType logical1, IndexType logical2)

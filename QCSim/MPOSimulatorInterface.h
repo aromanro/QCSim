@@ -79,6 +79,17 @@ namespace QC {
 				DiscardedWeight
 			};
 
+			// Whether ApplyKrausOperators checks Σ_i K_i^dagger K_i = I.
+			// Ignore (default) allows leaky / non-TP maps. Warn prints to stderr and still
+			// applies the map. Strict throws std::invalid_argument if the residual exceeds
+			// the completeness tolerance.
+			enum class KrausCompletenessCheck
+			{
+				Ignore,
+				Warn,
+				Strict
+			};
+
 			MPOSimulatorInterface() = default;
 			virtual ~MPOSimulatorInterface() = default;
 
@@ -107,10 +118,37 @@ namespace QC {
 			virtual bool setTruncationMode(TruncationMode mode) = 0;
 			virtual TruncationMode getTruncationMode() const = 0;
 			virtual void Trim() = 0;
+			// Restores the Vidal gauge by two-site SVDs. Does not apply setLimitBondDimension or
+			// setLimitEntanglement; those remain the job of two-qubit gates and Trim. Numerically
+			// null SVD sectors are still dropped (the rank floor used by every two-site split).
 			virtual void ReCanonicalize() = 0;
 
+			virtual bool setKrausCompletenessCheck(KrausCompletenessCheck mode) = 0;
+			virtual KrausCompletenessCheck getKrausCompletenessCheck() const = 0;
+
+			// Optional patches after a user-requested truncating SVD (two-qubit updates and Trim).
+			// Both default to off so compression stays a raw operator-space approximation unless
+			// the caller opts in. RestoreTraceAfterTruncation rescales Γ[0] by 1/Tr(ρ) when
+			// Re(Tr ρ) is safely positive; it restores trace, not positivity. HermitizeAfterTruncation
+			// replaces ρ with (ρ + ρ†)/2. A later truncated SVD can make the operator non-Hermitian
+			// again. Neither patch runs during ReCanonicalize (gauge only).
+			virtual void setRestoreTraceAfterTruncation(bool enable) = 0;
+			virtual bool getRestoreTraceAfterTruncation() const = 0;
+			virtual void setHermitizeAfterTruncation(bool enable) = 0;
+			virtual bool getHermitizeAfterTruncation() const = 0;
+
+			// Manual versions of the same patches. RestoreTrace throws if Re(Tr ρ) is not safely
+			// positive. Hermitize always builds (ρ + ρ†)/2 from the tensors (conjugate + ket↔bra),
+			// recanonicalizes, and compresses if a bond or entanglement limit is set.
+			virtual void RestoreTrace() = 0;
+			virtual void Hermitize() = 0;
+
 			// the analogue of MPS getRegisterStorage(): the full 2^N x 2^N density matrix
+			// of the trace-normalized state rho / Tr(rho). Throws if Re(Tr(rho)) is not safely
+			// positive. For the raw MPO operator, including after a non-TP map or truncation
+			// that drifted the trace, use getUnnormalizedDensityMatrix().
 			virtual MatrixClass getDensityMatrix() const = 0;
+			virtual MatrixClass getUnnormalizedDensityMatrix() const = 0;
 			virtual void print() const = 0;
 
 			virtual void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) = 0;
@@ -127,7 +165,8 @@ namespace QC {
 			virtual void ApplyOperatorAndNormalize(const GateClass& op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
 
 			// Applies a multi-Kraus channel: rho -> sum_i K_i rho K_i^dagger.
-			// The Kraus completeness relation is not checked; non trace-preserving maps are allowed.
+			// Completeness Σ_i K_i^dagger K_i = I is controlled by setKrausCompletenessCheck;
+			// the default (Ignore) allows non trace-preserving maps.
 			virtual void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) = 0;
 			virtual void ApplyKrausOperators(const std::vector<MatrixClass>& ops, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
 
@@ -221,12 +260,26 @@ namespace QC {
 
 			// trace of the density matrix, should be 1 for a properly normalized state
 			virtual std::complex<double> Trace() const = 0;
+			// Tr(ρ²) by contracting two MPO copies. Does not build the 2^N matrix. The result can
+			// have a small imaginary part if truncation left a non-Hermitian leftover.
+			virtual std::complex<double> TraceOfSquare() const = 0;
+			// Tr(ρ²) / [Tr(ρ)]² when Re(Tr ρ) is safely positive. Throws otherwise, matching
+			// getDensityMatrix(). For a physical state this is the usual purity in [2^{-N}, 1].
+			virtual double Purity() const = 0;
+			// Frobenius ||ρ − ρ†|| of the raw operator. Reconstructs the 2^N matrix, so N must be
+			// small (the same limit as getUnnormalizedDensityMatrix()).
+			virtual double HermiticityResidual() const = 0;
+			virtual bool IsHermitian(double eps = 1E-10) const = 0;
 
-			// <P> = Tr(rho P) / Tr(rho) for a Pauli string P = (x) P_i, where character i of the
-			// string is the single qubit Pauli ('I', 'X', 'Y' or 'Z') acting on qubit i (qubit 0
-			// is the rightmost / least significant bit, character 0 in the string).
+			// Born expectation <P> = Tr(rho P) / Tr(rho) for a Pauli string P = (x) P_i, where
+			// character i of the string is the single qubit Pauli ('I', 'X', 'Y' or 'Z') acting
+			// on qubit i (qubit 0 is the rightmost / least significant bit, character 0 in the
+			// string). This matches getDensityMatrix() / getBasisStateProbability() in dividing
+			// by the current trace. UnnormalizedExpectationValue returns the raw Tr(rho P),
+			// matching DensityMatrix::ExpectationValue when Tr(rho) is not 1.
 			// It contracts the MPO chain site by site, so it avoids building the full density matrix.
 			virtual std::complex<double> ExpectationValue(const std::string& pauliString) const = 0;
+			virtual std::complex<double> UnnormalizedExpectationValue(const std::string& pauliString) const = 0;
 
 			virtual std::shared_ptr<MPOSimulatorStateInterface> getState() const = 0;
 			virtual void setState(const std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;

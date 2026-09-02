@@ -70,6 +70,9 @@ namespace QC {
 			virtual bool setTruncationMode(TruncationMode mode) = 0;
 			virtual TruncationMode getTruncationMode() const = 0;
 			virtual void Trim() = 0;
+			// Restores the Vidal gauge by two-site SVDs. Does not apply setLimitBondDimension or
+			// setLimitEntanglement; those remain the job of two-qubit gates and Trim. Numerically
+			// null SVD sectors are still dropped (the rank floor used by every two-site split).
 			virtual void ReCanonicalize() = 0;
 			virtual VectorClass getRegisterStorage() const = 0;
 			virtual void print() const = 0;

@@ -329,26 +329,148 @@ namespace QC {
 				return truncationMode;
 			}
 
+			bool setKrausCompletenessCheck(KrausCompletenessCheck mode) override
+			{
+				switch (mode)
+				{
+				case KrausCompletenessCheck::Ignore:
+				case KrausCompletenessCheck::Warn:
+				case KrausCompletenessCheck::Strict:
+					krausCompletenessCheck = mode;
+					return true;
+				default:
+					throw std::invalid_argument("Unrecognized Kraus completeness check mode");
+				}
+			}
+
+			KrausCompletenessCheck getKrausCompletenessCheck() const override
+			{
+				return krausCompletenessCheck;
+			}
+
+			void setRestoreTraceAfterTruncation(bool enable) override
+			{
+				restoreTraceAfterTruncation = enable;
+			}
+
+			bool getRestoreTraceAfterTruncation() const override
+			{
+				return restoreTraceAfterTruncation;
+			}
+
+			void setHermitizeAfterTruncation(bool enable) override
+			{
+				hermitizeAfterTruncation = enable;
+			}
+
+			bool getHermitizeAfterTruncation() const override
+			{
+				return hermitizeAfterTruncation;
+			}
+
+			void RestoreTrace() override
+			{
+				const std::complex<double> tr = Trace();
+				if (!HasSafelyPositiveTrace(tr))
+					throw std::runtime_error("Cannot restore trace of an MPO operator whose trace is not safely positive");
+
+				ScaleSite(0, 1. / tr);
+			}
+
 			std::complex<double> Trace() const override
 			{
 				return ContractChain([this](IndexType q) { return SiteTraceMatrix(q); });
 			}
 
-			std::complex<double> ExpectationValue(const std::string& pauliString) const override
+			std::complex<double> TraceOfSquare() const override
+			{
+				const size_t n = gammas.size();
+				if (n == 0) return 0.;
+
+				MatrixClass env = MatrixClass::Ones(1, 1);
+
+				for (size_t q = 0; q < n; ++q)
+				{
+					const auto& g = gammas[q];
+					const IndexType L = g.dimension(0);
+					const IndexType R = g.dimension(3);
+					MatrixClass next = MatrixClass::Zero(R, R);
+
+					for (IndexType ket = 0; ket < 2; ++ket)
+						for (IndexType bra = 0; bra < 2; ++bra)
+						{
+							MatrixClass Gkb(L, R);
+							MatrixClass Gbk(L, R);
+							for (IndexType r = 0; r < R; ++r)
+								for (IndexType l = 0; l < L; ++l)
+								{
+									Gkb(l, r) = g(l, ket, bra, r);
+									Gbk(l, r) = g(l, bra, ket, r);
+								}
+
+							next.noalias() += Gkb.transpose() * env * Gbk;
+						}
+
+					if (q + 1 < n)
+					{
+						const auto& lam = lambdas[q];
+						for (IndexType r2 = 0; r2 < R; ++r2)
+						{
+							const double lam2 = r2 < lam.size() ? lam[r2] : 0.;
+							for (IndexType r1 = 0; r1 < R; ++r1)
+							{
+								const double lam1 = r1 < lam.size() ? lam[r1] : 0.;
+								next(r1, r2) *= lam1 * lam2;
+							}
+						}
+					}
+
+					env = std::move(next);
+				}
+
+				return env(0, 0);
+			}
+
+			double Purity() const override
+			{
+				const std::complex<double> tr = Trace();
+				if (!HasSafelyPositiveTrace(tr))
+					throw std::runtime_error("Cannot compute purity of an MPO operator whose trace is not safely positive");
+
+				return (TraceOfSquare() / (tr * tr)).real();
+			}
+
+			double HermiticityResidual() const override
+			{
+				const MatrixClass rho = ReconstructOperatorMatrix();
+				if (rho.size() == 0) return 0.;
+
+				return (rho - rho.adjoint()).norm();
+			}
+
+			bool IsHermitian(double eps = 1E-10) const override
+			{
+				return HermiticityResidual() < eps;
+			}
+
+			std::complex<double> UnnormalizedExpectationValue(const std::string& pauliString) const override
 			{
 				const size_t nrQubits = getNrQubits();
 				if (pauliString.size() != nrQubits)
 					throw std::invalid_argument("Pauli string length must match the number of qubits");
 
-				// per site single qubit Pauli matrices (index by qubit); identity where the character is 'I'
 				std::vector<MatrixClass> siteOps(nrQubits);
 				for (size_t i = 0; i < nrQubits; ++i)
 					siteOps[i] = PauliMatrixFromChar(pauliString[i]);
 
-				const std::complex<double> num = ContractChain([this, &siteOps](IndexType q) {
+				return ContractChain([this, &siteOps](IndexType q) {
 					return SitePauliMatrix(q, siteOps[static_cast<size_t>(q)]);
 				});
+			}
 
+			std::complex<double> ExpectationValue(const std::string& pauliString) const override
+			{
+				const std::complex<double> num = UnnormalizedExpectationValue(pauliString);
 				const std::complex<double> tr = Trace();
 				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
 					return 0.;
@@ -473,28 +595,26 @@ namespace QC {
 			// this is costly (it builds the full 2^N x 2^N matrix) and it's meant only
 			// for comparing the results against other simulators, not for simulation.
 			//
-			// The result is divided by the trace, matching what every probability and
-			// expectation-value accessor here does. Without it a truncated MPO - whose
-			// trace drifts away from one - would hand back an operator inconsistent with
-			// the numbers the same object reports through getBasisStateProbability() and
-			// ExpectationValue(). Normalizing cannot restore positivity, only the scale.
+			// getDensityMatrix returns rho / Tr(rho), matching getBasisStateProbability() and
+			// ExpectationValue(). That scale matches a state; it cannot restore positivity.
+			// It throws if Re(Tr(rho)) is not safely positive — dividing by a vanished or
+			// negative trace would produce a sign-flipped or non-finite "state".
+			// getUnnormalizedDensityMatrix returns the raw MPO operator.
+			MatrixClass getUnnormalizedDensityMatrix() const override
+			{
+				return ReconstructOperatorMatrix();
+			}
+
 			MatrixClass getDensityMatrix() const override
 			{
-				const size_t sz = gammas.size();
-				if (sz == 0) return {};
-				if (sz > 13) throw std::runtime_error("Too many qubits to build the full density matrix");
-
-				const size_t NrBasisStates = 1ULL << sz;
-				MatrixClass rho(NrBasisStates, NrBasisStates);
-
-				for (size_t r = 0; r < NrBasisStates; ++r)
-					for (size_t c = 0; c < NrBasisStates; ++c)
-						rho(r, c) = getBasisStateMatrixElement(r, c);
+				MatrixClass rho = ReconstructOperatorMatrix();
+				if (rho.size() == 0) return rho;
 
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) >= std::numeric_limits<double>::epsilon())
-					rho /= tr;
+				if (!HasSafelyPositiveTrace(tr))
+					throw std::runtime_error("Cannot normalize an MPO operator whose trace is not safely positive");
 
+				rho /= tr;
 				return rho;
 			}
 
@@ -601,6 +721,28 @@ namespace QC {
 				if (probability > 1. && probability < 1. + tolerance) return 1.;
 
 				return probability;
+			}
+
+			static bool HasSafelyPositiveTrace(const std::complex<double>& trace)
+			{
+				return std::isfinite(trace.real()) && std::isfinite(trace.imag()) &&
+					trace.real() > std::numeric_limits<double>::epsilon();
+			}
+
+			MatrixClass ReconstructOperatorMatrix() const
+			{
+				const size_t sz = gammas.size();
+				if (sz == 0) return {};
+				if (sz > 13) throw std::runtime_error("Too many qubits to build the full density matrix");
+
+				const size_t NrBasisStates = 1ULL << sz;
+				MatrixClass rho(NrBasisStates, NrBasisStates);
+
+				for (size_t r = 0; r < NrBasisStates; ++r)
+					for (size_t c = 0; c < NrBasisStates; ++c)
+						rho(r, c) = getBasisStateMatrixElement(r, c);
+
+				return rho;
 			}
 
 			static double ValidMeasurementProbability(double probability)
@@ -803,6 +945,26 @@ namespace QC {
 				ScaleSite(0, 1. / tr);
 			}
 
+			void RestoreTraceIfSafe()
+			{
+				const std::complex<double> tr = Trace();
+				if (!HasSafelyPositiveTrace(tr)) return;
+
+				ScaleSite(0, 1. / tr);
+			}
+
+			static TensorType AdjointSite(const TensorType& gamma)
+			{
+				TensorType adjoint(gamma.dimension(0), 2, 2, gamma.dimension(3));
+				for (IndexType r = 0; r < gamma.dimension(3); ++r)
+					for (IndexType bra = 0; bra < 2; ++bra)
+						for (IndexType ket = 0; ket < 2; ++ket)
+							for (IndexType l = 0; l < gamma.dimension(0); ++l)
+								adjoint(l, ket, bra, r) = std::conj(gamma(l, bra, ket, r));
+
+				return adjoint;
+			}
+
 			void ScaleSite(IndexType q, std::complex<double> factor)
 			{
 				auto& g = gammas[q];
@@ -928,6 +1090,9 @@ namespace QC {
 			// (that is a separate, unrelated choice made to keep Tr(rho) stable - see the class
 			// comment above and DecomposeAndSetGammas in MPOSimulatorImpl.h).
 			TruncationMode truncationMode = TruncationMode::DiscardedWeight;
+			KrausCompletenessCheck krausCompletenessCheck = KrausCompletenessCheck::Ignore;
+			bool restoreTraceAfterTruncation = false;
+			bool hermitizeAfterTruncation = false;
 
 			std::vector<LambdaType> lambdas;
 			std::vector<TensorType> gammas;

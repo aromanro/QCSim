@@ -1106,7 +1106,8 @@ static bool CompressionLosslessTestMPO()
 // operator-space MPO truncation does not preserve trace/Hermiticity/positivity (see the simulator's
 // own documentation), so exact values are NOT asserted here (those are covered by the lossless test).
 // Instead this locks the guaranteed invariants: the bond dimension never exceeds the limit and the
-// reconstructed density matrix stays finite (no division-by-(near)-zero blow up).
+// raw reconstructed operator stays finite. getDensityMatrix() may throw if truncation drove the
+// trace through zero; that is the safe alternative to dividing by a vanished trace.
 static bool CompressionTruncationTestMPO()
 {
 	std::cout << "\nMPO simulator bond dimension cap test" << std::endl;
@@ -1135,7 +1136,7 @@ static bool CompressionTruncationTestMPO()
 					return false;
 				}
 
-			const Eigen::MatrixXcd rho = mpo.getDensityMatrix();
+			const Eigen::MatrixXcd rho = mpo.getUnnormalizedDensityMatrix();
 			for (Eigen::Index r = 0; r < rho.rows(); ++r)
 				for (Eigen::Index c = 0; c < rho.cols(); ++c)
 					if (!std::isfinite(rho(r, c).real()) || !std::isfinite(rho(r, c).imag()))
@@ -1336,6 +1337,36 @@ static bool CloneTestMPO()
 	if (cloned->getTruncationMode() != TruncationMode::RelativeToMax)
 	{
 		std::cout << "Clone did not preserve the RelativeToMax truncation mode (got DiscardedWeight instead)" << std::endl;
+		return false;
+	}
+
+	using KrausCompletenessCheck = QC::TensorNetworks::MPOSimulatorInterface::KrausCompletenessCheck;
+	if (!mpo.setKrausCompletenessCheck(KrausCompletenessCheck::Strict) ||
+		cloned->getKrausCompletenessCheck() != KrausCompletenessCheck::Ignore)
+	{
+		std::cout << "Clone captured Kraus completeness mode before it was set on the original" << std::endl;
+		return false;
+	}
+
+	const auto clonedStrict = mpo.Clone();
+	if (clonedStrict->getKrausCompletenessCheck() != KrausCompletenessCheck::Strict)
+	{
+		std::cout << "Clone did not preserve the Strict Kraus completeness check" << std::endl;
+		return false;
+	}
+
+	if (clonedStrict->getRestoreTraceAfterTruncation() || clonedStrict->getHermitizeAfterTruncation())
+	{
+		std::cout << "Clone turned on optional post-truncation patches by default" << std::endl;
+		return false;
+	}
+
+	mpo.setRestoreTraceAfterTruncation(true);
+	mpo.setHermitizeAfterTruncation(true);
+	const auto clonedPatches = mpo.Clone();
+	if (!clonedPatches->getRestoreTraceAfterTruncation() || !clonedPatches->getHermitizeAfterTruncation())
+	{
+		std::cout << "Clone did not preserve optional post-truncation patches" << std::endl;
 		return false;
 	}
 
@@ -1656,7 +1687,10 @@ static bool TrimTestMPO()
 				}
 
 			// Trim must produce the same density matrix as the equivalent no-op two qubit gate truncations
-			if (!CompareDensityMatrices(mpoRef.getDensityMatrix(), mpoTrim.getDensityMatrix(), nrQubits))
+			// Trim must produce the same operator as the equivalent no-op two qubit gate truncations.
+			// Compare the raw MPO, not getDensityMatrix(): aggressive chi cuts can drive Re(Tr rho)
+			// through zero, and the normalized accessor now refuses to divide by that trace.
+			if (!CompareDensityMatrices(mpoRef.getUnnormalizedDensityMatrix(), mpoTrim.getUnnormalizedDensityMatrix(), nrQubits))
 			{
 				std::cout << "Trim density matrix differs from the reference truncation for " << nrQubits << " qubits" << std::endl;
 				return false;
@@ -2113,6 +2147,18 @@ static bool InvariantsTestMPO()
 			if (purity < minPurity - 1E-3 || purity > 1. + 1E-3)
 			{
 				std::cout << "MPO purity " << purity << " out of bounds for " << nrQubits << " qubits" << std::endl;
+				return false;
+			}
+
+			const Eigen::MatrixXcd raw = mpo.getUnnormalizedDensityMatrix();
+			if (!approxEqual(mpo.TraceOfSquare(), (raw * raw).trace(), 1E-8))
+			{
+				std::cout << "MPO TraceOfSquare does not match Tr(rho^2) from the reconstructed operator" << std::endl;
+				return false;
+			}
+			if (!approxEqual(mpo.Purity(), purity, 1E-6) || mpo.HermiticityResidual() > 1E-3 || !mpo.IsHermitian(1E-3))
+			{
+				std::cout << "MPO diagnostic purity/Hermiticity disagree with the reconstructed state" << std::endl;
 				return false;
 			}
 
@@ -2741,7 +2787,7 @@ static bool KrausBondLimitAndLocalityTestMPO()
 			}
 	}
 
-	const Eigen::MatrixXcd rho = mpo.getDensityMatrix();
+	const Eigen::MatrixXcd rho = mpo.getUnnormalizedDensityMatrix();
 	if (!rho.allFinite() || !std::isfinite(mpo.Trace().real()) || !std::isfinite(mpo.Trace().imag()))
 	{
 		std::cout << "Kraus evolution with a bond cap produced a non-finite MPO" << std::endl;
@@ -2799,6 +2845,414 @@ static bool CollapseNormalizationAndAtomicFailureTestMPO()
 	return true;
 }
 
+static bool ReCanonicalizeDoesNotTruncateTestMPO()
+{
+	std::cout << "\nMPO simulator ReCanonicalize does not apply compression limits" << std::endl;
+
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+
+	QC::TensorNetworks::MPOSimulator mpo(4);
+	mpo.ApplyGate(h, 0);
+	mpo.ApplyGate(cnot, 1, 0);
+	mpo.ApplyGate(cnot, 2, 1);
+	mpo.ApplyGate(cnot, 3, 2);
+
+	const auto bondsBefore = mpo.getBondDimensions();
+	const Eigen::MatrixXcd rhoBefore = mpo.getDensityMatrix();
+	bool hasLargeBond = false;
+	for (const auto dim : bondsBefore)
+		if (dim > 1) hasLargeBond = true;
+	if (!hasLargeBond)
+	{
+		std::cout << "MPO ReCanonicalize test setup did not produce a bond dimension above 1" << std::endl;
+		return false;
+	}
+
+	mpo.setLimitBondDimension(1);
+	mpo.setLimitEntanglement(0.5);
+	mpo.ReCanonicalize();
+
+	if (mpo.getBondDimensions() != bondsBefore)
+	{
+		std::cout << "ReCanonicalize truncated MPO bond dimensions after compression limits were set" << std::endl;
+		return false;
+	}
+
+	if (!CompareDensityMatrices(rhoBefore, mpo.getDensityMatrix(), 4, 1E-10))
+		return false;
+
+	mpo.Trim();
+	for (const auto dim : mpo.getBondDimensions())
+	{
+		if (dim > 1)
+		{
+			std::cout << "Trim did not apply the bond-dimension limit after ReCanonicalize" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+static bool KrausCompletenessCheckTestMPO()
+{
+	using KrausCompletenessCheck = QC::TensorNetworks::MPOSimulatorInterface::KrausCompletenessCheck;
+
+	std::cout << "\nMPO simulator Kraus completeness check" << std::endl;
+
+	QC::TensorNetworks::MPOSimulator mpo(1);
+	if (mpo.getKrausCompletenessCheck() != KrausCompletenessCheck::Ignore)
+	{
+		std::cout << "Default Kraus completeness check is not Ignore" << std::endl;
+		return false;
+	}
+
+	const Eigen::MatrixXcd leaky = std::sqrt(0.5) * Eigen::MatrixXcd::Identity(2, 2);
+	mpo.ApplyKrausOperators({ leaky }, 0);
+	if (!approxEqual(mpo.Trace(), std::complex<double>(0.5, 0.), 1E-12))
+	{
+		std::cout << "Ignore mode did not apply a leaky Kraus map" << std::endl;
+		return false;
+	}
+
+	if (!mpo.setKrausCompletenessCheck(KrausCompletenessCheck::Warn))
+	{
+		std::cout << "Failed to set Warn Kraus completeness check" << std::endl;
+		return false;
+	}
+	mpo.Clear();
+	mpo.ApplyKrausOperators({ leaky }, 0);
+	if (!approxEqual(mpo.Trace(), std::complex<double>(0.5, 0.), 1E-12))
+	{
+		std::cout << "Warn mode did not apply a leaky Kraus map" << std::endl;
+		return false;
+	}
+
+	if (!mpo.setKrausCompletenessCheck(KrausCompletenessCheck::Strict))
+	{
+		std::cout << "Failed to set Strict Kraus completeness check" << std::endl;
+		return false;
+	}
+	if (!MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({ leaky }, 0); }, "Incomplete Kraus operators in Strict mode"))
+		return false;
+	if (!approxEqual(mpo.Trace(), std::complex<double>(0.5, 0.), 1E-12))
+	{
+		std::cout << "A rejected Strict Kraus check changed the MPO" << std::endl;
+		return false;
+	}
+
+	mpo.Clear();
+	mpo.ApplyBitFlipNoise(0, 0.3);
+	if (!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12))
+	{
+		std::cout << "A complete noise channel was rejected in Strict mode" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+static bool UnnormalizedOperatorTestMPO()
+{
+	std::cout << "\nMPO simulator raw operator vs normalized state" << std::endl;
+
+	constexpr double scale = 0.37;
+	QC::TensorNetworks::MPOSimulator mpo(2);
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(h, 0);
+	mpo.ApplyGate(cnot, 1, 0);
+	mpo.ApplyOperator(QC::Gates::SingleQubitGate<>(std::sqrt(scale) * Eigen::MatrixXcd::Identity(2, 2)), 0);
+
+	const std::complex<double> trace = mpo.Trace();
+	if (!approxEqual(trace, std::complex<double>(scale, 0.), 1E-12))
+	{
+		std::cout << "Non-unitary setup did not produce the expected MPO trace" << std::endl;
+		return false;
+	}
+
+	const Eigen::MatrixXcd raw = mpo.getUnnormalizedDensityMatrix();
+	if (!approxEqual(raw.trace(), trace, 1E-12))
+	{
+		std::cout << "Unnormalized density matrix trace does not match Trace()" << std::endl;
+		return false;
+	}
+
+	const Eigen::MatrixXcd normalized = mpo.getDensityMatrix();
+	if (!approxEqual(normalized.trace(), std::complex<double>(1., 0.), 1E-12))
+	{
+		std::cout << "Normalized density matrix trace is not 1" << std::endl;
+		return false;
+	}
+
+	const std::complex<double> rawII = mpo.UnnormalizedExpectationValue(std::string("II"));
+	const std::complex<double> bornII = mpo.ExpectationValue(std::string("II"));
+	if (!approxEqual(rawII, trace, 1E-12) || !approxEqual(bornII, std::complex<double>(1., 0.), 1E-12))
+	{
+		std::cout << "Unnormalized vs Born Pauli expectations are inconsistent with the trace" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulatorImpl negative(1);
+	auto state = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(negative.getState());
+	if (!state)
+	{
+		std::cout << "Could not retrieve an MPO base state for the negative-trace case" << std::endl;
+		return false;
+	}
+	auto& gamma = state->gammas[0];
+	for (Eigen::Index i = 0; i < gamma.size(); ++i)
+		gamma.data()[i] *= -1.;
+	negative.setState(state);
+
+	if (!approxEqual(negative.Trace(), std::complex<double>(-1., 0.), 1E-12))
+	{
+		std::cout << "Negated MPO site did not produce trace -1" << std::endl;
+		return false;
+	}
+
+	const Eigen::MatrixXcd negativeRaw = negative.getUnnormalizedDensityMatrix();
+	if (!approxEqual(negativeRaw(0, 0), std::complex<double>(-1., 0.), 1E-12))
+	{
+		std::cout << "Unnormalized density matrix did not preserve a negative trace" << std::endl;
+		return false;
+	}
+
+	if (!MPO_ExpectRuntimeError([&] { negative.getDensityMatrix(); }, "Normalizing an MPO with negative trace"))
+		return false;
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+static bool UnsortedLambdaPseudoinverseTestMPO()
+{
+	std::cout << "\nMPO simulator Vidal pseudoinverse uses max(Lambda)" << std::endl;
+
+	QC::TensorNetworks::MPOSimulatorImpl mpo(3);
+	auto state = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(mpo.getState());
+	if (!state)
+	{
+		std::cout << "Could not retrieve an MPO base state for the unsorted-lambda case" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulatorInterface::TensorType g0(1, 2, 2, 2);
+	g0.setZero();
+	g0(0, 0, 0, 0) = 1e-8;
+	g0(0, 0, 0, 1) = 1.;
+
+	QC::TensorNetworks::MPOSimulatorInterface::TensorType g1(2, 2, 2, 1);
+	g1.setZero();
+	g1(0, 0, 0, 0) = 1e-8;
+	g1(1, 0, 0, 0) = 1.;
+
+	QC::TensorNetworks::MPOSimulatorInterface::TensorType g2(1, 2, 2, 1);
+	g2.setZero();
+	g2(0, 0, 0, 0) = 1.;
+
+	state->gammas[0] = std::move(g0);
+	state->gammas[1] = std::move(g1);
+	state->gammas[2] = std::move(g2);
+	state->lambdas[0] = Eigen::VectorXd(2);
+	state->lambdas[0] << 1e-15, 1.;
+	state->lambdas[1] = Eigen::VectorXd::Ones(1);
+	mpo.setState(state);
+
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(cnot, 2, 1);
+
+	const Eigen::MatrixXcd rho = mpo.getDensityMatrix();
+	if (!rho.allFinite() || !approxEqual(rho(0, 0), std::complex<double>(1., 0.), 1E-8))
+	{
+		std::cout << "Unsorted tiny-then-large lambda amplified a null Vidal sector" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+static void MPO_ApplyGHZPrep(QC::TensorNetworks::MPOSimulatorInterface& mpo)
+{
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(h, 0);
+	for (QC::TensorNetworks::MPOSimulatorInterface::IndexType q = 1; q < static_cast<QC::TensorNetworks::MPOSimulatorInterface::IndexType>(mpo.getNrQubits()); ++q)
+		mpo.ApplyGate(cnot, q, q - 1);
+}
+
+static bool TraceRestoreAndHermitizeTestMPO()
+{
+	std::cout << "\nMPO simulator optional trace restore and hermitization" << std::endl;
+
+	{
+		QC::TensorNetworks::MPOSimulator defaults(2);
+		using KrausCompletenessCheck = QC::TensorNetworks::MPOSimulatorInterface::KrausCompletenessCheck;
+		if (defaults.getKrausCompletenessCheck() != KrausCompletenessCheck::Ignore ||
+			defaults.getRestoreTraceAfterTruncation() || defaults.getHermitizeAfterTruncation())
+		{
+			std::cout << "Optional MPO patches are not off by default" << std::endl;
+			return false;
+		}
+	}
+
+	QC::Gates::CNOTGate<> cnot;
+
+	QC::TensorNetworks::MPOSimulator drifted(2);
+	drifted.setToMixtureOfBasisStates({ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
+	drifted.setLimitBondDimension(1);
+	drifted.Trim();
+	if (!std::isfinite(drifted.Trace().real()) || !std::isfinite(drifted.Trace().imag()))
+	{
+		std::cout << "Truncation produced a non-finite trace" << std::endl;
+		return false;
+	}
+	if (approxEqual(drifted.Trace(), std::complex<double>(1., 0.), 1E-10))
+	{
+		std::cout << "Truncation of a four-term mixture at chi=1 did not drift the trace" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulator restored(2);
+	restored.setToMixtureOfBasisStates({ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
+	restored.setRestoreTraceAfterTruncation(true);
+	restored.setLimitBondDimension(1);
+	restored.Trim();
+	if (!approxEqual(restored.Trace(), std::complex<double>(1., 0.), 1E-10))
+	{
+		std::cout << "Trace restore after Trim did not return Tr(rho) to 1: " << restored.Trace() << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulator restoredGate(2);
+	restoredGate.setToMixtureOfBasisStates({ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
+	restoredGate.setRestoreTraceAfterTruncation(true);
+	restoredGate.setLimitBondDimension(1);
+	restoredGate.ApplyGate(cnot, 1, 0);
+	if (!approxEqual(restoredGate.Trace(), std::complex<double>(1., 0.), 1E-10))
+	{
+		std::cout << "Trace restore after a truncating two-qubit gate did not return Tr(rho) to 1: "
+			<< restoredGate.Trace() << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulatorImpl nonHermitian(2);
+	auto state = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(nonHermitian.getState());
+	if (!state)
+	{
+		std::cout << "Could not retrieve an MPO base state for hermitization" << std::endl;
+		return false;
+	}
+	state->gammas[0](0, 0, 1, 0) = 0.4;
+	nonHermitian.setState(state);
+
+	const Eigen::MatrixXcd before = nonHermitian.getUnnormalizedDensityMatrix();
+	const Eigen::MatrixXcd expected = 0.5 * (before + before.adjoint());
+	if (nonHermitian.HermiticityResidual() < 0.1 || nonHermitian.IsHermitian(1E-8))
+	{
+		std::cout << "Hermitization setup did not produce a non-Hermitian operator" << std::endl;
+		return false;
+	}
+
+	nonHermitian.Hermitize();
+	if (!nonHermitian.IsHermitian(1E-10))
+	{
+		std::cout << "Hermitize did not produce a Hermitian operator, residual "
+			<< nonHermitian.HermiticityResidual() << std::endl;
+		return false;
+	}
+	if (!CompareDensityMatrices(expected, nonHermitian.getUnnormalizedDensityMatrix(), 2, 1E-10))
+	{
+		std::cout << "Hermitize did not implement (rho + rho^dagger)/2" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulatorImpl negative(1);
+	auto negativeState = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(negative.getState());
+	if (!negativeState)
+	{
+		std::cout << "Could not retrieve an MPO base state for negative-trace restore" << std::endl;
+		return false;
+	}
+	negativeState->gammas[0].data()[0] = -1.;
+	negative.setState(negativeState);
+	if (!MPO_ExpectRuntimeError([&] { negative.RestoreTrace(); }, "Restoring an MPO with negative trace") ||
+		!MPO_ExpectRuntimeError([&] { negative.Purity(); }, "Purity of an MPO with negative trace"))
+		return false;
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+static bool DiagnosticsTestMPO()
+{
+	std::cout << "\nMPO simulator diagnostics (trace, Tr(rho^2), Hermiticity)" << std::endl;
+
+	QC::TensorNetworks::MPOSimulator pure(1);
+	if (!approxEqual(pure.Trace(), std::complex<double>(1., 0.), 1E-12) ||
+		!approxEqual(pure.TraceOfSquare(), std::complex<double>(1., 0.), 1E-12) ||
+		!approxEqual(pure.Purity(), 1., 1E-12) ||
+		!pure.IsHermitian(1E-12))
+	{
+		std::cout << "Computational-basis projector failed the MPO diagnostics" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulator mixed(1);
+	mixed.setToMixtureOfBasisStates({ {0, 0.5}, {1, 0.5} });
+	if (!approxEqual(mixed.TraceOfSquare(), std::complex<double>(0.5, 0.), 1E-12) ||
+		!approxEqual(mixed.Purity(), 0.5, 1E-12))
+	{
+		std::cout << "Maximally mixed qubit failed Tr(rho^2) / purity diagnostics" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulator bell(2);
+	MPO_ApplyGHZPrep(bell);
+	const Eigen::MatrixXcd rho = bell.getUnnormalizedDensityMatrix();
+	if (!approxEqual(bell.TraceOfSquare(), (rho * rho).trace(), 1E-12) ||
+		!approxEqual(bell.Purity(), 1., 1E-12) ||
+		bell.HermiticityResidual() > 1E-10)
+	{
+		std::cout << "Bell state failed MPO-MPO purity or Hermiticity residual" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulator scaled(2);
+	MPO_ApplyGHZPrep(scaled);
+	const double scale = 0.37;
+	scaled.ApplyOperator(QC::Gates::SingleQubitGate<>(std::sqrt(scale) * Eigen::MatrixXcd::Identity(2, 2)), 0);
+	if (!approxEqual(scaled.TraceOfSquare(), std::complex<double>(scale * scale, 0.), 1E-12))
+	{
+		std::cout << "Scaled pure state Tr(rho^2) is not scale^2" << std::endl;
+		return false;
+	}
+	if (!approxEqual(scaled.Purity(), 1., 1E-12))
+	{
+		std::cout << "Normalized purity of a scaled pure state is not 1" << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPOSimulatorImpl mapped(3);
+	QC::TensorNetworks::MPOSimulator decorator(3);
+	decorator.SetInitialQubitsMap({ 2, 0, 1 });
+	MPO_ApplyGHZPrep(mapped);
+	MPO_ApplyGHZPrep(decorator);
+	if (!approxEqual(mapped.TraceOfSquare(), decorator.TraceOfSquare(), 1E-12) ||
+		!approxEqual(mapped.Purity(), decorator.Purity(), 1E-12))
+	{
+		std::cout << "Decorator diagnostics disagree with the physical-chain implementation" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
@@ -2836,5 +3290,11 @@ bool MPOSimulatorTests()
 		InvariantsTestMPO() &&
 		DecoratorVsImplTestMPO() &&
 		MeasurementVsDensityMatrixAndThrowsTestMPO() &&
-		SamplingNoCollapseTestMPO();
+		SamplingNoCollapseTestMPO() &&
+		ReCanonicalizeDoesNotTruncateTestMPO() &&
+		KrausCompletenessCheckTestMPO() &&
+		UnnormalizedOperatorTestMPO() &&
+		UnsortedLambdaPseudoinverseTestMPO() &&
+		TraceRestoreAndHermitizeTestMPO() &&
+		DiagnosticsTestMPO();
 }

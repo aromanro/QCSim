@@ -78,19 +78,18 @@ namespace QC {
 
 			void ReCanonicalize() override
 			{
-				// left to right
+				// Gauge only: do not apply user-requested chi / singular-value cuts.
 				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()) - 1; ++qubit1)
 				{
 					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1, false);
 				}
-				// right to left
 				for (IndexType qubit1 = static_cast<IndexType>(lambdas.size()) - 1; qubit1 > 0; --qubit1)
 				{
 					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1 - 1);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, qubit1 - 1, qubit1);
+					DecomposeAndSetGammas(thetaMatrix, qubit1 - 1, qubit1, false);
 				}
 			}
 
@@ -415,10 +414,11 @@ namespace QC {
 				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
 			}
 
-			// SVD the (already built) theta matrix, truncate it according to the bond dimension / entanglement
-			// limits and write back the two new gammas and the lambda in between.
-			// Shared by the two qubit gate application and by Trim.
-			void DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2)
+			// SVD the (already built) theta matrix and write back the two new gammas and the lambda
+			// in between. Shared by two-qubit gates, Trim, and ReCanonicalize. User-requested
+			// chi / entanglement cuts are applied only when applyUserCompression is true (the
+			// default); ReCanonicalize passes false so it is a gauge restore.
+			void DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression = true)
 			{
 #ifdef USE_FAST_SVD
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
@@ -464,12 +464,12 @@ namespace QC {
 				// If user-requested compression is enabled, further reduce the rank according to
 				// the configured truncation mode, applied on top of the already floor-filtered
 				// (still descending-sorted) singular values.
-				IndexType szm = limitEntanglement ?
+				IndexType szm = (applyUserCompression && limitEntanglement) ?
 					ComputeCompressedRank(SvaluesFull, floorRank, truncationMode, singularValueThreshold) : floorRank;
 
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
-				const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
+				const IndexType sz = (applyUserCompression && limitSize) ? std::min<IndexType>(chi, szm) : szm;
 
 				const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
 				const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();

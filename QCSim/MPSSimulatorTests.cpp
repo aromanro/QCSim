@@ -1283,6 +1283,67 @@ static bool WideBasisInitializationTestMPS()
 	return true;
 }
 
+// ReCanonicalize must restore the Vidal gauge without applying user-requested chi / entanglement
+// cuts. Trim (and two-qubit gates) remain the operations that compress.
+bool ReCanonicalizeDoesNotTruncateTestMPS()
+{
+	std::cout << "\nMPS simulator ReCanonicalize does not apply compression limits" << std::endl;
+
+	QC::Gates::HadamardGate<> h;
+	QC::Gates::CNOTGate<> cnot;
+
+	QC::TensorNetworks::MPSSimulatorImpl mps(4);
+	mps.ApplyGate(h, 0);
+	mps.ApplyGate(cnot, 1, 0);
+	mps.ApplyGate(cnot, 2, 1);
+	mps.ApplyGate(cnot, 3, 2);
+
+	const auto bondsBefore = mps.getBondDimensions();
+	const auto psiBefore = mps.getRegisterStorage();
+	bool hasLargeBond = false;
+	for (const auto dim : bondsBefore)
+		if (dim > 1) hasLargeBond = true;
+	if (!hasLargeBond)
+	{
+		std::cout << "MPS ReCanonicalize test setup did not produce a bond dimension above 1" << std::endl;
+		return false;
+	}
+
+	mps.setLimitBondDimension(1);
+	mps.setLimitEntanglement(0.5);
+	mps.ReCanonicalize();
+
+	const auto bondsAfter = mps.getBondDimensions();
+	if (bondsAfter != bondsBefore)
+	{
+		std::cout << "ReCanonicalize truncated MPS bond dimensions after compression limits were set" << std::endl;
+		return false;
+	}
+
+	const auto psiAfter = mps.getRegisterStorage();
+	for (Eigen::Index s = 0; s < psiBefore.size(); ++s)
+	{
+		if (!approxEqual(psiBefore[s], psiAfter[s], 1E-10))
+		{
+			std::cout << "ReCanonicalize changed the MPS state while compression limits were set" << std::endl;
+			return false;
+		}
+	}
+
+	mps.Trim();
+	for (const auto dim : mps.getBondDimensions())
+	{
+		if (dim > 1)
+		{
+			std::cout << "Trim did not apply the bond-dimension limit after ReCanonicalize" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -1312,7 +1373,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS();
+	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeDoesNotTruncateTestMPS();
 }
 
 

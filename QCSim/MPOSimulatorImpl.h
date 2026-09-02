@@ -2,6 +2,8 @@
 
 #include "MPOSimulatorBase.h"
 
+#include <iostream>
+
 #define USE_FAST_SVD 1
 
 namespace QC {
@@ -55,6 +57,7 @@ namespace QC {
 			{
 				if (!limitSize) return; // nothing to trim against
 
+				bool truncated = false;
 				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
 				{
 					if (lambdas[qubit1].size() <= chi) continue;
@@ -63,26 +66,59 @@ namespace QC {
 					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
 
-					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+					truncated = DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1) || truncated;
 				}
+
+				ApplyPostTruncationPatches(truncated);
 			}
 
 			void ReCanonicalize() override
 			{
-				// left to right
+				// Gauge only: do not apply user-requested chi / singular-value cuts.
 				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
 				{
 					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1, false);
 				}
-				// right to left
 				for (IndexType qubit1 = static_cast<IndexType>(lambdas.size()) - 1; qubit1 >= 0; --qubit1)
 				{
 					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1, false);
 				}
+			}
+
+			void Hermitize() override
+			{
+				const bool wasApplying = applyingPostTruncationPatches;
+				applyingPostTruncationPatches = true;
+
+				std::vector<LambdaType> adjointLambdas = lambdas;
+				std::vector<TensorType> adjointGammas;
+				adjointGammas.reserve(gammas.size());
+				for (const auto& gamma : gammas)
+					adjointGammas.emplace_back(AdjointSite(gamma));
+
+				AddState(lambdas, gammas, adjointLambdas, adjointGammas);
+				ScaleSite(0, 0.5);
+
+				ReCanonicalize();
+				if (limitSize || limitEntanglement)
+				{
+					for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
+					{
+						if (limitSize && !limitEntanglement && lambdas[qubit1].size() <= chi)
+							continue;
+
+						const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+						DecomposeAndSetGammas(ReshapeTheta(theta), qubit1, qubit1 + 1);
+					}
+				}
+
+				applyingPostTruncationPatches = wasApplying;
+				if (restoreTraceAfterTruncation && !wasApplying)
+					RestoreTraceIfSafe();
 			}
 
 			void ApplyOperator(const Gates::AppliedGate<MatrixClass>& op) override
@@ -327,10 +363,37 @@ namespace QC {
 
 			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, size_t operatorQubits, IndexType qubit, IndexType controllingQubit1)
 			{
+				CheckKrausCompleteness(ops);
+
 				if (operatorQubits == 1)
 					ApplySingleQubitChannel(ops, qubit);
 				else
 					ApplyTwoQubitChannel(ops, qubit, controllingQubit1);
+			}
+
+			template<class OperatorsContainer> void CheckKrausCompleteness(const OperatorsContainer& ops) const
+			{
+				if (krausCompletenessCheck == KrausCompletenessCheck::Ignore) return;
+
+				const MatrixClass& first = GetOperatorMatrix(ops.front());
+				MatrixClass sum = MatrixClass::Zero(first.rows(), first.cols());
+				for (const auto& op : ops)
+				{
+					const MatrixClass& K = GetOperatorMatrix(op);
+					sum.noalias() += K.adjoint() * K;
+				}
+
+				const double residual = (sum - MatrixClass::Identity(sum.rows(), sum.cols())).norm();
+				if (residual <= krausCompletenessTolerance) return;
+
+				if (krausCompletenessCheck == KrausCompletenessCheck::Warn)
+				{
+					std::cerr << "Kraus operators do not satisfy the completeness relation (residual "
+						<< residual << ")" << std::endl;
+					return;
+				}
+
+				throw std::invalid_argument("Kraus operators do not satisfy the completeness relation");
 			}
 
 			template<class OperatorsContainer> void ApplySingleQubitChannel(const OperatorsContainer& ops, IndexType qubit)
@@ -402,7 +465,7 @@ namespace QC {
 				}
 
 				const MatrixClass thetaMatrix = ReshapeThetaBar(result);
-				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
+				ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2));
 			}
 
 			void ApplyTwoQubitGate(const MatrixClass& gate, IndexType qubit, IndexType controllingQubit1)
@@ -429,13 +492,28 @@ namespace QC {
 				// (4 * leftBond) x (4 * rightBond) matrix, the physical dimension per site is 4 = 2 (ket) x 2 (bra)
 				const MatrixClass thetaMatrix = ReshapeThetaBar(thetaBar);
 
-				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
+				ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2));
 			}
 
-			// SVD the (already built) theta matrix, truncate it according to the bond dimension / entanglement
-			// limits and write back the two new site tensors and the lambda in between.
-			// Shared by the two qubit gate application and by Trim.
-			void DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2)
+			void ApplyPostTruncationPatches(bool truncated)
+			{
+				if (!truncated || applyingPostTruncationPatches) return;
+				if (!hermitizeAfterTruncation && !restoreTraceAfterTruncation) return;
+
+				applyingPostTruncationPatches = true;
+				if (hermitizeAfterTruncation)
+					Hermitize();
+				if (restoreTraceAfterTruncation)
+					RestoreTraceIfSafe();
+				applyingPostTruncationPatches = false;
+			}
+
+			// SVD the (already built) theta matrix and write back the two new site tensors and the
+			// lambda in between. Shared by two-qubit gates, Trim, and ReCanonicalize. User-requested
+			// chi / entanglement cuts are applied only when applyUserCompression is true (the
+			// default); ReCanonicalize passes false so it is a gauge restore.
+			// Returns true when a user-requested cut actually dropped singular values.
+			bool DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression = true)
 			{
 #ifdef USE_FAST_SVD
 				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
@@ -479,12 +557,13 @@ namespace QC {
 				// If user-requested compression is enabled, further reduce the rank according to
 				// the configured truncation mode, applied on top of the already floor-filtered
 				// (still descending-sorted) singular values.
-				IndexType szm = limitEntanglement ?
+				IndexType szm = (applyUserCompression && limitEntanglement) ?
 					ComputeCompressedRank(SvaluesFull, floorRank, truncationMode, singularValueThreshold) : floorRank;
 
 				if (szm == 0) szm = 1;
 
-				const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
+				const IndexType sz = (applyUserCompression && limitSize) ? std::min<IndexType>(chi, szm) : szm;
+				const bool truncated = applyUserCompression && sz < floorRank;
 
 				const IndexType L = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
 				const IndexType R = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
@@ -501,6 +580,7 @@ namespace QC {
 				lambdas[qubit1] = SvaluesFull.head(sz);
 
 				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, L, sz, R);
+				return truncated;
 			}
 
 			// See MPSSimulatorImpl::ComputeCompressedRank for the full explanation of both modes -
@@ -754,7 +834,7 @@ namespace QC {
 					// pseudoinverse. Dividing by SVD noise near machine epsilon makes the
 					// Vidal tensors ill-conditioned and can amplify roundoff to visible
 					// density-matrix errors after subsequent gates.
-					const double threshold = numericalRankThreshold * lambdas[prev][0];
+					const double threshold = numericalRankThreshold * lambdas[prev].maxCoeff();
 					for (IndexType m = 0; m < sz; ++m)
 						for (IndexType bra = 0; bra < 2; ++bra)
 							for (IndexType ket = 0; ket < 2; ++ket)
@@ -765,7 +845,7 @@ namespace QC {
 
 				if (qubit2 != static_cast<IndexType>(lambdas.size()))
 				{
-					const double threshold = numericalRankThreshold * lambdas[qubit2][0];
+					const double threshold = numericalRankThreshold * lambdas[qubit2].maxCoeff();
 					for (IndexType r = 0; r < R; ++r)
 						for (IndexType bra = 0; bra < 2; ++bra)
 							for (IndexType ket = 0; ket < 2; ++ket)
@@ -780,10 +860,12 @@ namespace QC {
 			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
 #endif
 			constexpr static double numericalRankThreshold = 1E-12;
+			constexpr static double krausCompletenessTolerance = 1E-10;
 			// See MPSSimulatorImpl::numericalRankThresholdDiscardedWeight for why this is squared
 			// rather than reusing numericalRankThreshold as-is.
 			constexpr static double numericalRankThresholdDiscardedWeight = numericalRankThreshold * numericalRankThreshold;
 			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
+			bool applyingPostTruncationPatches = false;
 		};
 
 	}
