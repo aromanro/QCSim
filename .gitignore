@@ -1,1 +1,2 @@
+# Add a line to ignore local CMake build outputs
 /build/
