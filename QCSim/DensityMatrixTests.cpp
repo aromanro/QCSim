@@ -549,6 +549,24 @@ static bool DensityMatrixInitializationAndValidationTest()
 	}
 
 	QC::DensityMatrix<> dm(2);
+	if (!dm.GetMultithreading())
+	{
+		std::cout << "Default multithreading state should be true" << std::endl;
+		return false;
+	}
+	dm.SetMultithreading(false);
+	if (dm.GetMultithreading())
+	{
+		std::cout << "SetMultithreading(false) failed" << std::endl;
+		return false;
+	}
+	dm.SetMultithreading(true);
+	if (!dm.GetMultithreading())
+	{
+		std::cout << "SetMultithreading(true) failed" << std::endl;
+		return false;
+	}
+
 	QC::Gates::PauliXGate<> x;
 	QC::Gates::CNOTGate<> cnot;
 	QC::Gates::ToffoliGate<> toffoli;
@@ -1557,6 +1575,77 @@ static bool DensityMatrixInvariantsTest()
 	return true;
 }
 
+static bool DensityMatrixNewFeaturesTest()
+{
+	std::cout << "\nDensity matrix simulator - bitvector initialization, partial trace, overlap and fidelity" << std::endl;
+
+	// 1. Bitvector initialization overloads
+	{
+		QC::DensityMatrix<> dm(2);
+		dm.setToBasisState(std::vector<bool>{ true, false }); // |01> state (qubit 0 = 1, qubit 1 = 0) => state 1
+		if (!approxEqual(dm.getBasisStateProbability(1), 1.0, 1E-9))
+		{
+			std::cout << "setToBasisState(vector<bool>) failed" << std::endl;
+			return false;
+		}
+
+		dm.setToMixtureOfBasisStates(std::vector<std::pair<std::vector<bool>, double>>{
+			{ { false, false }, 0.4 },
+			{ { true, true }, 0.6 }
+		});
+		if (!approxEqual(dm.getBasisStateProbability(0), 0.4, 1E-9) ||
+			!approxEqual(dm.getBasisStateProbability(3), 0.6, 1E-9))
+		{
+			std::cout << "setToMixtureOfBasisStates(vector<bool>) failed" << std::endl;
+			return false;
+		}
+	}
+
+	// 2. Partial trace: Bell state (|00> + |11>)/sqrt(2) -> trace out qubit 1 -> reduced state on qubit 0 is I/2
+	{
+		QC::DensityMatrix<> dm(2);
+		QC::Gates::HadamardGate<> h;
+		QC::Gates::CNOTGate<> cnot;
+		dm.ApplyGate(h, 0);
+		dm.ApplyGate(cnot, 1, 0);
+
+		const Eigen::MatrixXcd rho0 = dm.PartialTrace({ 0 }); // keep qubit 0
+		if (!approxEqual(rho0(0, 0), std::complex<double>(0.5, 0), 1E-9) ||
+			!approxEqual(rho0(1, 1), std::complex<double>(0.5, 0), 1E-9) ||
+			!approxEqual(rho0(0, 1), std::complex<double>(0, 0), 1E-9))
+		{
+			std::cout << "PartialTrace of Bell state failed:\n" << rho0 << std::endl;
+			return false;
+		}
+	}
+
+	// 3. Overlap and Fidelity
+	{
+		QC::DensityMatrix<> dm1(1);
+		QC::DensityMatrix<> dm2(1);
+		QC::Gates::HadamardGate<> h;
+		dm1.ApplyGate(h, 0); // |+>
+		dm2.ApplyGate(h, 0); // |+>
+
+		if (!approxEqual(dm1.HilbertSchmidtOverlap(dm2).real(), 1.0, 1E-9))
+		{
+			std::cout << "HilbertSchmidtOverlap of identical pure states is not 1" << std::endl;
+			return false;
+		}
+
+		QC::QubitRegister<> reg(1);
+		reg.ApplyGate(h, 0);
+		if (!approxEqual(dm1.FidelityWithStatevector(reg.getRegisterStorage()), 1.0, 1E-9))
+		{
+			std::cout << "FidelityWithStatevector with identical state is not 1" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool DensityMatrixTests()
 {
 	std::cout << "\nDensity matrix simulator tests" << std::endl;
@@ -1566,7 +1655,8 @@ bool DensityMatrixTests()
 	const bool result = DensityMatrixUnitaryTest() && DensityMatrixDenseGateReferenceTest() && DensityMatrixThreeQubitGateTest() && DensityMatrixChannelsTest() &&
 		DensityMatrixGenericChannelTest() && DensityMatrixInitializationAndValidationTest() && DensityMatrixMeasurementTest() &&
 		DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() &&
-		DensityMatrixCollapseTest() && DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() && DensityMatrixStateSaveRestoreCloneTest();
+		DensityMatrixCollapseTest() && DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() && DensityMatrixStateSaveRestoreCloneTest() &&
+		DensityMatrixNewFeaturesTest();
 	gen = savedGenerator;
 	return result;
 }

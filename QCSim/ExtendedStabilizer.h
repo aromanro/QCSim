@@ -107,6 +107,91 @@ namespace QC {
 			frames.emplace_back(nrQubits);
 		}
 
+		void SetMultithreading(bool enable = true)
+		{
+			enableMultithreading = enable;
+		}
+
+		bool GetMultithreading() const
+		{
+			return enableMultithreading;
+		}
+
+		void setToBasisState(size_t State)
+		{
+			const size_t nrQubits = GetNrQubits();
+			if (nrQubits < 64 && State >= (1ULL << nrQubits))
+				throw std::invalid_argument("Basis state is outside the register");
+
+			std::vector<bool> bits(nrQubits, false);
+			for (size_t i = 0; i < nrQubits; ++i)
+				bits[i] = (State & (1ULL << i)) != 0;
+
+			setToBasisState(bits);
+		}
+
+		void setToBasisState(const std::vector<bool>& state)
+		{
+			const size_t nrQubits = GetNrQubits();
+			if (state.size() > nrQubits)
+				throw std::invalid_argument("Basis state bitvector exceeds qubit count");
+
+			frames.clear();
+			savedFrames.clear();
+			approximationStatistics = {};
+			savedApproximationStatistics = {};
+
+			ExtendedFrame frame(nrQubits);
+			frame.amplitudes = { {1.0, 0.0} };
+			frame.signs.clear();
+
+			const size_t nrWords = frame.signs.GetNrWords();
+			std::vector<ExtendedFrame::Word> words(nrWords, 0);
+			for (size_t i = 0; i < state.size(); ++i)
+				if (state[i])
+					SetPackedBit(words.data(), i);
+
+			frame.signs.Append(words.data());
+			frames.push_back(std::move(frame));
+		}
+
+		double getBasisStateProbability(size_t State) const
+		{
+			const size_t nrQubits = GetNrQubits();
+			std::vector<bool> bits(nrQubits, false);
+			for (size_t i = 0; i < nrQubits; ++i)
+				bits[i] = (State & (1ULL << i)) != 0;
+
+			return getBasisStateProbability(bits);
+		}
+
+		double getBasisStateProbability(const std::vector<bool>& state) const
+		{
+			const size_t nrQubits = GetNrQubits();
+			if (state.size() != nrQubits)
+				throw std::invalid_argument("State size does not match qubit count");
+
+			auto cloneSim = Clone();
+			double totalProb = 1.0;
+
+			for (size_t q = 0; q < nrQubits; ++q)
+			{
+				const bool targetOutcome = state[q];
+				const double p1 = cloneSim->GetQubitProbability(q);
+				const double pTarget = targetOutcome ? p1 : (1.0 - p1);
+
+				if (pTarget <= 1E-15 || !std::isfinite(pTarget))
+					return 0.0;
+
+				totalProb *= pTarget;
+				const bool outcome = cloneSim->MeasureConditioned(q, targetOutcome);
+				if (outcome != targetOutcome)
+					return 0.0;
+			}
+
+			return ClampProbability(totalProb);
+		}
+
 		// Primarily useful for reproducible measurement runs and regression tests.
 		void SetRandomSeed(std::mt19937::result_type seed)
 		{
@@ -259,20 +344,25 @@ namespace QC {
 			ApplyPackedAxisRotation(qubit, angle, false);
 		}
 
-		bool Measure(size_t qubit)
+		bool Measure(size_t qubit, const bool* forcedOutcome = nullptr)
 		{
 			ValidateQubit(qubit);
 			AccountForMeasurementConditioning();
 			auto& frame = frames.front();
 			if (frame.GetFrameSize() == 1)
-				return MeasureSingleStabilizer(qubit);
+				return MeasureSingleStabilizer(qubit, forcedOutcome);
 
 			const auto observable = BasisPauliForQubit(frame, qubit, false);
 			CompilePauliAction(frame, observable, pauliActionWorkspace);
 			const auto& action = pauliActionWorkspace;
 			if (!HasPauliFlip(action))
-				return MeasureDiagonalFrame(frame, action);
-			return MeasureOffDiagonalFrame(frame, qubit, action);
+				return MeasureDiagonalFrame(frame, action, forcedOutcome);
+			return MeasureOffDiagonalFrame(frame, qubit, action, forcedOutcome);
+		}
+
+		bool MeasureConditioned(size_t qubit, bool forcedOutcome)
+		{
+			return Measure(qubit, &forcedOutcome);
 		}
 
 		double GetQubitProbability(size_t qubit) const
@@ -406,7 +496,8 @@ namespace QC {
 			savedApproximationPolicy(other.savedApproximationPolicy),
 			approximationStatistics(other.approximationStatistics),
 			savedApproximationStatistics(other.savedApproximationStatistics),
-			gen(other.gen), dist(other.dist)
+			gen(other.gen), dist(other.dist),
+			enableMultithreading(other.enableMultithreading)
 		{
 		}
 
@@ -686,7 +777,7 @@ namespace QC {
 		}
 
 		bool MeasureDiagonalFrame(ExtendedFrame& frame,
-			const PauliAction& action)
+			const PauliAction& action, const bool* forcedOutcome = nullptr)
 		{
 			double probabilityZero = 0.0;
 			double probabilityOne = 0.0;
@@ -704,9 +795,10 @@ namespace QC {
 					"Cannot measure a frame with zero total probability");
 			const double normalizedProbabilityOne = ClampProbability(
 				probabilityOne / totalProbability);
-			const bool outcome = normalizedProbabilityOne >= 1.0
-				|| (normalizedProbabilityOne > 0.0
-					&& dist(gen) < normalizedProbabilityOne);
+			const bool outcome = forcedOutcome ? *forcedOutcome
+				: (normalizedProbabilityOne >= 1.0
+					|| (normalizedProbabilityOne > 0.0
+						&& dist(gen) < normalizedProbabilityOne));
 
 			const double outcomeProbability = outcome
 				? probabilityOne : probabilityZero;
@@ -738,7 +830,7 @@ namespace QC {
 		}
 
 		bool MeasureOffDiagonalFrame(ExtendedFrame& frame,
-			size_t physicalQubit, const PauliAction& action)
+			size_t physicalQubit, const PauliAction& action, const bool* forcedOutcome = nullptr)
 		{
 			size_t pivot = 0;
 			while (!GetPackedBit(action.flipMask, pivot))
@@ -812,9 +904,10 @@ namespace QC {
 					"Cannot measure a frame with zero total probability");
 			const double normalizedProbabilityOne = ClampProbability(
 				probabilityOne / totalProbability);
-			const bool outcome = normalizedProbabilityOne >= 1.0
-				|| (normalizedProbabilityOne > 0.0
-					&& dist(gen) < normalizedProbabilityOne);
+			const bool outcome = forcedOutcome ? *forcedOutcome
+				: (normalizedProbabilityOne >= 1.0
+					|| (normalizedProbabilityOne > 0.0
+						&& dist(gen) < normalizedProbabilityOne));
 
 			const double outcomeProbability = outcome
 				? probabilityOne : probabilityZero;
@@ -1119,7 +1212,7 @@ namespace QC {
 			return PauliExpectation(frame, pauliActionWorkspace);
 		}
 
-		bool MeasureSingleStabilizer(size_t qubit)
+		bool MeasureSingleStabilizer(size_t qubit, const bool* forcedOutcome = nullptr)
 		{
 			auto& frame = frames.front();
 			const auto observable = BasisPauliForQubit(frame, qubit, false);
@@ -1149,7 +1242,7 @@ namespace QC {
 				return outcome;
 			}
 
-			const bool outcome = dist(gen) < 0.5;
+			const bool outcome = forcedOutcome ? *forcedOutcome : (dist(gen) < 0.5);
 			if (frame.signs.Get(0, pivot))
 			{
 				// Let Q = U^dagger Z_q U and
@@ -1251,6 +1344,7 @@ namespace QC {
 
 		std::mt19937 gen;
 		std::uniform_real_distribution<double> dist;
+		bool enableMultithreading = true;
 	};
 
 }

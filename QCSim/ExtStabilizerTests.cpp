@@ -2494,3 +2494,52 @@ bool TestExtStabilizer()
 
 	return true;
 }
+
+static bool TestExtStabilizerNewFeatures()
+{
+	std::cout << "\nExtended Stabilizer new features (SetMultithreading, setToBasisState, getBasisStateProbability)" << std::endl;
+
+	QC::ExtendedStabilizer sim(3);
+	if (!sim.GetMultithreading())
+	{
+		std::cout << "Default multithreading state should be true" << std::endl;
+		return false;
+	}
+	sim.SetMultithreading(false);
+	if (sim.GetMultithreading())
+	{
+		std::cout << "SetMultithreading(false) failed" << std::endl;
+		return false;
+	}
+	sim.SetMultithreading(true);
+
+	sim.setToBasisState(std::vector<bool>{ true, false, true });
+	if (!approxEqual(sim.getBasisStateProbability(5), 1.0, 1E-9) ||
+		!approxEqual(sim.getBasisStateProbability(std::vector<bool>{ true, false, true }), 1.0, 1E-9) ||
+		!approxEqual(sim.getBasisStateProbability(0), 0.0, 1E-9))
+	{
+		std::cout << "setToBasisState or getBasisStateProbability failed for computational basis state" << std::endl;
+		return false;
+	}
+
+	sim.Reset(3);
+	sim.ApplyH(0);
+	sim.ApplyCX(1, 0);
+	sim.ApplyCX(2, 0);
+
+	if (!approxEqual(sim.getBasisStateProbability(0), 0.5, 1E-9) ||
+		!approxEqual(sim.getBasisStateProbability(7), 0.5, 1E-9) ||
+		!approxEqual(sim.getBasisStateProbability(1), 0.0, 1E-9))
+	{
+		std::cout << "getBasisStateProbability failed for GHZ state" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+bool ExtendedStabilizerTests()
+{
+	return TestExtStabilizer() && TestExtStabilizerNewFeatures();
+}

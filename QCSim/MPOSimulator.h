@@ -517,6 +517,50 @@ namespace QC
 				return impl.IsHermitian(eps);
 			}
 
+			MatrixClass PartialTrace(const std::vector<IndexType>& keepQubits) const override
+			{
+				std::vector<IndexType> physicalKeep;
+				physicalKeep.reserve(keepQubits.size());
+
+				for (IndexType logical : keepQubits)
+				{
+					ValidateLogicalQubit(logical);
+					physicalKeep.push_back(qubitsMap[logical]);
+				}
+
+				return impl.PartialTrace(physicalKeep);
+			}
+
+			std::complex<double> HilbertSchmidtOverlap(const MPOSimulatorInterface& other) const override
+			{
+				return impl.HilbertSchmidtOverlap(other);
+			}
+
+			double FidelityWithStatevector(const VectorClass& psi) const override
+			{
+				const size_t nrQubits = getNrQubits();
+				const IndexType n = static_cast<IndexType>(nrQubits);
+				const size_t dim = 1ULL << nrQubits;
+				if (psi.size() < 0 || static_cast<size_t>(psi.size()) != dim)
+					throw std::invalid_argument("Statevector dimension does not match the register");
+
+				VectorClass psiMapped(dim);
+				for (size_t s = 0; s < dim; ++s)
+				{
+					size_t tmp = s;
+					size_t mapped = 0;
+					for (IndexType i = 0; i < n; ++i)
+					{
+						if (tmp & 1ULL)
+							mapped |= (1ULL << qubitsMap[i]);
+						tmp >>= 1;
+					}
+					psiMapped(static_cast<Eigen::Index>(mapped)) = psi(static_cast<Eigen::Index>(s));
+				}
+
+				return impl.FidelityWithStatevector(psiMapped);
+			}
+
 			std::shared_ptr<MPOSimulatorStateInterface> getState() const override
 			{
 				auto baseState = std::dynamic_pointer_cast<MPOSimulatorBaseState>(impl.getState());

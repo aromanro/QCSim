@@ -4,6 +4,10 @@ project(QCSim)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+if(MSVC)
+    add_compile_options(/bigobj)
+endif()
+
 set(default_build_type "Release")
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose Release or Debug" FORCE)
@@ -88,7 +92,7 @@ if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_HOST_SYSTEM_PROCESSOR 
             enable_cxx_flag("-mpopcnt")
         endif()
     elseif(MSVC)
-	    set(SIMD_FLAGS "/arch:AVX")
+	    set(SIMD_FLAGS "/arch:AVX /bigobj")
     endif()
 endif()
 

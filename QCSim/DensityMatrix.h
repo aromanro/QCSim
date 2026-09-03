@@ -75,6 +75,17 @@ namespace QC {
 		size_t getNrQubits() const { return NrQubits; }
 		size_t getNrBasisStates() const { return NrBasisStates; }
 
+		void SetMultithreading(bool enable = true)
+		{
+			colCalculator.SetMultithreading(enable);
+			rowCalculator.SetMultithreading(enable);
+		}
+
+		bool GetMultithreading() const
+		{
+			return colCalculator.GetMultithreading();
+		}
+
 		// Allows simulations and statistical tests to be reproduced exactly.
 		void SetRandomSeed(uint64_t seed) { rng.seed(seed); }
 
@@ -92,6 +103,18 @@ namespace QC {
 
 			rho.setZero();
 			rho(State, State) = 1.;
+		}
+
+		void setToBasisState(const std::vector<bool>& State)
+		{
+			if (State.size() > NrQubits)
+				throw std::invalid_argument("Basis state has more bits than the register");
+
+			size_t stateIndex = 0;
+			for (size_t i = 0; i < State.size(); ++i)
+				if (State[i]) stateIndex |= (1ULL << i);
+
+			setToBasisState(stateIndex);
 		}
 
 		void Reset()
@@ -126,6 +149,7 @@ namespace QC {
 			sim->savedStateStorage = savedStateStorage;
 			sim->rng = rng;
 			sim->uniformZeroOne = uniformZeroOne;
+			sim->SetMultithreading(GetMultithreading());
 
 			return sim;
 		}
@@ -177,6 +201,32 @@ namespace QC {
 			for (const auto& [state, weight] : mixture)
 				if (weight > 0. && state < NrBasisStates)
 					rho(static_cast<Eigen::Index>(state), static_cast<Eigen::Index>(state)) += weight / total;
+		}
+
+		void setToMixtureOfBasisStates(std::initializer_list<std::pair<size_t, double>> mixture)
+		{
+			setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>(mixture));
+		}
+
+		void setToMixtureOfBasisStates(const std::vector<std::pair<std::vector<bool>, double>>& mixture)
+		{
+			std::vector<std::pair<size_t, double>> integerMixture;
+			integerMixture.reserve(mixture.size());
+
+			for (const auto& [bits, weight] : mixture)
+			{
+				if (!std::isfinite(weight))
+					throw std::invalid_argument("Mixture weights must be finite");
+				if (weight <= 0. || bits.size() > NrQubits) continue;
+
+				size_t stateIndex = 0;
+				for (size_t i = 0; i < bits.size(); ++i)
+					if (bits[i]) stateIndex |= (1ULL << i);
+
+				integerMixture.emplace_back(stateIndex, weight);
+			}
+
+			setToMixtureOfBasisStates(integerMixture);
 		}
 
 		// rho' = U rho U^dagger
@@ -458,6 +508,79 @@ namespace QC {
 			return (rho - rho.adjoint()).norm() < eps;
 		}
 
+		// Computes reduced density matrix rho_A = Tr_B(rho) for qubits in keepQubits
+		MatrixClass PartialTrace(const std::vector<size_t>& keepQubits) const
+		{
+			const size_t numKeep = keepQubits.size();
+			if (numKeep > NrQubits)
+				throw std::invalid_argument("Keep qubits set size exceeds total qubits");
+
+			std::vector<bool> isKept(NrQubits, false);
+			for (size_t q : keepQubits)
+			{
+				if (q >= NrQubits)
+					throw std::invalid_argument("Qubit index out of bounds");
+				if (isKept[q])
+					throw std::invalid_argument("Duplicate qubit index in keepQubits");
+				isKept[q] = true;
+			}
+
+			const size_t dimA = 1ULL << numKeep;
+			MatrixClass rhoA = MatrixClass::Zero(dimA, dimA);
+
+			for (size_t r = 0; r < NrBasisStates; ++r)
+			{
+				for (size_t c = 0; c < NrBasisStates; ++c)
+				{
+					bool tracedMatch = true;
+					for (size_t q = 0; q < NrQubits; ++q)
+					{
+						if (!isKept[q] && ((r & (1ULL << q)) != (c & (1ULL << q))))
+						{
+							tracedMatch = false;
+							break;
+						}
+					}
+					if (!tracedMatch) continue;
+
+					size_t rowA = 0;
+					size_t colA = 0;
+					for (size_t i = 0; i < numKeep; ++i)
+					{
+						if (r & (1ULL << keepQubits[i])) rowA |= (1ULL << i);
+						if (c & (1ULL << keepQubits[i])) colA |= (1ULL << i);
+					}
+
+					rhoA(static_cast<Eigen::Index>(rowA), static_cast<Eigen::Index>(colA)) += rho(static_cast<Eigen::Index>(r), static_cast<Eigen::Index>(c));
+				}
+			}
+
+			return rhoA;
+		}
+
+		// Tr(rho_1^\dagger rho_2) = Tr(rho_1 rho_2) Hilbert-Schmidt inner product / state overlap
+		std::complex<double> HilbertSchmidtOverlap(const DensityMatrix<VectorClass, MatrixClass>& other) const
+		{
+			if (other.NrQubits != NrQubits)
+				throw std::invalid_argument("Register dimensions do not match");
+
+			return rho.cwiseProduct(other.rho.conjugate()).sum();
+		}
+
+		// <psi|rho|psi> / Tr(rho) fidelity with pure statevector psi
+		double FidelityWithStatevector(const VectorClass& psi) const
+		{
+			if (psi.size() < 0 || static_cast<size_t>(psi.size()) != NrBasisStates)
+				throw std::invalid_argument("Statevector dimension does not match the register");
+
+			const std::complex<double> tr = Trace();
+			if (std::abs(tr) < std::numeric_limits<double>::epsilon())
+				return 0.;
+
+			const std::complex<double> val = (psi.adjoint() * (rho * psi))(0);
+			return std::clamp((val / tr).real(), 0., 1.);
+		}
+
 		double getBasisStateProbability(size_t State) const
 		{
 			if (State >= NrBasisStates) return 0;
@@ -692,17 +815,28 @@ namespace QC {
 
 				swapStorage = true;
 				if (gateQubits == 1)
-					colCalculator.ApplyOneQubitGate(gate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
+				{
+					if (!colCalculator.GetMultithreading() || NrBasisStates < ColCalculator::OneQubitOmpLimit)
+						colCalculator.ApplyOneQubitGate(gate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
+					else
+						colCalculator.ApplyOneQubitGateOmp(gate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
+				}
 				else if (gateQubits == 2)
 				{
 					const size_t ctrlQubitBit = 1ULL << controllingQubit1;
-					colCalculator.ApplyTwoQubitsGate(gate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
+					if (!colCalculator.GetMultithreading() || NrBasisStates < ColCalculator::TwoQubitOmpLimit)
+						colCalculator.ApplyTwoQubitsGate(gate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
+					else
+						colCalculator.ApplyTwoQubitsGateOmp(gate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
 				}
 				else
 				{
 					const size_t qubitBit2 = 1ULL << controllingQubit1;
 					const size_t ctrlQubitBit = 1ULL << controllingQubit2;
-					colCalculator.ApplyThreeQubitsGate(gate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
+					if (!colCalculator.GetMultithreading() || NrBasisStates < ColCalculator::ThreeQubitOmpLimit)
+						colCalculator.ApplyThreeQubitsGate(gate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
+					else
+						colCalculator.ApplyThreeQubitsGateOmp(gate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
 				}
 			}
 
@@ -735,17 +869,28 @@ namespace QC {
 
 				swapStorage = true;
 				if (gateQubits == 1)
-					rowCalculator.ApplyOneQubitGate(*dispatchGate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
+				{
+					if (!rowCalculator.GetMultithreading() || NrBasisStates < RowCalculator::OneQubitOmpLimit)
+						rowCalculator.ApplyOneQubitGate(*dispatchGate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
+					else
+						rowCalculator.ApplyOneQubitGateOmp(*dispatchGate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
+				}
 				else if (gateQubits == 2)
 				{
 					const size_t ctrlQubitBit = 1ULL << controllingQubit1;
-					rowCalculator.ApplyTwoQubitsGate(*dispatchGate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
+					if (!rowCalculator.GetMultithreading() || NrBasisStates < RowCalculator::TwoQubitOmpLimit)
+						rowCalculator.ApplyTwoQubitsGate(*dispatchGate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
+					else
+						rowCalculator.ApplyTwoQubitsGateOmp(*dispatchGate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
 				}
 				else
 				{
 					const size_t qubitBit2 = 1ULL << controllingQubit1;
 					const size_t ctrlQubitBit = 1ULL << controllingQubit2;
-					rowCalculator.ApplyThreeQubitsGate(*dispatchGate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
+					if (!rowCalculator.GetMultithreading() || NrBasisStates < RowCalculator::ThreeQubitOmpLimit)
+						rowCalculator.ApplyThreeQubitsGate(*dispatchGate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
+					else
+						rowCalculator.ApplyThreeQubitsGateOmp(*dispatchGate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
 				}
 			}
 

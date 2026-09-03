@@ -453,6 +453,155 @@ namespace QC {
 				return HermiticityResidual() < eps;
 			}
 
+			MatrixClass PartialTrace(const std::vector<IndexType>& keepQubits) const override
+			{
+				const size_t nrQubits = getNrQubits();
+				const size_t numKeep = keepQubits.size();
+				if (numKeep > nrQubits)
+					throw std::invalid_argument("Keep qubits set size exceeds total qubits");
+
+				std::vector<bool> isKept(nrQubits, false);
+				for (IndexType q : keepQubits)
+				{
+					if (q < 0 || static_cast<size_t>(q) >= nrQubits)
+						throw std::invalid_argument("Qubit index out of bounds");
+					if (isKept[static_cast<size_t>(q)])
+						throw std::invalid_argument("Duplicate qubit index in keepQubits");
+					isKept[static_cast<size_t>(q)] = true;
+				}
+
+				const std::complex<double> tr = Trace();
+				const size_t dimA = 1ULL << numKeep;
+				MatrixClass rhoA = MatrixClass::Zero(dimA, dimA);
+				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
+					return rhoA;
+
+				for (size_t rA = 0; rA < dimA; ++rA)
+				{
+					for (size_t cA = 0; cA < dimA; ++cA)
+					{
+						const std::complex<double> val = ContractChain([this, &keepQubits, &isKept, rA, cA](IndexType q) {
+							if (isKept[static_cast<size_t>(q)])
+							{
+								size_t pos = 0;
+								for (size_t i = 0; i < keepQubits.size(); ++i)
+									if (keepQubits[i] == q) { pos = i; break; }
+
+								const int ket = (rA & (1ULL << pos)) ? 1 : 0;
+								const int bra = (cA & (1ULL << pos)) ? 1 : 0;
+								return SiteSelectMatrix(q, ket, bra);
+							}
+							return SiteTraceMatrix(q);
+						});
+
+						rhoA(static_cast<Eigen::Index>(rA), static_cast<Eigen::Index>(cA)) = val / tr;
+					}
+				}
+
+				return rhoA;
+			}
+
+			std::complex<double> HilbertSchmidtOverlap(const MPOSimulatorInterface& other) const override
+			{
+				const size_t n = getNrQubits();
+				if (other.getNrQubits() != n)
+					throw std::invalid_argument("MPO register sizes do not match");
+
+				const auto* otherBase = dynamic_cast<const MPOSimulatorBase*>(&other);
+				if (!otherBase)
+				{
+					const MatrixClass r1 = getDensityMatrix();
+					const MatrixClass r2 = other.getDensityMatrix();
+					return r1.cwiseProduct(r2.conjugate()).sum();
+				}
+
+				if (n == 0) return 0.;
+
+				MatrixClass env = MatrixClass::Ones(1, 1);
+
+				for (size_t q = 0; q < n; ++q)
+				{
+					const auto& g1 = gammas[q];
+					const auto& g2 = otherBase->gammas[q];
+
+					const IndexType L1 = g1.dimension(0);
+					const IndexType R1 = g1.dimension(3);
+					const IndexType L2 = g2.dimension(0);
+					const IndexType R2 = g2.dimension(3);
+
+					MatrixClass next = MatrixClass::Zero(R1, R2);
+
+					for (IndexType ket = 0; ket < 2; ++ket)
+						for (IndexType bra = 0; bra < 2; ++bra)
+						{
+							MatrixClass G1(L1, R1);
+							MatrixClass G2(L2, R2);
+							for (IndexType r = 0; r < R1; ++r)
+								for (IndexType l = 0; l < L1; ++l)
+									G1(l, r) = g1(l, ket, bra, r);
+
+							for (IndexType r = 0; r < R2; ++r)
+								for (IndexType l = 0; l < L2; ++l)
+									G2(l, r) = std::conj(g2(l, ket, bra, r));
+
+							next.noalias() += G1.transpose() * env * G2;
+						}
+
+					if (q + 1 < n)
+					{
+						const auto& lam1 = lambdas[q];
+						const auto& lam2 = otherBase->lambdas[q];
+						for (IndexType r2 = 0; r2 < R2; ++r2)
+						{
+							const double l2 = r2 < lam2.size() ? lam2[r2] : 0.;
+							for (IndexType r1 = 0; r1 < R1; ++r1)
+							{
+								const double l1 = r1 < lam1.size() ? lam1[r1] : 0.;
+								next(r1, r2) *= l1 * l2;
+							}
+						}
+					}
+
+					env = std::move(next);
+				}
+
+				const std::complex<double> tr1 = Trace();
+				const std::complex<double> tr2 = other.Trace();
+				if (std::abs(tr1) < std::numeric_limits<double>::epsilon() || std::abs(tr2) < std::numeric_limits<double>::epsilon())
+					return 0.;
+
+				return env(0, 0) / (tr1 * std::conj(tr2));
+			}
+
+			double FidelityWithStatevector(const VectorClass& psi) const override
+			{
+				const size_t nrQubits = getNrQubits();
+				const size_t dim = 1ULL << nrQubits;
+				if (psi.size() < 0 || static_cast<size_t>(psi.size()) != dim)
+					throw std::invalid_argument("Statevector dimension does not match the register");
+
+				const std::complex<double> tr = Trace();
+				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
+					return 0.;
+
+				std::complex<double> acc = 0.;
+				for (size_t r = 0; r < dim; ++r)
+				{
+					const std::complex<double> psiRConj = std::conj(psi(static_cast<Eigen::Index>(r)));
+					if (psiRConj == std::complex<double>(0., 0.)) continue;
+
+					for (size_t c = 0; c < dim; ++c)
+					{
+						const std::complex<double> psiC = psi(static_cast<Eigen::Index>(c));
+						if (psiC == std::complex<double>(0., 0.)) continue;
+
+						acc += psiRConj * getBasisStateMatrixElement(r, c) * psiC;
+					}
+				}
+
+				return std::clamp((acc / tr).real(), 0., 1.);
+			}
+
 			std::complex<double> UnnormalizedExpectationValue(const std::string& pauliString) const override
 			{
 				const size_t nrQubits = getNrQubits();

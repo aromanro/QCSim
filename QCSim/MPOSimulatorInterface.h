@@ -110,6 +110,11 @@ namespace QC {
 			virtual void setToMixtureOfBasisStates(const std::vector<std::pair<size_t, double>>& mixture) = 0;
 			virtual void setToMixtureOfBasisStates(const std::vector<std::pair<std::vector<bool>, double>>& mixture) = 0;
 
+			void setToMixtureOfBasisStates(std::initializer_list<std::pair<size_t, double>> mixture)
+			{
+				setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>(mixture));
+			}
+
 			virtual void setLimitBondDimension(IndexType chival) = 0;
 			virtual void setLimitEntanglement(double svdThreshold) = 0;
 			virtual void dontLimitBondDimension() = 0;
@@ -270,6 +275,15 @@ namespace QC {
 			// small (the same limit as getUnnormalizedDensityMatrix()).
 			virtual double HermiticityResidual() const = 0;
 			virtual bool IsHermitian(double eps = 1E-10) const = 0;
+
+			// Partial Trace: computes reduced density matrix rho_A = Tr_B(rho) for qubits in keepQubits
+			virtual MatrixClass PartialTrace(const std::vector<IndexType>& keepQubits) const = 0;
+
+			// Hilbert-Schmidt inner product / state overlap Tr(rho_1^\dagger rho_2) between this MPO and another
+			virtual std::complex<double> HilbertSchmidtOverlap(const MPOSimulatorInterface& other) const = 0;
+
+			// Fidelity <psi|rho|psi> / Tr(rho) with a pure statevector psi
+			virtual double FidelityWithStatevector(const VectorClass& psi) const = 0;
 
 			// Born expectation <P> = Tr(rho P) / Tr(rho) for a Pauli string P = (x) P_i, where
 			// character i of the string is the single qubit Pauli ('I', 'X', 'Y' or 'Z') acting
