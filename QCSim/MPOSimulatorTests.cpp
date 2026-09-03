@@ -159,10 +159,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	QC::Gates::CNOTGate<> cnot;
 
 	QC::TensorNetworks::MPOSimulator drifted(2);
-	drifted.setToMixtureOfBasisStates(
-		std::vector<std::pair<QC::TensorNetworks::MPOSimulatorInterface::IndexType, double>>{
-			{0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4}
-		});
+	drifted.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
 	drifted.setLimitBondDimension(1);
 	drifted.Trim();
 	if (!std::isfinite(drifted.Trace().real()) || !std::isfinite(drifted.Trace().imag()))
@@ -177,10 +174,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator restored(2);
-	restored.setToMixtureOfBasisStates(
-		std::vector<std::pair<QC::TensorNetworks::MPOSimulatorInterface::IndexType, double>>{
-			{0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4}
-		});
+	restored.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
 	restored.setRestoreTraceAfterTruncation(true);
 	restored.setLimitBondDimension(1);
 	restored.Trim();
@@ -191,10 +185,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator restoredGate(2);
-	restoredGate.setToMixtureOfBasisStates(
-		std::vector<std::pair<QC::TensorNetworks::MPOSimulatorInterface::IndexType, double>>{
-			{0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4}
-		});
+	restoredGate.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
 	restoredGate.setRestoreTraceAfterTruncation(true);
 	restoredGate.setLimitBondDimension(1);
 	restoredGate.ApplyGate(cnot, 1, 0);
@@ -223,10 +214,7 @@ static bool DiagnosticsTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator mixed(1);
-	mixed.setToMixtureOfBasisStates(
-		std::vector<std::pair<QC::TensorNetworks::MPOSimulatorInterface::IndexType, double>>{
-			{0, 0.5}, {1, 0.5}
-		});
+	mixed.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.5}, {1, 0.5} });
 	if (!approxEqual(mixed.TraceOfSquare(), std::complex<double>(0.5, 0.), 1E-12) ||
 		!approxEqual(mixed.Purity(), 0.5, 1E-12))
 	{
