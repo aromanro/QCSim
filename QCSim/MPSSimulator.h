@@ -58,6 +58,8 @@ namespace QC
 				InitQubitsMap();
 			}
 
+			void SetSeed(uint64_t seed) { impl.SetSeed(seed); }
+
 			size_t getNrQubits() const final
 			{
 				return impl.getNrQubits();
