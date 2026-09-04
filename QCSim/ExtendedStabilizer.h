@@ -91,6 +91,12 @@ namespace QC {
 			frames.emplace_back(nrQubits);
 		}
 
+		void SetSeed(uint64_t theSeed)
+		{
+			std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
+			gen.seed(seed);
+		}
+
 		size_t GetNrQubits() const
 		{
 			if (frames.empty()) return 0;
@@ -1342,7 +1348,7 @@ namespace QC {
 		ExtendedStabilizerApproximationStatistics savedApproximationStatistics;
 		mutable PauliAction pauliActionWorkspace;
 
-		std::mt19937 gen;
+		std::mt19937_64 gen;
 		std::uniform_real_distribution<double> dist;
 		bool enableMultithreading = true;
 	};

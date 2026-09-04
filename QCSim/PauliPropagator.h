@@ -50,6 +50,12 @@ namespace QC
 			//threadPool = std::make_unique<ThreadPool<>>(nrThreads);
 		}
 
+		void SetSeed(uint64_t theSeed)
+		{
+			std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
+			rng.seed(seed);
+		}
+
 		double Probability0(int qubit) const
 		{
 			PauliStringStorage pauliStrings;

@@ -83,6 +83,12 @@ namespace QC {
 				return *this;
 			}
 
+			void SetSeed(uint64_t theSeed)
+			{
+				std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
+				gen.seed(seed);
+			}
+
 			void Reset()
 			{
 				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
@@ -343,7 +349,7 @@ namespace QC {
 			std::vector<Generator> savedDestabilizerGenerators;
 			std::vector<Generator> savedStabilizerGenerators;
 
-			std::default_random_engine gen;
+			std::mt19937_64 gen;
 			std::bernoulli_distribution rnd;
 
 			bool enableMultithreading = true;

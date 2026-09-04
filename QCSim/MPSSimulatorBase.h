@@ -60,6 +60,12 @@ namespace QC {
 			MPSSimulatorBase& operator=(const MPSSimulatorBase&) = default;
 			MPSSimulatorBase& operator=(MPSSimulatorBase&&) = default;
 
+			void SetSeed(uint64_t theSeed)
+			{
+				std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
+				rng.seed(seed);
+			}
+
 			size_t getNrQubits() const override
 			{
 				return gammas.size();

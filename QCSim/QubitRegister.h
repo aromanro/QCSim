@@ -56,6 +56,12 @@ namespace QC {
 			rng.seed(seed);
 		}
 
+		void SetSeed(uint64_t theSeed)
+		{
+			std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
+			rng.seed(seed);
+		}
+
 		size_t getNrQubits() const { return NrQubits; };
 		size_t getNrBasisStates() const { return NrBasisStates; };
 

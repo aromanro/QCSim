@@ -103,6 +103,12 @@ namespace QC {
 				: doublingsLimit(std::numeric_limits<size_t>::max()), epsilon(1E-15), rng(std::random_device{}()), uniformZeroOne(0, 1)
 			{}
 
+			void SetSeed(uint64_t theSeed)
+			{
+				std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
+				rng.seed(seed);
+			}
+
 			void SetTrimValue(double val)
 			{
 				epsilon = val;
