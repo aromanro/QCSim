@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <iostream>
+#include <chrono>
+#include <random>
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -48,6 +50,12 @@ namespace QC {
 				{
 					gamma(0, 0, 0) = 1.;
 					gamma(0, 1, 0) = 0.;
+				}
+
+				if (addseed == 0)
+				{
+					std::random_device rdl;
+					addseed = rdl();
 				}
 
 				const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;

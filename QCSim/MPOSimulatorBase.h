@@ -74,6 +74,12 @@ namespace QC {
 				for (auto& gamma : gammas)
 					SetSiteToBasis(gamma, 0); // |0><0|
 
+				if (addseed == 0)
+				{
+					std::random_device rdl;
+					addseed = rdl();
+				}
+
 				const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
 				std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
 				rng.seed(seed);
