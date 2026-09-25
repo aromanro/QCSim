@@ -135,6 +135,16 @@ namespace QC
 				return impl.getTruncationMode();
 			}
 
+			void SetMultithreading(bool enable = true) override
+			{
+				impl.SetMultithreading(enable);
+			}
+
+			bool GetMultithreading() const override
+			{
+				return impl.GetMultithreading();
+			}
+
 			void Trim() override
 			{
 				impl.Trim();
@@ -397,6 +407,7 @@ namespace QC
 				sim->impl.chi = impl.chi;
 				sim->impl.singularValueThreshold = impl.singularValueThreshold;
 				sim->impl.truncationMode = impl.truncationMode;
+				sim->impl.enableMultithreading = impl.enableMultithreading;
 
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;

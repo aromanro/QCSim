@@ -260,6 +260,9 @@
     <ClInclude Include="QCSim\SimpleGates.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\SingleThreaded.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="QCSim\Clifford.h">
       <Filter>Header Files</Filter>
     </ClInclude>

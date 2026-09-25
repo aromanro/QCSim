@@ -12,6 +12,7 @@
 
 #include "MPSSimulatorInterface.h"
 #include "Operators.h"
+#include "SingleThreaded.h"
 
 namespace QC {
 
@@ -35,6 +36,14 @@ namespace QC {
 		// here there are the types definitions, the data structures used and some functions that are simpler and/or not so important for the implementation
 		// for example, the code that converts the MPS to a state vector is here, but it wouldn't be needed for a simulation, it's needed just for comparing the results against the statevector simulator
 		// also the initialization functions are here
+		//
+		// Storage: the 'gammas' are NOT the Vidal Gamma tensors, they hold B_i = Gamma_i * lambda_i (the right canonical form, as in Hastings' TEBD variant,
+		// see M. B. Hastings, J. Math. Phys. 50, 095207 (2009), arXiv:0903.3253). The last site has no right lambda, so there B = Gamma.
+		// The lambdas are still the Schmidt values on the bonds, lambdas[i] being the bond between site i and site i + 1.
+		// The state is simply the product B_0 B_1 ... B_{N-1}, the lambdas are needed only as the left 'environment' of a site
+		// (the reduced density matrix to the left of bond i is diag(lambda_i^2)).
+		// The advantage over storing the Vidal Gammas is that the two qubit gates never divide by the lambdas, so small singular values
+		// don't amplify the numerical noise.
 		class MPSSimulatorBase : public MPSSimulatorInterface
 		{
 		public:
@@ -167,18 +176,11 @@ namespace QC {
 				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
 					throw std::invalid_argument("Qubit index out of bounds");
 
-				const bool notFirst = qubit > 0;
-				const bool notLast = qubit < static_cast<IndexType>(lambdas.size());
-				if (notFirst && notLast)
-					return ClampProbability(GetProbabilityMiddleQubit(qubit, zeroVal));
-				else if (notFirst)
-					return ClampProbability(GetProbabilityLastQubit(qubit, zeroVal));
-				else if (notLast)
-					return ClampProbability(GetProbabilityFirstQubit(qubit, zeroVal));
+				// the sites to the right are in the right canonical form, so only the left lambda is needed
+				if (qubit > 0)
+					return ClampProbability(GetProbabilityWithLeftLambda(qubit, zeroVal));
 
-				assert(qubit == 0);
-
-				return ClampProbability(GetProbabilitySingleQubit(zeroVal));
+				return ClampProbability(GetProbabilityFirstQubit(zeroVal));
 			}
 
 			void setLimitBondDimension(IndexType chival) override
@@ -227,6 +229,16 @@ namespace QC {
 				return truncationMode;
 			}
 
+			void SetMultithreading(bool enable = true) override
+			{
+				enableMultithreading = enable;
+			}
+
+			bool GetMultithreading() const override
+			{
+				return enableMultithreading;
+			}
+
 			// this is for 'compatibility' with the statevector simulator (QubitRegister)
 			// it's not stored as this and it's costly to compute, it will throw an exception for more than 32 qubits
 			// but don't call it for such a large number of qubits
@@ -269,14 +281,9 @@ namespace QC {
 				static const Indexes product_dims{ IntIndexPair(1, 0) };
 				MatrixTensorType res = gammas[0].chip(State[0] ? 1 : 0, 1);
 
+				// the lambdas are already included in the B tensors
 				for (size_t q = 1; q < nrQubits; ++q)
 				{
-					const size_t q1 = q - 1;
-
-					for (IndexType c = 0; c < res.dimension(1); ++c)
-						for (IndexType r = 0; r < res.dimension(0); ++r)
-							res(r, c) *= lambdas[q1][c];
-
 					// why? Needs this intermediary variable here, not even calling eval() works if assigning directly to res
 					MatrixTensorType tmp = res.contract(gammas[q].chip(State[q] ? 1 : 0, 1), product_dims);
 					res = std::move(tmp);
@@ -326,38 +333,14 @@ namespace QC {
 			{
 				for (size_t i = 0; i < gammas.size() - 1; ++i)
 				{
-					std::cout << std::endl << "Gamma " << i << ":" << std::endl;
+					std::cout << std::endl << "B (Gamma * Lambda) " << i << ":" << std::endl;
 					PrintGamma(i);
 					std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
 				}
 
-				std::cout << std::endl << "Gamma " << gammas.size() - 1 << ":" << std::endl;
+				std::cout << std::endl << "B (Gamma) " << gammas.size() - 1 << ":" << std::endl;
 				PrintGamma(gammas.size() - 1);
 			}
-
-			// needed for some tests, ignore
-			void SetSiteMatrices(size_t site, const Eigen::MatrixXcd& matrix0, const Eigen::MatrixXcd& matrix1)
-			{
-				assert(matrix0.rows() == matrix1.rows());
-				assert(matrix0.cols() == matrix1.cols());
-
-				gammas[site].resize(matrix0.rows(), 2, matrix0.cols());
-
-
-				for (IndexType j = 0; j < matrix0.cols(); ++j)
-					for (IndexType i = 0; i < matrix0.rows(); ++i) 
-					{
-						gammas[site](i, 0, j) = matrix0(i, j);
-						gammas[site](i, 1, j) = matrix1(i, j);
-					}
-			}
-
-			void SetLambdas(size_t pos, const Eigen::VectorXd& lambda)
-			{
-				assert(pos < lambdas.size());
-				lambdas[pos] = lambda;
-			}
-			// end test functions
 
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
 			{
@@ -412,7 +395,8 @@ namespace QC {
 				std::cout << std::endl;
 			}
 
-			double GetProbabilitySingleQubit(bool zeroVal = true) const
+			// the first site has a left bond dimension of 1, no lambda on the left
+			double GetProbabilityFirstQubit(bool zeroVal = true) const
 			{
 				double res = 0;
 
@@ -424,19 +408,7 @@ namespace QC {
 				return res;
 			}
 
-			double GetProbabilityFirstQubit(IndexType qubit, bool zeroVal = true) const
-			{
-				double res = 0;
-				const size_t physIndex = zeroVal ? 0 : 1;
-
-				for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-					for (IndexType i = 0; i < gammas[qubit].dimension(0); ++i)
-						res += std::norm(lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
-
-				return res;
-			}
-
-			double GetProbabilityLastQubit(IndexType qubit, bool zeroVal = true) const
+			double GetProbabilityWithLeftLambda(IndexType qubit, bool zeroVal = true) const
 			{
 				double res = 0;
 				const size_t physIndex = zeroVal ? 0 : 1;
@@ -445,19 +417,6 @@ namespace QC {
 				for (IndexType j = 0; j < gammas[qubit].dimension(2); ++j)
 					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
 						res += std::norm(lambdas[qbit1][i] * gammas[qubit](i, physIndex, j));
-				
-				return res;
-			}
-
-			double GetProbabilityMiddleQubit(IndexType qubit, bool zeroVal = true) const
-			{
-				double res = 0;
-				const size_t physIndex = zeroVal ? 0 : 1;
-
-				const IndexType qbit1 = qubit - 1;
-				for (IndexType j = 0; j < lambdas[qubit].size(); ++j)
-					for (IndexType i = 0; i < lambdas[qbit1].size(); ++i)
-						res += std::norm(lambdas[qbit1][i] * lambdas[qubit][j] * gammas[qubit](i, physIndex, j));
 
 				return res;
 			}
@@ -465,26 +424,6 @@ namespace QC {
 			void ApplySingleQubitGate(const GateClass& gate, IndexType qubit)
 			{
 				ApplySingleQubitGate(gammas[qubit], gate);
-			}
-
-			void MultiplyMatrixWithLambda(IndexType qubit, MatrixClass& mat) const
-			{
-				const size_t nrQubits = gammas.size();
-
-				if (qubit != static_cast<IndexType>(nrQubits) - 1)	
-					for (IndexType col = 0; col < mat.cols(); ++col)
-						for (IndexType row = 0; row < mat.rows(); ++row)
-							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
-			}
-
-			void MultiplyMatrixWithLambda(IndexType qubit, MatrixTensorType& mat) const
-			{
-				const size_t nrQubits = gammas.size();
-
-				if (qubit != static_cast<IndexType>(nrQubits) - 1)
-					for (IndexType col = 0; col < mat.dimension(1); ++col)
-						for (IndexType row = 0; row < mat.dimension(0); ++row)
-							mat(row, col) *= col < lambdas[qubit].size() ? lambdas[qubit][col] : 0.;
 			}
 
 
@@ -502,25 +441,17 @@ namespace QC {
 			}
 
 		private:
-			template<int N> static Eigen::Tensor<std::complex<double>, N + 2> ContractNQubits(const Eigen::Tensor<std::complex<double>, N + 1>& left, const LambdaType& lambdaVal, const GammaType& nextQubit)
+			// the lambdas are already included in the B tensors, so the sites are simply contracted along the bonds
+			template<int N> static Eigen::Tensor<std::complex<double>, N + 2> ContractNQubits(const Eigen::Tensor<std::complex<double>, N + 1>& left, const GammaType& nextQubit)
 			{
-				const IndexType dim1 = left.dimension(N);
-				const IndexType dim2 = nextQubit.dimension(0);
-
-				Eigen::Tensor<std::complex<double>, 2> lambdaTensor(dim1, dim2);
-				lambdaTensor.setZero();
-
-				for (IndexType i = 0; i < std::min(static_cast<IndexType>(lambdaVal.size()), std::min(dim1, dim2)); ++i)
-					lambdaTensor(i, i) = lambdaVal(i);
-
 				static const Indexes productDim{ IntIndexPair(N, 0) };
 
-				return left.contract(lambdaTensor, productDim).contract(nextQubit, productDim);
+				return left.contract(nextQubit, productDim);
 			}
 
 			template<int N> Eigen::Tensor<std::complex<double>, N + 2> GetContractedTensor() const
 			{
-				return ContractNQubits<N>(GetContractedTensor<N - 1>(), lambdas[N - 2], gammas[N - 1]);
+				return ContractNQubits<N>(GetContractedTensor<N - 1>(), gammas[N - 1]);
 			}
 
 			template<int N> static VectorClass GenerateStatevector(const Eigen::Tensor<std::complex<double>, N + 2>& tensor)
@@ -673,6 +604,9 @@ namespace QC {
 			// change: bond-dimension growth under setLimitEntanglement now differs from what every
 			// earlier version of this simulator produced unless RelativeToMax is requested explicitly.
 			TruncationMode truncationMode = TruncationMode::DiscardedWeight;
+
+			// if false, the SVDs (and the matrix products) are done single threaded, see SetMultithreading
+			bool enableMultithreading = true;
 
 			std::vector<LambdaType> lambdas;
 			std::vector<GammaType> gammas;

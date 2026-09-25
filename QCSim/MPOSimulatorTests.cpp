@@ -10,6 +10,10 @@
 #include <limits>
 #include <set>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "Tests.h"
 
 #include "QubitRegister.h"
@@ -264,8 +268,10 @@ static bool NumericalRankStabilityTestMPO()
 	};
 
 	// This circuit creates roundoff-only singular values and then routes a gate
-	// across them. Retaining those values makes the Vidal pseudoinverse amplify
-	// SVD noise into percent-level density-matrix errors.
+	// across them. With the Vidal form (dividing by the lambdas), retaining those values
+	// made the pseudoinverse amplify SVD noise into percent-level density-matrix errors.
+	// The implementation does not divide by the lambdas anymore (Hastings' method),
+	// but this remains a useful precision regression test.
 	const std::array<CircuitStep, 11> circuit{ {
 		{ 2, 0, 0 }, { 24, 2, 4 }, { 22, 0, 1 }, { 18, 0, 3 },
 		{ 0, 4, 4 }, { 23, 0, 4 }, { 1, 3, 3 }, { 5, 3, 3 },
@@ -3028,9 +3034,12 @@ static bool UnnormalizedOperatorTestMPO()
 	return true;
 }
 
+// Originally a regression test for the Vidal pseudoinverse floor (it had to use max(Lambda), not Lambda[0]).
+// The site tensors are now the B = Gamma * Lambda tensors and nothing divides by the lambdas, but a tiny,
+// unsorted lambda used as the left environment of a two qubit gate must still not produce garbage.
 static bool UnsortedLambdaPseudoinverseTestMPO()
 {
-	std::cout << "\nMPO simulator Vidal pseudoinverse uses max(Lambda)" << std::endl;
+	std::cout << "\nMPO simulator tiny unsorted Lambda as the left environment" << std::endl;
 
 	QC::TensorNetworks::MPOSimulatorImpl mpo(3);
 	auto state = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(mpo.getState());
@@ -3068,7 +3077,7 @@ static bool UnsortedLambdaPseudoinverseTestMPO()
 	const Eigen::MatrixXcd rho = mpo.getDensityMatrix();
 	if (!rho.allFinite() || !approxEqual(rho(0, 0), std::complex<double>(1., 0.), 1E-8))
 	{
-		std::cout << "Unsorted tiny-then-large lambda amplified a null Vidal sector" << std::endl;
+		std::cout << "Unsorted tiny-then-large lambda amplified a null sector" << std::endl;
 		return false;
 	}
 
@@ -3253,6 +3262,220 @@ static bool DiagnosticsTestMPO()
 	return true;
 }
 
+// Checks the operator space canonical form (the sites hold B = Gamma * Lambda, see MPOSimulatorBase):
+// for each site with a left bond sum_p B_p B_p^dagger = I (right orthonormal) and for each site
+// sum_p B_p^dagger Lambda_left^2 B_p = Lambda_right^2 (so the lambdas are the operator Schmidt values).
+// The MPO lambdas are not normalized, their squared norm is the squared Hilbert-Schmidt norm of rho,
+// which takes the place of 1 at the ends of the chain.
+static bool CheckCanonicalFormMPO(const QC::TensorNetworks::MPOSimulatorImpl& mpo, double tolerance, double& maxDeviation)
+{
+	const auto state = std::static_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(mpo.getState());
+	const auto& gammas = state->gammas;
+	const auto& lambdas = state->lambdas;
+
+	maxDeviation = 0;
+	if (gammas.size() < 2) return true;
+
+	const double norm2 = lambdas[0].squaredNorm();
+
+	for (size_t q = 0; q < gammas.size(); ++q)
+	{
+		const auto& B = gammas[q];
+		const Eigen::Index dimLeft = B.dimension(0);
+		const Eigen::Index dimRight = B.dimension(3);
+
+		const Eigen::VectorXd leftLambda2 = q == 0 ? Eigen::VectorXd::Ones(1) : Eigen::VectorXd(lambdas[q - 1].cwiseAbs2());
+		const Eigen::VectorXd rightLambda2 = q + 1 == gammas.size() ? Eigen::VectorXd::Constant(1, norm2) : Eigen::VectorXd(lambdas[q].cwiseAbs2());
+
+		Eigen::MatrixXcd rightCondition = Eigen::MatrixXcd::Zero(dimLeft, dimLeft);
+		Eigen::MatrixXcd leftCondition = Eigen::MatrixXcd::Zero(dimRight, dimRight);
+
+		for (int ket = 0; ket < 2; ++ket)
+			for (int bra = 0; bra < 2; ++bra)
+			{
+				Eigen::MatrixXcd Bp(dimLeft, dimRight);
+				for (Eigen::Index r = 0; r < dimRight; ++r)
+					for (Eigen::Index l = 0; l < dimLeft; ++l)
+						Bp(l, r) = B(l, ket, bra, r);
+
+				rightCondition += Bp * Bp.adjoint();
+				leftCondition += Bp.adjoint() * leftLambda2.asDiagonal() * Bp;
+			}
+
+		const Eigen::MatrixXcd expectedRight = q == 0 ? Eigen::MatrixXcd(Eigen::MatrixXcd::Constant(1, 1, norm2)) : Eigen::MatrixXcd(Eigen::MatrixXcd::Identity(dimLeft, dimLeft));
+		const Eigen::MatrixXcd expectedLeft = rightLambda2.cast<std::complex<double>>().asDiagonal();
+		maxDeviation = std::max({ maxDeviation, (rightCondition - expectedRight).cwiseAbs().maxCoeff(), (leftCondition - expectedLeft).cwiseAbs().maxCoeff() });
+	}
+
+	return maxDeviation <= tolerance;
+}
+
+static bool CanonicalFormTestMPO()
+{
+	std::cout << "\nMPO simulator canonical form test (unitary evolution, ReCanonicalize after noise, measurement and truncation)" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	constexpr double tolerance = 1E-10;
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+	for (int nrQubits = 2; nrQubits < 6; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+		std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+		auto applyRandomCircuit = [&](QC::TensorNetworks::MPOSimulatorImpl& mpo, int nrGates)
+		{
+			for (int i = 0; i < nrGates; ++i)
+			{
+				const int gate = gateDistr(gen);
+				if (gates[gate]->getQubitsNumber() == 2)
+				{
+					int qubit1 = qubitDistr2(gen);
+					int qubit2 = qubit1 + 1;
+					if (dist_bool(gen)) std::swap(qubit1, qubit2);
+					mpo.ApplyGate(*gates[gate], qubit1, qubit2);
+				}
+				else
+					mpo.ApplyGate(*gates[gate], qubitDistr(gen));
+			}
+		};
+
+		for (int t = 0; t < 5; ++t)
+		{
+			double deviation = 0;
+
+			// unitary evolution preserves the canonical form (the superoperator is unitary in the Hilbert-Schmidt sense)
+			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			applyRandomCircuit(mpo, 30);
+			if (!CheckCanonicalFormMPO(mpo, tolerance, deviation))
+			{
+				std::cout << "Canonical form broken by unitary evolution for " << nrQubits << " qubits, deviation: " << deviation << std::endl;
+				return false;
+			}
+
+			// noise, a measurement and truncation break it, ReCanonicalize must restore it without changing the operator
+			for (int variant = 0; variant < 3; ++variant)
+			{
+				QC::TensorNetworks::MPOSimulatorImpl broken(nrQubits);
+				if (variant == 2) broken.setLimitBondDimension(2);
+				applyRandomCircuit(broken, 30);
+
+				if (variant == 0)
+				{
+					broken.ApplyDepolarizingNoise(qubitDistr(gen), 0.2);
+					broken.ApplyAmplitudeDamping(qubitDistr(gen), 0.3);
+				}
+				else if (variant == 1)
+					broken.MeasureQubit(qubitDistr(gen));
+
+				const Eigen::MatrixXcd before = broken.getUnnormalizedDensityMatrix();
+				broken.ReCanonicalize();
+
+				if (!CheckCanonicalFormMPO(broken, tolerance, deviation))
+				{
+					std::cout << "ReCanonicalize did not restore the canonical form (variant " << variant << ") for " << nrQubits << " qubits, deviation: " << deviation << std::endl;
+					return false;
+				}
+
+				if (!CompareDensityMatrices(before, broken.getUnnormalizedDensityMatrix(), nrQubits, tolerance))
+				{
+					std::cout << "ReCanonicalize changed the operator (variant " << variant << ") for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+			}
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+static bool MultithreadingSettingTestMPO()
+{
+	std::cout << "\nMPO simulator multithreading setting test" << std::endl;
+
+	QC::TensorNetworks::MPOSimulatorImpl impl(2);
+	QC::TensorNetworks::MPOSimulator mpo(2);
+	if (!impl.GetMultithreading() || !mpo.GetMultithreading())
+	{
+		std::cout << "Multithreading is not enabled by default" << std::endl;
+		return false;
+	}
+
+	impl.SetMultithreading(false);
+	mpo.SetMultithreading(false);
+	if (impl.GetMultithreading() || mpo.GetMultithreading() || mpo.Clone()->GetMultithreading())
+	{
+		std::cout << "Disabling multithreading did not stick (or was not cloned)" << std::endl;
+		return false;
+	}
+
+	// the same noisy circuit with and without multithreading, big enough for Eigen to parallelize the SVDs
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGatesMPO(gates);
+	FillTwoQubitGatesMPO(gates);
+
+	constexpr int nrQubits = 6;
+	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+	std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+	std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+#ifdef _OPENMP
+	const int threadsBefore = omp_get_max_threads();
+#endif
+
+	QC::TensorNetworks::MPOSimulator mpoMultithreaded(nrQubits);
+	QC::TensorNetworks::MPOSimulator mpoSingleThreaded(nrQubits);
+	mpoSingleThreaded.SetMultithreading(false);
+
+	for (int i = 0; i < 150; ++i)
+	{
+		const int gate = gateDistr(gen);
+		const int qubit1 = qubitDistr(gen);
+		const int qubit2 = (qubit1 + 1 + qubitDistr2(gen)) % nrQubits;
+
+		mpoMultithreaded.ApplyGate(*gates[gate], qubit1, qubit2);
+		mpoSingleThreaded.ApplyGate(*gates[gate], qubit1, qubit2);
+
+		if (i % 10 == 0)
+		{
+			mpoMultithreaded.ApplyDepolarizingNoise(qubit1, 0.02);
+			mpoSingleThreaded.ApplyDepolarizingNoise(qubit1, 0.02);
+		}
+	}
+
+	const double purity1 = mpoMultithreaded.Purity();
+	const double purity2 = mpoSingleThreaded.Purity();
+	const std::complex<double> overlap1 = mpoMultithreaded.HilbertSchmidtOverlap(mpoSingleThreaded);
+	const std::complex<double> overlap2 = mpoSingleThreaded.HilbertSchmidtOverlap(mpoMultithreaded);
+
+#ifdef _OPENMP
+	if (omp_get_max_threads() != threadsBefore)
+	{
+		std::cout << "The OpenMP number of threads was not restored after single threaded operations" << std::endl;
+		return false;
+	}
+#endif
+
+	if (!approxEqual(purity1, purity2, 1E-12) || !approxEqual(overlap1, overlap2, 1E-12))
+	{
+		std::cout << "Single threaded and multithreaded purity or overlap differ" << std::endl;
+		return false;
+	}
+
+	if (!CompareDensityMatrices(mpoMultithreaded.getUnnormalizedDensityMatrix(), mpoSingleThreaded.getUnnormalizedDensityMatrix(), nrQubits, 1E-12))
+	{
+		std::cout << "Single threaded and multithreaded simulations differ" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
@@ -3296,5 +3519,7 @@ bool MPOSimulatorTests()
 		UnnormalizedOperatorTestMPO() &&
 		UnsortedLambdaPseudoinverseTestMPO() &&
 		TraceRestoreAndHermitizeTestMPO() &&
-		DiagnosticsTestMPO();
+		DiagnosticsTestMPO() &&
+		CanonicalFormTestMPO() &&
+		MultithreadingSettingTestMPO();
 }

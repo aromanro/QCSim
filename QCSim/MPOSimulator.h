@@ -156,6 +156,16 @@ namespace QC
 				return impl.getTruncationMode();
 			}
 
+			void SetMultithreading(bool enable = true) override
+			{
+				impl.SetMultithreading(enable);
+			}
+
+			bool GetMultithreading() const override
+			{
+				return impl.GetMultithreading();
+			}
+
 			bool setKrausCompletenessCheck(KrausCompletenessCheck mode) override
 			{
 				return impl.setKrausCompletenessCheck(mode);
@@ -667,6 +677,7 @@ namespace QC
 				sim->impl.krausCompletenessCheck = impl.krausCompletenessCheck;
 				sim->impl.restoreTraceAfterTruncation = impl.restoreTraceAfterTruncation;
 				sim->impl.hermitizeAfterTruncation = impl.hermitizeAfterTruncation;
+				sim->impl.enableMultithreading = impl.enableMultithreading;
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
 

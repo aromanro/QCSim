@@ -37,8 +37,8 @@ namespace QC {
 		//
 		// Compression caveat: without user-requested compression this is an MPO
 		// representation of the density matrix that is exact to numerical precision.
-		// SVD sectors below the scale-relative numerical rank floor are treated as zero
-		// to keep the Vidal pseudoinverse stable. When bond dimension or larger
+		// Only the singular values beyond the SVD's numerical rank (below diagSize * epsilon * sigma_max,
+		// not distinguishable from zero in double precision) are dropped. When bond dimension or
 		// singular-value truncation is enabled, the simulator becomes an approximate
 		// operator-space MPO simulator.
 		// The compressed operator is not guaranteed to remain a physical density matrix:
@@ -122,10 +122,15 @@ namespace QC {
 			// See MPSSimulatorInterface::setTruncationMode for the return-value contract.
 			virtual bool setTruncationMode(TruncationMode mode) = 0;
 			virtual TruncationMode getTruncationMode() const = 0;
+			// Enables (the default) or disables the multithreading of the simulator, which is inside the SVDs and matrix
+			// products (Eigen parallelizes them with OpenMP). Disable it when several simulators run in parallel in
+			// different threads, to avoid having too many threads. It affects only this simulator (see RunSingleThreaded).
+			virtual void SetMultithreading(bool enable = true) = 0;
+			virtual bool GetMultithreading() const = 0;
 			virtual void Trim() = 0;
-			// Restores the Vidal gauge by two-site SVDs. Does not apply setLimitBondDimension or
-			// setLimitEntanglement; those remain the job of two-qubit gates and Trim. Numerically
-			// null SVD sectors are still dropped (the rank floor used by every two-site split).
+			// Restores the canonical form (right orthonormal B tensors, operator Schmidt values on the bonds) by two-site SVDs. Does not apply setLimitBondDimension or
+			// setLimitEntanglement; those remain the job of two-qubit gates and Trim. Only the singular values
+			// beyond the SVD's numerical rank (not distinguishable from zero in double precision) are dropped.
 			virtual void ReCanonicalize() = 0;
 
 			virtual bool setKrausCompletenessCheck(KrausCompletenessCheck mode) = 0;

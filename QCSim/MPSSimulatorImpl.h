@@ -18,7 +18,8 @@ namespace QC {
 				: MPSSimulatorBase(N, addseed)
 			{
 #ifdef USE_FAST_SVD
-				// the default is 16, but with that value I get some precision issues in tests against statevector... too often for my taste
+				// 16 is Eigen's default. With the Vidal form (dividing by the lambdas) it caused precision issues in tests against statevector,
+				// so it used to be 64, but with Hastings' method it's as precise as Jacobi and much faster for bond dimensions between 8 and 32
 				SVD.setSwitchSize(blockSizeLimit); // lower sizes will use Jacobi
 #endif
 			}
@@ -79,17 +80,24 @@ namespace QC {
 			void ReCanonicalize() override
 			{
 				// Gauge only: do not apply user-requested chi / singular-value cuts.
-				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()) - 1; ++qubit1)
+				const IndexType nrBonds = static_cast<IndexType>(lambdas.size());
+
+				// First sweep from right to left: afterwards all the B tensors except the first one are right orthonormal
+				// (each one is a V^dagger from a SVD), no matter how good the lambdas used as left environment were.
+				for (IndexType bond = nrBonds - 1; bond >= 0; --bond)
 				{
-					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(bond);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1, false);
+					DecomposeAndSetGammas(thetaMatrix, bond, bond + 1, false);
 				}
-				for (IndexType qubit1 = static_cast<IndexType>(lambdas.size()) - 1; qubit1 > 0; --qubit1)
+
+				// Then from left to right: now the left environment used for each bond is the correct one, so the singular values
+				// are the Schmidt values. The first bond was already done correctly by the previous sweep, its left environment is trivial.
+				for (IndexType bond = 1; bond < nrBonds; ++bond)
 				{
-					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1 - 1);
+					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(bond);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, qubit1 - 1, qubit1, false);
+					DecomposeAndSetGammas(thetaMatrix, bond, bond + 1, false);
 				}
 			}
 
@@ -211,9 +219,10 @@ namespace QC {
 				for (IndexType s = 0; s < nrSites; ++s)
 					modGammas[s] = gammas[minQubit + s];
 
+				// the right lambdas are already in the B tensors, only the left one needs to be multiplied in
 				// the lambdas multiplication goes for both dagger and non-dagger gammas,
 				// so the dagger are computed after the lambdas are applied
-				MultiplyModGammasWithLambdas(modGammas, minQubit, nrSites);
+				MultiplyFirstModGammaWithLeftLambda(modGammas[0], minQubit);
 
 				std::vector<GammaType> daggerGammas(nrSites);
 				for (IndexType s = 0; s < nrSites; ++s)
@@ -274,14 +283,9 @@ namespace QC {
 				static const Indexes product_dims{ IntIndexPair(1, 0) };
 				MatrixTensorType res = gammas[0].chip(0, 1);
 
+				// the lambdas are already included in the B tensors
 				for (size_t q = 1; q < nrQubits; ++q)
 				{
-					const size_t q1 = q - 1;
-
-					for (IndexType c = 0; c < res.dimension(1); ++c)
-						for (IndexType r = 0; r < res.dimension(0); ++r)
-							res(r, c) *= lambdas[q1][c];
-
 					// why? Needs this intermediary variable here, not even calling eval() works if assigning directly to res
 					MatrixTensorType tmp = res.contract(gammas[q].chip(0, 1), product_dims);
 					res = std::move(tmp);
@@ -309,37 +313,18 @@ namespace QC {
 				return rndVal < prob0;
 			}
 
-			void MultiplyModGammasWithLambdas(std::vector<GammaType>& modGammas, IndexType minQubit, IndexType nrSites) const
+			void MultiplyFirstModGammaWithLeftLambda(GammaType& firstModGamma, IndexType minQubit) const
 			{
-				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
+				if (minQubit == 0) return; // no left lambda for the first qubit
 
-				if (minQubit > 0)
-				{
-					// multiply with the left lambda as well
-					const IndexType prev = minQubit - 1;
-					const IndexType szl = modGammas[0].dimension(0);
-					const IndexType szr = modGammas[0].dimension(2);
+				const IndexType prev = minQubit - 1;
+				const IndexType szl = firstModGamma.dimension(0);
+				const IndexType szr = firstModGamma.dimension(2);
 
-					for (IndexType r = 0; r < szr; ++r)
-						for (IndexType p = 0; p < 2; ++p)
-							for (IndexType l = 0; l < szl; ++l)
-								modGammas[0](l, p, r) *= lambdas[prev][l];
-				}
-
-				// multiply with the right lambdas
-				for (IndexType s = 0; s < nrSites; ++s)
-				{
-					const IndexType q = minQubit + s;
-					if (q >= lastQubit) break; // no right lambdas for the last qubit
-
-					const IndexType szl = modGammas[s].dimension(0);
-					const IndexType szr = modGammas[s].dimension(2);
-
-					for (IndexType r = 0; r < szr; ++r)
-						for (IndexType p = 0; p < 2; ++p)
-							for (IndexType l = 0; l < szl; ++l)
-								modGammas[s](l, p, r) *= lambdas[q][r];
-				}
+				for (IndexType r = 0; r < szr; ++r)
+					for (IndexType p = 0; p < 2; ++p)
+						for (IndexType l = 0; l < szl; ++l)
+							firstModGamma(l, p, r) *= lambdas[prev][l];
 			}
 
 			static void SwapTheta(Eigen::Tensor<std::complex<double>, 4>& theta)
@@ -391,10 +376,10 @@ namespace QC {
 			{
 				// it's more complex than the single qubit gate
 				// very shortly:
-				// contract tensors for the two qubits, along with the correspnding lambdas
+				// contract tensors for the two qubits (the B tensors already contain the lambdas, except the left one)
 				// shape the gate into a tensor
 				// contract the gate tensor with the two qubit tensor
-				// apply SVD to separate out the resulting tensor into the two qubit tensors and the lambdas
+				// apply SVD (with the left lambda multiplied in) to separate out the resulting tensor into the two qubit tensors and the lambda between them
 
 				IndexType qubit1 = controllingQubit1;
 				IndexType qubit2 = qubit;
@@ -414,84 +399,99 @@ namespace QC {
 				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
 			}
 
-			// SVD the (already built) theta matrix and write back the two new gammas and the lambda
+			// SVD the (already built) theta matrix and write back the two new B tensors and the lambda
 			// in between. Shared by two-qubit gates, Trim, and ReCanonicalize. User-requested
 			// chi / entanglement cuts are applied only when applyUserCompression is true (the
 			// default); ReCanonicalize passes false so it is a gauge restore.
+			//
+			// This is Hastings' method: theta = B1 B2 (with the gate applied) does not contain the left lambda.
+			// The SVD is done on lambda_left * theta = U S V^dagger, which is the two site tensor in the Schmidt basis of the left bond,
+			// so the singular values are the Schmidt values of the middle bond.
+			// Then the new right B is V^dagger and the new left B is theta * V (which is lambda_left^-1 * U * S, but computed without dividing).
+			// U is not needed at all.
 			void DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression = true)
 			{
-#ifdef USE_FAST_SVD
-				const bool computeWithJacobi = thetaMatrix.rows() < blockSizeLimit && thetaMatrix.cols() < blockSizeLimit;
-#endif
+				// the SVD and the matrix product for the new left B are the parts Eigen parallelizes
+				RunMaybeSingleThreaded(enableMultithreading, [&]() { DecomposeAndSetGammasImpl(thetaMatrix, qubit1, qubit2, applyUserCompression); });
+			}
 
-				// Eigen's default rank threshold is close enough to machine epsilon that
-				// roundoff-only singular values can survive and later make the Vidal
-				// pseudoinverse ill-conditioned. Always filter those out first with the fixed
-				// scale-relative floor, regardless of the requested truncation mode or whether
-				// user-requested compression (limitEntanglement) is enabled at all - compression
-				// selection, below, is a separate step applied on top of this floor.
+			void DecomposeAndSetGammasImpl(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression)
+			{
+				const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
+				const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
+
+				assert(2 * szl == thetaMatrix.rows());
+				assert(2 * szr == thetaMatrix.cols());
+
+				// the rows are (physical index, left bond index) = j * szl + i
+				MatrixClass weightedTheta;
+				if (qubit1 != 0)
+				{
+					const LambdaType& leftLambda = lambdas[qubit1 - 1];
+					weightedTheta.resize(thetaMatrix.rows(), thetaMatrix.cols());
+					for (IndexType c = 0; c < thetaMatrix.cols(); ++c)
+						for (IndexType j = 0; j < 2; ++j)
+						{
+							const IndexType jszl = j * szl;
+							for (IndexType i = 0; i < szl; ++i)
+								weightedTheta(jszl + i, c) = thetaMatrix(jszl + i, c) * leftLambda[i];
+						}
+				}
+				const MatrixClass& svdMatrix = qubit1 == 0 ? thetaMatrix : weightedTheta;
+
 #ifdef USE_FAST_SVD
-				if (computeWithJacobi)
-#endif
-					jacobiSVD.setThreshold(numericalRankThreshold);
-#ifdef USE_FAST_SVD
-				else
-					SVD.setThreshold(numericalRankThreshold);
+				const bool computeWithJacobi = svdMatrix.rows() < blockSizeLimit && svdMatrix.cols() < blockSizeLimit;
 #endif
 
 				// n x p is decomposed into U = n x n, singular vals diagonal matrix = n x p, V^t = p x p
 				// the thin version U = n x min(n, p), singular vals diagonal matrix = min(n,p) x min(n,p), V^t = min(n,p) x p
+				// only V is computed, U is not needed
 #ifdef USE_FAST_SVD
 				if (computeWithJacobi)
 #endif
-					jacobiSVD.compute(thetaMatrix);
+					jacobiSVD.compute(svdMatrix);
 #ifdef USE_FAST_SVD
 				else
-					SVD.compute(thetaMatrix);
+					SVD.compute(svdMatrix);
 
-				const MatrixClass& UmatrixFull = computeWithJacobi ? jacobiSVD.matrixU() : SVD.matrixU();
 				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
 				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
-				const IndexType floorRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
+				// Eigen's own numerical rank (no threshold is set on the SVD objects): only the singular values
+				// below diagSize * epsilon * sigma_max are dropped, they are not distinguishable from zero in double precision.
+				// Any real cut is only the user's choice (setLimitEntanglement / setLimitBondDimension).
+				const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
 #else
-				const MatrixClass& UmatrixFull = jacobiSVD.matrixU();
 				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
 				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
 
-				const IndexType floorRank = jacobiSVD.rank();
+				const IndexType numericalRank = jacobiSVD.rank();
 #endif
 				// If user-requested compression is enabled, further reduce the rank according to
-				// the configured truncation mode, applied on top of the already floor-filtered
-				// (still descending-sorted) singular values.
+				// the configured truncation mode, applied on the (still descending-sorted) singular values.
 				IndexType szm = (applyUserCompression && limitEntanglement) ?
-					ComputeCompressedRank(SvaluesFull, floorRank, truncationMode, singularValueThreshold) : floorRank;
+					ComputeCompressedRank(SvaluesFull, numericalRank, truncationMode, singularValueThreshold) : numericalRank;
 
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
 				const IndexType sz = (applyUserCompression && limitSize) ? std::min<IndexType>(chi, szm) : szm;
 
-				const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
-				const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
-
-				assert(UmatrixFull.cols() == VmatrixFull.cols()); // for 'thin'
-				assert(sz <= UmatrixFull.cols());
-
-				assert(2 * szl == UmatrixFull.rows());
+				assert(sz <= VmatrixFull.cols());
 				assert(2 * szr == VmatrixFull.rows());
-
-				const MatrixClass Umatrix = UmatrixFull.topLeftCorner(UmatrixFull.rows(), sz);
-				const MatrixClass Vmatrix = VmatrixFull.topLeftCorner(VmatrixFull.rows(), sz).adjoint();
 
 				// now set back lambdas and gammas
 				lambdas[qubit1] = SvaluesFull.head(sz);
 				assert(lambdas[qubit1][0] != 0.);
-				lambdas[qubit1].normalize();
 
-				SetNewGammas(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
+				// the norm of the kept singular values is the norm of the state after truncation
+				// the lambdas are normalized, and the left B has to be scaled the same way to keep the state normalized
+				const double norm = lambdas[qubit1].norm();
+				if (norm > 0) lambdas[qubit1] /= norm;
+
+				SetNewGammas(thetaMatrix, VmatrixFull, norm > 0 ? 1. / norm : 1., qubit1, qubit2, szl, sz, szr);
 			}
 
-			// Given the (descending-sorted, already roundoff-floor-filtered) singular values and a
+			// Given the (descending-sorted, already limited to the numerical rank) singular values and a
 			// user-requested compression threshold, returns how many of them to keep according to
 			// the selected truncation mode. Always keeps at least the largest singular value.
 			static IndexType ComputeCompressedRank(const LambdaType& sortedDescendingSVs, IndexType rank, TruncationMode mode, double threshold)
@@ -504,8 +504,7 @@ namespace QC {
 					// strictly greater than threshold * sigma_max (with the same guard against a
 					// zero sigma_max that Eigen's own premultiplied threshold uses). This is this
 					// simulator's original (pre-mode-switch) truncation behavior.
-					const double effectiveThreshold = std::max(threshold, numericalRankThreshold);
-					const double premultipliedThreshold = std::max(effectiveThreshold * sortedDescendingSVs[0], std::numeric_limits<double>::min());
+					const double premultipliedThreshold = std::max(threshold * sortedDescendingSVs[0], std::numeric_limits<double>::min());
 					IndexType i = rank - 1;
 					while (i >= 0 && sortedDescendingSVs[i] < premultipliedThreshold) --i;
 					return i + 1;
@@ -516,7 +515,6 @@ namespace QC {
 				// stays below the threshold. Matches Qiskit Aer's reduce_zeros (see
 				// build/qiskit-aer/src/simulators/matrix_product_state/svd.cpp in the maestro repo)
 				// and ITensor's default 'cutoff'. Never discards the largest singular value.
-				const double effectiveThreshold = std::max(threshold, numericalRankThresholdDiscardedWeight);
 				const double total = sortedDescendingSVs.head(rank).squaredNorm();
 				if (total <= 0.) return rank;
 
@@ -525,7 +523,7 @@ namespace QC {
 				for (IndexType i = rank - 1; i > 0; --i)
 				{
 					const double sq = sortedDescendingSVs[i] * sortedDescendingSVs[i];
-					if ((discarded + sq) / total >= effectiveThreshold) break;
+					if ((discarded + sq) / total >= threshold) break;
 
 					discarded += sq;
 					keep = i;
@@ -569,110 +567,32 @@ namespace QC {
 				return result;
 			}
 
-			static IndexType CountNonZeroSingularValues(const LambdaType& singularValues)
+			// the left B is (theta * V) * scale, the right B is V^dagger
+			// V is the full V from the SVD, only the first sz columns are used
+			inline void SetNewGammas(const MatrixClass& thetaMatrix, const MatrixClass& Vmatrix, double scale, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
 			{
-				IndexType count = 0;
-				while (count < singularValues.size() && singularValues[count] > 0.)
-					++count;
+				// left site: the (szl, 2, sz) tensor has the same memory layout as the (2 * szl) x sz matrix with the rows j * szl + i
+				// so the product can be written directly into it
+				gammas[qubit1].resize(szl, 2, sz);
+				Eigen::Map<MatrixClass> leftB(gammas[qubit1].data(), 2 * szl, sz);
+				leftB.noalias() = thetaMatrix * Vmatrix.leftCols(sz);
+				if (scale != 1.) leftB *= scale;
 
-				return count;
-			}
-
-			inline void SetNewGammas(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
-			{
-				if (sz != szl || sz != szr)
-					SetNewGammasDif(Umatrix, Vmatrix, qubit1, qubit2, szl, sz, szr);
-				else
-					SetNewGammasSame(Umatrix, Vmatrix, qubit1, qubit2, sz);
-
-				DivideGammasWithLambdas(qubit1, qubit2, szl, sz, szr);
-			}
-
-			inline void SetNewGammasDif(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
-			{
-				Eigen::Tensor<std::complex<double>, 3> Utensor(szl, 2, sz);
-				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, szr);
-
-				for (IndexType k = 0; k < sz; ++k)
-					for (IndexType j = 0; j < 2; ++j)
-					{
-						const IndexType jszl = j * szl;
-						for (IndexType i = 0; i < szl; ++i)
-						{
-							const IndexType jind = jszl + i;
-							Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
-						}
-					}
-
+				// right site: the columns of V^dagger are (physical index, right bond index) = j * szr + k
+				GammaType& rightB = gammas[qubit2];
+				rightB.resize(sz, 2, szr);
 				for (IndexType k = 0; k < szr; ++k)
 					for (IndexType j = 0; j < 2; ++j)
 					{
 						const IndexType jind = j * szr + k;
 						for (IndexType i = 0; i < sz; ++i)
-						{
-							Vtensor(i, j, k) = (jind < Vmatrix.cols()) ? Vmatrix(i, jind) : 0;
-						}
+							rightB(i, j, k) = std::conj(Vmatrix(jind, i));
 					}
-
-				gammas[qubit1] = Utensor;
-				gammas[qubit2] = Vtensor;
 			}
 
-			inline void SetNewGammasSame(const MatrixClass& Umatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType sz)
-			{
-				Eigen::Tensor<std::complex<double>, 3> Utensor(sz, 2, sz);
-				Eigen::Tensor<std::complex<double>, 3> Vtensor(sz, 2, sz);
-
-				for (IndexType k = 0; k < sz; ++k)
-					for (IndexType j = 0; j < 2; ++j)
-					{
-						const IndexType jchi = j * sz;
-						const IndexType jchik = jchi + k;
-						for (IndexType i = 0; i < sz; ++i)
-						{
-							const IndexType jind = jchi + i;
-							Utensor(i, j, k) = (jind < Umatrix.rows()) ? Umatrix(jind, k) : 0;
-
-							Vtensor(i, j, k) = (jchik < Vmatrix.cols()) ? Vmatrix(i, jchik) : 0;
-						}
-					}
-
-				gammas[qubit1] = Utensor;
-				gammas[qubit2] = Vtensor;
-			}
-
-			inline void DivideGammasWithLambdas(IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
-			{
-				assert(gammas[qubit1].dimension(0) == szl);
-				assert(gammas[qubit1].dimension(2) == sz);
-				assert(gammas[qubit2].dimension(0) == sz);
-				assert(gammas[qubit2].dimension(2) == szr);
-
-				if (qubit1 != 0)
-				{
-					const IndexType prev = qubit1 - 1;
-					// Treat numerically null Schmidt sectors as zero when applying the
-					// pseudoinverse instead of amplifying SVD roundoff through division.
-					const double threshold = numericalRankThreshold * lambdas[prev][0];
-					for (IndexType k = 0; k < sz; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
-								if (lambdas[prev][i] > threshold) gammas[qubit1](i, j, k) /= lambdas[prev][i];
-								else gammas[qubit1](i, j, k) = 0;
-				}
-
-				if (qubit2 != static_cast<IndexType>(lambdas.size()))
-				{
-					const double threshold = numericalRankThreshold * lambdas[qubit2][0];
-					for (IndexType k = 0; k < szr; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-								if (lambdas[qubit2][k] > threshold) gammas[qubit2](i, j, k) /= lambdas[qubit2][k];
-								else gammas[qubit2](i, j, k) = 0;
-				}
-			}
-
-			Eigen::Tensor<std::complex<double>, 4> ContractTwoQubits(IndexType qubit1)
+			// the B tensors already contain the lambdas: the middle one is in the left B, the right one in the right B
+			// the left lambda is not included, it's needed only for the SVD (see DecomposeAndSetGammas)
+			Eigen::Tensor<std::complex<double>, 4> ContractTwoQubits(IndexType qubit1) const
 			{
 				const IndexType qubit2 = qubit1 + 1;
 
@@ -680,40 +600,7 @@ namespace QC {
 
 				assert(gammas[qubit1].dimension(2) == gammas[qubit2].dimension(0));
 
-				const IndexType szl = gammas[qubit1].dimension(0);
-				const IndexType sz = gammas[qubit1].dimension(2);
-				const IndexType szr = gammas[qubit2].dimension(2);
-
-				if (qubit1 != 0)
-				{
-					const IndexType prev = qubit1 - 1;
-					for (IndexType k = 0; k < sz; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
-								gammas[qubit1](i, j, k) *= lambdas[prev][i] * lambdas[qubit1][k];
-				}
-				else
-				{
-					for (IndexType k = 0; k < sz; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < szl; ++i)
-								gammas[qubit1](i, j, k) *= lambdas[qubit1][k];
-				}
-
-				if (qubit2 != static_cast<IndexType>(lambdas.size()))
-				{
-					for (IndexType k = 0; k < szr; ++k)
-						for (IndexType j = 0; j < 2; ++j)
-							for (IndexType i = 0; i < sz; ++i)
-								gammas[qubit2](i, j, k) *= lambdas[qubit2][k];
-				}
-
-				// contract first gamma with the lambda in the middle
-				// the resulting tensor has three legs, 1 is the physical one
-
-				// then
-
-				// contract the result with the next gamma
+				// contract the first B with the next one
 				// the resulting tensor has four legs, 1 and 2 are the physical ones
 
 				return gammas[qubit1].contract(gammas[qubit2], product_dims_int);
@@ -806,9 +693,14 @@ namespace QC {
 				const IndexType limit1 = limit + 1;
 				std::unordered_map<IndexType, bool> res;
 
-				Eigen::MatrixXcd mat;
+				// the product of the B matrices (the lambdas are included in them) for the values measured so far
+				// the sites to the right are in the right canonical form, so the probability is the squared norm of this row vector
+				Eigen::RowVectorXcd vec = Eigen::RowVectorXcd::Ones(1);
 
 				double totalProb = 1.;
+
+				// the matrix for a physical index p starts at offset p * dim1 in the tensor data, the columns are 2 * dim1 apart
+				using SliceMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
 
 				for (IndexType qubit = 0; qubit < limit1; ++qubit)
 				{
@@ -817,17 +709,13 @@ namespace QC {
 
 					// 1. First, compute probability for measuring 0
 					// zero matrix
-					MatrixTensorType qubitMat = gammas[qubit].chip(0, 1);
-					MultiplyMatrixWithLambda(qubit, qubitMat);
-					MatrixClass mq = Eigen::Map<const MatrixClass>(qubitMat.data(), dim1, dim2);
-
-					if (qubit != 0)
-						mq = mat * mq;
+					const SliceMap zeroMat(gammas[qubit].data(), dim1, dim2, Eigen::OuterStride<>(2 * dim1));
+					Eigen::RowVectorXcd zeroVec = vec * zeroMat;
 
 					// this is the probability of measuring all the qubits with the picked up values using the random number generator, up to this one
-					// including a measured zero value for the current qubit 
+					// including a measured zero value for the current qubit
 
-					const double allProbability = mq.cwiseProduct(mq.conjugate()).sum().real();
+					const double allProbability = zeroVec.squaredNorm();
 
 					// to get the probability for the current qubit to be 0, we need to divide by the probability of measuring all the previous qubits
 					const double prob0 = ValidMeasurementProbability(allProbability / totalProb);
@@ -840,37 +728,25 @@ namespace QC {
 					// accumulate the probability for measuring the current qubit to whatever was picked by using the random number generator
 					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
 
-					// now update the matrix
+					// now update the vector
 					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
-						mat.swap(mq);
+						vec.swap(zeroVec);
 					else
 					{
-						qubitMat = gammas[qubit].chip(1, 1);
-						MultiplyMatrixWithLambda(qubit, qubitMat);
-						mq = Eigen::Map<const MatrixClass>(qubitMat.data(), dim1, dim2);
-
-						if (qubit == 0)
-							mat.swap(mq);
-						else
-							mat = mat * mq;
+						const SliceMap oneMat(gammas[qubit].data() + dim1, dim1, dim2, Eigen::OuterStride<>(2 * dim1));
+						vec = vec * oneMat;
 					}
 				}
 
 				return res;
 			}
 
+			// with Hastings' method the U matrix from the SVD is not needed, only V
 #ifdef USE_FAST_SVD
-			constexpr static IndexType blockSizeLimit = 64;
-			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> SVD;
+			constexpr static IndexType blockSizeLimit = 16;
+			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinV> SVD;
 #endif
-			constexpr static double numericalRankThreshold = 1E-12;
-			// Equivalent roundoff floor for DiscardedWeight mode: a single singular value at the
-			// RelativeToMax floor scale (1E-12 * sigma_max) contributes ~(1E-12)^2 to the
-			// normalized sum-of-squares weight, so this floor is squared, not reused as-is -
-			// reusing numericalRankThreshold directly here would discard non-negligible singular
-			// values as if they were roundoff.
-			constexpr static double numericalRankThresholdDiscardedWeight = numericalRankThreshold * numericalRankThreshold;
-			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
+			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
 		};
 
 	}

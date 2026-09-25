@@ -11,6 +11,11 @@ There is also a Matrix Product Operator simulator (which is a compressed Density
 
 I also added a DensityMatrix simulator and although I added it with AI as well, it should be good as it's based on the statevector 'calculator' and pretty straightforward (although Claude did some mistakes affecting performance which I had to correct by additional prompting).
 
+> [!NOTE]
+> The blog describes the Matrix Product State implementation in the Vidal decomposition. The MPO was originally implemented using by mirroring the MPS implementation. The current implementation for both is changed to [Hastings' method](https://arxiv.org/abs/0903.3253).
+> This way both precision is increased (some issues caused by the divisions with the singular values which amplify errors were removed) and the speed is increased (more for small bond dimensions, less - in percentage - for big bond dimensions).
+> I implemented it with the help of Opus 5.5, reviewed the code with Astra.
+
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://app.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)
 

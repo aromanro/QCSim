@@ -15,6 +15,10 @@
 #include <math.h>
 #include <future>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 
 #define NR_QUBITS_LIMIT 9
 
@@ -395,9 +399,11 @@ bool NumericalRankStabilityTestMPS()
 	FillTwoQubitGates(gates);
 
 	// This fixed seed contains a mapped circuit that creates roundoff-only
-	// Schmidt values and subsequently routes gates across them. Without a
-	// numerical rank floor, the Vidal pseudoinverse amplifies that SVD noise
-	// into percent-level state-vector errors.
+	// Schmidt values and subsequently routes gates across them. With the Vidal
+	// form (dividing by the lambdas) and without a numerical rank floor, the
+	// pseudoinverse amplified that SVD noise into percent-level state-vector errors.
+	// The implementation does not divide by the lambdas anymore (Hastings' method),
+	// but this remains a useful precision regression test.
 	std::mt19937 stabilityGenerator(544);
 	std::bernoulli_distribution stabilityBool;
 	std::uniform_int_distribution nrGatesDistribution(25, 50);
@@ -1283,7 +1289,7 @@ static bool WideBasisInitializationTestMPS()
 	return true;
 }
 
-// ReCanonicalize must restore the Vidal gauge without applying user-requested chi / entanglement
+// ReCanonicalize must restore the canonical form without applying user-requested chi / entanglement
 // cuts. Trim (and two-qubit gates) remain the operations that compress.
 bool ReCanonicalizeDoesNotTruncateTestMPS()
 {
@@ -1344,6 +1350,196 @@ bool ReCanonicalizeDoesNotTruncateTestMPS()
 	return true;
 }
 
+// Checks the canonical form the implementation relies on (the sites hold B = Gamma * lambda, see MPSSimulatorBase):
+// for each site sum_s B_s B_s^dagger = I (right canonical) and sum_s B_s^dagger lambda_left^2 B_s = lambda_right^2
+// (together they mean that the lambdas are the Schmidt values)
+static bool CheckCanonicalFormMPS(const QC::TensorNetworks::MPSSimulatorImpl& mps, double tolerance, double& maxDeviation)
+{
+	const auto state = std::static_pointer_cast<QC::TensorNetworks::MPSSimulatorBaseState>(mps.getState());
+	const auto& gammas = state->gammas;
+	const auto& lambdas = state->lambdas;
+
+	maxDeviation = 0;
+
+	for (size_t q = 0; q < gammas.size(); ++q)
+	{
+		const auto& B = gammas[q];
+		const Eigen::Index dimLeft = B.dimension(0);
+		const Eigen::Index dimRight = B.dimension(2);
+
+		const Eigen::VectorXd leftLambda2 = q == 0 ? Eigen::VectorXd::Ones(1) : Eigen::VectorXd(lambdas[q - 1].cwiseAbs2());
+		const Eigen::VectorXd rightLambda2 = q + 1 == gammas.size() ? Eigen::VectorXd::Ones(1) : Eigen::VectorXd(lambdas[q].cwiseAbs2());
+
+		if (leftLambda2.size() != dimLeft || rightLambda2.size() != dimRight)
+		{
+			std::cout << "Bond dimensions of site " << q << " don't match the lambdas" << std::endl;
+			maxDeviation = std::numeric_limits<double>::infinity();
+			return false;
+		}
+
+		Eigen::MatrixXcd rightCondition = Eigen::MatrixXcd::Zero(dimLeft, dimLeft);
+		Eigen::MatrixXcd leftCondition = Eigen::MatrixXcd::Zero(dimRight, dimRight);
+
+		for (int s = 0; s < 2; ++s)
+		{
+			Eigen::MatrixXcd Bs(dimLeft, dimRight);
+			for (Eigen::Index j = 0; j < dimRight; ++j)
+				for (Eigen::Index i = 0; i < dimLeft; ++i)
+					Bs(i, j) = B(i, s, j);
+
+			rightCondition += Bs * Bs.adjoint();
+			leftCondition += Bs.adjoint() * leftLambda2.asDiagonal() * Bs;
+		}
+
+		const Eigen::MatrixXcd identity = Eigen::MatrixXcd::Identity(dimLeft, dimLeft);
+		const Eigen::MatrixXcd expectedLeft = rightLambda2.cast<std::complex<double>>().asDiagonal();
+		maxDeviation = std::max({ maxDeviation, (rightCondition - identity).cwiseAbs().maxCoeff(), (leftCondition - expectedLeft).cwiseAbs().maxCoeff() });
+	}
+
+	return maxDeviation <= tolerance;
+}
+
+bool CanonicalFormTestMPS()
+{
+	std::cout << "\nMPS simulator canonical form test (after gates, measurements and ReCanonicalize)" << std::endl;
+
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGates(gates);
+	FillTwoQubitGates(gates);
+
+	constexpr double tolerance = 1E-10;
+
+	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT; ++nrQubits)
+	{
+		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+
+		for (int t = 0; t < 5; ++t)
+		{
+			double deviation = 0;
+
+			// exact simulation: the canonical form must hold after the gates
+			QC::TensorNetworks::MPSSimulatorImpl mps(nrQubits);
+			for (const auto& gate : GenerateRandomCircuitWithGates(gates, 25, 50, nrQubits))
+				mps.ApplyGate(*gate);
+
+			if (!CheckCanonicalFormMPS(mps, tolerance, deviation))
+			{
+				std::cout << "Canonical form broken after applying gates for " << nrQubits << " qubits, deviation: " << deviation << std::endl;
+				return false;
+			}
+
+			// ... and after measurements (the collapse is propagated along the chain)
+			mps.MeasureQubit(qubitDistr(gen));
+			if (!CheckCanonicalFormMPS(mps, tolerance, deviation))
+			{
+				std::cout << "Canonical form broken after a measurement for " << nrQubits << " qubits, deviation: " << deviation << std::endl;
+				return false;
+			}
+
+			std::set<Eigen::Index> measuredQubits;
+			for (int q = 0; q < nrQubits; q += 2)
+				measuredQubits.insert(q);
+			for (const auto& gate : GenerateRandomCircuitWithGates(gates, 10, 20, nrQubits))
+				mps.ApplyGate(*gate);
+			mps.MeasureQubits(measuredQubits);
+			if (!CheckCanonicalFormMPS(mps, tolerance, deviation))
+			{
+				std::cout << "Canonical form broken after measuring several qubits for " << nrQubits << " qubits, deviation: " << deviation << std::endl;
+				return false;
+			}
+
+			// truncated simulation: the canonical form holds only approximately, ReCanonicalize must restore it exactly
+			// without changing the (normalized) state
+			QC::TensorNetworks::MPSSimulatorImpl mpsTrunc(nrQubits);
+			mpsTrunc.setLimitBondDimension(2);
+			for (const auto& gate : GenerateRandomCircuitWithGates(gates, 25, 50, nrQubits))
+				mpsTrunc.ApplyGate(*gate);
+
+			const Eigen::VectorXcd stateBefore = mpsTrunc.getRegisterStorage().normalized();
+			mpsTrunc.ReCanonicalize();
+			if (!CheckCanonicalFormMPS(mpsTrunc, tolerance, deviation))
+			{
+				std::cout << "ReCanonicalize did not restore the canonical form for " << nrQubits << " qubits, deviation: " << deviation << std::endl;
+				return false;
+			}
+
+			const Eigen::VectorXcd stateAfter = mpsTrunc.getRegisterStorage();
+			for (Eigen::Index s = 0; s < stateBefore.size(); ++s)
+				if (!approxEqual(stateBefore[s], stateAfter[s], tolerance))
+				{
+					std::cout << "ReCanonicalize changed the truncated state for " << nrQubits << " qubits" << std::endl;
+					return false;
+				}
+		}
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+bool MultithreadingSettingTestMPS()
+{
+	std::cout << "\nMPS simulator multithreading setting test" << std::endl;
+
+	QC::TensorNetworks::MPSSimulatorImpl impl(2);
+	QC::TensorNetworks::MPSSimulator mps(2);
+	if (!impl.GetMultithreading() || !mps.GetMultithreading())
+	{
+		std::cout << "Multithreading is not enabled by default" << std::endl;
+		return false;
+	}
+
+	impl.SetMultithreading(false);
+	mps.SetMultithreading(false);
+	if (impl.GetMultithreading() || mps.GetMultithreading() || mps.Clone()->GetMultithreading())
+	{
+		std::cout << "Disabling multithreading did not stick (or was not cloned)" << std::endl;
+		return false;
+	}
+
+	// the same circuit with and without multithreading, big enough for Eigen to parallelize the SVDs (bond dimensions up to 64)
+	std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> gates;
+	FillOneQubitGates(gates);
+	FillTwoQubitGates(gates);
+
+	constexpr int nrQubits = 12;
+	const auto circuit = GenerateRandomCircuitWithGatesNoAdjacent(gates, 300, 300, nrQubits);
+
+#ifdef _OPENMP
+	const int threadsBefore = omp_get_max_threads();
+#endif
+
+	QC::TensorNetworks::MPSSimulator mpsMultithreaded(nrQubits);
+	QC::TensorNetworks::MPSSimulator mpsSingleThreaded(nrQubits);
+	mpsSingleThreaded.SetMultithreading(false);
+
+	for (const auto& gate : circuit)
+	{
+		mpsMultithreaded.ApplyGate(*gate);
+		mpsSingleThreaded.ApplyGate(*gate);
+	}
+
+#ifdef _OPENMP
+	if (omp_get_max_threads() != threadsBefore)
+	{
+		std::cout << "The OpenMP number of threads was not restored after single threaded operations" << std::endl;
+		return false;
+	}
+#endif
+
+	const auto state1 = mpsMultithreaded.getRegisterStorage();
+	const auto state2 = mpsSingleThreaded.getRegisterStorage();
+	for (Eigen::Index s = 0; s < state1.size(); ++s)
+		if (!approxEqual(state1[s], state2[s], 1E-12))
+		{
+			std::cout << "Single threaded and multithreaded simulations differ" << std::endl;
+			return false;
+		}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -1373,7 +1569,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeDoesNotTruncateTestMPS();
+	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeDoesNotTruncateTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS();
 }
 
 

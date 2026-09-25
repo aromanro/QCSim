@@ -15,6 +15,7 @@
 
 #include "MPOSimulatorInterface.h"
 #include "Operators.h"
+#include "SingleThreaded.h"
 
 namespace QC {
 
@@ -42,17 +43,23 @@ namespace QC {
 		// the full density matrix, used for comparing against other simulators.
 		//
 		// Each site is a rank-4 tensor with leg order (leftBond, ket, bra, rightBond).
-		// The represented density matrix is the Vidal-like product
-		//        rho = Gamma[0] Lambda[0] Gamma[1] Lambda[1] ... Gamma[N-1]
+		// As for the MPS simulator, the 'gammas' are NOT the Vidal Gamma tensors, they hold
+		// B[i] = Gamma[i] Lambda[i] (Hastings' form, see M. B. Hastings, J. Math. Phys. 50, 095207 (2009)),
+		// the last site has no right lambda, so there B = Gamma. The represented density matrix is the product
+		//        rho = B[0] B[1] ... B[N-1]   ( = Gamma[0] Lambda[0] Gamma[1] Lambda[1] ... Gamma[N-1] )
 		// where the physical indices are pairs (ket, bra).
+		// The lambdas (the operator space singular values on the bonds) are needed only as the left
+		// environment in the two site SVD, so the two qubit gates never divide by them.
 		//
-		// IMPORTANT difference from the MPS simulator: the singular values (lambdas)
+		// IMPORTANT difference from the MPS simulator: the singular values (lambdas) and the B tensors
 		// are NOT renormalized after the SVD. The trace is linear in rho, so keeping
 		// the raw singular values keeps Tr(rho) = 1 to numerical precision under
-		// unitary evolution when user-requested compression is disabled. Numerically
-		// null SVD sectors are still removed to keep the Vidal pseudoinverse stable
+		// unitary evolution when user-requested compression is disabled
 		// (L2-normalizing the lambdas, as the MPS does to keep <psi|psi> = 1, would
 		// instead rescale the trace).
+		// Local non unitary operations (projections, Kraus channels) leave the lambdas stale; that's fine
+		// for the represented operator (everything is computed by contracting the whole chain), it only
+		// makes subsequent truncations less than optimal until ReCanonicalize.
 		//
 		// Compression caveat: limiting the bond dimension or dropping singular values
 		// is ordinary operator-space MPO truncation. It minimizes a local SVD error, but
@@ -341,6 +348,16 @@ namespace QC {
 				return truncationMode;
 			}
 
+			void SetMultithreading(bool enable = true) override
+			{
+				enableMultithreading = enable;
+			}
+
+			bool GetMultithreading() const override
+			{
+				return enableMultithreading;
+			}
+
 			bool setKrausCompletenessCheck(KrausCompletenessCheck mode) override
 			{
 				switch (mode)
@@ -396,6 +413,15 @@ namespace QC {
 
 			std::complex<double> TraceOfSquare() const override
 			{
+				// the environment matrix products are parallelized by Eigen
+				std::complex<double> result;
+				RunMaybeSingleThreaded(enableMultithreading, [&]() { result = TraceOfSquareImpl(); });
+
+				return result;
+			}
+
+			std::complex<double> TraceOfSquareImpl() const
+			{
 				const size_t n = gammas.size();
 				if (n == 0) return 0.;
 
@@ -423,20 +449,7 @@ namespace QC {
 							next.noalias() += Gkb.transpose() * env * Gbk;
 						}
 
-					if (q + 1 < n)
-					{
-						const auto& lam = lambdas[q];
-						for (IndexType r2 = 0; r2 < R; ++r2)
-						{
-							const double lam2 = r2 < lam.size() ? lam[r2] : 0.;
-							for (IndexType r1 = 0; r1 < R; ++r1)
-							{
-								const double lam1 = r1 < lam.size() ? lam[r1] : 0.;
-								next(r1, r2) *= lam1 * lam2;
-							}
-						}
-					}
-
+					// the lambdas are already included in the B tensors
 					env = std::move(next);
 				}
 
@@ -531,51 +544,41 @@ namespace QC {
 
 				MatrixClass env = MatrixClass::Ones(1, 1);
 
-				for (size_t q = 0; q < n; ++q)
-				{
-					const auto& g1 = gammas[q];
-					const auto& g2 = otherBase->gammas[q];
-
-					const IndexType L1 = g1.dimension(0);
-					const IndexType R1 = g1.dimension(3);
-					const IndexType L2 = g2.dimension(0);
-					const IndexType R2 = g2.dimension(3);
-
-					MatrixClass next = MatrixClass::Zero(R1, R2);
-
-					for (IndexType ket = 0; ket < 2; ++ket)
-						for (IndexType bra = 0; bra < 2; ++bra)
-						{
-							MatrixClass G1(L1, R1);
-							MatrixClass G2(L2, R2);
-							for (IndexType r = 0; r < R1; ++r)
-								for (IndexType l = 0; l < L1; ++l)
-									G1(l, r) = g1(l, ket, bra, r);
-
-							for (IndexType r = 0; r < R2; ++r)
-								for (IndexType l = 0; l < L2; ++l)
-									G2(l, r) = std::conj(g2(l, ket, bra, r));
-
-							next.noalias() += G1.transpose() * env * G2;
-						}
-
-					if (q + 1 < n)
+				// the environment matrix products are parallelized by Eigen
+				RunMaybeSingleThreaded(enableMultithreading, [&]()
 					{
-						const auto& lam1 = lambdas[q];
-						const auto& lam2 = otherBase->lambdas[q];
-						for (IndexType r2 = 0; r2 < R2; ++r2)
+						for (size_t q = 0; q < n; ++q)
 						{
-							const double l2 = r2 < lam2.size() ? lam2[r2] : 0.;
-							for (IndexType r1 = 0; r1 < R1; ++r1)
-							{
-								const double l1 = r1 < lam1.size() ? lam1[r1] : 0.;
-								next(r1, r2) *= l1 * l2;
-							}
-						}
-					}
+							const auto& g1 = gammas[q];
+							const auto& g2 = otherBase->gammas[q];
 
-					env = std::move(next);
-				}
+							const IndexType L1 = g1.dimension(0);
+							const IndexType R1 = g1.dimension(3);
+							const IndexType L2 = g2.dimension(0);
+							const IndexType R2 = g2.dimension(3);
+
+							MatrixClass next = MatrixClass::Zero(R1, R2);
+
+							for (IndexType ket = 0; ket < 2; ++ket)
+								for (IndexType bra = 0; bra < 2; ++bra)
+								{
+									MatrixClass G1(L1, R1);
+									MatrixClass G2(L2, R2);
+									for (IndexType r = 0; r < R1; ++r)
+										for (IndexType l = 0; l < L1; ++l)
+											G1(l, r) = g1(l, ket, bra, r);
+
+									for (IndexType r = 0; r < R2; ++r)
+										for (IndexType l = 0; l < L2; ++l)
+											G2(l, r) = std::conj(g2(l, ket, bra, r));
+
+									next.noalias() += G1.transpose() * env * G2;
+								}
+
+							// the lambdas are already included in the B tensors
+							env = std::move(next);
+						}
+					});
 
 				const std::complex<double> tr1 = Trace();
 				const std::complex<double> tr2 = other.Trace();
@@ -812,7 +815,7 @@ namespace QC {
 			{
 				for (size_t i = 0; i < gammas.size(); ++i)
 				{
-					std::cout << std::endl << "Gamma " << i << " (leftBond, ket, bra, rightBond):" << std::endl;
+					std::cout << std::endl << "B (Gamma * Lambda) " << i << " (leftBond, ket, bra, rightBond):" << std::endl;
 					PrintGamma(i);
 					if (i < lambdas.size())
 						std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
@@ -1072,7 +1075,7 @@ namespace QC {
 			}
 
 			// contracts the whole chain, picking at each site a (leftBond x rightBond) matrix
-			// supplied by 'siteMatrix', with the lambdas folded in on the bonds in between
+			// supplied by 'siteMatrix' (the lambdas are already included in the B tensors)
 			template<typename SiteMatrixFunc> std::complex<double> ContractChain(SiteMatrixFunc siteMatrix) const
 			{
 				const size_t n = gammas.size();
@@ -1082,28 +1085,11 @@ namespace QC {
 
 				for (size_t q = 1; q < n; ++q)
 				{
-					const auto& lam = lambdas[q - 1];
-					for (IndexType c = 0; c < res.cols(); ++c)
-					{
-						const double l = c < lam.size() ? lam[c] : 0.;
-						for (IndexType r = 0; r < res.rows(); ++r)
-							res(r, c) *= l;
-					}
-
 					const MatrixClass sm = siteMatrix(static_cast<IndexType>(q));
 					res = (res * sm).eval();
 				}
 
 				return res(0, 0);
-			}
-
-			void NormalizeByTrace()
-			{
-				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					throw std::runtime_error("Cannot normalize an MPO state with zero trace");
-
-				ScaleSite(0, 1. / tr);
 			}
 
 			void RestoreTraceIfSafe()
@@ -1136,41 +1122,17 @@ namespace QC {
 								g(l, ket, bra, r) *= factor;
 			}
 
-			static void AbsorbLambdasIntoGammas(std::vector<LambdaType>& stateLambdas, std::vector<TensorType>& stateGammas)
-			{
-				for (size_t q = 0; q < stateLambdas.size(); ++q)
-				{
-					auto& gamma = stateGammas[q];
-					const auto& lambda = stateLambdas[q];
-
-					for (IndexType r = 0; r < gamma.dimension(3); ++r)
-					{
-						const double lval = r < lambda.size() ? lambda[r] : 0.;
-						for (IndexType bra = 0; bra < 2; ++bra)
-							for (IndexType ket = 0; ket < 2; ++ket)
-								for (IndexType l = 0; l < gamma.dimension(0); ++l)
-									gamma(l, ket, bra, r) *= lval;
-					}
-
-					stateLambdas[q] = LambdaType::Ones(gamma.dimension(3));
-				}
-			}
-
-			static void AddState(std::vector<LambdaType>& lhsLambdas, std::vector<TensorType>& lhsGammas, const std::vector<LambdaType>& rhsLambdas, const std::vector<TensorType>& rhsGammas)
+			// lhs = lhs + rhs, the operators are the products of the site tensors (the lambdas are already included in them)
+			// the resulting bonds are the direct sums of the bonds, the lambdas are set to ones, they are only
+			// placeholders for the left environment until the next ReCanonicalize
+			static void AddState(std::vector<LambdaType>& lhsLambdas, std::vector<TensorType>& lhsGammas, const std::vector<TensorType>& rhsGammas)
 			{
 				assert(lhsGammas.size() == rhsGammas.size());
-				assert(lhsLambdas.size() == rhsLambdas.size());
-
-				std::vector<LambdaType> rhsLambdasAbsorbed = rhsLambdas;
-				std::vector<TensorType> rhsGammasAbsorbed = rhsGammas;
-
-				AbsorbLambdasIntoGammas(lhsLambdas, lhsGammas);
-				AbsorbLambdasIntoGammas(rhsLambdasAbsorbed, rhsGammasAbsorbed);
 
 				const size_t n = lhsGammas.size();
 				if (n == 1)
 				{
-					lhsGammas[0] = (lhsGammas[0] + rhsGammasAbsorbed[0]).eval();
+					lhsGammas[0] = (lhsGammas[0] + rhsGammas[0]).eval();
 					return;
 				}
 
@@ -1180,7 +1142,7 @@ namespace QC {
 				for (size_t q = 0; q < n; ++q)
 				{
 					const auto& lg = lhsGammas[q];
-					const auto& rg = rhsGammasAbsorbed[q];
+					const auto& rg = rhsGammas[q];
 
 					const IndexType lL = lg.dimension(0);
 					const IndexType lR = lg.dimension(3);
@@ -1252,6 +1214,8 @@ namespace QC {
 			// comment above and DecomposeAndSetGammas in MPOSimulatorImpl.h).
 			TruncationMode truncationMode = TruncationMode::DiscardedWeight;
 			KrausCompletenessCheck krausCompletenessCheck = KrausCompletenessCheck::Ignore;
+			// if false, the SVDs and the matrix products are done single threaded, see SetMultithreading
+			bool enableMultithreading = true;
 			bool restoreTraceAfterTruncation = false;
 			bool hermitizeAfterTruncation = false;
 
