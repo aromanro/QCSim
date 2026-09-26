@@ -1,7 +1,7 @@
 # QCSim
 Quantum computation simulator
 
-Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator, a Clifford gates simulator using the stabilizer formalism, a Pauli propagation simulator and a Path Integral simulator. Those are implemented 'from scratch' with no help from AI whatsoever (maybe some of the tests were generated).
+Has a statevector simulator (better than the 'naive' matrix multiplication kind), a Matrix Product State simulator, a Clifford gates simulator using the stabilizer formalism, a Pauli propagation simulator and a Path Integral simulator. Those are implemented 'from scratch' with no help from AI whatsoever (maybe some of the tests were generated) - later edit: see the Note following.
 
 There is also an 'extended stabilizer' simulator based on the frames formalism. Its single-frame implementation supports Clifford gates and arbitrary single-qubit X, Y and Z rotations. Multiframe coalescing is still work in progress (postponed indefinitely). 
 I started to implement it with no AI help and got it working up to executing Clifford gates, then got bored and resumed the work on it with Chat GPT (5.6 Sol Ultra). 
@@ -15,6 +15,9 @@ I also added a DensityMatrix simulator and although I added it with AI as well, 
 > The blog describes the Matrix Product State implementation in the Vidal decomposition. The MPO was originally implemented using by mirroring the MPS implementation. The current implementation for both is changed to [Hastings' method](https://arxiv.org/abs/0903.3253).
 > This way both precision is increased (some issues caused by the divisions with the singular values which amplify errors were removed) and the speed is increased (more for small bond dimensions, less - in percentage - for big bond dimensions).
 > I implemented it with the help of Opus 5.5, reviewed the code with Astra.
+>
+> The statevector - and the Density Matrix, since it uses the same 'calculator', but this one benefits less - are now optimized better, all gates are applied 'in place' - so the statevector uses half the memory it used before - and I tried to apply open mp and avx2 optimizations that should work on both windows and linux.
+> More simulators might be optimized with the AI help in the future. Density Matrix for example is stored as a matrix now, but to be optimized further it should be stored as a 2n qubits vector, then more optimizations could be done.
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://app.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)

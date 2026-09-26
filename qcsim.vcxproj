@@ -323,6 +323,7 @@
     <ClInclude Include="QCSim\FFT.h" />
     <ClInclude Include="QCSim\Frame.h" />
     <ClInclude Include="QCSim\Function.h" />
+    <ClInclude Include="QCSim\GateStructure.h" />
     <ClInclude Include="QCSim\GeneralElitzurVaidmanBomb.h" />
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h" />
     <ClInclude Include="QCSim\GroverAlgorithm.h" />

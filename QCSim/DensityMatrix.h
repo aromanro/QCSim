@@ -56,7 +56,6 @@ namespace QC {
 		DensityMatrix(size_t N = 3, unsigned int addseed = 0)
 			: NrQubits(N), NrBasisStates(CheckedBasisStateCount(N)),
 			rho(MatrixClass::Zero(NrBasisStates, NrBasisStates)),
-			target(MatrixClass::Zero(NrBasisStates, NrBasisStates)),
 			uniformZeroOne(0, 1)
 		{
 			if (addseed == 0)
@@ -805,102 +804,39 @@ namespace QC {
 			return cumulativeProbability;
 		}
 
-		// applies a small gate to every column of rho (the ket index). Each column is a fake 'register'
-		// (an Eigen block expression) fed directly to the reused QubitRegisterCalculator kernels; results
-		// go in place or into the matching column of the target buffer, which is then swapped in - so no
-		// per column temporaries and no copies back and forth.
+		// Each Eigen column/row view is updated in place. Classification is
+		// shared by all views; their possibly non-unit stride is preserved.
 		void ApplyGateToColumns(const GateClass& gate, const MatrixClass& gateMatrix, size_t gateQubits, size_t qubit, size_t controllingQubit1, size_t controllingQubit2)
 		{
-			const size_t qubitBit = 1ULL << qubit;
-
-			bool swapStorage = true;
+			const std::array<size_t, 3> bits{size_t{1} << qubit,
+				gateQubits > 1 ? size_t{1} << controllingQubit1 : 0,
+				gateQubits > 2 ? size_t{1} << controllingQubit2 : 0};
+			const auto structure = gate.getStructure();
+			const bool parallel = colCalculator.GetMultithreading() && NrBasisStates >= ColCalculator::GetParallelMinBasisStates();
 			for (size_t col = 0; col < NrBasisStates; ++col)
 			{
-				ColXpr src = rho.col(col);
-				ColXpr dst = target.col(col);
-
-				swapStorage = true;
-				if (gateQubits == 1)
-				{
-					if (!colCalculator.GetMultithreading() || NrBasisStates < ColCalculator::OneQubitOmpLimit)
-						colCalculator.ApplyOneQubitGate(gate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
-					else
-						colCalculator.ApplyOneQubitGateOmp(gate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
-				}
-				else if (gateQubits == 2)
-				{
-					const size_t ctrlQubitBit = 1ULL << controllingQubit1;
-					if (!colCalculator.GetMultithreading() || NrBasisStates < ColCalculator::TwoQubitOmpLimit)
-						colCalculator.ApplyTwoQubitsGate(gate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
-					else
-						colCalculator.ApplyTwoQubitsGateOmp(gate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
-				}
-				else
-				{
-					const size_t qubitBit2 = 1ULL << controllingQubit1;
-					const size_t ctrlQubitBit = 1ULL << controllingQubit2;
-					if (!colCalculator.GetMultithreading() || NrBasisStates < ColCalculator::ThreeQubitOmpLimit)
-						colCalculator.ApplyThreeQubitsGate(gate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
-					else
-						colCalculator.ApplyThreeQubitsGateOmp(gate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
-				}
+				ColXpr state = rho.col(col);
+				ColCalculator::ApplyGateInPlace(state, gateMatrix, structure, bits,
+					static_cast<unsigned>(gateQubits), NrBasisStates, parallel);
 			}
-
-			if (swapStorage) rho.swap(target); // the results ended up in the target, make it the new rho
 		}
 
-		// applies U^dagger from the right (the bra index) by applying the conjugated small operator to
-		// every row of rho. The passed gateMatrix is already the elementwise conjugate, so the kernels
-		// that read the matrix (generic / diagonal / antidiagonal / controlled) are directly correct.
-		// The hardcoded iSwap / iSwapDag kernels ignore the matrix, so their roles are swapped here to
-		// realize the conjugate (iSwap^dagger = iSwapDag); swap gates are self conjugate.
+		// Right multiplication by U^dagger applies conjugate(U) to each row.
+		// Even specialized Y/phase/iSWAP paths read that supplied matrix; no
+		// replacement gate object or hardcoded conjugation exception is needed.
 		void ApplyGateToRows(const GateClass& gate, const MatrixClass& gateMatrix, size_t gateQubits, size_t qubit, size_t controllingQubit1, size_t controllingQubit2)
 		{
-			const size_t qubitBit = 1ULL << qubit;
-
-			const GateClass* dispatchGate = &gate;
-			static const Gates::iSwapGate<MatrixClass> iswap;
-			static const Gates::iSwapDagGate<MatrixClass> iswapDag;
-			if (gateQubits == 2)
-			{
-				if (gate.IsISwapGate()) dispatchGate = &iswapDag;
-				else if (gate.IsISwapDagGate()) dispatchGate = &iswap;
-			}
-
-			bool swapStorage = true;
+			const std::array<size_t, 3> bits{size_t{1} << qubit,
+				gateQubits > 1 ? size_t{1} << controllingQubit1 : 0,
+				gateQubits > 2 ? size_t{1} << controllingQubit2 : 0};
+			const auto structure = gate.getStructure();
+			const bool parallel = rowCalculator.GetMultithreading() && NrBasisStates >= RowCalculator::GetParallelMinBasisStates();
 			for (size_t row = 0; row < NrBasisStates; ++row)
 			{
-				RowXpr src = rho.row(row);
-				RowXpr dst = target.row(row);
-
-				swapStorage = true;
-				if (gateQubits == 1)
-				{
-					if (!rowCalculator.GetMultithreading() || NrBasisStates < RowCalculator::OneQubitOmpLimit)
-						rowCalculator.ApplyOneQubitGate(*dispatchGate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
-					else
-						rowCalculator.ApplyOneQubitGateOmp(*dispatchGate, src, dst, gateMatrix, qubitBit, NrBasisStates, swapStorage);
-				}
-				else if (gateQubits == 2)
-				{
-					const size_t ctrlQubitBit = 1ULL << controllingQubit1;
-					if (!rowCalculator.GetMultithreading() || NrBasisStates < RowCalculator::TwoQubitOmpLimit)
-						rowCalculator.ApplyTwoQubitsGate(*dispatchGate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
-					else
-						rowCalculator.ApplyTwoQubitsGateOmp(*dispatchGate, src, dst, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
-				}
-				else
-				{
-					const size_t qubitBit2 = 1ULL << controllingQubit1;
-					const size_t ctrlQubitBit = 1ULL << controllingQubit2;
-					if (!rowCalculator.GetMultithreading() || NrBasisStates < RowCalculator::ThreeQubitOmpLimit)
-						rowCalculator.ApplyThreeQubitsGate(*dispatchGate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
-					else
-						rowCalculator.ApplyThreeQubitsGateOmp(*dispatchGate, src, dst, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
-				}
+				RowXpr state = rho.row(row);
+				RowCalculator::ApplyGateInPlace(state, gateMatrix, structure, bits,
+					static_cast<unsigned>(gateQubits), NrBasisStates, parallel);
 			}
-
-			if (swapStorage) rho.swap(target);
 		}
 
 		void CollapseQubit(size_t qubit, size_t result, double pm)
@@ -956,7 +892,6 @@ namespace QC {
 		size_t NrBasisStates;
 
 		MatrixClass rho;
-		MatrixClass target; // reused scratch buffer, swapped in place of rho when a kernel needs a target
 		MatrixClass savedStateStorage;
 
 		// stateless calculators held as member objects (composition instead of inheritance)

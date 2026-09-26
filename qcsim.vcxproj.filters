@@ -299,5 +299,8 @@
     <ClInclude Include="QCSim\DensityMatrix.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\GateStructure.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

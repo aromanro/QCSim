@@ -3,6 +3,7 @@
 #include "QubitRegisterCalculator.h"
 
 #include <unordered_map>
+#include <stdexcept>
 
 // Qubits are numbered from right to left, starting with zero, this might be confusing, since notation numbers them usually from left to right
 
@@ -21,7 +22,6 @@ namespace QC {
 		{
 			assert(N > 0);
 
-			resultsStorage.resize(NrBasisStates);
 
 			if (addseed == 0)
 			{
@@ -42,7 +42,6 @@ namespace QC {
 			uniformZeroOne(0, 1), recordGates(false)
 		{
 			assert(N > 0);
-			resultsStorage.resize(NrBasisStates);
 			registerStorage.swap(v);
 
 			if (addseed == 0)
@@ -174,26 +173,8 @@ namespace QC {
 
 		size_t MeasureAll()
 		{
-			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-			double accum = 0;
-			size_t state = NrBasisStates - 1;
-
-			for (size_t i = 0; i < NrBasisStates; ++i)
-			{
-				accum += std::norm(registerStorage(i));
-				if (prob <= accum)
-				{
-					state = i;
-					break;
-				}
-				++i;
-				accum += std::norm(registerStorage(i));
-				if (prob <= accum)
-				{
-					state = i;
-					break;
-				}
-			}
+			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy
+			const size_t state = BaseClass::SampleBasisState(NrBasisStates, registerStorage, prob, NrBasisStates - 1, UseMultithreading());
 
 			setToBasisState(state); // collapse
 
@@ -217,13 +198,13 @@ namespace QC {
 
 			if (firstQubit == secondQubit)
 			{
-				if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::OneQubitOmpLimit)
+				if (!UseMultithreading())
 					return BaseClass::MeasureQubit(NrBasisStates, registerStorage, firstQubit, prob);
 
 				return BaseClass::MeasureQubitOmp(NrBasisStates, registerStorage, firstQubit, prob);
 			}
 
-			if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::OneQubitOmpLimit)
+			if (!UseMultithreading())
 				return BaseClass::Measure(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
 			
 			return  BaseClass::MeasureOmp(NrBasisStates, registerStorage, firstQubit, secondQubit, prob);
@@ -439,7 +420,14 @@ namespace QC {
 		// controllingQubit1 is for two qubit gates and controllingQubit2 is for three qubit gates, they are ignored for gates with a lower number of qubits
 		void ApplyGate(const GateClass& gate, size_t qubit, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0)
 		{
+			const auto& matrix = gate.getRawOperatorMatrix();
+			const auto dimension = matrix.rows();
+			if (dimension != matrix.cols() || (dimension != 2 && dimension != 4 && dimension != 8))
+				throw std::invalid_argument("Statevector gates must have a 2x2, 4x4 or 8x8 operator matrix");
 			const size_t gateQubits = gate.getQubitsNumber();
+			const size_t matrixQubits = dimension == 2 ? 1 : (dimension == 4 ? 2 : 3);
+			if (gateQubits != matrixQubits)
+				throw std::invalid_argument("Gate arity does not match its operator matrix");
 
 			CheckQubits(gate, qubit, controllingQubit1, controllingQubit2, gateQubits);
 
@@ -447,42 +435,14 @@ namespace QC {
 #ifdef OPTIMIZED_TENSOR_PRODUCT
 			assert(gateQubits > 0 && gateQubits <= 3);
 
-			const size_t qubitBit = 1ULL << qubit;
-
-			const MatrixClass& gateMatrix = gate.getRawOperatorMatrix();
-
-			// TODO: perhaps also optimize better for controlled gates
-			// TODO: there are ways to optimize further for particular kind of gates, probably I won't bother
-			
-			bool swapStorage = true;
-			if (gateQubits == 1)
-			{
-				if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::OneQubitOmpLimit)
-					BaseClass::ApplyOneQubitGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates, swapStorage);
-				else
-					BaseClass::ApplyOneQubitGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, NrBasisStates, swapStorage);
-			}
-			else if (gateQubits == 2)
-			{
-				const size_t ctrlQubitBit = 1ULL << controllingQubit1;
-
-				if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::TwoQubitOmpLimit)
-					BaseClass::ApplyTwoQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
-				else
-					BaseClass::ApplyTwoQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, ctrlQubitBit, NrBasisStates, swapStorage);
-			}
-			else
-			{
-				const size_t qubitBit2 = 1ULL << controllingQubit1;
-				const size_t ctrlQubitBit = 1ULL << controllingQubit2;
-
-				if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::ThreeQubitOmpLimit)
-					BaseClass::ApplyThreeQubitsGate(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
-				else
-					BaseClass::ApplyThreeQubitsGateOmp(gate, registerStorage, resultsStorage, gateMatrix, qubitBit, qubitBit2, ctrlQubitBit, NrBasisStates, swapStorage);
-			}
-
-			if (swapStorage) registerStorage.swap(resultsStorage);
+			const std::array<size_t, 3> bits{
+				size_t{1} << qubit,
+				gateQubits > 1 ? size_t{1} << controllingQubit1 : 0,
+				gateQubits > 2 ? size_t{1} << controllingQubit2 : 0
+			};
+			BaseClass::ApplyGateInPlace(registerStorage, matrix, gate.getStructure(),
+				bits, static_cast<unsigned>(gateQubits), NrBasisStates,
+				UseMultithreading());
 #else			
 			registerStorage = gate.getOperatorMatrix(NrQubits, qubit, controllingQubit1, controllingQubit2) * registerStorage;
 #endif
@@ -597,7 +557,7 @@ namespace QC {
 
 		double GetQubitProbability(size_t qubit) const
 		{
-			if (!BaseClass::GetMultithreading() || NrBasisStates < BaseClass::OneQubitOmpLimit)
+			if (!UseMultithreading())
 				return BaseClass::GetQubitProbability(NrBasisStates, registerStorage, qubit);
 
 			return BaseClass::GetQubitProbabilityOmp(NrBasisStates, registerStorage, qubit);
@@ -624,27 +584,9 @@ namespace QC {
 		// the following ones should be used for 'repeated measurements' that avoid reexecuting the circuit each time
 		size_t MeasureNoCollapse()
 		{
-			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-			double accum = 0;
-			size_t state = 0;
-			for (size_t i = 0; i < NrBasisStates; ++i)
-			{
-				accum += std::norm(registerStorage(i));
-				if (prob <= accum)
-				{
-					state = i;
-					break;
-				}
-				++i;
-				accum += std::norm(registerStorage(i));
-				if (prob <= accum)
-				{
-					state = i;
-					break;
-				}
-			}
+			const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy
 
-			return state;
+			return BaseClass::SampleBasisState(NrBasisStates, registerStorage, prob, 0, UseMultithreading());
 		}
 
 		// does not check the gates, that's why it returns a complex number
@@ -653,7 +595,14 @@ namespace QC {
 		{
 			if (gates.empty()) return 1.;
 
-			// TODO: there are faster methods for special cases, like Pauli strings!
+			// Pauli strings (the common case) are computed in a single read-only pass, without copying the state
+			size_t xMask = 0;
+			size_t zMask = 0;
+			size_t nrY = 0;
+			if (GetPauliStringMasks(gates, xMask, zMask, nrY))
+				return BaseClass::PauliExpectationValue(NrBasisStates, registerStorage, xMask, zMask, nrY,
+					UseMultithreading());
+
 			VectorClass savedState = registerStorage;
 
 			ApplyGates(gates);
@@ -668,10 +617,10 @@ namespace QC {
 		std::unique_ptr<QubitRegister<VectorClass, MatrixClass>> Clone() const
 		{
 			auto qr = std::make_unique<QubitRegister<VectorClass, MatrixClass>>(1);
+			qr->SetMultithreading(BaseClass::GetMultithreading());
 			qr->NrQubits = NrQubits;
 			qr->NrBasisStates = NrBasisStates;
 			qr->registerStorage = registerStorage;
-			qr->resultsStorage = resultsStorage;
 			qr->savedStateStorage = savedStateStorage;
 			qr->computeGates = computeGates;
 			qr->recordGates = recordGates;
@@ -685,6 +634,11 @@ namespace QC {
 		}
 
 	protected:
+		bool UseMultithreading() const
+		{
+			return BaseClass::GetMultithreading() && NrBasisStates >= BaseClass::GetParallelMinBasisStates();
+		}
+
 		inline void CheckQubits(const GateClass& /*gate*/, size_t qubit, size_t controllingQubit1, size_t controllingQubit2, size_t gateQubits) const
 		{
 			if (NrQubits == 0) throw std::invalid_argument("Qubit number is zero");
@@ -701,6 +655,58 @@ namespace QC {
 		}
 
 
+
+		// Recognizes a product of single qubit X, Y, Z (or identity) gates, each on a different qubit.
+		// Exact comparisons only, anything else (including a repeated qubit) is left to the generic path.
+		bool GetPauliStringMasks(const std::vector<Gates::AppliedGate<MatrixClass>>& gates, size_t& xMask, size_t& zMask, size_t& nrY) const
+		{
+			const std::complex<double> zero(0., 0.);
+			const std::complex<double> one(1., 0.);
+			const std::complex<double> i(0., 1.);
+
+			size_t usedQubits = 0;
+			for (const auto& gate : gates)
+			{
+				const MatrixClass& m = gate.getRawOperatorMatrix();
+				if (m.rows() != 2 || m.cols() != 2) return false;
+
+				const size_t qubit = gate.getQubit1();
+				if (qubit >= NrQubits) return false;
+
+				const size_t qubitBit = 1ULL << qubit;
+				if (usedQubits & qubitBit) return false;
+				usedQubits |= qubitBit;
+
+				if (m(0, 1) == zero && m(1, 0) == zero && m(0, 0) == one)
+				{
+					if (m(1, 1) == one) continue; // identity
+					if (m(1, 1) == -one) // Z
+					{
+						zMask |= qubitBit;
+						continue;
+					}
+				}
+				else if (m(0, 0) == zero && m(1, 1) == zero)
+				{
+					if (m(0, 1) == one && m(1, 0) == one) // X
+					{
+						xMask |= qubitBit;
+						continue;
+					}
+					if (m(0, 1) == -i && m(1, 0) == i) // Y
+					{
+						xMask |= qubitBit;
+						zMask |= qubitBit;
+						++nrY;
+						continue;
+					}
+				}
+
+				return false;
+			}
+
+			return true;
+		}
 
 		// shortcut for measuring a single qubit
 		size_t MeasureNoCollapse(size_t qubit)
@@ -727,7 +733,6 @@ namespace QC {
 		size_t NrBasisStates;
 
 		VectorClass registerStorage;
-		VectorClass resultsStorage;
 
 		VectorClass savedStateStorage;
 
@@ -739,6 +744,5 @@ namespace QC {
 	};
 
 }
-
 
 

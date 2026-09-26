@@ -5,6 +5,8 @@
 #include <Eigen/Eigen>
 
 #include <cassert>
+#include <typeinfo>
+#include "GateStructure.h"
 
 namespace QC {
 	namespace Gates {
@@ -88,25 +90,34 @@ namespace QC {
 			QuantumGateWithOp& operator=(const QuantumGateWithOp& other)
 			{
 				operatorMat = other.operatorMat;
+				OperatorChanged();
 				return *this;
 			}
 
 			QuantumGateWithOp& operator=(QuantumGateWithOp&& other)
 			{
 				operatorMat = std::move(other.operatorMat);
+				OperatorChanged();
 				return *this;
 			}
 
 			QuantumGateWithOp& operator=(const MatrixClass& U)
 			{
 				operatorMat = U;
+				OperatorChanged();
 				return *this;
 			}
 
 			QuantumGateWithOp& operator=(MatrixClass&& U)
 			{
 				operatorMat = std::move(U);
+				OperatorChanged();
 				return *this;
+			}
+
+			virtual GateStructure getStructure() const
+			{
+				return ClassifyGateMatrix(operatorMat);
 			}
 
 			const MatrixClass& getRawOperatorMatrix() const
@@ -116,7 +127,12 @@ namespace QC {
 
 			size_t getQubitsNumber() const override
 			{
-				return static_cast<size_t>(log2(operatorMat.rows()));
+				// Common arities avoid a transcendental call on every AppliedGate.
+				const auto rows = operatorMat.rows();
+				if (rows == 2) return 1;
+				if (rows == 4) return 2;
+				if (rows == 8) return 3;
+				return rows > 0 ? static_cast<size_t>(log2(rows)) : 0;
 			}
 
 			void setOperator(const MatrixClass& U)
@@ -125,9 +141,12 @@ namespace QC {
 				//assert(U.rows() == 1ULL << getQubitsNumber());
 
 				operatorMat = U;
+				OperatorChanged();
 			}
 
 		protected:
+			// Derived caches refresh eagerly, including mutations through a base reference.
+			virtual void OperatorChanged() {}
 			MatrixClass operatorMat;
 		};
 
@@ -444,31 +463,43 @@ namespace QC {
 			AppliedGate() noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(MatrixClass::Zero(1, 1)), q1(0), q2(0), q3(0)
 			{
+				OperatorChanged();
 			}
 
 			AppliedGate(const AppliedGate& other) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(other.operatorMat), q1(other.q1), q2(other.q2), q3(other.q3)
 			{
+				structure = other.CurrentStructure();
 			}
 
 			AppliedGate(AppliedGate&& other) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(std::move(other.operatorMat)), q1(other.q1), q2(other.q2), q3(other.q3)
 			{
+				// A derived source may have changed its protected matrix directly.
+				// Its matrix has already moved, so classify the destination instead.
+				structure = other.IsExactAppliedGate() ? other.structure : ClassifyGateMatrix(BaseClass::operatorMat);
 			}
 
 			AppliedGate(const MatrixClass& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(op), q1(q1), q2(q2), q3(q3)
 			{
+				OperatorChanged();
 			}
 
 			AppliedGate(MatrixClass&& op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0) noexcept
 				: Gates::QuantumGateWithOp<MatrixClass>(std::move(op)), q1(q1), q2(q2), q3(q3)
 			{
+				OperatorChanged();
 			}
 
+			// The assignments take the source's descriptor instead of classifying the matrix again. A derived
+			// source is classified from its current matrix (read before a move); a derived destination still
+			// gets its OperatorChanged hook.
 			AppliedGate& operator=(const AppliedGate& other)
 			{
-				BaseClass::operator=(other.operatorMat);
+				if (this == &other) return *this;
+				BaseClass::operatorMat = other.operatorMat;
+				AssignStructure(other.CurrentStructure());
 				q1 = other.q1;
 				q2 = other.q2;
 				q3 = other.q3;
@@ -477,12 +508,19 @@ namespace QC {
 
 			AppliedGate& operator=(AppliedGate&& other) noexcept
 			{
-				BaseClass::operator=(std::move(other.operatorMat));
+				if (this == &other) return *this;
+				const GateStructure otherStructure = other.CurrentStructure();
+				BaseClass::operatorMat = std::move(other.operatorMat);
+				AssignStructure(otherStructure);
 				q1 = other.q1;
 				q2 = other.q2;
 				q3 = other.q3;
 				return *this;
 			}
+
+			// Kernel metadata is separate from the legacy predicates. Other
+			// callers (including MPS routing) rely on AppliedGate's generic flags.
+			GateStructure getStructure() const override { return CurrentStructure(); }
 
 			size_t getQubit1() const { return q1; }
 			size_t getQubit2() const { return q2; }
@@ -546,7 +584,35 @@ namespace QC {
 				return false;
 			}
 
+		protected:
+			void OperatorChanged() override { structure = ClassifyGateMatrix(BaseClass::operatorMat); }
+
 		private:
+			bool IsExactAppliedGate() const
+			{
+#if defined(__cpp_rtti) || defined(_CPPRTTI)
+				return typeid(*this) == typeid(AppliedGate);
+#else
+				return false;
+#endif
+			}
+
+			GateStructure CurrentStructure() const
+			{
+				// Only the exact type can guarantee that every matrix mutation uses
+				// OperatorChanged. Subclasses retain access to operatorMat; without
+				// RTTI use the same safe, uncached path for all instances.
+				return IsExactAppliedGate() ? structure : ClassifyGateMatrix(BaseClass::operatorMat);
+			}
+
+			// After the matrix was assigned: the exact type takes the known descriptor, a derived
+			// destination (which may override OperatorChanged) is refreshed through its hook.
+			void AssignStructure(const GateStructure& known)
+			{
+				if (IsExactAppliedGate()) structure = known;
+				else OperatorChanged();
+			}
+
 			// don't use it!
 			MatrixClass getOperatorMatrix(size_t nrQubits, size_t qubit = 0, size_t controllingQubit1 = 0, size_t controllingQubit2 = 0) const override
 			{
@@ -572,6 +638,7 @@ namespace QC {
 				return BaseClass::getRawOperatorMatrix();
 			}
 
+			GateStructure structure;
 			size_t q1;
 			size_t q2;
 			size_t q3;
