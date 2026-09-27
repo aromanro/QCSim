@@ -1,358 +1,436 @@
 #pragma once
 
 #include <random>
-#include <cassert>
-
-#include "QubitRegisterCalculator.h"
+#include <limits>
+#include <stdexcept>
+#include <unordered_map>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "PauliStringXZ.h"
-
-namespace QC {
-	namespace Clifford {
-
-		class StabilizerState {
-		public:
-			using Generator = PauliStringXZWithSign;
-
-			StabilizerState()
-				: gen(std::random_device{}()), rnd(0.5)
-			{
-			}
-
-			explicit StabilizerState(size_t nQubits)
-				: destabilizerGenerators(nQubits), stabilizerGenerators(nQubits), gen(std::random_device{}()), rnd(0.5)
-			{
-				// this puts it in the |0> state
-				// for each stabilizer generator there is a corresponding destabilizer generator
-				// a stabilizer generator anticommutes with the corresponding destabilizer generator
-				// but commutes with all the other destabilizer generators
-				// this is preserved during the simulation
-				for (size_t q = 0; q < nQubits; ++q)
-				{
-					destabilizerGenerators[q].Resize(nQubits);
-					stabilizerGenerators[q].Resize(nQubits);
-
-					destabilizerGenerators[q].X[q] = true;
-					stabilizerGenerators[q].Z[q] = true;
-				}
-			}
-
-			// copy and move ctors and assignment operators
-			StabilizerState(const StabilizerState& other)
-				: gen(std::random_device{}()), rnd(0.5)
-			{
-				destabilizerGenerators = other.destabilizerGenerators;
-				stabilizerGenerators = other.stabilizerGenerators;
-				savedDestabilizerGenerators = other.savedDestabilizerGenerators;
-				savedStabilizerGenerators = other.savedStabilizerGenerators;
-				enableMultithreading = other.enableMultithreading;
-			}
-
-			StabilizerState(StabilizerState&& other) noexcept
-				: gen(std::random_device{}()), rnd(0.5)
-			{
-				destabilizerGenerators.swap(other.destabilizerGenerators);
-				stabilizerGenerators.swap(other.stabilizerGenerators);
-				savedDestabilizerGenerators.swap(other.savedDestabilizerGenerators);
-				savedStabilizerGenerators.swap(other.savedStabilizerGenerators);
-				enableMultithreading = other.enableMultithreading;
-			}
-
-			StabilizerState& operator=(const StabilizerState& other)
-			{
-				if (this != &other)
-				{
-					destabilizerGenerators = other.destabilizerGenerators;
-					stabilizerGenerators = other.stabilizerGenerators;
-					savedDestabilizerGenerators = other.savedDestabilizerGenerators;
-					savedStabilizerGenerators = other.savedStabilizerGenerators;
-					enableMultithreading = other.enableMultithreading;
-				}
-				return *this;
-			}
-
-			StabilizerState& operator=(StabilizerState&& other) noexcept
-			{
-				if (this != &other)
-				{
-					destabilizerGenerators.swap(other.destabilizerGenerators);
-					stabilizerGenerators.swap(other.stabilizerGenerators);
-					savedDestabilizerGenerators.swap(other.savedDestabilizerGenerators);
-					savedStabilizerGenerators.swap(other.savedStabilizerGenerators);
-					enableMultithreading = other.enableMultithreading;
-				}
-				return *this;
-			}
-
-			void SetSeed(uint64_t theSeed)
-			{
-				std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
-				gen.seed(seed);
-			}
-
-			void Reset()
-			{
-				for (size_t q = 0; q < stabilizerGenerators.size(); ++q)
-				{
-					for (size_t p = 0; p < stabilizerGenerators.size(); ++p)
-					{
-						if (p == q)
-						{
-							destabilizerGenerators[q].X[q] = true;
-							stabilizerGenerators[q].Z[q] = true;
-						}
-						else
-						{
-							destabilizerGenerators[q].X[p] = false;
-							stabilizerGenerators[q].Z[p] = false;
-						}
-
-						destabilizerGenerators[q].PhaseSign = false;
-						stabilizerGenerators[q].PhaseSign = false;
-					}
-				}
-			}
-
-			bool MeasureQubit(size_t qubit)
-			{
-				size_t p;
-				if (IsRandomResult(qubit, p))
-				{
-					// grab the first anticommuting generator
-					Generator& h = stabilizerGenerators[p];
-					// then multiply each other anticommuting one (stabilizer or destabilizer) with it 
-
-					// X present means it's either X or Y, both of which anticommute with Z
-					// otherwise it's either I or Z, which commute with Z
-					for (size_t q = p + 1; q < getNrQubits(); ++q)
-						if (stabilizerGenerators[q].X[qubit])
-							stabilizerGenerators[q].Multiply(h, enableMultithreading);
-
-					for (size_t q = 0; q < getNrQubits(); ++q)
-						if (destabilizerGenerators[q].X[qubit])
-							destabilizerGenerators[q].Multiply(h, enableMultithreading);
-
-					destabilizerGenerators[p] = h;
-
-					h.Clear();
-					h.Z[qubit] = true;
-					h.PhaseSign = rnd(gen);
-
-					return h.PhaseSign;
-				}
-
-				// case 2 - Z (on measured qubit) commutes with all generators
-				// no change to generators, just need to compute the sign in order to get the measurement result
-				return GetTheDeterministicOutcome(qubit);
-			}
-
-			double GetQubitProbability(size_t qubit)
-			{
-				size_t p;
-				if (IsRandomResult(qubit, p))
-					return 0.5;
-
-				return GetTheDeterministicOutcome(qubit) ? 1. : 0.;
-			}
-
-			double getBasisStateProbability(size_t State)
-			{
-				const size_t nrQubits = getNrQubits();
-				std::vector<bool> state(nrQubits);
-
-				for (size_t i = 0; i < nrQubits; ++i)
-				{
-					state[i] = (State & 1) == 1;
-					State >>= 1;
-				}
-
-				return getBasisStateProbability(state);
-			}
-
-			double getBasisStateProbability(const std::vector<bool>& state)
-			{
-				const size_t nrQubits = getNrQubits();
-
-				size_t firstRandomQubit = 0;
-				size_t firstP = 0;
-
-				double prob = 1.0;
-				size_t countRandomQubits = DealWithDeterministicQubits(state, firstRandomQubit, firstP, prob);
-				if (countRandomQubits == 0 || prob == 0.0)
-					return prob;
-
-				// we're going to modify the generators, so let's save the current state, to be restored at the end
-				auto saveDest = destabilizerGenerators;
-				auto saveStab = stabilizerGenerators;
-
-				do {
-					prob *= 0.5; // a random qubit has the 0.5 probability
-
-					Generator& h = stabilizerGenerators[firstP];
-
-					for (size_t q = firstP + 1; q < nrQubits; ++q)
-						if (stabilizerGenerators[q].X[firstRandomQubit])
-							stabilizerGenerators[q].Multiply(h, enableMultithreading);
-
-					for (size_t q = 0; q < nrQubits; ++q)
-						if (destabilizerGenerators[q].X[firstRandomQubit])
-							destabilizerGenerators[q].Multiply(h, enableMultithreading);
-
-					destabilizerGenerators[firstP] = h;
-
-					h.Clear();
-					h.Z[firstRandomQubit] = true;
-
-					// set the measured outcome to the expected value for this state
-					h.PhaseSign = state[firstRandomQubit];
-
-					++firstRandomQubit;
-
-					countRandomQubits = DealWithDeterministicQubits(state, firstRandomQubit, firstP, prob);
-					if (prob == 0.0)
-						break;
-				} while (countRandomQubits > 0);
-
-				// we're done, restore the state
-				destabilizerGenerators.swap(saveDest);
-				stabilizerGenerators.swap(saveStab);
-
-				return prob;
-			}
-
-			std::vector<double> AllProbabilities()
-			{
-				const size_t nrQubits = getNrQubits();
-				if (nrQubits > 32) throw std::runtime_error("The simulator has too many qubits for computing all probabilities");
-
-				const size_t nrStates = 1ULL << nrQubits;
-				std::vector<double> probs(nrStates, 0);
-
-				for (size_t state = 0; state < nrStates; ++state)
-					probs[state] = getBasisStateProbability(state);
-
-				return probs;
-			}
-
-			size_t getNrQubits() const { return stabilizerGenerators.size(); }
-
-			void SaveState()
-			{
-				savedDestabilizerGenerators = destabilizerGenerators;
-				savedStabilizerGenerators = stabilizerGenerators;
-			}
-
-			void RestoreState()
-			{
-				if (savedDestabilizerGenerators.empty() || savedStabilizerGenerators.empty()) return;
-				
-				destabilizerGenerators = savedDestabilizerGenerators;
-				stabilizerGenerators = savedStabilizerGenerators;
-			}
-
-			void RestoreSavedStateDestructive()
-			{
-				if (savedDestabilizerGenerators.empty() || savedStabilizerGenerators.empty()) return;
-
-				destabilizerGenerators.swap(savedDestabilizerGenerators);
-				stabilizerGenerators.swap(savedStabilizerGenerators);
-				ClearSavedState();
-			}
-
-			void ClearSavedState()
-			{
-				savedDestabilizerGenerators.clear();
-				savedStabilizerGenerators.clear();
-			}
-
-			void SetMultithreading(bool enable = true)
-			{
-				enableMultithreading = enable;
-			}
-
-			bool GetMultithreading() const
-			{
-				return enableMultithreading;
-			}
-
-		protected:
-			inline size_t DealWithDeterministicQubits(const std::vector<bool>& state, size_t& firstRandomQubit, size_t& firstP, double& prob)
-			{
-				const size_t nrQubits = getNrQubits();
-				size_t p;
-				size_t countRandomQubits = 0;
-
-				// first deal with the deterministic qubits, it might turn out that the probability is 0
-				// in that case, we can return immediately
-				for (size_t qubit = firstRandomQubit; qubit < nrQubits; ++qubit)
-				{
-					if (IsRandomResult(qubit, p))
-					{
-						if (0 == countRandomQubits)
-						{
-							firstRandomQubit = qubit;
-							firstP = p;
-						}
-						++countRandomQubits;
-					}
-					else
-					{
-						if (GetTheDeterministicOutcome(qubit) != state[qubit])
-						{
-							prob = 0.;
-							return 0;
-						}
-					}
-				}
-
-				if (countRandomQubits == 1)
-				{
-					prob *= 0.5;
-					countRandomQubits = 0;
-				}
-
-				return countRandomQubits;
-			}
-
-			inline bool IsRandomResult(size_t qubit, size_t& p) const
-			{
-				for (size_t q = 0; q < getNrQubits(); ++q)
-					if (stabilizerGenerators[q].X[qubit])
-					{
-						// Z anticommutes with X
-						p = q;
-						return true;
-					}
-
-				return false;
-			}
-
-			// call it only in the case 2, Z (on measured qubit) commutes with all generators
-			inline bool GetTheDeterministicOutcome(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-
-				// no change to generators, just need to compute the sign in order to get the measurement result
-				Generator h(nrQubits);
-
-				// all the stabilizer generators for which the corresponding destabilizer anticommutes with Z are multiplied together
-				// if this is called, all stabilizer generators commute with Z, by the way
-				for (size_t q = 0; q < nrQubits; ++q)
-					if (destabilizerGenerators[q].X[qubit])
-						h.Multiply(stabilizerGenerators[q], enableMultithreading);
-
-				return h.PhaseSign;
-			}
-
-			std::vector<Generator> destabilizerGenerators;
-			std::vector<Generator> stabilizerGenerators;
-
-			std::vector<Generator> savedDestabilizerGenerators;
-			std::vector<Generator> savedStabilizerGenerators;
-
-			std::mt19937_64 gen;
-			std::bernoulli_distribution rnd;
-
-			bool enableMultithreading = true;
-		};
-	}
-}
+#include "CliffordProbability.h"
+
+namespace QC { namespace Clifford {
+
+// The rows represent U^dagger X_q U and U^dagger Z_q U for |psi> = U|0>.
+// Measurements rebase this inverse Clifford map while retaining a zero logical
+// input. No frame amplitudes or extended-stabilizer approximation are involved.
+class StabilizerState {
+public:
+    using Generator = PauliStringXZWithSign;
+
+    StabilizerState() : StabilizerState(0) {}
+    explicit StabilizerState(size_t n)
+        : inverseX(n), inverseZ(n), measurementScratch(1, n), gen(std::random_device{}()), rnd(0.5)
+    { Reset(); }
+
+    // Copies retain the previous independent-RNG policy; moves transfer the RNG.
+    StabilizerState(const StabilizerState& other)
+        : inverseX(other.inverseX), inverseZ(other.inverseZ),
+          savedX(other.savedX), savedZ(other.savedZ), measurementScratch(1, other.getNrQubits()),
+          gen(std::random_device{}()), rnd(0.5), enableMultithreading(other.enableMultithreading) {}
+
+    StabilizerState(StabilizerState&& other) noexcept
+        : gen(std::move(other.gen)), rnd(std::move(other.rnd))
+    { SwapQuantumState(other); }
+
+    StabilizerState& operator=(const StabilizerState& other)
+    {
+        if (this != &other) { StabilizerState copy(other); SwapQuantumState(copy); }
+        return *this;
+    }
+    StabilizerState& operator=(StabilizerState&& other) noexcept
+    {
+        if (this != &other)
+        {
+            SwapQuantumState(other);
+            std::swap(gen, other.gen); std::swap(rnd, other.rnd);
+        }
+        return *this;
+    }
+
+    void SetSeed(uint64_t seed)
+    {
+        std::seed_seq sequence{uint32_t(seed), uint32_t(seed >> 32)};
+        gen.seed(sequence);
+    }
+
+    void Reset() noexcept
+    {
+        InvalidateDistribution();
+        inverseX.Clear(); inverseZ.Clear();
+        for (size_t q = 0; q < getNrQubits(); ++q) { inverseX[q].X[q] = true; inverseZ[q].Z[q] = true; }
+    }
+
+    bool MeasureQubit(size_t qubit)
+    {
+        ValidateQubit(qubit);
+        size_t pivot;
+        if (!IsRandomResult(qubit, pivot)) return bool(inverseZ[qubit].PhaseSign);
+        const bool outcome = rnd(gen);
+        CollapseRandomQubit(qubit, pivot, outcome);
+        return outcome;
+    }
+
+    double GetQubitProbability(size_t qubit) const
+    {
+        ValidateQubit(qubit);
+        return inverseZ[qubit].HasX() ? 0.5 : (inverseZ[qubit].PhaseSign ? 1.0 : 0.0);
+    }
+
+    double getBasisStateProbability(size_t state)
+    {
+        const size_t n = getNrQubits();
+        if (n < std::numeric_limits<size_t>::digits && (state >> n) != 0) return 0.0;
+        EnsureDistribution();
+        return distribution.Probability(state);
+    }
+
+    double getBasisStateProbability(const std::vector<bool>& state)
+    {
+        if (state.size() != getNrQubits())
+            throw std::invalid_argument("Basis state must contain one bit per qubit");
+        EnsureDistribution();
+        return distribution.Probability(state);
+    }
+
+    // These queries distinguish impossible outcomes from probabilities too
+    // small for double. Unsupported outcomes have log2 probability -infinity.
+    bool ContainsBasisState(size_t state)
+    {
+        const size_t n = getNrQubits();
+        if (n < std::numeric_limits<size_t>::digits && (state >> n) != 0) return false;
+        EnsureDistribution();
+        return distribution.Contains(state);
+    }
+    bool ContainsBasisState(const std::vector<bool>& state)
+    {
+        if (state.size() != getNrQubits())
+            throw std::invalid_argument("Basis state must contain one bit per qubit");
+        EnsureDistribution();
+        return distribution.Contains(state);
+    }
+    double Log2BasisStateProbability(size_t state)
+    {
+        const size_t n = getNrQubits();
+        if (n < std::numeric_limits<size_t>::digits && (state >> n) != 0)
+            return -std::numeric_limits<double>::infinity();
+        EnsureDistribution();
+        return distribution.Log2Probability(state);
+    }
+    double Log2BasisStateProbability(const std::vector<bool>& state)
+    {
+        if (state.size() != getNrQubits())
+            throw std::invalid_argument("Basis state must contain one bit per qubit");
+        EnsureDistribution();
+        return distribution.Log2Probability(state);
+    }
+
+    // Terminal samples preserve the quantum state and advance this simulator's RNG.
+    std::vector<bool> SampleBasisState()
+    {
+        EnsureDistribution();
+        return distribution.Sample(gen, rnd);
+    }
+
+    std::vector<std::vector<bool>> SampleBasisStates(size_t shots)
+    {
+        std::vector<std::vector<bool>> samples;
+        if (shots == 0) return samples;
+        EnsureDistribution();
+        samples.reserve(shots);
+        for (size_t shot = 0; shot < shots; ++shot) samples.push_back(distribution.Sample(gen, rnd));
+        return samples;
+    }
+
+    // Bit i in each key corresponds to qubits[i]. Repeated indices repeat the
+    // same measured value. Sampling preserves both the live and saved state.
+    std::unordered_map<size_t, size_t> SampleCounts(const std::vector<size_t>& qubits, size_t shots)
+    {
+        if (qubits.size() > std::numeric_limits<size_t>::digits)
+            throw std::invalid_argument("Use SampleCountsMany for outcomes wider than size_t");
+        ValidateSampleQubits(qubits);
+        std::unordered_map<size_t, size_t> counts;
+        if (shots == 0 || qubits.empty()) return counts;
+        ForEachSample(qubits, shots, [&](const auto& bits) {
+            ++counts[static_cast<size_t>(bits[0])];
+        });
+        return counts;
+    }
+
+    std::unordered_map<std::vector<bool>, size_t> SampleCountsMany(const std::vector<size_t>& qubits, size_t shots)
+    {
+        ValidateSampleQubits(qubits);
+        std::unordered_map<std::vector<bool>, size_t> counts;
+        if (shots == 0 || qubits.empty()) return counts;
+        std::vector<bool> result(qubits.size());
+        ForEachSample(qubits, shots, [&](const auto& bits) {
+            for (size_t q = 0; q < result.size(); ++q) result[q] = (bits[q / 64] >> (q % 64)) & 1;
+            ++counts[result];
+        });
+        return counts;
+    }
+
+    std::vector<double> AllProbabilities()
+    {
+        const size_t nrQubits = getNrQubits();
+        if (nrQubits > 32)
+            throw std::runtime_error("The simulator has too many qubits for computing all probabilities");
+        if (nrQubits >= std::numeric_limits<size_t>::digits)
+            throw std::length_error("The simulator has too many qubits for computing all probabilities");
+
+        const size_t nrStates = 1ULL << nrQubits;
+        if (nrStates > std::vector<double>().max_size())
+            throw std::length_error("Probability vector exceeds container capacity");
+        std::vector<double> probs(nrStates, 0);
+
+        EnsureDistribution();
+        distribution.FillProbabilities(probs);
+
+        return probs;
+    }
+
+
+    size_t getNrQubits() const noexcept { return inverseZ.size(); }
+
+    void SaveState()
+    {
+        if (savedX.HasSameShape(inverseX) && savedZ.HasSameShape(inverseZ))
+        {
+            savedX.CopyFrom(inverseX); savedZ.CopyFrom(inverseZ);
+            return;
+        }
+        // First save (or save after ClearSavedState): publish both allocations
+        // together. Repeated saves above cannot throw or partially fail.
+        detail::PackedTableau x(inverseX), z(inverseZ);
+        savedX.swap(x); savedZ.swap(z);
+    }
+    void RestoreState() noexcept
+    {
+        if (savedX.empty()) return;
+        inverseX.CopyFrom(savedX); inverseZ.CopyFrom(savedZ);
+        InvalidateDistribution();
+    }
+    void RestoreSavedStateDestructive() noexcept
+    {
+        if (savedX.empty()) return;
+        inverseX.swap(savedX); inverseZ.swap(savedZ);
+        ClearSavedState(); InvalidateDistribution();
+    }
+    void ClearSavedState() noexcept { savedX.clear(); savedZ.clear(); }
+    void SetMultithreading(bool enable = true) noexcept { enableMultithreading = enable; }
+    bool GetMultithreading() const noexcept { return enableMultithreading; }
+
+protected:
+    void FlipDistributionBit(size_t qubit) noexcept
+    {
+        if (validDistributions & FullDistribution) distribution.FlipBit(qubit);
+        if (validDistributions & MarginalDistribution)
+            for (size_t bit = 0; bit < marginalQubits.size(); ++bit)
+                if (marginalQubits[bit] == qubit) marginalDistribution.FlipBit(bit);
+    }
+    // Keep both validity flags in one byte: ordinary gates invalidate both
+    // caches with one store, regardless of the amount of cached storage.
+    void InvalidateDistribution() noexcept { validDistributions = 0; }
+    void EnsureDistribution()
+    {
+        if (!(validDistributions & FullDistribution))
+        {
+            distribution.BuildFromInverse(inverseZ);
+            validDistributions |= FullDistribution;
+        }
+    }
+    void ValidateSampleQubits(const std::vector<size_t>& qubits) const
+    {
+        for (size_t q : qubits) ValidateQubit(q);
+    }
+    void EnsureMarginalDistribution(const std::vector<size_t>& qubits)
+    {
+        if ((validDistributions & MarginalDistribution) && marginalQubits == qubits) return;
+        std::vector<size_t> nextQubits(qubits);
+        marginalDistribution.BuildFromInverse(inverseZ, qubits);
+        marginalQubits.swap(nextQubits);
+        validDistributions |= MarginalDistribution;
+    }
+    template<class Consumer> bool TrySimpleSample(const std::vector<size_t>& qubits, Consumer consume)
+    {
+        size_t first = getNrQubits();
+        for (size_t q : qubits)
+        {
+            const auto row = inverseZ[q];
+            if (!row.HasX()) continue;
+            if (first == getNrQubits()) { first = q; continue; }
+            const auto previous = inverseZ[first];
+            for (size_t w = 0; w < row.Words(); ++w)
+                if (row.X.words[w] != previous.X.words[w]) return false;
+        }
+        // Rank zero/one needs neither a tableau copy nor elimination. Rows
+        // with equal X parts differ by a deterministic diagonal observable.
+        std::vector<detail::Word> bits(qubits.size() / 64 + (qubits.size() % 64 != 0));
+        const bool random = first != getNrQubits() && rnd(gen);
+        unsigned referenceY = 0;
+        bool referenceSign = false;
+        if (first != getNrQubits())
+        {
+            const auto reference = inverseZ[first];
+            referenceSign = bool(reference.PhaseSign);
+            for (size_t w = 0; w < reference.Words(); ++w)
+                referenceY += detail::Popcount(reference.X.words[w] & reference.Z.words[w]);
+        }
+        for (size_t output = 0; output < qubits.size(); ++output)
+        {
+            const auto row = inverseZ[qubits[output]];
+            bool value = bool(row.PhaseSign);
+            if (row.HasX())
+            {
+                unsigned phase = referenceY + 2 * unsigned(value != referenceSign);
+                for (size_t w = 0; w < row.Words(); ++w)
+                    phase += 3 * detail::Popcount(row.X.words[w] & row.Z.words[w]);
+                assert((phase & 1) == 0);
+                value = random != bool(phase & 2);
+            }
+            if (value) bits[output / 64] |= detail::Word(1) << (output % 64);
+        }
+        consume(bits);
+        return true;
+    }
+    template<class Consumer> void ForEachSample(const std::vector<size_t>& qubits, size_t shots, Consumer consume)
+    {
+        // A single wide cold shot need not pay for full Gaussian elimination.
+        // The prepared path uses the same random free variables as measurement,
+        // so warming the cache never changes seeded outcomes.
+        if (shots == 1 && !((validDistributions & MarginalDistribution) && marginalQubits == qubits))
+        {
+            if (TrySimpleSample(qubits, consume)) return;
+            if (qubits.size() >= 128)
+            {
+                StabilizerState sample(*this, SamplingCopy{});
+                std::vector<detail::Word> bits(qubits.size() / 64 + (qubits.size() % 64 != 0));
+                for (size_t q = 0; q < qubits.size(); ++q)
+                    if (sample.MeasureQubit(qubits[q])) bits[q / 64] |= detail::Word(1) << (q % 64);
+                consume(bits);
+                gen = sample.gen; rnd = sample.rnd;
+                return;
+            }
+        }
+        EnsureMarginalDistribution(qubits);
+        std::vector<detail::Word> bits(marginalDistribution.Words());
+        for (size_t shot = 0; shot < shots; ++shot)
+        {
+            marginalDistribution.SampleInto(bits, gen, rnd);
+            consume(bits);
+        }
+    }
+    void ValidateQubit(size_t q) const
+    {
+        if (q >= getNrQubits()) throw std::out_of_range("Qubit index out of range");
+    }
+    void ValidatePair(size_t a, size_t b, bool allowEqual = false) const
+    {
+        ValidateQubit(a); ValidateQubit(b);
+        if (!allowEqual && a == b) throw std::invalid_argument("Two-qubit gate requires distinct qubits");
+    }
+    bool IsRandomResult(size_t qubit, size_t& pivot) const noexcept
+    {
+        const auto row = inverseZ[qubit];
+        for (size_t w = 0; w < row.Words(); ++w)
+        {
+            detail::Word value = row.X.words[w];
+            if (!value) continue;
+            pivot = 64 * w + detail::TrailingZero(value);
+            return true;
+        }
+        return false;
+    }
+
+    void CollapseRandomQubit(size_t qubit, size_t pivot, bool outcome) noexcept
+    {
+        InvalidateDistribution();
+        auto measured = measurementScratch[0];
+        measured.CopyFrom(inverseZ[qubit]);
+        unsigned measuredY = 0;
+        for (size_t w = 0; w < measured.Words(); ++w)
+            measuredY += detail::Popcount(measured.X.words[w] & measured.Z.words[w]);
+        const size_t pivotWord = pivot / 64;
+        const detail::Word mask = detail::Word(1) << (pivot % 64);
+        const auto update = [&](auto row, bool anticommutes) {
+            // Only the image of physical X_qubit anticommutes with measured Z.
+            // Rows without logical X_p need only their two pivot bits changed.
+            if (!row.X[pivot])
+            {
+                row.X[pivot] = anticommutes;
+                row.Z[pivot] = false;
+                return;
+            }
+            const bool sign = bool(row.PhaseSign) ^ bool(measured.PhaseSign) ^ anticommutes ^ outcome;
+            unsigned phase = 2 * unsigned(sign) + measuredY;
+            for (size_t w = 0; w < row.Words(); ++w)
+            {
+                const detail::Word x = row.X.words[w], z = row.Z.words[w];
+                detail::Word nx = x ^ measured.X.words[w], nz = z ^ measured.Z.words[w];
+                if (w == pivotWord)
+                {
+                    nx = (nx & ~mask) | (anticommutes ? mask : 0);
+                    nz |= mask;
+                }
+                // Convert between Hermitian-Pauli and ordered X/Z phases;
+                // absorb the observed outcome into the new logical-Z signs.
+                phase += detail::Popcount(x & z) - detail::Popcount(nx & nz)
+                    + 2 * detail::Popcount(x & measured.Z.words[w]);
+                row.X.words[w] = nx; row.Z.words[w] = nz;
+            }
+            assert((phase & 1) == 0);
+            row.PhaseSign = (phase & 2) != 0;
+        };
+        const size_t n = getNrQubits();
+        int threads = 1;
+#ifdef _OPENMP
+        // Packed rows need far less work than the former bit-by-bit kernel.
+        // Keep at least 128 rows per worker and respect the caller's limit.
+        if (enableMultithreading && n >= 512)
+            threads = static_cast<int>(std::min(n / 128, size_t(omp_get_max_threads())));
+#endif
+        if (threads == 1)
+        {
+            for (size_t q = 0; q < n; ++q) { update(inverseX[q], q == qubit); update(inverseZ[q], false); }
+        }
+        else
+        {
+#pragma omp parallel for num_threads(threads)
+            for (long long q = 0; q < static_cast<long long>(n); ++q)
+            { update(inverseX[q], size_t(q) == qubit); update(inverseZ[q], false); }
+        }
+    }
+
+    void SwapQuantumState(StabilizerState& other) noexcept
+    {
+        inverseX.swap(other.inverseX); inverseZ.swap(other.inverseZ);
+        savedX.swap(other.savedX); savedZ.swap(other.savedZ);
+        measurementScratch.swap(other.measurementScratch);
+        std::swap(enableMultithreading, other.enableMultithreading);
+        InvalidateDistribution(); other.InvalidateDistribution();
+    }
+
+    detail::PackedTableau inverseX, inverseZ;
+    detail::PackedTableau savedX, savedZ;
+    detail::PackedTableau measurementScratch;
+    std::mt19937_64 gen;
+    std::bernoulli_distribution rnd{0.5};
+    bool enableMultithreading = true;
+    enum : uint8_t { FullDistribution = 1, MarginalDistribution = 2 };
+    uint8_t validDistributions = 0;
+    detail::BasisDistribution distribution;
+    detail::BasisDistribution marginalDistribution;
+    std::vector<size_t> marginalQubits;
+
+private:
+    struct SamplingCopy {};
+    // Copy only the live tableau. Preserve the parent's RNG stream without
+    // invoking random_device or copying its saved state and probability caches.
+    StabilizerState(const StabilizerState& other, SamplingCopy)
+        : inverseX(other.inverseX), inverseZ(other.inverseZ),
+          measurementScratch(1, other.getNrQubits()), gen(other.gen), rnd(other.rnd),
+          enableMultithreading(other.enableMultithreading) {}
+};
+
+}}

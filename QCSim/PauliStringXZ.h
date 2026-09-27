@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <string>
 #include <cassert>
+#include <utility>
 
 namespace QC
 {
@@ -239,9 +240,13 @@ namespace QC
 
 		inline void ApplySwap(size_t qubit1, size_t qubit2)
 		{
-			ApplyCX(qubit1, qubit2);
-			ApplyCX(qubit2, qubit1);
-			ApplyCX(qubit1, qubit2);
+			// Permuting tensor factors leaves the Pauli sign/coefficient unchanged.
+			const bool x = X[qubit1];
+			const bool z = Z[qubit1];
+			X[qubit1] = X[qubit2];
+			Z[qubit1] = Z[qubit2];
+			X[qubit2] = x;
+			Z[qubit2] = z;
 		}
 
 		inline void ApplyISwap(size_t qubit1, size_t qubit2)
@@ -296,7 +301,7 @@ namespace QC
 
 		PauliStringXZWithSign(const PauliStringXZWithSign& other) : PauliStringXZ(other), PhaseSign(other.PhaseSign) {}
 
-		PauliStringXZWithSign(PauliStringXZWithSign&& other) noexcept : PauliStringXZ(other), PhaseSign(other.PhaseSign) {}
+		PauliStringXZWithSign(PauliStringXZWithSign&& other) noexcept : PauliStringXZ(std::move(other)), PhaseSign(other.PhaseSign) {}
 
 		PauliStringXZWithSign& operator=(const PauliStringXZWithSign& other)
 		{
@@ -420,7 +425,9 @@ namespace QC
 		}
 
 		// multiplies the two generators and stores the result in the current one
-		inline void Multiply(const PauliStringXZWithSign& j, bool enableMultithreading)
+		// Keep the threading argument for source compatibility. Parallelism belongs
+		// across independent rows: vector<bool> writes within a row can share words.
+		inline void Multiply(const PauliStringXZWithSign& j, bool /*enableMultithreading*/)
 		{
 			const size_t nrQubits = X.size();
 			// phase sign is negative when 'PhaseSign' is true
@@ -429,46 +436,19 @@ namespace QC
 			
 			// we still need to add the contribution from the Pauli strings:
 
-			if (!enableMultithreading || nrQubits < 1024)
+			for (size_t q = 0; q < nrQubits; ++q)
 			{
-				for (size_t q = 0; q < nrQubits; ++q)
-				{
-					const int x1 = BoolToInt(j.X[q]);
-					const int z1 = BoolToInt(j.Z[q]);
-					const int x2 = BoolToInt(X[q]);
-					const int z2 = BoolToInt(Z[q]);
+				const int x1 = BoolToInt(j.X[q]);
+				const int z1 = BoolToInt(j.Z[q]);
+				const int x2 = BoolToInt(X[q]);
+				const int z2 = BoolToInt(Z[q]);
 
-					// add up all the exponents of i that contribute to the sign of the product
-					m += g(x1, z1, x2, z2);
+				// add up all the exponents of i that contribute to the sign of the product
+				m += g(x1, z1, x2, z2);
 
-					// X * X = I, Z * Z = I, so the value is set when there is only one of them
-					X[q] = (x1 ^ x2) == 1;
-					Z[q] = (z1 ^ z2) == 1;
-				}
-			}
-			else
-			{
-				//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-				long long int mloc = 0;
-
-#pragma omp parallel for reduction(+:mloc) 
-				//num_threads(processor_count) schedule(static, 256)
-				for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-				{
-					const int x1 = BoolToInt(j.X[q]);
-					const int z1 = BoolToInt(j.Z[q]);
-					const int x2 = BoolToInt(X[q]);
-					const int z2 = BoolToInt(Z[q]);
-
-					// add up all the exponents of i that contribute to the sign of the product
-					mloc += g(x1, z1, x2, z2);
-
-					// X * X = I, Z * Z = I, so the value is set when there is only one of them
-					X[q] = (x1 ^ x2) == 1;
-					Z[q] = (z1 ^ z2) == 1;
-				}
-
-				m += mloc;
+				// X * X = I, Z * Z = I, so the value is set when there is only one of them
+				X[q] = (x1 ^ x2) == 1;
+				Z[q] = (z1 ^ z2) == 1;
 			}
 
 			// the mod 4 that appears here is because the values for the powers of i keep repeating

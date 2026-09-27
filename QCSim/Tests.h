@@ -43,6 +43,7 @@ bool MPOSimulatorTests();
 bool DensityMatrixTests();
 
 bool CliffordSimulatorTests();
+bool CliffordRegressionTests();
 bool CliffordExpectationValuesTests();
 
 void ConstructPauliString(size_t nrQubits, std::string& pauliStr, std::vector<QC::Gates::AppliedGate<>>& expGates);

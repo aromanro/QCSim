@@ -1,550 +1,149 @@
 #pragma once
 
+#include <memory>
+#include <string>
 #include "StabilizerState.h"
 
-namespace QC {
-	namespace Clifford {
+namespace QC { namespace Clifford {
 
-		class StabilizerSimulator : public StabilizerState {
-		public:
-			StabilizerSimulator() = default;
+class StabilizerSimulator : public StabilizerState {
+public:
+    StabilizerSimulator() = default;
+    explicit StabilizerSimulator(size_t n) : StabilizerState(n) {}
 
-			explicit StabilizerSimulator(size_t nQubits)
-				: StabilizerState(nQubits)
-			{
-			}
+    // Appending G to U maps inverse images by U^dagger G^dagger P G U.
+    // Gates touch a constant number of packed rows, with no parallel launch.
+    void ApplyH(size_t q) { BeginGate(q); detail::SwapRows(inverseX[q], inverseZ[q]); }
+    void ApplyS(size_t q) { ValidateQubit(q); S(q, 3); }
+    void ApplySdg(size_t q) { ValidateQubit(q); S(q, 1); }
+    void ApplyX(size_t q) { ValidateQubit(q); inverseZ[q].PhaseSign ^= true; FlipDistributionBit(q); }
+    void ApplyY(size_t q) { ValidateQubit(q); inverseX[q].PhaseSign ^= true; inverseZ[q].PhaseSign ^= true; FlipDistributionBit(q); }
+    void ApplyZ(size_t q) { ValidateQubit(q); inverseX[q].PhaseSign ^= true; }
+    void ApplySx(size_t q) { BeginGate(q); inverseZ[q].Multiply(inverseX[q], 3); }
+    void ApplySxDag(size_t q) { BeginGate(q); inverseZ[q].Multiply(inverseX[q], 1); }
+    void ApplyK(size_t q)
+    {
+        BeginGate(q);
+        inverseZ[q].Multiply(inverseX[q], 3);
+        inverseX[q].PhaseSign ^= true;
+    }
+    void ApplyCX(size_t target, size_t control) { BeginPair(target, control); CX(target, control); }
+    void ApplyCY(size_t target, size_t control)
+    {
+        BeginPair(target, control);
+        S(target, 1); CX(target, control); S(target, 3);
+    }
+    void ApplyCZ(size_t target, size_t control) { ValidatePair(target, control); CZ(target, control); }
+    void ApplySwap(size_t a, size_t b)
+    {
+        ValidatePair(a, b, true);
+        if (a == b) return;
+        InvalidateDistribution(); Swap(a, b);
+    }
+    void ApplyISwap(size_t a, size_t b)
+    {
+        BeginPair(a, b);
+        S(a, 3); S(b, 3); CZ(a, b); Swap(a, b);
+    }
+    void ApplyISwapDag(size_t a, size_t b)
+    {
+        BeginPair(a, b);
+        S(a, 1); S(b, 1); CZ(a, b); Swap(a, b);
+    }
 
-			void ApplyH(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 2048)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-						ApplyH(qubit, q);
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+    double ExpectationValue(const std::string& pauliString) const
+    {
+        if (pauliString.size() > getNrQubits()) throw std::invalid_argument("Pauli string exceeds the number of qubits");
+        std::vector<std::pair<size_t, char>> positions;
+        std::pair<size_t, char> first{0, 'I'};
+        for (size_t q = 0; q < pauliString.size(); ++q)
+        {
+            char c;
+            switch (pauliString[q])
+            {
+            case 'I': case 'i': continue;
+            case 'X': case 'x': c = 'X'; break;
+            case 'Y': case 'y': c = 'Y'; break;
+            case 'Z': case 'z': c = 'Z'; break;
+            default: throw std::runtime_error("Invalid operator in the Pauli string");
+            }
+            if (first.second == 'I') first = {q, c};
+            else
+            {
+                if (positions.empty()) { positions.reserve(pauliString.size()); positions.push_back(first); }
+                positions.emplace_back(q, c);
+            }
+        }
+        if (first.second == 'I') return 1.0;
+        // Sparse one-qubit observables need no allocation or scratch product.
+        if (positions.empty())
+        {
+            if (first.second != 'Y')
+            {
+                const auto row = first.second == 'X' ? inverseX[first.first] : inverseZ[first.first];
+                return row.HasX() ? 0.0 : (row.PhaseSign ? -1.0 : 1.0);
+            }
+            const auto x = inverseX[first.first], z = inverseZ[first.first];
+            unsigned phase = 1 + 2 * unsigned(bool(x.PhaseSign) != bool(z.PhaseSign));
+            for (size_t w = 0; w < x.Words(); ++w)
+            {
+                if (x.X.words[w] != z.X.words[w]) return 0.0;
+                phase += detail::Popcount(x.X.words[w] & x.Z.words[w])
+                    + detail::Popcount(z.X.words[w] & z.Z.words[w])
+                    + 2 * detail::Popcount(x.Z.words[w] & z.X.words[w]);
+            }
+            assert((phase & 1) == 0);
+            return (phase & 2) ? -1.0 : 1.0;
+        }
+        detail::PackedTableau work(1, getNrQubits());
+        auto result = work[0];
+        bool allDiagonal = true, diagonalSign = false;
+        const auto accumulate = [&](auto row) {
+            diagonalSign ^= bool(row.PhaseSign);
+            for (size_t w = 0; w < result.Words(); ++w)
+            {
+                const auto x = row.X.words[w];
+                result.X.words[w] ^= x;
+                if (x) allDiagonal = false;
+            }
+        };
+        for (const auto& op : positions)
+        {
+            if (op.second != 'Z') accumulate(inverseX[op.first]);
+            if (op.second != 'X') accumulate(inverseZ[op.first]);
+        }
+        if (result.HasX()) return 0.0;
+        if (allDiagonal) return diagonalSign ? -1.0 : 1.0;
+        result.Clear();
+        for (const auto& op : positions)
+        {
+            if (op.second != 'Z') result.Multiply(inverseX[op.first]);
+            if (op.second != 'X') result.Multiply(inverseZ[op.first], op.second == 'Y' ? 1 : 0);
+        }
+        return result.PhaseSign ? -1.0 : 1.0;
+    }
 
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-						ApplyH(qubit, q);
-				}
-			}
+    std::unique_ptr<StabilizerSimulator> Clone() const { return std::make_unique<StabilizerSimulator>(*this); }
 
-			void ApplyK(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-						ApplyH(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
+private:
+    void BeginGate(size_t q) { ValidateQubit(q); InvalidateDistribution(); }
+    void BeginPair(size_t a, size_t b) { ValidatePair(a, b); InvalidateDistribution(); }
+    void S(size_t q, unsigned phase) noexcept { inverseX[q].Multiply(inverseZ[q], phase); }
+    void CX(size_t target, size_t control) noexcept
+    {
+        inverseX[control].Multiply(inverseX[target]);
+        inverseZ[target].Multiply(inverseZ[control]);
+    }
+    void CZ(size_t target, size_t control) noexcept
+    {
+        inverseX[target].Multiply(inverseZ[control]);
+        inverseX[control].Multiply(inverseZ[target]);
+    }
+    void Swap(size_t a, size_t b) noexcept
+    {
+        detail::SwapRows(inverseX[a], inverseX[b]);
+        detail::SwapRows(inverseZ[a], inverseZ[b]);
+    }
+};
 
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-						ApplyH(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-			}
-
-			void ApplyS(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 2048)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-						ApplyS(qubit, q);
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-						ApplyS(qubit, q);
-				}
-			}
-
-			void ApplySdg(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-			}
-
-			void ApplySx(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 512)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-						ApplyH(qubit, q);
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 128)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-						ApplyH(qubit, q);
-						ApplyZ(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-			}
-
-			void ApplySxDag(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyS(qubit, q);
-						ApplyH(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyS(qubit, q);
-						ApplyH(qubit, q);
-						ApplyS(qubit, q);
-					}
-				}
-			}
-
-			void ApplyX(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 2048)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-						ApplyX(qubit, q);
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-						ApplyX(qubit, q);
-				}
-			}
-
-			void ApplyY(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 2048)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-						ApplyY(qubit, q);
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-						ApplyY(qubit, q);
-				}
-			}
-
-			void ApplyZ(size_t qubit)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 2048)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-						ApplyZ(qubit, q);
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 512)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-						ApplyZ(qubit, q);
-				}
-			}
-
-			void ApplyCX(size_t target, size_t control)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-						ApplyCX(target, control, q);
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-						ApplyCX(target, control, q);
-				}
-			}
-
-			void ApplyCY(size_t target, size_t control)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyZ(target, q);
-						ApplyS(target, q);
-						ApplyCX(target, control, q);
-						ApplyS(target, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyZ(target, q);
-						ApplyS(target, q);
-						ApplyCX(target, control, q);
-						ApplyS(target, q);
-					}
-				}
-			}
-
-			void ApplyCZ(size_t target, size_t control)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyH(target, q);
-						ApplyCX(target, control, q);
-						ApplyH(target, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyH(target, q);
-						ApplyCX(target, control, q);
-						ApplyH(target, q);
-					}
-				}
-			}
-
-			void ApplySwap(size_t qubit1, size_t qubit2)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 1024)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyCX(qubit1, qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyCX(qubit1, qubit2, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 256)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyCX(qubit1, qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyCX(qubit1, qubit2, q);
-					}
-				}
-			}
-
-			void ApplyISwap(size_t qubit1, size_t qubit2)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 512)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyS(qubit1, q);
-						ApplyH(qubit1, q);
-						ApplyS(qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyCX(qubit1, qubit2, q);
-						ApplyH(qubit2, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 128)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyS(qubit1, q);
-						ApplyH(qubit1, q);
-						ApplyS(qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyCX(qubit1, qubit2, q);
-						ApplyH(qubit2, q);
-					}
-				}
-			}
-
-
-			void ApplyISwapDag(size_t qubit1, size_t qubit2)
-			{
-				const size_t nrQubits = getNrQubits();
-				if (!enableMultithreading || nrQubits < 512)
-				{
-					for (size_t q = 0; q < nrQubits; ++q)
-					{
-						ApplyH(qubit2, q);
-						ApplyCX(qubit1, qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyZ(qubit2, q);
-						ApplyS(qubit2, q);
-						ApplyH(qubit1, q);
-						ApplyZ(qubit1, q);
-						ApplyS(qubit1, q);
-					}
-				}
-				else
-				{
-					//const auto processor_count = QC::QubitRegisterCalculator<>::GetNumberOfThreads();
-
-#pragma omp parallel for 
-					//num_threads(processor_count) schedule(static, 128)
-					for (long long int q = 0; q < static_cast<long long int>(nrQubits); ++q)
-					{
-						ApplyH(qubit2, q);
-						ApplyCX(qubit1, qubit2, q);
-						ApplyCX(qubit2, qubit1, q);
-						ApplyZ(qubit2, q);
-						ApplyS(qubit2, q);
-						ApplyH(qubit1, q);
-						ApplyZ(qubit1, q);
-						ApplyS(qubit1, q);
-					}
-				}
-			}
-
-			double ExpectationValue(const std::string& pauliString) const
-			{
-				// We compute this: <Psi|pauliString|Psi>, where |Psi> is defined by the stabilizers
-				if (pauliString.empty()) return 1.0;
-
-				PauliStringXZ g(getNrQubits());
-				std::vector<size_t> pos;
-				size_t phase = 0;
-				
-				SetPauliString(pauliString, g, pos, phase);
-				if (pos.empty()) return 1.0;
-
-				// this is easy, if the pauli string transforming the stabilizers leads to an orthogonal state on the original one, the expectation value is zero
-				if (CheckStabilizersAnticommutation(g, pos))
-					return 0.0;
-
-				// now we're left with the case when all stabilizers commute with the operator
-				// we need to find if the result is 1 or -1
-
-				// check destabilizers for that
-				std::vector<bool> GZ(g.Z);
-
-				for (size_t i = 0; i < getNrQubits(); ++i)
-				{
-					// check if the destabilizer anticommutes with the operator
-					if (CommutesWithGenerator(g, destabilizerGenerators[i], pos))
-						continue; // commutes, check next destabilizer
-
-					// anticommutes with this destabilizer
-					// multiply with the corresponding stabilizer
-					const Generator& gen = stabilizerGenerators[i];
-
-					phase += gen.PhaseSign ? 2 : 0;
-					for (size_t q = 0; q < getNrQubits(); ++q)
-					{	
-						if (gen.X[q] && GZ[q])
-							phase += 2;
-						if (gen.X[q] && gen.Z[q])
-							++phase;
-						
-						GZ[q] = GZ[q] != gen.Z[q];
-					}
-				}
-
-				return phase % 4 == 0 ? 1.0 : -1.0;
-			}
-
-			std::unique_ptr<StabilizerSimulator> Clone() const
-			{
-				auto sim = std::make_unique<StabilizerSimulator>(1);
-
-				sim->destabilizerGenerators = destabilizerGenerators;
-				sim->stabilizerGenerators = stabilizerGenerators;
-
-				sim->savedDestabilizerGenerators = savedDestabilizerGenerators;
-				sim->savedStabilizerGenerators = savedStabilizerGenerators;
-
-				sim->enableMultithreading = enableMultithreading;
-
-				return sim;
-			}
-
-		private:
-			static inline bool CommutesWithGenerator(const PauliStringXZ& g, const PauliStringXZ& generator, const std::vector<size_t>& pos)
-			{
-				bool commutes = true;
-				for (size_t j = 0; j < pos.size(); ++j)
-				{
-					const size_t pauliOpQubit = pos[j];
-					if ((g.X[pauliOpQubit] && generator.Z[pauliOpQubit]) != (g.Z[pauliOpQubit] && generator.X[pauliOpQubit])) 
-						commutes = !commutes;
-				}
-
-				return commutes;
-			}
-
-			bool CheckStabilizersAnticommutation(const PauliStringXZ& g, const std::vector<size_t>& pos) const
-			{
-				for (size_t i = 0; i < getNrQubits(); ++i)
-					if (!CommutesWithGenerator(g, stabilizerGenerators[i], pos))
-						return true;
-
-				return false;
-			}
-
-			static void SetPauliString(const std::string& pauliString, PauliStringXZ& g, std::vector<size_t>& pos, size_t& phase)
-			{
-				pos.reserve(pauliString.size());
-				for (size_t i = 0; i < pauliString.size(); ++i)
-				{
-					const char c = toupper(pauliString[i]);
-					switch (c)
-					{
-					case 'I':
-						break;
-					case 'X':
-						g.X[i] = true;
-						pos.push_back(i);
-						break;
-					case 'Y':
-						g.X[i] = true;
-						g.Z[i] = true;
-						// Y = iXZ, so we get a phase factor of i
-						++phase;
-						pos.push_back(i);
-						break;
-					case 'Z':
-						g.Z[i] = true;
-						pos.push_back(i);
-						break;
-					default:
-						throw std::runtime_error("Invalid operator in the Pauli string");
-					}
-				}
-			}
-
-			inline void ApplyH(size_t qubit, size_t q)
-			{
-				destabilizerGenerators[q].ApplyH(qubit);
-				stabilizerGenerators[q].ApplyH(qubit);
-			}
-
-			inline void ApplyS(size_t qubit, size_t q)
-			{
-				destabilizerGenerators[q].ApplyS(qubit);
-				stabilizerGenerators[q].ApplyS(qubit);
-			}
-
-			inline void ApplyX(size_t qubit, size_t q)
-			{
-				destabilizerGenerators[q].ApplyX(qubit);
-				stabilizerGenerators[q].ApplyX(qubit);
-			}
-
-			inline void ApplyY(size_t qubit, size_t q)
-			{
-				destabilizerGenerators[q].ApplyY(qubit);
-				stabilizerGenerators[q].ApplyY(qubit);
-			}
-
-			inline void ApplyZ(size_t qubit, size_t q)
-			{
-				destabilizerGenerators[q].ApplyZ(qubit);
-				stabilizerGenerators[q].ApplyZ(qubit);
-			}
-
-			inline void ApplyCX(size_t target, size_t control, size_t q)
-			{
-				destabilizerGenerators[q].ApplyCX(target, control);
-				stabilizerGenerators[q].ApplyCX(target, control);
-			}
-		};
-	}
-}
+}}

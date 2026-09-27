@@ -116,6 +116,8 @@ target_compile_options(QCSim PUBLIC ${SIMD_FLAGS})
 
 include(CTest)
 if(BUILD_TESTING)
+    add_test(NAME clifford_simulator COMMAND QCSim 4)
+    set_tests_properties(clifford_simulator PROPERTIES TIMEOUT 600)
     add_test(NAME pauli_propagator COMMAND QCSim 5)
     set_tests_properties(pauli_propagator PROPERTIES TIMEOUT 600)
 endif()

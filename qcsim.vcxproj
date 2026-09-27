@@ -311,6 +311,8 @@
     <ClInclude Include="QCSim\CatEntangler.h" />
     <ClInclude Include="QCSim\CheckCHSHInequality.h" />
     <ClInclude Include="QCSim\Clifford.h" />
+    <ClInclude Include="QCSim\CliffordTableau.h" />
+    <ClInclude Include="QCSim\CliffordProbability.h" />
     <ClInclude Include="QCSim\CoinFlipping.h" />
     <ClInclude Include="QCSim\DensityMatrix.h" />
     <ClInclude Include="QCSim\DeutschJozsa.h" />
