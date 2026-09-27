@@ -18,6 +18,8 @@ I also added a DensityMatrix simulator and although I added it with AI as well, 
 >
 > The statevector - and the Density Matrix, since it uses the same 'calculator', but this one benefits less - are now optimized better, all gates are applied 'in place' - so the statevector uses half the memory it used before - and I tried to apply open mp and avx2 optimizations that should work on both windows and linux.
 > More simulators might be optimized with the AI help in the future. Density Matrix for example is stored as a matrix now, but to be optimized further it should be stored as a 2n qubits vector, then more optimizations could be done.
+>
+> Other simulators optimized with AI in later commits: Path integral.
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/6a193db170ab432596079c530fc75c77)](https://app.codacy.com/gh/aromanro/QCSim/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![CodeFactor](https://www.codefactor.io/repository/github/aromanro/qcsim/badge)](https://www.codefactor.io/repository/github/aromanro/qcsim)

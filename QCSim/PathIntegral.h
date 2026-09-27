@@ -1,8 +1,12 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <vector>
 #include <random>
+#include <unordered_map>
+#include "PathIntegralGate.h"
+#include "PathIntegralStorage.h"
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -12,90 +16,6 @@
 
 namespace QC {
 	namespace PathIntegral {
-
-		struct FastVectorBool {
-			static constexpr size_t MaxWords = 16;
-
-			FastVectorBool() = default;
-
-			explicit FastVectorBool(const std::vector<bool>& v) 
-				: nBits(v.size())
-			{
-				for (size_t i = 0; i < v.size(); ++i)
-					if (v[i]) words[i / 64] |= (1ULL << (i % 64));
-				for (size_t i = (v.size() + 63) / 64; i < MaxWords; ++i)
-					words[i] = 0;
-			}
-
-			explicit FastVectorBool(size_t nBits) : nBits(nBits)
-			{
-				for (size_t i = 0; i < MaxWords; ++i)
-					words[i] = 0;
-			}
-
-			FastVectorBool(const FastVectorBool& other) = default;
-			
-			FastVectorBool& operator=(const FastVectorBool& other) = default;
-			
-			FastVectorBool(FastVectorBool&& other) noexcept
-			{
-				words.swap(other.words);
-				nBits = other.nBits;
-			}
-
-			FastVectorBool& operator=(FastVectorBool&& other) noexcept
-			{
-				words.swap(other.words);
-				nBits = other.nBits;
-				return *this;
-			}
-
-			bool get(size_t i) const { return (words[i / 64] >> (i % 64)) & 1; }
-
-			void set(size_t i, bool val)
-			{
-				if (val) words[i / 64] |= (1ULL << (i % 64));
-				else words[i / 64] &= ~(1ULL << (i % 64));
-			}
-
-			std::vector<bool> toVector() const
-			{
-				std::vector<bool> res(nBits);
-				for (size_t i = 0; i < nBits; ++i)
-					res[i] = get(i);
-				return res;
-			}
-
-			size_t size() const { return nBits; }
-			size_t nWords() const { return (nBits + 63) / 64; }
-
-			bool operator==(const FastVectorBool& o) const
-			{
-				const size_t w = nWords();
-				for (size_t i = 0; i < w; ++i)
-					if (words[i] != o.words[i]) return false;
-				return true;
-			}
-
-			bool operator!=(const FastVectorBool& o) const { return !(*this == o); }
-
-			const std::array<uint64_t, MaxWords>& getWords() const { return words; }
-
-		private:
-			std::array<uint64_t, MaxWords> words{};
-			size_t nBits = 0;
-		};
-
-		struct FastVectorBoolHash {
-			size_t operator()(const FastVectorBool& s) const
-			{
-				const std::array<uint64_t, FastVectorBool::MaxWords>& words = s.getWords();
-				size_t seed = 0;
-				for (int i = static_cast<int>((s.size() + 63) / 64) - 1; i >= 0; --i)
-					seed ^= std::hash<uint64_t>{}(words[i]) + (seed << 6);
-				return seed;
-			}
-		};
 
 		class PathIntegralSimulator {
 		public:
@@ -129,7 +49,7 @@ namespace QC {
 				return doublingsLimit;
 			}
 
-			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash>& GetAmplitudes()
+			AmplitudeMap& GetAmplitudes()
 			{
 				return intermediateAmplitudes;
 			}
@@ -151,13 +71,14 @@ namespace QC {
 
 			void ClearSavedAmplitudes()
 			{
-				savedAmplitudes.clear();
+				savedAmplitudes.Release();
 			}
 
 			void Reset()
 			{
-				intermediateAmplitudes.clear();
-				savedAmplitudes.clear();
+				intermediateAmplitudes.Release();
+				savedAmplitudes.Release();
+				scratchAmplitudes.Release();
 				circuit.clear();
 				circuitBack.clear();
 			}
@@ -282,97 +203,135 @@ namespace QC {
 				intermediateAmplitudes = PropagateAll(startBits);
 			}
 
-			void PropagateStep(const QC::Gates::AppliedGate<>& gate, std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash>& currentAmplitudes)
+			void PropagateStep(const QC::Gates::AppliedGate<>& gate, AmplitudeMap& currentAmplitudes)
 			{
-				const auto& U = gate.getRawOperatorMatrix();
-				const size_t gateQubits = gate.getQubitsNumber();
-
-				assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
-
-				std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> nextAmplitudes;
-				nextAmplitudes.reserve(currentAmplitudes.size() * 2);
-
-				if (gateQubits == 1)
-				{
-					const size_t qubit = gate.getQubit1();
-
-					for (const auto& [state, amp] : currentAmplitudes)
-					{
-						if (std::norm(amp) < epsilon) continue;
-
-						assert(qubit < state.size());
-						const Eigen::Index col = (state.get(qubit) ? 1 : 0);
-
-						for (Eigen::Index row = 0; row < 2; ++row)
-						{
-							const std::complex<double> val = U(row, col);
-							if (std::norm(val) > epsilon)
-							{
-								auto nextState = state;
-								nextState.set(qubit, row == 1);
-
-								nextAmplitudes[nextState] += val * amp;
-							}
-						}
-					}
+				if (currentAmplitudes.empty()) {
+					scratchAmplitudes.ReleaseIfOversized(0, currentAmplitudes.QubitCount());
+					return;
 				}
-				else if (gateQubits == 2)
-				{
-					const size_t qubit1 = gate.getQubit1();
-					const size_t qubit2 = gate.getQubit2();
-
-					for (const auto& [state, amp] : currentAmplitudes)
-					{
-						if (std::norm(amp) < epsilon) continue;
-
-						assert(qubit1 < state.size() && qubit2 < state.size());
-						const Eigen::Index col = ((state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
-
-						for (Eigen::Index row = 0; row < 4; ++row)
-						{
-							const std::complex<double> val = U(row, col);
-							if (std::norm(val) > epsilon)
-							{
-								auto nextState = state;
-								nextState.set(qubit1, (row & 1) == 1);
-								nextState.set(qubit2, (row & 2) == 2);
-
-								nextAmplitudes[nextState] += val * amp;
-							}
-						}
-					}
+				currentAmplitudes.CompactIfSparse();
+				const Detail::SparseGate transitions(gate, epsilon);
+				for (unsigned i = 0; i < transitions.arity; ++i)
+					if (transitions.qubits[i] >= currentAmplitudes.QubitCount())
+						throw std::out_of_range("Path integral gate qubit is outside the register");
+				switch (transitions.arity) {
+				case 1: PropagateSparse<1>(transitions, currentAmplitudes); break;
+				case 2: PropagateSparse<2>(transitions, currentAmplitudes); break;
+				case 3: PropagateSparse<3>(transitions, currentAmplitudes); break;
 				}
-				else // only up to three qubits gates are supported
-				{
-					const size_t qubit1 = gate.getQubit1();
-					const size_t qubit2 = gate.getQubit2();
-					const size_t qubit3 = gate.getQubit3();
-
-					for (const auto& [state, amp] : currentAmplitudes)
-					{
-						if (std::norm(amp) < epsilon) continue;
-
-						assert(qubit1 < state.size() && qubit2 < state.size() && qubit3 < state.size());
-						const Eigen::Index col = ((state.get(qubit3) ? 4 : 0) | (state.get(qubit2) ? 2 : 0) | (state.get(qubit1) ? 1 : 0));
-
-						for (Eigen::Index row = 0; row < 8; ++row)
-						{
-							const std::complex<double> val = U(row, col);
-							if (std::norm(val) > epsilon)
-							{
-								auto nextState = state;
-								nextState.set(qubit1, (row & 1) == 1);
-								nextState.set(qubit2, (row & 2) == 2);
-								nextState.set(qubit3, (row & 4) == 4);
-
-								nextAmplitudes[nextState] += val * amp;
-							}
-						}
-					}
-				}
-
-				currentAmplitudes.swap(nextAmplitudes);
+				scratchAmplitudes.ReleaseIfOversized(currentAmplitudes.size(), currentAmplitudes.QubitCount());
 			}
+
+		private:
+			template<unsigned Arity> bool UseGroups(const Detail::SparseGate& gate, const AmplitudeMap& current, unsigned& expansion) const
+			{
+				if (Arity < 2 || gate.maxFanout < 4 || !gate.distinctQubits || current.size() < 128) return false;
+				constexpr unsigned dimension = 1u << Arity;
+				constexpr size_t samples = 8;
+				size_t present = 0, outputs = 0;
+				std::array<uint64_t, FastVectorBool::MaxWords> words;
+				for (size_t sample = 0; sample < samples; ++sample) {
+					std::copy_n(current.State(sample * (current.size() / samples)).getWords(), current.wordCount, words.begin());
+					Detail::MutableStateView state(words.data(), current.QubitCount());
+					unsigned rows = 0;
+					for (unsigned column = 0; column < dimension; ++column) {
+						gate.SetRow<Arity>(state, column);
+						if (current.FindIndex(state) == current.size()) continue;
+						++present;
+						for (unsigned t = 0; t < gate.counts[column]; ++t) rows |= 1u << gate.rows[column][t];
+					}
+					for (; rows; rows &= rows - 1) ++outputs;
+				}
+				// Sparse local groups really can expand four- or eightfold. Do
+				// not force them through repeated allocation/rehash growth.
+				expansion = static_cast<unsigned>(std::max<size_t>(1, (outputs + present - 1) / present));
+				// The sample is only an estimate. Round up to leave room for
+				// less-occupied groups without a mid-gate growth allocation.
+				unsigned rounded = 1;
+				while (rounded < expansion) rounded *= 2;
+				expansion = rounded;
+				return present * 2 >= samples * dimension;
+			}
+
+			template<unsigned Arity> void PropagateGroups(const Detail::SparseGate& gate, AmplitudeMap& current, unsigned expansion)
+			{
+				constexpr unsigned dimension = 1u << Arity;
+				auto& next = scratchAmplitudes;
+				next.PrepareOutput(current.QubitCount(), gate.ReserveSize(current.size(), current.QubitCount(), next.max_size(), expansion));
+				std::vector<unsigned char> visited(current.size(), 0);
+				std::array<uint64_t, FastVectorBool::MaxWords> words;
+				for (size_t i = 0; i < current.size(); ++i) {
+					if (visited[i]) continue;
+					std::copy_n(current.State(i).getWords(), current.wordCount, words.begin());
+					Detail::MutableStateView state(words.data(), current.QubitCount());
+					const unsigned sourceColumn = gate.Column<Arity>(state);
+					std::array<std::complex<double>, dimension> output{};
+					unsigned retainedRows = 0;
+					for (unsigned column = 0; column < dimension; ++column) {
+						gate.SetRow<Arity>(state, column);
+						const size_t index = column == sourceColumn ? i : current.FindIndex(state);
+						if (index == current.size()) continue;
+						visited[index] = 1;
+						const auto amplitude = current.values[index];
+						if (std::norm(amplitude) < epsilon) continue;
+						for (unsigned t = 0; t < gate.counts[column]; ++t) {
+							const unsigned row = gate.rows[column][t];
+							output[row] += gate.values[column][t] * amplitude;
+							retainedRows |= 1u << row;
+						}
+					}
+					for (unsigned row = 0; row < dimension; ++row) {
+						if (!(retainedRows & (1u << row))) continue;
+						gate.SetRow<Arity>(state, row);
+						// Distinct untouched-bit groups cannot produce the same key.
+						// Keep entries even when their contributions cancel to zero.
+						next.InsertUnique(state, output[row]);
+					}
+				}
+				current.swap(next);
+				current.CompactIfSparse();
+			}
+
+			template<unsigned Arity> void PropagateSparse(const Detail::SparseGate& gate, AmplitudeMap& current)
+			{
+				if (gate.diagonal || gate.injective) {
+					current.Transform(!gate.diagonal, [&](Detail::MutableStateView& state, std::complex<double>& amplitude) noexcept {
+						if (std::norm(amplitude) < epsilon) return false;
+						const unsigned column = gate.Column<Arity>(state);
+						if (!gate.counts[column]) return false;
+						if (!gate.diagonal) gate.SetRow<Arity>(state, gate.rows[column][0]);
+						amplitude = gate.values[column][0] * amplitude;
+						return true;
+					});
+					return;
+				}
+				unsigned expansion = 0;
+				if (UseGroups<Arity>(gate, current, expansion)) {
+					PropagateGroups<Arity>(gate, current, expansion);
+					return;
+				}
+				// Retain capacities in both buffers across gates. No state nodes or
+				// per-key allocations are needed, including for wide registers.
+				auto& next = scratchAmplitudes;
+				next.PrepareOutput(current.QubitCount(), gate.ReserveSize(current.size(), current.QubitCount(), next.max_size(), expansion));
+				std::array<uint64_t, FastVectorBool::MaxWords> words;
+				const size_t width = current.QubitCount();
+				const size_t wordCount = (width + 63) / 64;
+				for (const auto& item : current) {
+					if (std::norm(item.second) < epsilon) continue;
+					const unsigned column = gate.Column<Arity>(item.first);
+					std::copy_n(item.first.getWords(), wordCount, words.begin());
+					Detail::MutableStateView state(words.data(), width);
+					for (unsigned t = 0; t < gate.counts[column]; ++t) {
+						gate.SetRow<Arity>(state, gate.rows[column][t]);
+						next[state] += gate.values[column][t] * item.second;
+					}
+				}
+				current.swap(next);
+				current.CompactIfSparse();
+			}
+
+		public:
 
 			double QubitProbability(size_t qubit, bool value = true) const
 			{
@@ -386,49 +345,100 @@ namespace QC {
 			}
 
 			FastVectorBool MeasureNoCollapse() {
-				const double prob = 1. - uniformZeroOne(rng); // this excludes 0 as probabiliy 
-				double accum = 0;
-				for (const auto& [state, amp] : intermediateAmplitudes) {
-					accum += std::norm(amp);
-					if (prob <= accum)
-						return state;
+				const auto& values = intermediateAmplitudes.values;
+				if (values.empty()) throw std::domain_error("Cannot measure an empty path integral state");
+				// Rebuild from current values: callers can retain mutable amplitude
+				// references, so a persistent cached distribution could be stale.
+				// Independent sums scan all amplitudes without a per-entry CDF
+				// dependency. Only the selected block needs a second, short scan.
+				std::array<double, 64> cumulativeBlocks;
+				if (values.size() <= cumulativeBlocks.size()) {
+					double total = 0.;
+					for (size_t i = 0; i < values.size(); ++i) {
+						total += std::norm(values[i]);
+						cumulativeBlocks[i] = total;
+					}
+					const double target = MeasurementTarget(total);
+					size_t index = 0;
+					while (index + 1 < values.size() && target >= cumulativeBlocks[index]) ++index;
+					return intermediateAmplitudes.State(index);
 				}
-
-				return intermediateAmplitudes.begin()->first;
+				const size_t blockSize = std::max<size_t>(64, 1 + (values.size() - 1) / cumulativeBlocks.size());
+				const size_t blocks = 1 + (values.size() - 1) / blockSize;
+				double total = 0.;
+				for (size_t block = 0; block < blocks; ++block) {
+					const size_t end = std::min(values.size(), (block + 1) * blockSize);
+					size_t i = block * blockSize;
+					double a = 0., b = 0., c = 0., d = 0.;
+					for (; i + 3 < end; i += 4) {
+						a += std::norm(values[i]); b += std::norm(values[i + 1]);
+						c += std::norm(values[i + 2]); d += std::norm(values[i + 3]);
+					}
+					for (; i < end; ++i) a += std::norm(values[i]);
+					total += (a + b) + (c + d);
+					cumulativeBlocks[block] = total;
+				}
+				double target = MeasurementTarget(total);
+				size_t block = 0;
+				while (block + 1 < blocks && target >= cumulativeBlocks[block]) ++block;
+				if (block) target -= cumulativeBlocks[block - 1];
+				double cumulative = 0.;
+				size_t lastPositive = block * blockSize;
+				const size_t end = std::min(values.size(), (block + 1) * blockSize);
+				for (size_t i = block * blockSize; i < end; ++i) {
+					const double weight = std::norm(values[i]);
+					if (weight > 0.) lastPositive = i;
+					cumulative += weight;
+					if (target < cumulative) return intermediateAmplitudes.State(i);
+				}
+				return intermediateAmplitudes.State(lastPositive);
 			}
 
 			bool MeasureQubit(size_t qubit) {
-				const auto state = MeasureNoCollapse();
-				const bool result = state.get(qubit);
-
-				
-				double accum = 0.;
-				for (const auto& [s, amp] : intermediateAmplitudes) {
-					if (s.get(qubit) == result)
-						accum += std::norm(amp);
+				if (intermediateAmplitudes.empty()) throw std::domain_error("Cannot measure an empty path integral state");
+				if (qubit >= intermediateAmplitudes.QubitCount())
+					throw std::out_of_range("Path integral measurement qubit is outside the register");
+				// Draw directly from the two marginals instead of sampling a full
+				// basis state, then compact survivors and rebuild their index once.
+				double zeroMass = 0., oneMass = 0.;
+				unsigned present = 0;
+				const size_t word = qubit / 64;
+				const uint64_t mask = uint64_t{1} << (qubit % 64);
+				for (size_t i = 0; i < intermediateAmplitudes.size(); ++i) {
+					const bool bit = (intermediateAmplitudes.keys[i * intermediateAmplitudes.wordCount + word] & mask) != 0;
+					const double weight = std::norm(intermediateAmplitudes.values[i]);
+					if (bit) oneMass += weight;
+					else zeroMass += weight;
+					present |= 1u << unsigned(bit);
 				}
-
-				double normFactor = 1.;
-				
-				const double sqrtAccum = std::sqrt(accum);
-				if (sqrtAccum > std::numeric_limits<double>::epsilon())
-					normFactor = 1. / sqrtAccum;
-				
-				// collapse the state
-				for (auto it = intermediateAmplitudes.begin(); it != intermediateAmplitudes.end();) {
-					if (it->first.get(qubit) == result)
-					{
-						it->second *= normFactor;
-						++it;
-					}
-					else
-						it = intermediateAmplitudes.erase(it);
-				}
+				const bool result = MeasurementTarget(zeroMass + oneMass) >= zeroMass;
+				const double normFactor = 1. / std::sqrt(result ? oneMass : zeroMass);
+				// A normalized state with this bit already fixed needs no writes.
+				// Track keys as well as mass so opposite-sector zero entries still
+				// get removed when that sector has zero probability.
+				if (present == 3 || normFactor != 1.)
+					intermediateAmplitudes.Transform(false,
+						[&](Detail::MutableStateView& state, std::complex<double>& amplitude) noexcept {
+							if (state.get(qubit) != result) return false;
+							amplitude *= normFactor;
+							return true;
+						}, true);
+				intermediateAmplitudes.CompactIfSparse();
+				scratchAmplitudes.ReleaseIfOversized(intermediateAmplitudes.size(), intermediateAmplitudes.QubitCount());
 
 				return result;
 			}
 
 		private:
+			// Measurement is conditional on the retained state, including after
+			// pruning. Reject undefined distributions before consuming randomness.
+			double MeasurementTarget(double total) {
+				if (!(total > 0.) || !std::isfinite(total))
+					throw std::domain_error("Path integral measurement requires finite positive probability mass");
+				const double target = uniformZeroOne(rng) * total;
+				return target < total ? target : std::nextafter(total, 0.);
+			}
+
 			// TODO: this can be parallelized!
 			std::complex<double> Propagate(const FastVectorBool& currentState, const FastVectorBool& endState, size_t gateIndex, size_t possibleQubitsChanges)
 			{
@@ -533,9 +543,9 @@ namespace QC {
 					PropagateStep(gate, intermediateAmplitudes);
 			}
 
-			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> PropagateAll(const FastVectorBool& startState)
+			AmplitudeMap PropagateAll(const FastVectorBool& startState)
 			{
-				std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> currentAmplitudes;
+				AmplitudeMap currentAmplitudes;
 				currentAmplitudes[startState] = std::complex<double>(1., 0.);
 
 				for (const auto& gate : circuit)
@@ -588,9 +598,10 @@ namespace QC {
 
 			std::vector<QC::Gates::AppliedGate<>> circuit;
 			std::vector<QC::Gates::AppliedGate<>> circuitBack;
-			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> intermediateAmplitudes;
+			AmplitudeMap intermediateAmplitudes;
 
-			std::unordered_map<FastVectorBool, std::complex<double>, FastVectorBoolHash> savedAmplitudes;
+			AmplitudeMap savedAmplitudes;
+			AmplitudeMap scratchAmplitudes;
 
 			size_t doublingsLimit;
 			double epsilon;
