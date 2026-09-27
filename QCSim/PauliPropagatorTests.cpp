@@ -2,6 +2,7 @@
 
 #include "QubitRegister.h"
 #include "PauliPropagator.h"
+#include "PauliPropagatorRegressionTests.h"
 
 
 void ApplyTwoQubitsGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2)
@@ -282,5 +283,15 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 
 bool TestPauliPropagator()
 {
+	try
+	{
+		QC::PauliRegression::Run();
+	}
+	catch (const std::exception& error)
+	{
+		std::cerr << error.what() << std::endl;
+		return false;
+	}
+
 	return TestPauliPropagatorCorNC(true) && TestPauliPropagatorCorNC(false);
 }

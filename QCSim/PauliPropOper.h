@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <cmath>
+#include <utility>
 #include "PauliStringXZCoeff.h"
 
 namespace QC
@@ -32,6 +34,8 @@ namespace QC
 
 	class Operator {
 	public:
+		virtual ~Operator() = default;
+
 		Operator() : type(OperationType::X), qubits(1, 0) {}
 
 		Operator(OperationType type, int q1 = 0, int q2 = 0)
@@ -414,7 +418,7 @@ namespace QC
 	class OperatorRotation : public Operator {
 	public:
 		OperatorRotation(OperationType type, int q1 = 0, double angle = 0.0)
-			: Operator(type, q1), angle(angle)
+			: Operator(type, q1), angle(angle), sine(std::sin(angle)), cosine(std::cos(angle))
 		{
 		}
 
@@ -423,8 +427,11 @@ namespace QC
 			return angle;
 		}
 
+		double GetSin() const { return sine; }
+		double GetCos() const { return cosine; }
 	private:
 		double angle;
+		double sine, cosine;
 	};
 
 	class OperatorRZ : public OperatorRotation {
@@ -447,20 +454,19 @@ namespace QC
 			// the Pauli string is split in two, make a copy for the second term
 			PauliStringXZWithCoefficient pstrNew = pauliString;
 
-			const double ang = GetAngle();
 			// the first term is multiplied by cos(angle) and preserves X or Y on the qubit position, so we're done with it
-			pauliString.Coefficient *= std::cos(ang);
+			pauliString.Coefficient *= GetCos();
 
 			// now deal with the second term
 			// X is set, check Y
 			if (pauliString.Z[qubit]) // Y present
 			{
-				pstrNew.Coefficient *= std::sin(ang);
+				pstrNew.Coefficient *= GetSin();
 				pstrNew.Z[qubit] = false; // Y becomes X
 			}
 			else // only X present
 			{
-				pstrNew.Coefficient *= -std::sin(ang);
+				pstrNew.Coefficient *= -GetSin();
 				pstrNew.Z[qubit] = true; // X becomes Y	
 			}
 			pauliStrings.push_back(std::move(pstrNew));
@@ -494,20 +500,19 @@ namespace QC
 			// the Pauli string is split in two, make a copy for the second term
 			PauliStringXZWithCoefficient pstrNew = pauliString;
 
-			const double ang = GetAngle();
 			// the first term is multiplied by cos(angle) and preserves Z or Y on the qubit position, so we're done with it
-			pauliString.Coefficient *= std::cos(ang);
+			pauliString.Coefficient *= GetCos();
 
 			// now deal with the second term
 			// Z is set, check X
 			if (pauliString.X[qubit]) // Y present
 			{
-				pstrNew.Coefficient *= -std::sin(ang);
+				pstrNew.Coefficient *= -GetSin();
 				pstrNew.X[qubit] = false; // Y becomes Z
 			}
 			else // only Z present
 			{
-				pstrNew.Coefficient *= std::sin(ang);
+				pstrNew.Coefficient *= GetSin();
 				pstrNew.X[qubit] = true; // Z becomes Y
 			}
 			pauliStrings.push_back(std::move(pstrNew));
@@ -540,22 +545,21 @@ namespace QC
 			// the Pauli string is split in two, make a copy for the second term
 			PauliStringXZWithCoefficient pstrNew = pauliString;
 
-			const double ang = GetAngle();
 			// the first term is multiplied by cos(angle) and preserves X or Z on the qubit position, so we're done with it
-			pauliString.Coefficient *= std::cos(ang);
+			pauliString.Coefficient *= GetCos();
 
 			// now deal with the second term
 			// any can be checked, as only one is set
 			if (pauliString.X[qubit]) // X present
 			{
-				pstrNew.Coefficient *= std::sin(ang);
+				pstrNew.Coefficient *= GetSin();
 				// X becomes Z
 				pstrNew.X[qubit] = false;
 				pstrNew.Z[qubit] = true;
 			}
 			else // Z case
 			{
-				pstrNew.Coefficient *= -std::sin(ang);
+				pstrNew.Coefficient *= -GetSin();
 				// Z becomes X
 				pstrNew.X[qubit] = true;
 				pstrNew.Z[qubit] = false;
@@ -570,7 +574,3 @@ namespace QC
 	};
 
 }
-
-
-
-

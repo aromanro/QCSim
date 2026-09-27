@@ -348,7 +348,9 @@
     <ClInclude Include="QCSim\PathIntegral.h" />
     <ClInclude Include="QCSim\PathIntegralGate.h" />
     <ClInclude Include="QCSim\PathIntegralStorage.h" />
+    <ClInclude Include="QCSim\PauliPropagationEngine.h" />
     <ClInclude Include="QCSim\PauliPropagator.h" />
+    <ClInclude Include="QCSim\PauliPropagatorRegressionTests.h" />
     <ClInclude Include="QCSim\PauliPropOper.h" />
     <ClInclude Include="QCSim\PauliString.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />

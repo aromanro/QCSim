@@ -22,9 +22,11 @@ namespace QC
             if (numThreads == 0)
                 numThreads = 4;
 
+            try {
             for (size_t i = 0; i < numThreads; ++i)
             {
                 workers.emplace_back([this] {
+                    currentPool = this;
                     for (;;)
                     {
                         std::function<void()> task;
@@ -47,6 +49,12 @@ namespace QC
                         */
                     }
                 });
+            }
+            } catch (...) {
+                { std::lock_guard<std::mutex> lock(mtx); stopped = true; }
+                cv.notify_all();
+                for (auto& worker : workers) worker.join();
+                throw;
             }
         }
 
@@ -99,8 +107,10 @@ namespace QC
         */
 
         size_t GetThreadCount() const { return workers.size(); }
+        bool IsWorkerThread() const { return currentPool == this; }
 
     private:
+        inline static thread_local const ThreadPool* currentPool = nullptr;
         std::vector<std::thread> workers;
         std::queue<std::function<void()>> tasks;
         std::mutex mtx;
