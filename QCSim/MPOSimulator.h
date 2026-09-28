@@ -52,6 +52,9 @@ namespace QC
 				InitQubitsMap();
 			}
 
+			// Current logical-to-physical chain mapping, for external routing planners.
+			const std::vector<IndexType>& getQubitsMap() const { return qubitsMap; }
+
 			void SetSeed(uint64_t seed) { impl.SetSeed(seed); }
 
 			size_t getNrQubits() const final
