@@ -660,8 +660,6 @@ namespace QC
 
 				if (realq2 - realq1 <= 1) return;
 
-				assert(meetPosition >= realq1 && meetPosition < realq2);
-
 				// just in case some invalid meeting position is given, fallback to the heuristic
 				if (meetPosition < realq1 || meetPosition >= realq2)
 				{
@@ -681,6 +679,9 @@ namespace QC
 					exit(1);
 				}
 				*/
+
+				// A callback may request local routing by returning -1.
+				assert(meetPosition >= realq1 && meetPosition < realq2);
 
 				// Move lower qubit (qubit1) rightward from realq1 to meetPosition
 				{

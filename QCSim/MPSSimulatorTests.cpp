@@ -1540,6 +1540,31 @@ bool MultithreadingSettingTestMPS()
 	return true;
 }
 
+bool MeetingPositionFallbackTestMPS()
+{
+	for (const bool optimal : {false, true})
+		for (const int position : {-1, 99})
+		{
+			QC::TensorNetworks::MPSSimulator mps(4);
+			QC::QubitRegister<> reference(4);
+			mps.SetUseOptimalMeetingPosition(optimal);
+			int callbacks = 0;
+			mps.SetMeetingPositionCallback([&](const auto&) {
+				++callbacks;
+				return position;
+			});
+			QC::Gates::HadamardGate<> h;
+			QC::Gates::CNOTGate<> cx;
+			mps.ApplyGate(h, 0);
+			reference.ApplyGate(h, 0);
+			mps.ApplyGate(cx, 3, 0);
+			reference.ApplyGate(cx, 3, 0);
+			if (callbacks != 1 || (mps.getRegisterStorage() - reference.getRegisterStorage()).norm() > 1E-10)
+				return false;
+		}
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -1569,7 +1594,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeDoesNotTruncateTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS();
+	return MeetingPositionFallbackTestMPS() && WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeDoesNotTruncateTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS();
 }
 
 
