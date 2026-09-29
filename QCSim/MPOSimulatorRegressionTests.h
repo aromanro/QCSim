@@ -396,7 +396,7 @@ inline void SamplingCacheAndSavedStates()
 		if (variant == 2) sim.setToBasisState(41);
 		if (variant == 3) sim.InitOnesState();
 		if (variant == 4) sim.Clear();
-		if (variant == 5) sim.setToMixtureOfBasisStates({ {3, .4}, {60, .6} });
+		if (variant == 5) sim.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {3, .4}, {60, .6} });
 		if (variant == 6) { sim.ApplyGate(Gates::HadamardGate<>(), 1); sim.MeasureQubit(1); }
 		if (variant == 7) { auto state = fresh.getState(); sim.setStateDestructive(state); }
 		if (variant == 8) sim.ApplyKrausOperators(std::vector<Matrix>{ std::sqrt(.3) * Matrix::Identity(2, 2), std::sqrt(.7) * Gates::PauliXGate<>().getRawOperatorMatrix() }, 2);
