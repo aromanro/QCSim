@@ -21,35 +21,93 @@
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <array>
+#include <atomic>
 
 // A density-matrix quantum computing simulator.
 //
-// The state is stored as a rho = 2^n x 2^n complex matrix (MatrixClass), not as a vectorized
-// super-operator. Unitary gates are applied as rho' = U rho U^dagger by reusing the exact same
-// bit-mask gate kernels from QubitRegisterCalculator, but instead of building a full register and
-// copying data back and forth, the kernels are fed directly with the columns and the rows of rho
-// (Eigen block expressions used as fake 'registers').
-//
-// The left multiplication U rho is done by applying U to every column (the ket index); the right
-// multiplication by U^dagger is done by applying the (elementwise) conjugated small operator to
-// every row (the bra index). Only the small operator matrix is conjugated, never the big rho, and
-// the calculators are held as member objects instead of being inherited from.
+// The state is an owning 2^n x 2^n matrix. A zero-copy, contiguous vector view lets the
+// statevector kernels act on all its entries at once: U on the ket bits and conjugate(U)
+// on the bra bits. For column-major storage the ket bits are low and the bra bits high;
+// row-major storage reverses those roles. No full-register operator is constructed.
 //
 // Qubits are numbered from right to left, starting with zero (same convention as QubitRegister).
 
 namespace QC {
+
+	inline constexpr size_t DefaultDensityParallelMinElements = 65536;
+	inline std::atomic<size_t>& DensityParallelMinElementsSetting()
+	{
+		static std::atomic<size_t> value{ DefaultDensityParallelMinElements };
+		return value;
+	}
 
 	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd>
 	class DensityMatrix
 	{
 	public:
 		using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
+		using Scalar = typename MatrixClass::Scalar;
+		using FlatVector = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+		using FlatView = Eigen::Map<FlatVector>;
+		using FlatCalculator = QubitRegisterCalculator<FlatView, MatrixClass>;
 
-		// whatever rho.col(0) / rho.row(0) return - the Eigen block expressions used as fake 'registers'
+		// An immutable probability snapshot. It stays valid after the simulator changes;
+		// callers explicitly prepare a new snapshot when they want the new distribution.
+		class PreparedSampler
+		{
+			friend class DensityMatrix;
+		public:
+			// Empty snapshots can be stored before preparation. Moving to a distinct snapshot
+			// leaves its source empty, independently of vector move semantics; self-move is a no-op.
+			PreparedSampler() noexcept = default;
+			PreparedSampler(const PreparedSampler&) = default;
+			PreparedSampler(PreparedSampler&& other) noexcept { Swap(other); }
+			PreparedSampler& operator=(const PreparedSampler& other)
+			{
+				PreparedSampler copy(other);
+				Swap(copy);
+				return *this;
+			}
+			PreparedSampler& operator=(PreparedSampler&& other) noexcept
+			{
+				if (this != &other)
+				{
+					PreparedSampler moved(std::move(other));
+					Swap(moved);
+				}
+				return *this;
+			}
+
+			bool isValid() const noexcept { return sourceBasisStates != 0; }
+			bool isFullRegister() const noexcept { return isValid() && getNrOutcomes() == sourceBasisStates; }
+			size_t getNrOutcomes() const noexcept { return cumulativeProbabilities.size(); }
+			// Returned outcome bit k corresponds to register qubit getFirstQubit() + k.
+			size_t getFirstQubit() const noexcept { return firstQubit; }
+			size_t getNrQubits() const noexcept { return nrQubits; }
+		private:
+			PreparedSampler(size_t basisStates, size_t first, size_t width, std::vector<double>&& cumulative, double mass)
+				: sourceBasisStates(basisStates), firstQubit(first), nrQubits(width),
+				cumulativeProbabilities(std::move(cumulative)), total(mass) {}
+			void Swap(PreparedSampler& other) noexcept
+			{
+				std::swap(sourceBasisStates, other.sourceBasisStates);
+				std::swap(firstQubit, other.firstQubit);
+				std::swap(nrQubits, other.nrQubits);
+				cumulativeProbabilities.swap(other.cumulativeProbabilities);
+				std::swap(total, other.total);
+			}
+			size_t sourceBasisStates = 0;
+			size_t firstQubit = 0;
+			size_t nrQubits = 0;
+			std::vector<double> cumulativeProbabilities;
+			double total = 0.;
+		};
+
+		// Legacy public aliases retained for source compatibility; execution now uses FlatView.
 		using ColXpr = decltype(std::declval<MatrixClass&>().col(0));
 		using RowXpr = decltype(std::declval<MatrixClass&>().row(0));
 
-		// two calculators, one instantiated for the column blocks, one for the row blocks
 		using ColCalculator = QubitRegisterCalculator<ColXpr, MatrixClass>;
 		using RowCalculator = QubitRegisterCalculator<RowXpr, MatrixClass>;
 
@@ -82,13 +140,24 @@ namespace QC {
 
 		void SetMultithreading(bool enable = true)
 		{
-			colCalculator.SetMultithreading(enable);
-			rowCalculator.SetMultithreading(enable);
+			enableMultithreading = enable;
 		}
 
 		bool GetMultithreading() const
 		{
-			return colCalculator.GetMultithreading();
+			return enableMultithreading;
+		}
+
+		// Independent of SetParallelMinBasisStates: density work is measured in total matrix elements.
+		// The default is 65,536 elements (8 qubits), rather than the former 16,384-element row/column cutoff.
+		static void SetParallelMinElements(size_t count)
+		{
+			DensityParallelMinElementsSetting().store(count, std::memory_order_relaxed);
+		}
+
+		static size_t GetParallelMinElements()
+		{
+			return DensityParallelMinElementsSetting().load(std::memory_order_relaxed);
 		}
 
 		// Allows simulations and statistical tests to be reproduced exactly.
@@ -149,14 +218,7 @@ namespace QC {
 
 		std::unique_ptr<DensityMatrix<VectorClass, MatrixClass>> Clone() const
 		{
-			auto sim = std::make_unique<DensityMatrix<VectorClass, MatrixClass>>(NrQubits);
-			sim->rho = rho;
-			sim->savedStateStorage = savedStateStorage;
-			sim->rng = rng;
-			sim->uniformZeroOne = uniformZeroOne;
-			sim->SetMultithreading(GetMultithreading());
-
-			return sim;
+			return std::make_unique<DensityMatrix<VectorClass, MatrixClass>>(*this);
 		}
 
 		// Initialize rho = |psi><psi| from a statevector, normalizing any finite non-zero input.
@@ -239,14 +301,18 @@ namespace QC {
 		{
 			const size_t gateQubits = ValidateGateAndQubits(gate, qubit, controllingQubit1, controllingQubit2);
 			const MatrixClass& U = gate.getRawOperatorMatrix();
-			const MatrixClass Uconj = U.conjugate(); // small, cheap to conjugate
-
-			// rho <- U rho : apply U to every column (the ket index)
-			ApplyGateToColumns(gate, U, gateQubits, qubit, controllingQubit1, controllingQubit2);
-
-			// rho <- (U rho) U^dagger : right multiplication by U^dagger is applying the conjugated
-			// small operator to every row (the bra index). Only the small operator was conjugated.
-			ApplyGateToRows(gate, Uconj, gateQubits, qubit, controllingQubit1, controllingQubit2);
+			const auto structure = gate.getStructure();
+			if (structure.kind == Gates::GateStructure::Kind::Diagonal)
+			{
+				const std::array<size_t, 3> qubits{qubit, controllingQubit1, controllingQubit2};
+				if (gateQubits == 1) ApplyDensityDiagonal<1>(U, qubits);
+				else if (gateQubits == 2) ApplyDensityDiagonal<2>(U, qubits);
+				else ApplyDensityDiagonal<3>(U, qubits);
+				return;
+			}
+			const MatrixClass Uconj = U.conjugate(); // only the small operator
+			ApplyGateToBuffer(U, structure, gateQubits, qubit, controllingQubit1, controllingQubit2, true);
+			ApplyGateToBuffer(Uconj, structure, gateQubits, qubit, controllingQubit1, controllingQubit2, false);
 		}
 
 		void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate)
@@ -273,43 +339,32 @@ namespace QC {
 			const size_t gateQubits = GetOperatorQubits(kraus.front(), 2);
 			ValidateQubits(gateQubits, qubit, controllingQubit1, 0);
 
-			const Eigen::Index operatorDimension = kraus.front().rows();
-			MatrixClass completeness = MatrixClass::Zero(operatorDimension, operatorDimension);
+			const size_t operatorDimension = static_cast<size_t>(kraus.front().rows());
+			std::array<Scalar, 16> completeness{};
 			for (const auto& E : kraus)
 			{
-				if (GetOperatorQubits(E, 2) != gateQubits || E.rows() != operatorDimension)
+				if (GetOperatorQubits(E, 2) != gateQubits)
 					throw std::invalid_argument("All Kraus operators must have the same dimensions");
 
 				if (!E.allFinite())
 					throw std::invalid_argument("Kraus operators must contain only finite values");
 
-				completeness.noalias() += E.adjoint() * E;
+				for (size_t r = 0; r < operatorDimension; ++r)
+					for (size_t c = 0; c < operatorDimension; ++c)
+						for (size_t k = 0; k < operatorDimension; ++k)
+							completeness[r * operatorDimension + c] += std::conj(E(k, r)) * E(k, c);
 			}
 
-			const MatrixClass identity = MatrixClass::Identity(operatorDimension, operatorDimension);
-			const double completenessTolerance = 1E-10 * std::max<Eigen::Index>(1, operatorDimension);
-			if ((completeness - identity).norm() > completenessTolerance)
+			double errorSquared = 0.;
+			for (size_t r = 0; r < operatorDimension; ++r)
+				for (size_t c = 0; c < operatorDimension; ++c)
+					errorSquared += std::norm(completeness[r * operatorDimension + c] - Scalar(r == c ? 1. : 0.));
+			const double completenessTolerance = 1E-10 * operatorDimension;
+			if (!std::isfinite(errorSquared) || errorSquared > completenessTolerance * completenessTolerance)
 				throw std::invalid_argument("Kraus operators do not define a trace-preserving channel");
 
-			const MatrixClass original = rho;
-			MatrixClass acc = MatrixClass::Zero(NrBasisStates, NrBasisStates);
-
-			for (const auto& E : kraus)
-			{
-				const Gates::AppliedGate<MatrixClass> gate(E);
-				const MatrixClass Econj = E.conjugate();
-
-				rho = original;
-
-				// rho <- E_k rho E_k^dagger (left mult on columns, right mult on rows with the
-				// conjugated small operator - the big matrix is never adjointed)
-				ApplyGateToColumns(gate, E, gateQubits, qubit, controllingQubit1, 0);
-				ApplyGateToRows(gate, Econj, gateQubits, qubit, controllingQubit1, 0);
-
-				acc += rho;
-			}
-
-			rho.swap(acc);
+			if (gateQubits == 1) ApplyLocalChannel<1>(kraus, {qubit, 0});
+			else ApplyLocalChannel<2>(kraus, {qubit, controllingQubit1});
 		}
 
 		// ---- predefined single qubit noise channels ----
@@ -318,62 +373,80 @@ namespace QC {
 		void ApplyBitFlipNoise(size_t qubit, double p)
 		{
 			ValidateProbability(p, "Bit-flip probability");
-			ApplyChannel({ std::sqrt(1. - p) * PauliI(), std::sqrt(p) * PauliX() }, qubit);
+			ValidateQubit(qubit);
+			if (p == 0.) return;
+			ForEachLocalBlock<1>({qubit, 0}, [&](Scalar* base, const auto& o) {
+				if (p == 1.)
+				{
+					std::swap(base[o[0]], base[o[3]]);
+					std::swap(base[o[1]], base[o[2]]);
+					return;
+				}
+				const auto a = base[o[0]], b = base[o[1]], c = base[o[2]], d = base[o[3]];
+				base[o[0]] = (1. - p) * a + p * d;
+				base[o[3]] = (1. - p) * d + p * a;
+				base[o[1]] = (1. - p) * b + p * c;
+				base[o[2]] = (1. - p) * c + p * b;
+			});
 		}
 
 		// phase flip: rho' = (1 - p) rho + p Z rho Z
 		void ApplyPhaseFlipNoise(size_t qubit, double p)
 		{
 			ValidateProbability(p, "Phase-flip probability");
-			ApplyChannel({ std::sqrt(1. - p) * PauliI(), std::sqrt(p) * PauliZ() }, qubit);
+			ValidateQubit(qubit);
+			ScaleCoherences(qubit, 1. - 2. * p);
 		}
 
 		// depolarizing: rho' = (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
 		void ApplyDepolarizingNoise(size_t qubit, double p)
 		{
 			ValidateProbability(p, "Depolarizing probability");
-			const double s = std::sqrt(p / 3.);
-			ApplyChannel({ std::sqrt(1. - p) * PauliI(), s * PauliX(), s * PauliY(), s * PauliZ() }, qubit);
+			ValidateQubit(qubit);
+			if (p == 0.) return;
+			const double transfer = 2. * p / 3.;
+			const double coherence = 1. - 4. * p / 3.;
+			ForEachLocalBlock<1>({qubit, 0}, [&](Scalar* base, const auto& o) {
+				const auto a = base[o[0]], d = base[o[3]];
+				base[o[0]] = (1. - transfer) * a + transfer * d;
+				base[o[3]] = (1. - transfer) * d + transfer * a;
+				base[o[1]] *= coherence;
+				base[o[2]] *= coherence;
+			});
 		}
 
 		// amplitude damping (|1> -> |0> relaxation with probability gamma)
 		void ApplyAmplitudeDamping(size_t qubit, double gamma)
 		{
 			ValidateProbability(gamma, "Amplitude-damping probability");
-			MatrixClass E0 = MatrixClass::Zero(2, 2);
-			E0(0, 0) = 1.;
-			E0(1, 1) = std::sqrt(1. - gamma);
-
-			MatrixClass E1 = MatrixClass::Zero(2, 2);
-			E1(0, 1) = std::sqrt(gamma);
-
-			ApplyChannel({ E0, E1 }, qubit);
+			ValidateQubit(qubit);
+			if (gamma == 0.) return;
+			if (gamma == 1.) { ApplyReset(qubit); return; }
+			const double coherence = std::sqrt(1. - gamma);
+			ForEachLocalBlock<1>({qubit, 0}, [&](Scalar* base, const auto& o) {
+				base[o[0]] += gamma * base[o[3]];
+				base[o[3]] *= 1. - gamma;
+				base[o[1]] *= coherence;
+				base[o[2]] *= coherence;
+			});
 		}
 
 		// phase damping / dephasing, suppresses the off diagonal coherences by lambda = sqrt(1 - gamma)
 		void ApplyPhaseDamping(size_t qubit, double gamma)
 		{
 			ValidateProbability(gamma, "Phase-damping probability");
-			MatrixClass E0 = MatrixClass::Zero(2, 2);
-			E0(0, 0) = 1.;
-			E0(1, 1) = std::sqrt(1. - gamma);
-
-			MatrixClass E1 = MatrixClass::Zero(2, 2);
-			E1(1, 1) = std::sqrt(gamma);
-
-			ApplyChannel({ E0, E1 }, qubit);
+			ValidateQubit(qubit);
+			ScaleCoherences(qubit, std::sqrt(1. - gamma));
 		}
 
 		// reset a qubit to |0>: E0 = |0><0|, E1 = |0><1|
 		void ApplyReset(size_t qubit)
 		{
-			MatrixClass E0 = MatrixClass::Zero(2, 2);
-			E0(0, 0) = 1.;
-
-			MatrixClass E1 = MatrixClass::Zero(2, 2);
-			E1(0, 1) = 1.;
-
-			ApplyChannel({ E0, E1 }, qubit);
+			ValidateQubit(qubit);
+			ForEachLocalBlock<1>({qubit, 0}, [](Scalar* base, const auto& o) {
+				base[o[0]] += base[o[3]];
+				base[o[1]] = base[o[2]] = base[o[3]] = 0.;
+			});
 		}
 
 		// ---- measurement ----
@@ -424,12 +497,7 @@ namespace QC {
 		void DephaseMeasure(size_t qubit)
 		{
 			ValidateQubit(qubit);
-			const size_t mask = 1ULL << qubit;
-
-			for (size_t i = 0; i < NrBasisStates; ++i)
-				for (size_t j = 0; j < NrBasisStates; ++j)
-					if (((i & mask) == 0) != ((j & mask) == 0))
-						rho(i, j) = 0;
+			ScaleCoherences(qubit, 0.);
 		}
 
 		// sample a full computational basis outcome from the diagonal populations without collapsing
@@ -437,13 +505,47 @@ namespace QC {
 		// The returned value is the measured basis state (bit k corresponds to qubit k).
 		size_t MeasureNoCollapse()
 		{
-			std::vector<double> cumulativeProbabilities;
-			const double total = BuildCumulativeProbabilities(cumulativeProbabilities);
+			// Reuse capacity, but rebuild every time: even protected state mutations by
+			// subclasses must be reflected without requiring cache-invalidation hooks.
+			const double total = BuildCumulativeProbabilities(samplingWorkspace);
 			const double probability = std::min(uniformZeroOne(rng) * total, std::nextafter(total, 0.));
-			const auto it = std::upper_bound(cumulativeProbabilities.begin(), cumulativeProbabilities.end(), probability);
-			return it == cumulativeProbabilities.end()
-				? NrBasisStates - 1
-				: static_cast<size_t>(it - cumulativeProbabilities.begin());
+			const auto it = std::upper_bound(samplingWorkspace.begin(), samplingWorkspace.end(), probability);
+			return it == samplingWorkspace.end() ? NrBasisStates - 1 : static_cast<size_t>(it - samplingWorkspace.begin());
+		}
+
+		PreparedSampler PrepareSampler() const
+		{
+			std::vector<double> cumulative;
+			const double total = BuildCumulativeProbabilities(cumulative);
+			return PreparedSampler(NrBasisStates, 0, NrQubits, std::move(cumulative), total);
+		}
+
+		// Packed marginal outcomes: firstQubit becomes bit zero. This opt-in sampler
+		// has the same distribution as sampling the full state and masking, but a different
+		// mapping from random draws to outcomes. Existing measurement APIs keep their sequence.
+		PreparedSampler PrepareSampler(size_t firstQubit, size_t secondQubit) const
+		{
+			ValidateMeasurementRange(firstQubit, secondQubit);
+			const size_t outcomes = size_t{1} << (secondQubit - firstQubit + 1);
+			std::vector<double> cumulative(outcomes, 0.);
+			for (size_t state = 0; state < NrBasisStates; ++state)
+				cumulative[(state >> firstQubit) & (outcomes - 1)] += ValidatedPopulation(state);
+			double total = 0.;
+			for (double& value : cumulative) { total += value; value = total; }
+			ValidateProbabilityMass(total);
+			return PreparedSampler(NrBasisStates, firstQubit, secondQubit - firstQubit + 1, std::move(cumulative), total);
+		}
+
+		// Draw from the snapshot using this simulator's RNG. Any valid snapshot from a
+		// register of the same size is accepted; its qubit metadata describes the returned bits.
+		size_t MeasureNoCollapse(const PreparedSampler& sampler)
+		{
+			if (!sampler.isValid() || sampler.sourceBasisStates != NrBasisStates)
+				throw std::invalid_argument("Prepared sampler is empty or does not match the register");
+			const double probability = std::min(uniformZeroOne(rng) * sampler.total, std::nextafter(sampler.total, 0.));
+			const auto& cumulative = sampler.cumulativeProbabilities;
+			const auto it = std::upper_bound(cumulative.begin(), cumulative.end(), probability);
+			return it == cumulative.end() ? cumulative.size() - 1 : static_cast<size_t>(it - cumulative.begin());
 		}
 
 		// sample a subset of qubits from the diagonal populations without collapsing the state.
@@ -458,6 +560,7 @@ namespace QC {
 				ValidateQubit(qubit);
 
 			const size_t state = MeasureNoCollapse();
+			res.reserve(qubits.size());
 			for (const size_t qubit : qubits)
 				res[qubit] = (state & (1ULL << qubit)) != 0;
 
@@ -531,34 +634,32 @@ namespace QC {
 			}
 
 			const size_t dimA = 1ULL << numKeep;
-			MatrixClass rhoA = MatrixClass::Zero(dimA, dimA);
-
-			for (size_t r = 0; r < NrBasisStates; ++r)
-			{
-				for (size_t c = 0; c < NrBasisStates; ++c)
+			const size_t dimB = NrBasisStates / dimA;
+			std::vector<size_t> keptOffsets(dimA, 0), tracedOffsets(dimB, 0);
+			for (size_t k = 0; k < numKeep; ++k)
+				for (size_t i = 0; i < (size_t{1} << k); ++i)
+					keptOffsets[i | (size_t{1} << k)] = keptOffsets[i] | (size_t{1} << keepQubits[k]);
+			size_t filled = 1;
+			for (size_t q = 0; q < NrQubits; ++q)
+				if (!isKept[q])
 				{
-					bool tracedMatch = true;
-					for (size_t q = 0; q < NrQubits; ++q)
-					{
-						if (!isKept[q] && ((r & (1ULL << q)) != (c & (1ULL << q))))
-						{
-							tracedMatch = false;
-							break;
-						}
-					}
-					if (!tracedMatch) continue;
-
-					size_t rowA = 0;
-					size_t colA = 0;
-					for (size_t i = 0; i < numKeep; ++i)
-					{
-						if (r & (1ULL << keepQubits[i])) rowA |= (1ULL << i);
-						if (c & (1ULL << keepQubits[i])) colA |= (1ULL << i);
-					}
-
-					rhoA(static_cast<Eigen::Index>(rowA), static_cast<Eigen::Index>(colA)) += rho(static_cast<Eigen::Index>(r), static_cast<Eigen::Index>(c));
+					for (size_t i = 0; i < filled; ++i) tracedOffsets[i + filled] = tracedOffsets[i] | (size_t{1} << q);
+					filled *= 2;
 				}
-			}
+
+			MatrixClass rhoA(dimA, dimA);
+			// Each output is owned by one worker, with a fixed summation order and no atomics.
+			// Visit exactly dimA^2 * dimB contributing entries, in the requested qubit order.
+			ForEachRange(dimA * dimA, NrBasisStates * dimA, [&](size_t begin, size_t end) {
+				for (size_t i = begin; i < end; ++i)
+				{
+					const size_t row = keptOffsets[MatrixClass::IsRowMajor ? i / dimA : i % dimA];
+					const size_t col = keptOffsets[MatrixClass::IsRowMajor ? i % dimA : i / dimA];
+					Scalar value = 0.;
+					for (size_t offset : tracedOffsets) value += rho(row | offset, col | offset);
+					rhoA.data()[i] = value;
+				}
+			});
 
 			return rhoA;
 		}
@@ -679,18 +780,27 @@ namespace QC {
 				return measurements;
 			}
 
-			std::vector<double> cumulativeProbabilities;
+			auto& cumulativeProbabilities = samplingWorkspace;
 			const double total = BuildCumulativeProbabilities(cumulativeProbabilities);
+			const double upperEndpoint = std::nextafter(total, 0.);
+			const size_t outcomes = (measuredPartMask >> firstQubit) + 1;
+			// Bound auxiliary memory, and avoid clearing a large histogram for a few shots.
+			std::vector<size_t> counts;
+			if (outcomes <= 65536 && outcomes <= nrTimes) counts.resize(outcomes, 0);
 
 			for (size_t shot = 0; shot < nrTimes; ++shot)
 			{
-				const double probability = std::min(uniformZeroOne(rng) * total, std::nextafter(total, 0.));
+				const double probability = std::min(uniformZeroOne(rng) * total, upperEndpoint);
 				const auto it = std::upper_bound(cumulativeProbabilities.begin(), cumulativeProbabilities.end(), probability);
 				const size_t state = it == cumulativeProbabilities.end()
 					? NrBasisStates - 1
 					: static_cast<size_t>(it - cumulativeProbabilities.begin());
-				++measurements[(state & measuredPartMask) >> firstQubit];
+				const size_t outcome = (state & measuredPartMask) >> firstQubit;
+				if (counts.empty()) ++measurements[outcome];
+				else ++counts[outcome];
 			}
+			for (size_t outcome = 0; outcome < counts.size(); ++outcome)
+				if (counts[outcome]) measurements.emplace(outcome, counts[outcome]);
 
 			return measurements;
 		}
@@ -708,6 +818,8 @@ namespace QC {
 			const size_t maxElements = std::numeric_limits<size_t>::max() / sizeof(typename MatrixClass::Scalar);
 			if (nrBasisStates > maxElements / nrBasisStates)
 				throw std::length_error("Density-matrix storage size overflows size_t");
+			if (nrBasisStates > static_cast<size_t>(std::numeric_limits<Eigen::Index>::max()) / nrBasisStates)
+				throw std::length_error("Density-matrix element count exceeds Eigen's index range");
 
 			return nrBasisStates;
 		}
@@ -799,26 +911,191 @@ namespace QC {
 				cumulativeProbabilities[state] = cumulativeProbability;
 			}
 
-			if (!std::isfinite(cumulativeProbability) || cumulativeProbability <= 1E-20)
-				throw std::domain_error("Cannot sample a state with no probability mass");
+			ValidateProbabilityMass(cumulativeProbability);
 			return cumulativeProbability;
 		}
 
-		// Each Eigen column/row view is updated in place. Classification is
-		// shared by all views; their possibly non-unit stride is preserved.
+		static void ValidateProbabilityMass(double mass)
+		{
+			if (!std::isfinite(mass) || mass <= 1E-20)
+				throw std::domain_error("Cannot sample a state with no probability mass");
+		}
+
+		bool UseParallel(size_t elements) const
+		{
+			return GetMultithreading() && elements >= GetParallelMinElements();
+		}
+
+		// Disjoint tiles share one team. Calls from an existing OpenMP team remain serial.
+		template<class Function>
+		void ForEachRange(size_t count, size_t work, const Function& function) const
+		{
+#ifdef _OPENMP
+			if (UseParallel(work) && !omp_in_parallel())
+			{
+				const int threads = omp_get_max_threads();
+				if (threads > 1 && count > 1)
+				{
+					size_t tileSize = std::min<size_t>(1024, count);
+					while (tileSize > 1 && count / tileSize < static_cast<size_t>(threads) * 4) tileSize >>= 1;
+					const size_t tiles = (count + tileSize - 1) / tileSize;
+#pragma omp parallel for schedule(static) num_threads(threads)
+					for (long long tile = 0; tile < static_cast<long long>(tiles); ++tile)
+					{
+						const size_t begin = static_cast<size_t>(tile) * tileSize;
+						function(begin, std::min(begin + tileSize, count));
+					}
+					return;
+				}
+			}
+#endif
+			function(0, count);
+		}
+
+		// Enumerate independent d-by-d local density blocks. The small block uses
+		// column-major local indices (row + d * column), for either physical storage order.
+		template<unsigned Qubits, class Function>
+		void ForEachLocalBlock(const std::array<size_t, 3>& qubits, const Function& function)
+		{
+			constexpr size_t dimension = size_t{1} << Qubits;
+			std::array<size_t, 2 * Qubits> fixedBits{};
+			std::array<size_t, dimension * dimension> offsets{};
+			const size_t ketShift = MatrixClass::IsRowMajor ? NrQubits : 0;
+			const size_t braShift = MatrixClass::IsRowMajor ? 0 : NrQubits;
+			for (unsigned k = 0; k < Qubits; ++k)
+			{
+				fixedBits[k] = size_t{1} << (qubits[k] + ketShift);
+				fixedBits[k + Qubits] = size_t{1} << (qubits[k] + braShift);
+			}
+			for (size_t i = 0; i < offsets.size(); ++i)
+				for (unsigned k = 0; k < 2 * Qubits; ++k)
+					if (i & (size_t{1} << k)) offsets[i] |= fixedBits[k];
+			std::sort(fixedBits.begin(), fixedBits.end());
+			for (auto& bit : fixedBits) --bit; // masks below each fixed bit
+			const size_t elements = static_cast<size_t>(rho.size());
+			Scalar* const data = rho.data();
+			ForEachRange(elements >> (2 * Qubits), elements, [&](size_t begin, size_t end) {
+				for (size_t i = begin; i < end; ++i)
+				{
+					size_t base = i;
+					for (size_t mask : fixedBits) base = (base & mask) | ((base & ~mask) << 1);
+					function(data + base, offsets);
+				}
+			});
+		}
+
+		template<unsigned Qubits>
+		void ApplyLocalChannel(const std::vector<MatrixClass>& kraus, const std::array<size_t, 2>& qubits)
+		{
+			constexpr size_t dimension = size_t{1} << Qubits;
+			constexpr size_t blockSize = dimension * dimension;
+			std::array<std::array<Scalar, blockSize>, blockSize> coefficients{};
+			std::array<std::array<unsigned, blockSize>, blockSize> sources{};
+			std::array<unsigned, blockSize> counts{};
+			// Compile only the local 4x4 or 16x16 map. Exact zeros are omitted; small
+			// nonzero terms are retained. Scratch never scales with the register size.
+			for (size_t output = 0; output < blockSize; ++output)
+				for (size_t input = 0; input < blockSize; ++input)
+				{
+					Scalar value = 0.;
+					for (const auto& e : kraus)
+						value += e(output % dimension, input % dimension) * std::conj(e(output / dimension, input / dimension));
+					if (value != Scalar(0.))
+					{
+						const unsigned pos = counts[output]++;
+						coefficients[output][pos] = value;
+						sources[output][pos] = static_cast<unsigned>(input);
+					}
+				}
+			ForEachLocalBlock<Qubits>({qubits[0], qubits[1], 0}, [&](Scalar* base, const auto& offsets) {
+				std::array<Scalar, size_t{1} << (2 * Qubits)> input;
+				for (size_t i = 0; i < blockSize; ++i) input[i] = base[offsets[i]];
+				for (size_t output = 0; output < blockSize; ++output)
+				{
+					Scalar value = 0.;
+					for (unsigned k = 0; k < counts[output]; ++k) value += coefficients[output][k] * input[sources[output][k]];
+					base[offsets[output]] = value;
+				}
+			});
+		}
+
+		void ScaleCoherences(size_t qubit, double scale)
+		{
+			if (scale == 1.) return;
+			ForEachLocalBlock<1>({qubit, 0}, [&](Scalar* base, const auto& o) {
+				if (scale == 0.) base[o[1]] = base[o[2]] = 0.;
+				else { base[o[1]] *= scale; base[o[2]] *= scale; }
+			});
+		}
+
+		// One operator, one traversal: multiply rho(r,c) by u(r)*conjugate(u(c)).
+		// This also handles non-unitary diagonal operators without assuming unit-modulus entries.
+		template<unsigned Qubits>
+		void ApplyDensityDiagonal(const MatrixClass& matrix, const std::array<size_t, 3>& qubits)
+		{
+			constexpr size_t dimension = size_t{1} << Qubits;
+			std::array<Scalar, dimension * dimension> factors;
+			bool identity = true;
+			for (size_t c = 0; c < dimension; ++c)
+				for (size_t r = 0; r < dimension; ++r)
+				{
+					factors[r + dimension * c] = matrix(r, r) * std::conj(matrix(c, c));
+					identity = identity && factors[r + dimension * c] == Scalar(1.);
+				}
+			if (identity) return;
+			size_t lowQubit = qubits[0];
+			for (unsigned k = 1; k < Qubits; ++k) lowQubit = std::min(lowQubit, qubits[k]);
+			// Short runs otherwise repeat bit extraction for virtually every entry. Enumerate
+			// local blocks instead, amortizing index expansion over their 4, 16, or 64 entries.
+			if (lowQubit < 2)
+			{
+				ForEachLocalBlock<Qubits>(qubits, [&](Scalar* base, const auto& offsets) {
+					for (size_t i = 0; i < offsets.size(); ++i)
+						if (factors[i] != Scalar(1.)) base[offsets[i]] *= factors[i];
+				});
+				return;
+			}
+			const size_t runMask = (size_t{1} << lowQubit) - 1;
+			const size_t ketShift = MatrixClass::IsRowMajor ? NrQubits : 0;
+			const size_t braShift = MatrixClass::IsRowMajor ? 0 : NrQubits;
+			const size_t count = static_cast<size_t>(rho.size());
+			Scalar* const data = rho.data();
+			ForEachRange(count, count, [&](size_t begin, size_t end) {
+				for (size_t i = begin; i < end; )
+				{
+					size_t r = 0, c = 0;
+					for (unsigned k = 0; k < Qubits; ++k)
+					{
+						r |= ((i >> (qubits[k] + ketShift)) & 1) << k;
+						c |= ((i >> (qubits[k] + braShift)) & 1) << k;
+					}
+					const Scalar factor = factors[r + dimension * c];
+					const size_t stop = std::min((i | runMask) + 1, end);
+					if (factor == Scalar(1.)) i = stop;
+					else if (factor == Scalar(-1.))
+						for (; i < stop; ++i) data[i] = -data[i];
+					else
+						for (; i < stop; ++i) data[i] *= factor;
+				}
+			});
+		}
+
+		void ApplyGateToBuffer(const MatrixClass& matrix, const Gates::GateStructure& structure,
+			size_t gateQubits, size_t qubit, size_t qubit2, size_t qubit3, bool ket)
+		{
+			const size_t shift = (ket == bool(MatrixClass::IsRowMajor)) ? NrQubits : 0;
+			const std::array<size_t, 3> bits{ size_t{1} << (qubit + shift),
+				gateQubits > 1 ? size_t{1} << (qubit2 + shift) : 0,
+				gateQubits > 2 ? size_t{1} << (qubit3 + shift) : 0 };
+			FlatView state(rho.data(), rho.size());
+			FlatCalculator::ApplyGateInPlace(state, matrix, structure, bits,
+				static_cast<unsigned>(gateQubits), static_cast<size_t>(rho.size()), UseParallel(static_cast<size_t>(rho.size())));
+		}
+
+		// Retain the protected entry points for subclasses; each is now one full-buffer pass.
 		void ApplyGateToColumns(const GateClass& gate, const MatrixClass& gateMatrix, size_t gateQubits, size_t qubit, size_t controllingQubit1, size_t controllingQubit2)
 		{
-			const std::array<size_t, 3> bits{size_t{1} << qubit,
-				gateQubits > 1 ? size_t{1} << controllingQubit1 : 0,
-				gateQubits > 2 ? size_t{1} << controllingQubit2 : 0};
-			const auto structure = gate.getStructure();
-			const bool parallel = colCalculator.GetMultithreading() && NrBasisStates >= ColCalculator::GetParallelMinBasisStates();
-			for (size_t col = 0; col < NrBasisStates; ++col)
-			{
-				ColXpr state = rho.col(col);
-				ColCalculator::ApplyGateInPlace(state, gateMatrix, structure, bits,
-					static_cast<unsigned>(gateQubits), NrBasisStates, parallel);
-			}
+			ApplyGateToBuffer(gateMatrix, gate.getStructure(), gateQubits, qubit, controllingQubit1, controllingQubit2, true);
 		}
 
 		// Right multiplication by U^dagger applies conjugate(U) to each row.
@@ -826,66 +1103,17 @@ namespace QC {
 		// replacement gate object or hardcoded conjugation exception is needed.
 		void ApplyGateToRows(const GateClass& gate, const MatrixClass& gateMatrix, size_t gateQubits, size_t qubit, size_t controllingQubit1, size_t controllingQubit2)
 		{
-			const std::array<size_t, 3> bits{size_t{1} << qubit,
-				gateQubits > 1 ? size_t{1} << controllingQubit1 : 0,
-				gateQubits > 2 ? size_t{1} << controllingQubit2 : 0};
-			const auto structure = gate.getStructure();
-			const bool parallel = rowCalculator.GetMultithreading() && NrBasisStates >= RowCalculator::GetParallelMinBasisStates();
-			for (size_t row = 0; row < NrBasisStates; ++row)
-			{
-				RowXpr state = rho.row(row);
-				RowCalculator::ApplyGateInPlace(state, gateMatrix, structure, bits,
-					static_cast<unsigned>(gateQubits), NrBasisStates, parallel);
-			}
+			ApplyGateToBuffer(gateMatrix, gate.getStructure(), gateQubits, qubit, controllingQubit1, controllingQubit2, false);
 		}
 
 		void CollapseQubit(size_t qubit, size_t result, double pm)
 		{
-			const size_t mask = 1ULL << qubit;
 			const double invpm = (pm > 1E-20) ? 1. / pm : 0.;
-
-			for (size_t i = 0; i < NrBasisStates; ++i)
-			{
-				const size_t bi = (i & mask) ? 1 : 0;
-				for (size_t j = 0; j < NrBasisStates; ++j)
-				{
-					const size_t bj = (j & mask) ? 1 : 0;
-					if (bi != result || bj != result)
-						rho(i, j) = 0;
-					else
-						rho(i, j) *= invpm;
-				}
-			}
-		}
-
-		static MatrixClass PauliI()
-		{
-			MatrixClass m = MatrixClass::Identity(2, 2);
-			return m;
-		}
-
-		static MatrixClass PauliX()
-		{
-			MatrixClass m = MatrixClass::Zero(2, 2);
-			m(0, 1) = 1.;
-			m(1, 0) = 1.;
-			return m;
-		}
-
-		static MatrixClass PauliY()
-		{
-			MatrixClass m = MatrixClass::Zero(2, 2);
-			m(0, 1) = std::complex<double>(0, -1);
-			m(1, 0) = std::complex<double>(0, 1);
-			return m;
-		}
-
-		static MatrixClass PauliZ()
-		{
-			MatrixClass m = MatrixClass::Zero(2, 2);
-			m(0, 0) = 1.;
-			m(1, 1) = -1.;
-			return m;
+			ForEachLocalBlock<1>({qubit, 0}, [&](Scalar* base, const auto& o) {
+				base[o[1]] = base[o[2]] = 0.;
+				if (result == 0) { base[o[0]] *= invpm; base[o[3]] = 0.; }
+				else { base[o[3]] *= invpm; base[o[0]] = 0.; }
+			});
 		}
 
 		size_t NrQubits;
@@ -893,10 +1121,9 @@ namespace QC {
 
 		MatrixClass rho;
 		MatrixClass savedStateStorage;
+		std::vector<double> samplingWorkspace; // capacity reuse only; values are never treated as a cached distribution
 
-		// stateless calculators held as member objects (composition instead of inheritance)
-		ColCalculator colCalculator;
-		RowCalculator rowCalculator;
+		bool enableMultithreading = true;
 
 		std::mt19937_64 rng;
 		std::uniform_real_distribution<double> uniformZeroOne;

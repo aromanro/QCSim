@@ -51,7 +51,7 @@ namespace QC {
 	// 14 qubits on both tested platforms. This default remains tunable.
 	inline constexpr size_t DefaultParallelMinBasisStates = 16384;
 
-	// Shared by all calculator instantiations (statevector, density matrix rows and columns)
+	// Shared by calculator instantiations that use this cutoff. DensityMatrix has its own element cutoff.
 	inline std::atomic<size_t>& ParallelMinBasisStatesSetting()
 	{
 		static std::atomic<size_t> value{ DefaultParallelMinBasisStates };
@@ -888,9 +888,10 @@ namespace QC {
 			return enableMultithreading;
 		}
 
-		// With multithreading enabled, registers with at least this many basis states run all their gates and
-		// measurements with the whole OpenMP team, smaller ones run serially. The density matrix applies it to the
-		// length of its rows and columns. It is a process-wide setting, to be tuned for the machine if needed.
+		// With multithreading enabled, statevector registers with at least this many basis states run their gates
+		// and measurements with the whole OpenMP team; smaller ones run serially. The default is 16,384 states.
+		// This process-wide setting does not affect DensityMatrix. Use DensityMatrix<>::SetParallelMinElements
+		// for density execution; its default is 65,536 total matrix elements (8 qubits).
 		// Simulators running concurrently on several threads should have multithreading disabled instead.
 		static void SetParallelMinBasisStates(size_t nrBasisStates)
 		{
