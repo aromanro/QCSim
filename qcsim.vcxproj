@@ -337,6 +337,7 @@
     <ClInclude Include="QCSim\MPOSimulatorBase.h" />
     <ClInclude Include="QCSim\MPOSimulatorImpl.h" />
     <ClInclude Include="QCSim\MPOSimulatorInterface.h" />
+    <ClInclude Include="QCSim\MPOSimulatorRegressionTests.h" />
     <ClInclude Include="QCSim\MPSSimulator.h" />
     <ClInclude Include="QCSim\MPSSimulatorBase.h" />
     <ClInclude Include="QCSim\MPSSimulatorImpl.h" />

@@ -7,6 +7,7 @@
 #include <complex>
 #include <stdexcept>
 #include <utility>
+#include <limits>
 #include <unordered_map>
 
 #include <Eigen/Eigen>
@@ -96,7 +97,9 @@ namespace QC {
 			virtual size_t getNrQubits() const = 0;
 			virtual void Clear() = 0;
 			virtual void InitOnesState() = 0;
+			// Invalid qubit indices are rejected before changing the register.
 			virtual void setToQubitState(IndexType q) = 0;
+			// Out-of-range integer states are rejected without changing the register.
 			virtual void setToBasisState(size_t State) = 0;
 			// Bit i selects qubit i. This overload also represents basis states wider
 			// than size_t; shorter vectors are zero-extended and oversized vectors are rejected.
@@ -127,8 +130,10 @@ namespace QC {
 			// different threads, to avoid having too many threads. It affects only this simulator (see RunSingleThreaded).
 			virtual void SetMultithreading(bool enable = true) = 0;
 			virtual bool GetMultithreading() const = 0;
+			// Applies the configured bond cap and/or singular-value threshold to the existing state.
 			virtual void Trim() = 0;
-			// Restores the canonical form (right orthonormal B tensors, operator Schmidt values on the bonds) by two-site SVDs. Does not apply setLimitBondDimension or
+			// Restores the canonical form (right orthonormal B tensors, operator Schmidt values on the bonds)
+			// by a non-truncating QR sweep followed by two-site SVDs. Does not apply setLimitBondDimension or
 			// setLimitEntanglement; those remain the job of two-qubit gates and Trim. Only the singular values
 			// beyond the SVD's numerical rank (not distinguishable from zero in double precision) are dropped.
 			virtual void ReCanonicalize() = 0;
@@ -254,6 +259,8 @@ namespace QC {
 			// samples a full computational basis outcome from the density matrix populations without
 			// collapsing the state - useful for repeated sampling that avoids re-executing the circuit.
 			// The map keys are the qubit indices and the values are the sampled measurement results.
+			// Throws for a zero or non-finite conditional weight. Uses normalized environments so
+			// exponentially small probabilities of complete outcomes do not bias subsequent bits.
 			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse() = 0;
 
 			// samples only the given subset of qubits without collapsing the state.
@@ -276,15 +283,20 @@ namespace QC {
 			// Tr(ρ²) / [Tr(ρ)]² when Re(Tr ρ) is safely positive. Throws otherwise, matching
 			// getDensityMatrix(). For a physical state this is the usual purity in [2^{-N}, 1].
 			virtual double Purity() const = 0;
-			// Frobenius ||ρ − ρ†|| of the raw operator. Reconstructs the 2^N matrix, so N must be
-			// small (the same limit as getUnnormalizedDensityMatrix()).
+			// Frobenius ||ρ − ρ†|| of the raw operator, using QR on the difference MPO.
+			// Does not reconstruct a dense matrix or require a nonzero trace.
 			virtual double HermiticityResidual() const = 0;
 			virtual bool IsHermitian(double eps = 1E-10) const = 0;
 
-			// Partial Trace: computes reduced density matrix rho_A = Tr_B(rho) for qubits in keepQubits
+			// Partial Trace: computes the trace-normalized reduced density matrix for keepQubits.
+			// Their order determines the output bit order. At most 13 qubits may be retained,
+			// matching the allocation limit of getDensityMatrix(); the full register may be larger.
+			// All trace-normalized queries throw if Re(Tr rho) is not safely positive or the trace is non-finite.
 			virtual MatrixClass PartialTrace(const std::vector<IndexType>& keepQubits) const = 0;
 
-			// Hilbert-Schmidt inner product / state overlap Tr(rho_1^\dagger rho_2) between this MPO and another
+			// Hilbert-Schmidt overlap Tr(rho_1^dagger rho_2) / (conj(Tr rho_1) Tr rho_2).
+			// Logical qubit ordering is respected; different mappings may require routing a copy.
+			// Exact reordering can increase bond dimensions; no user compression is applied to queries.
 			virtual std::complex<double> HilbertSchmidtOverlap(const MPOSimulatorInterface& other) const = 0;
 
 			// Fidelity <psi|rho|psi> / Tr(rho) with a pure statevector psi
@@ -305,6 +317,32 @@ namespace QC {
 			virtual void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
 
 		protected:
+			friend class MPOSimulatorBase;
+			// Double dispatch lets a mapping-aware decorator align against a physical chain.
+			// External implementations retain a dense fallback without recursive delegation.
+			virtual std::complex<double> OverlapWithPhysicalChain(const MPOSimulatorInterface& physical) const
+			{
+				return getDensityMatrix().conjugate().cwiseProduct(physical.getDensityMatrix()).sum();
+			}
+
+			static size_t CheckedStatevectorDimension(size_t qubits)
+			{
+				if (qubits >= std::numeric_limits<size_t>::digits ||
+					qubits >= std::numeric_limits<IndexType>::digits)
+					throw std::invalid_argument("Statevector dimension is not representable");
+				const size_t dimension = size_t{ 1 } << qubits;
+				if (dimension > std::numeric_limits<size_t>::max() / sizeof(std::complex<double>))
+					throw std::invalid_argument("Statevector allocation size is not representable");
+				return dimension;
+			}
+
+			static size_t CheckedDensityMatrixDimension(size_t qubits)
+			{
+				if (qubits > 13)
+					throw std::runtime_error("Too many qubits to build the full density matrix");
+				return CheckedStatevectorDimension(qubits);
+			}
+
 			static void ValidateNoiseProbability(double probability)
 			{
 				if (!std::isfinite(probability) || probability < 0. || probability > 1.)

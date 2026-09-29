@@ -320,5 +320,8 @@
     <ClInclude Include="QCSim\CliffordTableau.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\MPOSimulatorRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

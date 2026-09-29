@@ -108,14 +108,14 @@ add_executable (QCSim ${SOURCES})
 
 if(OpenMP_CXX_FOUND)
     target_link_libraries(QCSim PUBLIC OpenMP::OpenMP_CXX)
-    target_link_libraries(QCSim PRIVATE ${OpenMP_CXX_FLAGS})
-    target_compile_options(QCSim PRIVATE ${OpenMP_CXX_FLAGS})
 endif()
 
 target_compile_options(QCSim PUBLIC ${SIMD_FLAGS})
 
 include(CTest)
 if(BUILD_TESTING)
+    add_test(NAME mpo_simulator COMMAND QCSim 3)
+    set_tests_properties(mpo_simulator PROPERTIES TIMEOUT 600)
     add_test(NAME clifford_simulator COMMAND QCSim 4)
     set_tests_properties(clifford_simulator PROPERTIES TIMEOUT 600)
     add_test(NAME pauli_propagator COMMAND QCSim 5)

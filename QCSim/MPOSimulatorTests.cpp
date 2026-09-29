@@ -9,6 +9,9 @@
 #include <functional>
 #include <limits>
 #include <set>
+#include <cstdint>
+#include <cstdlib>
+#include <string>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -18,6 +21,7 @@
 
 #include "QubitRegister.h"
 #include "MPOSimulator.h"
+#include "MPOSimulatorRegressionTests.h"
 #include "DensityMatrix.h"
 
 #define _USE_MATH_DEFINES
@@ -25,6 +29,38 @@
 
 
 #define NR_QUBITS_LIMIT_MPO 7
+
+// Each fresh simulator gets a distinct, reproducible stream, including ensembles
+// that construct a new simulator for every shot. The suite prints the starting seed.
+static uint64_t mpoNextSamplingSeed = 0x4D504F26ULL;
+static bool ParseMPOTestSeed(const char* text, uint64_t& seed)
+{
+	if (!text || !*text || *text < '0' || *text > '9') return false;
+	try
+	{
+		size_t consumed = 0;
+		const std::string value(text);
+		const auto parsed = std::stoull(value, &consumed, 0);
+		if (consumed != value.size()) return false;
+		seed = parsed;
+		return true;
+	}
+	catch (const std::exception&) { return false; }
+}
+
+static bool MPOTestSeedParsing()
+{
+	uint64_t seed = 0;
+	return ParseMPOTestSeed("0", seed) && seed == 0 &&
+		ParseMPOTestSeed("0x100000001", seed) && seed == 0x100000001ULL &&
+		ParseMPOTestSeed("18446744073709551615", seed) && seed == std::numeric_limits<uint64_t>::max() &&
+		!ParseMPOTestSeed("", seed) && !ParseMPOTestSeed("-1", seed) &&
+		!ParseMPOTestSeed("123junk", seed) && !ParseMPOTestSeed("18446744073709551616", seed);
+}
+template<class Sim> static void MPOSeedNext(Sim& simulator)
+{
+	simulator.SetSeed(mpoNextSamplingSeed++);
+}
 
 template<class Callable>
 static bool MPO_ExpectInvalidArgument(Callable&& callable, const char* description)
@@ -164,6 +200,7 @@ static bool OneAndTwoQubitGatesTestMPO()
 		for (int t = 0; t < 10; ++t)
 		{
 			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			MPOSeedNext(mpo);
 			QC::QubitRegister<> reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
@@ -215,6 +252,7 @@ static bool NonAdjacentGatesTestMPO()
 		for (int t = 0; t < 10; ++t)
 		{
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 			QC::QubitRegister<> reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
@@ -279,6 +317,7 @@ static bool NumericalRankStabilityTestMPO()
 	} };
 
 	QC::TensorNetworks::MPOSimulator mpo(6);
+	MPOSeedNext(mpo);
 	QC::QubitRegister<> reg(6);
 	for (const auto& step : circuit)
 	{
@@ -302,6 +341,7 @@ static bool MeetingPositionCallbackTestMPO()
 
 	constexpr int nrQubits = 5;
 	QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+	MPOSeedNext(mpo);
 	QC::QubitRegister<> reg(nrQubits);
 
 	QC::Gates::HadamardGate<> hGate;
@@ -378,6 +418,7 @@ static bool OptimalMeetingPositionTestMPO()
 	};
 
 	QC::TensorNetworks::MPOSimulator probe(nrQubits);
+	MPOSeedNext(probe);
 	prepareUnevenBonds(probe, nullptr);
 	const auto bondDimensions = probe.getBondDimensions();
 	if (bondDimensions.size() != 4 || bondDimensions[0] <= bondDimensions[1] ||
@@ -396,6 +437,7 @@ static bool OptimalMeetingPositionTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		QC::QubitRegister<> reg(nrQubits);
 		prepareUnevenBonds(mpo, &reg);
 
@@ -414,6 +456,7 @@ static bool OptimalMeetingPositionTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		mpo.SetUseOptimalMeetingPosition(false);
 		mpo.ApplyGate(cnotGate, 4, 0);
 
@@ -427,6 +470,7 @@ static bool OptimalMeetingPositionTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		mpo.SetUseOptimalMeetingPosition(false);
 		mpo.ApplyGate(cnotGate, 2, 0);
 
@@ -440,6 +484,7 @@ static bool OptimalMeetingPositionTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		prepareUnevenBonds(mpo, nullptr);
 		mpo.SetMeetingPositionCallback([](const std::vector<Eigen::Index>&) { return Eigen::Index{ 2 }; });
 		mpo.ApplyGate(cnotGate, 4, 0);
@@ -455,6 +500,7 @@ static bool OptimalMeetingPositionTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		prepareUnevenBonds(mpo, nullptr);
 		mpo.SetMeetingPositionCallback([](const std::vector<Eigen::Index>&) { return Eigen::Index{ -1 }; });
 		mpo.ApplyGate(cnotGate, 4, 0);
@@ -469,6 +515,7 @@ static bool OptimalMeetingPositionTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		mpo.SetUseOptimalMeetingPosition(false);
 		mpo.SetMeetingPositionCallback([](const std::vector<Eigen::Index>&) { return Eigen::Index{ -1 }; });
 		mpo.ApplyGate(cnotGate, 4, 0);
@@ -483,6 +530,7 @@ static bool OptimalMeetingPositionTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		mpo.SetUseOptimalMeetingPosition(false);
 		auto clone = mpo.Clone();
 		clone->ApplyGate(cnotGate, 4, 0);
@@ -505,6 +553,7 @@ static bool InitialQubitsMapTestMPO()
 
 	constexpr int nrQubits = 4;
 	QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+	MPOSeedNext(mpo);
 	QC::QubitRegister<> reg(nrQubits);
 	const std::vector<long long int> initialMap{ 2, 0, 3, 1 };
 	mpo.SetInitialQubitsMap(initialMap);
@@ -554,6 +603,7 @@ static bool BondDimensionCallbackTestMPO()
 	std::cout << "\nMPO simulator bond dimension callback test" << std::endl;
 
 	QC::TensorNetworks::MPOSimulator mpo(4);
+	MPOSeedNext(mpo);
 	QC::Gates::HadamardGate<> hGate;
 	QC::Gates::CNOTGate<> cnotGate;
 
@@ -646,6 +696,7 @@ static bool TraceAndProbabilitiesTestMPO()
 		for (int t = 0; t < 10; ++t)
 		{
 			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			MPOSeedNext(mpo);
 			QC::QubitRegister<> reg(nrQubits);
 
 			const int lim = nrGatesDistr(gen);
@@ -731,6 +782,7 @@ static bool MeasurementsTestMPO()
 		for (int t2 = 0; t2 < nrMeasurements; ++t2)
 		{
 			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			MPOSeedNext(mpo);
 			QC::QubitRegister<> reg(nrQubits);
 
 			for (const auto& gate : circuit)
@@ -812,6 +864,7 @@ static bool MixtureOfBasisStatesTestMPO()
 				mixture.emplace_back(stateDistr(gen), dist_ampl(gen) + 1.5); // weights in (0.5, 2.5), always positive
 
 			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			MPOSeedNext(mpo);
 			mpo.setToMixtureOfBasisStates(mixture);
 
 			const Eigen::MatrixXcd rhoRef = ReferenceMixtureDensityMatrix(mixture, nrQubits);
@@ -835,6 +888,7 @@ static bool MixtureOfBasisStatesTestMPO()
 	{
 		const int nrQubits = 3;
 		QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+		MPOSeedNext(mpo);
 
 		// 0.25 |000><000| + 0.75 |101><101|
 		std::vector<std::pair<std::vector<bool>, double>> mixture;
@@ -909,6 +963,7 @@ static bool MixtureEvolutionTestMPO()
 
 			// evolve the mixture in the MPO simulator
 			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			MPOSeedNext(mpo);
 			mpo.setToMixtureOfBasisStates(mixture);
 			for (const auto& gate : circuit)
 				mpo.ApplyGate(gate);
@@ -956,6 +1011,7 @@ static bool KrausOperatorsTestMPO()
 	k1(0, 1) = std::sqrt(gamma);
 
 	QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+	MPOSeedNext(mpo);
 	QC::QubitRegister<> reg(nrQubits);
 
 	QC::Gates::HadamardGate<> hGate;
@@ -1073,6 +1129,7 @@ static bool CompressionLosslessTestMPO()
 			// (a) a high bond dimension limit: truncation code runs but keeps every singular value
 			{
 				QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+				MPOSeedNext(mpo);
 				mpo.setLimitBondDimension(largeChi);
 				for (const auto& gate : circuit)
 					mpo.ApplyGate(gate);
@@ -1091,6 +1148,7 @@ static bool CompressionLosslessTestMPO()
 			// (b) a tiny entanglement threshold: drops only numerically negligible singular values
 			{
 				QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+				MPOSeedNext(mpo);
 				mpo.setLimitEntanglement(1E-12);
 				for (const auto& gate : circuit)
 					mpo.ApplyGate(gate);
@@ -1129,6 +1187,7 @@ static bool CompressionTruncationTestMPO()
 			const Eigen::Index chi = 1 + (t % 4); // 1..4, smaller than the untruncated bond (up to 16+)
 
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 			mpo.setLimitBondDimension(chi);
 
 			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, 60);
@@ -1173,6 +1232,7 @@ static bool TruncationModeTestMPO()
 	// TruncationModeTestMPS for the full explanation of the test strategy below.
 	{
 		QC::TensorNetworks::MPOSimulatorImpl defaultMpo(2);
+		MPOSeedNext(defaultMpo);
 		if (defaultMpo.getTruncationMode() != TruncationMode::DiscardedWeight)
 		{
 			std::cout << "Default truncation mode is not DiscardedWeight" << std::endl;
@@ -1183,6 +1243,7 @@ static bool TruncationModeTestMPO()
 	// getter/setter round trip for both modes
 	{
 		QC::TensorNetworks::MPOSimulatorImpl mpo(2);
+		MPOSeedNext(mpo);
 		if (!mpo.setTruncationMode(TruncationMode::RelativeToMax) || mpo.getTruncationMode() != TruncationMode::RelativeToMax)
 		{
 			std::cout << "Truncation mode round trip failed for RelativeToMax" << std::endl;
@@ -1222,6 +1283,7 @@ static bool TruncationModeTestMPO()
 	constexpr Eigen::Index bondIndex = 1; // the bond between qubit 1 and qubit 2, joined last above
 
 	QC::TensorNetworks::MPOSimulatorImpl mpoRef(4);
+	MPOSeedNext(mpoRef);
 	buildCircuit(mpoRef);
 
 	const auto refState = std::static_pointer_cast<MPOState>(mpoRef.getState());
@@ -1274,6 +1336,7 @@ static bool TruncationModeTestMPO()
 	// is the regression test for "RelativeToMax still reproduces the original behavior".
 	{
 		QC::TensorNetworks::MPOSimulatorImpl mpoRel(4);
+		MPOSeedNext(mpoRel);
 		mpoRel.setTruncationMode(TruncationMode::RelativeToMax);
 		mpoRel.setLimitEntanglement(threshold);
 		buildCircuit(mpoRel);
@@ -1289,6 +1352,7 @@ static bool TruncationModeTestMPO()
 	// DiscardedWeight explicitly requested must match the independently-computed expectation.
 	{
 		QC::TensorNetworks::MPOSimulatorImpl mpoWeight(4);
+		MPOSeedNext(mpoWeight);
 		mpoWeight.setTruncationMode(TruncationMode::DiscardedWeight);
 		mpoWeight.setLimitEntanglement(threshold);
 		buildCircuit(mpoWeight);
@@ -1305,6 +1369,7 @@ static bool TruncationModeTestMPO()
 	// the regression test guarding the default-flip decision.
 	{
 		QC::TensorNetworks::MPOSimulatorImpl mpoDefault(4);
+		MPOSeedNext(mpoDefault);
 		mpoDefault.setLimitEntanglement(threshold);
 		buildCircuit(mpoDefault);
 
@@ -1333,6 +1398,7 @@ static bool CloneTestMPO()
 	std::cout << "\nMPO simulator clone preserves truncation mode" << std::endl;
 
 	QC::TensorNetworks::MPOSimulator mpo(2);
+	MPOSeedNext(mpo);
 	if (!mpo.setTruncationMode(TruncationMode::RelativeToMax))
 	{
 		std::cout << "Failed to set RelativeToMax on the original simulator" << std::endl;
@@ -1398,6 +1464,7 @@ static bool ApplyOperatorAndNormalizeTestMPO()
 	for (int qubit = 0; qubit < nrQubits; ++qubit)
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		QC::QubitRegister<> reg(nrQubits);
 
 		// some non trivial state with population on every qubit
@@ -1465,6 +1532,7 @@ static bool TwoQubitKrausOperatorsTestMPO()
 		const int channelControl = c[2];
 
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		QC::QubitRegister<> reg(nrQubits);
 
 		// prepare an entangled, non trivial state
@@ -1530,6 +1598,7 @@ static bool StateSaveRestoreTestMPO()
 		for (int t = 0; t < 10; ++t)
 		{
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 
 			// state A: a random circuit including non adjacent gates, so the qubit map gets permuted
 			for (int i = 0; i < 20; ++i)
@@ -1594,6 +1663,7 @@ static bool StateSaveRestoreTestMPO()
 	// Clone also preserves simulation limits and the routing callback.
 	{
 		QC::TensorNetworks::MPOSimulator mpo(4);
+		MPOSeedNext(mpo);
 		mpo.setLimitBondDimension(1);
 		int callbackCalls = 0;
 		mpo.SetMeetingPositionCallback([&callbackCalls](const std::vector<Eigen::Index>&) {
@@ -1637,10 +1707,6 @@ static bool TrimTestMPO()
 	std::uniform_int_distribution nrGatesDistr(15, 30);
 	std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
-	// a no-op two qubit gate: applying it with truncation enabled on a bond does exactly what Trim
-	// does on that bond (contract the two neighbour sites, apply no gate, SVD with truncation)
-	const QC::Gates::TwoQubitsGate<> identityTwoQubitGate(Eigen::MatrixXcd::Identity(4, 4));
-
 	for (int nrQubits = 2; nrQubits < NR_QUBITS_LIMIT_MPO; ++nrQubits)
 	{
 		std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
@@ -1665,21 +1731,13 @@ static bool TrimTestMPO()
 
 			const int chi = 1 + (t % 4); // trim down to a bond dimension between 1 and 4
 
-			// reference: apply the circuit without any limit (exact MPO), then lower the limit and
-			// truncate with the no-op two qubit gate exactly the bonds Trim would touch, that is
-			// only the ones that exceed the (newly lowered) limit. Trimming a bond that is already
-			// within the limit is a state preserving re-gauging that would still change the result
-			// of subsequent truncations, so the reference must skip those bonds just like Trim does.
-			QC::TensorNetworks::MPOSimulatorImpl mpoRef(nrQubits);
-			for (const auto& g : circuit) mpoRef.ApplyGate(g);
-			mpoRef.setLimitBondDimension(chi);
-			const auto refBondDims = mpoRef.getBondDimensions();
-			for (int q = 0; q < nrQubits - 1; ++q)
-				if (refBondDims[q] > chi)
-					mpoRef.ApplyGate(identityTwoQubitGate, q, q + 1);
+			// Reference operator from a different simulator, before requesting compression.
+			QC::QubitRegister<> reference(nrQubits);
+			for (const auto& g : circuit) reference.ApplyGate(g);
+			const Eigen::MatrixXcd rhoReference = reference.getDensityMatrix();
 
-			// the one under test: apply the same circuit without any limit, then lower the limit and Trim
 			QC::TensorNetworks::MPOSimulatorImpl mpoTrim(nrQubits);
+			MPOSeedNext(mpoTrim);
 			for (const auto& g : circuit) mpoTrim.ApplyGate(g);
 			mpoTrim.setLimitBondDimension(chi);
 			mpoTrim.Trim();
@@ -1692,13 +1750,37 @@ static bool TrimTestMPO()
 					return false;
 				}
 
-			// Trim must produce the same density matrix as the equivalent no-op two qubit gate truncations
-			// Trim must produce the same operator as the equivalent no-op two qubit gate truncations.
-			// Compare the raw MPO, not getDensityMatrix(): aggressive chi cuts can drive Re(Tr rho)
-			// through zero, and the normalized accessor now refuses to divide by that trace.
-			if (!CompareDensityMatrices(mpoRef.getUnnormalizedDensityMatrix(), mpoTrim.getUnnormalizedDensityMatrix(), nrQubits))
+			// A cutoff through degenerate singular values has no unique output matrix.
+			// Instead, independently unfold the dense reference at each cut. Its discarded
+			// Schmidt weight is a lower bound on any rank-chi approximation's squared error;
+			// their sum bounds a left-to-right SVD compression sweep from above.
+			double lowerErrorSquared = 0., upperErrorSquared = 0.;
+			for (int cut = 1; cut < nrQubits; ++cut)
 			{
-				std::cout << "Trim density matrix differs from the reference truncation for " << nrQubits << " qubits" << std::endl;
+				const size_t leftStates = size_t{ 1 } << cut;
+				const size_t rightStates = size_t{ 1 } << (nrQubits - cut);
+				Eigen::MatrixXcd unfolding(leftStates * leftStates, rightStates * rightStates);
+				for (Eigen::Index row = 0; row < rhoReference.rows(); ++row)
+					for (Eigen::Index col = 0; col < rhoReference.cols(); ++col)
+					{
+						const size_t left = (static_cast<size_t>(row) % leftStates) * leftStates +
+							static_cast<size_t>(col) % leftStates;
+						const size_t right = (static_cast<size_t>(row) / leftStates) * rightStates +
+							static_cast<size_t>(col) / leftStates;
+						unfolding(left, right) = rhoReference(row, col);
+					}
+				const Eigen::JacobiSVD<Eigen::MatrixXcd> svd(unfolding);
+				const auto& spectrum = svd.singularValues();
+				const double discarded = spectrum.size() > chi ? spectrum.tail(spectrum.size() - chi).squaredNorm() : 0.;
+				lowerErrorSquared = std::max(lowerErrorSquared, discarded);
+				upperErrorSquared += discarded;
+			}
+			const Eigen::MatrixXcd compressed = mpoTrim.getUnnormalizedDensityMatrix();
+			const double errorSquared = (compressed - rhoReference).squaredNorm();
+			if (!compressed.allFinite() || errorSquared < lowerErrorSquared - 1E-9 || errorSquared > upperErrorSquared + 1E-9)
+			{
+				std::cout << "Trim error " << errorSquared << " is outside the independent SVD bounds ["
+					<< lowerErrorSquared << ", " << upperErrorSquared << "] for " << nrQubits << " qubits" << std::endl;
 				return false;
 			}
 		}
@@ -1732,6 +1814,7 @@ static bool UnitaryCircuitVsDensityMatrixMPO()
 			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
 
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 			QC::DensityMatrix<> dm(nrQubits);
 
 			for (const auto& gate : circuit)
@@ -1776,6 +1859,7 @@ static bool SingleQubitKrausVsDensityMatrixMPO()
 	for (int nrQubits = 2; nrQubits < 5; ++nrQubits)
 	{
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		QC::DensityMatrix<> dm(nrQubits);
 
 		// entangling preparation
@@ -1839,6 +1923,7 @@ static bool NoiseChannelsVsDensityMatrixMPO()
 			for (int channel = 0; channel < 6; ++channel)
 			{
 				QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+				MPOSeedNext(mpo);
 				QC::DensityMatrix<> dm(nrQubits);
 
 				// same entangling preparation on both
@@ -1920,6 +2005,7 @@ static bool TwoQubitKrausVsDensityMatrixMPO()
 		const int channelControl = c[2];
 
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		QC::DensityMatrix<> dm(nrQubits);
 
 		std::vector<QC::Gates::AppliedGate<>> prep;
@@ -1992,6 +2078,7 @@ static bool MixtureEvolutionVsDensityMatrixMPO()
 
 			// evolve the mixture in the MPO simulator
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 			mpo.setToMixtureOfBasisStates(mixture);
 			for (const auto& gate : circuit)
 				mpo.ApplyGate(gate);
@@ -2036,6 +2123,7 @@ static bool PauliExpectationVsDensityMatrixMPO()
 			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
 
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 			QC::DensityMatrix<> dm(nrQubits);
 
 			for (const auto& gate : circuit)
@@ -2100,6 +2188,7 @@ static bool InvariantsTestMPO()
 		for (int t = 0; t < 5; ++t)
 		{
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 
 			const auto circuit = BuildRandomCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
 			for (const auto& gate : circuit)
@@ -2184,7 +2273,9 @@ static bool InvariantsTestMPO()
 	{
 		constexpr int nrQubits = 3;
 		QC::TensorNetworks::MPOSimulator mpoGate(nrQubits);
+		MPOSeedNext(mpoGate);
 		QC::TensorNetworks::MPOSimulator mpoKraus(nrQubits);
+		MPOSeedNext(mpoKraus);
 
 		QC::Gates::HadamardGate<> h;
 		mpoGate.ApplyGate(h, 0);
@@ -2229,7 +2320,9 @@ static bool DecoratorVsImplTestMPO()
 			const auto circuit = BuildRandomAdjacentCircuitMPO(gates, nrQubits, nrGatesDistr(gen));
 
 			QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+			MPOSeedNext(mpo);
 			QC::TensorNetworks::MPOSimulatorImpl impl(nrQubits);
+			MPOSeedNext(impl);
 
 			for (const auto& gate : circuit)
 			{
@@ -2299,6 +2392,7 @@ static bool MeasurementVsDensityMatrixAndThrowsTestMPO()
 			for (int m = 0; m < nrMeasurements; ++m)
 			{
 				QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+				MPOSeedNext(mpo);
 				for (const auto& gate : circuit)
 					mpo.ApplyGate(gate);
 
@@ -2320,6 +2414,7 @@ static bool MeasurementVsDensityMatrixAndThrowsTestMPO()
 	// error handling on the implementation layer (adjacency and index validation)
 	{
 		QC::TensorNetworks::MPOSimulatorImpl impl(3);
+		MPOSeedNext(impl);
 
 		// ExpectationValue with the wrong Pauli string length must throw
 		bool threw = false;
@@ -2385,6 +2480,7 @@ static bool SamplingNoCollapseTestMPO()
 
 		QC::DensityMatrix<> dm(nrQubits);
 		QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+		MPOSeedNext(mpo);
 		for (const auto& gate : circuit)
 		{
 			dm.ApplyGate(gate);
@@ -2494,6 +2590,7 @@ static bool ValidationAndStateCompatibilityTestMPO()
 	std::cout << "\nMPO simulator - validation and state compatibility" << std::endl;
 
 	QC::TensorNetworks::MPOSimulator mpo(4);
+	MPOSeedNext(mpo);
 	QC::Gates::HadamardGate<> h;
 	QC::Gates::CNOTGate<> cnot;
 	mpo.ApplyGate(h, 0);
@@ -2557,6 +2654,7 @@ static bool ValidationAndStateCompatibilityTestMPO()
 	// States are implementation-specific: accepting a decorator state in the adjacent implementation
 	// would silently discard its qubit map, while downcasting an implementation state is unsafe.
 	QC::TensorNetworks::MPOSimulatorImpl adjacent(4);
+	MPOSeedNext(adjacent);
 	adjacent.ApplyGate(h, 0);
 	const Eigen::MatrixXcd adjacentBeforeInvalidMeasurement = adjacent.getDensityMatrix();
 	if (!MPO_ExpectInvalidArgument([&] { adjacent.MeasureQubits(std::set<MPOIndex>{ 0, 4 }); }, "Implementation subset with an invalid measured qubit") ||
@@ -2578,6 +2676,7 @@ static bool ValidationAndStateCompatibilityTestMPO()
 		return false;
 
 	QC::TensorNetworks::MPOSimulator otherSize(3);
+	MPOSeedNext(otherSize);
 	auto otherSizeState = otherSize.getState();
 	if (!MPO_ExpectInvalidArgument([&] { mpo.setState(otherSizeState); }, "Wrong-size MPO state"))
 		return false;
@@ -2606,6 +2705,7 @@ static bool MixtureValidationAndScalingTestMPO()
 	for (const double scale : { 1E-300, std::numeric_limits<double>::max() / 4. })
 	{
 		QC::TensorNetworks::MPOSimulator mpo(2);
+		MPOSeedNext(mpo);
 		mpo.setToMixtureOfBasisStates({ std::pair<size_t, double>{ 0, scale }, std::pair<size_t, double>{ 1, 2. * scale } });
 		if (!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12) ||
 			!approxEqual(mpo.getBasisStateProbability(0), 1. / 3., 1E-12) ||
@@ -2617,6 +2717,7 @@ static bool MixtureValidationAndScalingTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator mpo(2);
+	MPOSeedNext(mpo);
 	mpo.setToBasisState(3);
 	const Eigen::MatrixXcd before = mpo.getDensityMatrix();
 	if (!MPO_ExpectInvalidArgument([&] { mpo.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{}); }, "Empty MPO mixture") ||
@@ -2656,6 +2757,7 @@ static bool WideBasisInitializationTestMPO()
 	for (const size_t nrQubits : { digits, digits + 1 })
 	{
 		QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+		MPOSeedNext(mpo);
 		mpo.setToBasisState(allBits);
 
 		if (!approxEqual(mpo.Trace(), std::complex<double>(1., 0.), 1E-12) ||
@@ -2682,6 +2784,7 @@ static bool WideBasisInitializationTestMPO()
 	const std::vector<bool> vectorState = std::move(vectorStateBits);
 
 	QC::TensorNetworks::MPOSimulator vectorMpo(vectorQubits);
+	MPOSeedNext(vectorMpo);
 	QC::TensorNetworks::MPOSimulatorInterface& vectorMpoApi = vectorMpo;
 	vectorMpoApi.setToBasisState(vectorState);
 
@@ -2722,6 +2825,7 @@ static bool WideBasisInitializationTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator mappedMpo(3);
+	MPOSeedNext(mappedMpo);
 	mappedMpo.setToBasisState(std::vector<bool>{ true, false, true });
 	mappedMpo.MoveAtBeginningOfChain({ 2 });
 	const auto stateBeforeInvalidCall = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mappedMpo.getState());
@@ -2758,6 +2862,7 @@ static bool KrausBondLimitAndLocalityTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator product(5);
+		MPOSeedNext(product);
 		for (int i = 0; i < 4; ++i)
 			product.ApplyDepolarizingNoise(2, 0.2 + 0.1 * i);
 
@@ -2770,6 +2875,7 @@ static bool KrausBondLimitAndLocalityTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator mpo(4);
+	MPOSeedNext(mpo);
 	mpo.setLimitBondDimension(1);
 	QC::Gates::HadamardGate<> h;
 	QC::Gates::CNOTGate<> cnot;
@@ -2811,6 +2917,7 @@ static bool CollapseNormalizationAndAtomicFailureTestMPO()
 	std::cout << "\nMPO simulator - collapse normalization and atomic failure" << std::endl;
 
 	QC::TensorNetworks::MPOSimulator mpo(2);
+	MPOSeedNext(mpo);
 	QC::Gates::HadamardGate<> h;
 	QC::Gates::CNOTGate<> cnot;
 	mpo.ApplyGate(h, 0);
@@ -2836,6 +2943,7 @@ static bool CollapseNormalizationAndAtomicFailureTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulatorImpl impossible(1);
+	MPOSeedNext(impossible);
 	const Eigen::MatrixXcd before = impossible.getDensityMatrix();
 	Eigen::MatrixXcd projectOne = Eigen::MatrixXcd::Zero(2, 2);
 	projectOne(1, 1) = 1.;
@@ -2859,6 +2967,7 @@ static bool ReCanonicalizeDoesNotTruncateTestMPO()
 	QC::Gates::CNOTGate<> cnot;
 
 	QC::TensorNetworks::MPOSimulator mpo(4);
+	MPOSeedNext(mpo);
 	mpo.ApplyGate(h, 0);
 	mpo.ApplyGate(cnot, 1, 0);
 	mpo.ApplyGate(cnot, 2, 1);
@@ -2909,6 +3018,7 @@ static bool KrausCompletenessCheckTestMPO()
 	std::cout << "\nMPO simulator Kraus completeness check" << std::endl;
 
 	QC::TensorNetworks::MPOSimulator mpo(1);
+	MPOSeedNext(mpo);
 	if (mpo.getKrausCompletenessCheck() != KrausCompletenessCheck::Ignore)
 	{
 		std::cout << "Default Kraus completeness check is not Ignore" << std::endl;
@@ -2967,6 +3077,7 @@ static bool UnnormalizedOperatorTestMPO()
 
 	constexpr double scale = 0.37;
 	QC::TensorNetworks::MPOSimulator mpo(2);
+	MPOSeedNext(mpo);
 	QC::Gates::HadamardGate<> h;
 	QC::Gates::CNOTGate<> cnot;
 	mpo.ApplyGate(h, 0);
@@ -3003,6 +3114,7 @@ static bool UnnormalizedOperatorTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulatorImpl negative(1);
+	MPOSeedNext(negative);
 	auto state = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(negative.getState());
 	if (!state)
 	{
@@ -3042,6 +3154,7 @@ static bool UnsortedLambdaPseudoinverseTestMPO()
 	std::cout << "\nMPO simulator tiny unsorted Lambda as the left environment" << std::endl;
 
 	QC::TensorNetworks::MPOSimulatorImpl mpo(3);
+	MPOSeedNext(mpo);
 	auto state = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(mpo.getState());
 	if (!state)
 	{
@@ -3100,6 +3213,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 
 	{
 		QC::TensorNetworks::MPOSimulator defaults(2);
+		MPOSeedNext(defaults);
 		using KrausCompletenessCheck = QC::TensorNetworks::MPOSimulatorInterface::KrausCompletenessCheck;
 		if (defaults.getKrausCompletenessCheck() != KrausCompletenessCheck::Ignore ||
 			defaults.getRestoreTraceAfterTruncation() || defaults.getHermitizeAfterTruncation())
@@ -3112,6 +3226,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	QC::Gates::CNOTGate<> cnot;
 
 	QC::TensorNetworks::MPOSimulator drifted(2);
+	MPOSeedNext(drifted);
 	drifted.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
 	drifted.setLimitBondDimension(1);
 	drifted.Trim();
@@ -3127,6 +3242,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator restored(2);
+	MPOSeedNext(restored);
 	restored.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
 	restored.setRestoreTraceAfterTruncation(true);
 	restored.setLimitBondDimension(1);
@@ -3138,6 +3254,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator restoredGate(2);
+	MPOSeedNext(restoredGate);
 	restoredGate.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.1}, {1, 0.2}, {2, 0.3}, {3, 0.4} });
 	restoredGate.setRestoreTraceAfterTruncation(true);
 	restoredGate.setLimitBondDimension(1);
@@ -3150,6 +3267,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulatorImpl nonHermitian(2);
+	MPOSeedNext(nonHermitian);
 	auto state = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(nonHermitian.getState());
 	if (!state)
 	{
@@ -3181,6 +3299,7 @@ static bool TraceRestoreAndHermitizeTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulatorImpl negative(1);
+	MPOSeedNext(negative);
 	auto negativeState = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(negative.getState());
 	if (!negativeState)
 	{
@@ -3202,6 +3321,7 @@ static bool DiagnosticsTestMPO()
 	std::cout << "\nMPO simulator diagnostics (trace, Tr(rho^2), Hermiticity)" << std::endl;
 
 	QC::TensorNetworks::MPOSimulator pure(1);
+	MPOSeedNext(pure);
 	if (!approxEqual(pure.Trace(), std::complex<double>(1., 0.), 1E-12) ||
 		!approxEqual(pure.TraceOfSquare(), std::complex<double>(1., 0.), 1E-12) ||
 		!approxEqual(pure.Purity(), 1., 1E-12) ||
@@ -3212,6 +3332,7 @@ static bool DiagnosticsTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator mixed(1);
+	MPOSeedNext(mixed);
 	mixed.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{ {0, 0.5}, {1, 0.5} });
 	if (!approxEqual(mixed.TraceOfSquare(), std::complex<double>(0.5, 0.), 1E-12) ||
 		!approxEqual(mixed.Purity(), 0.5, 1E-12))
@@ -3221,6 +3342,7 @@ static bool DiagnosticsTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator bell(2);
+	MPOSeedNext(bell);
 	MPO_ApplyGHZPrep(bell);
 	const Eigen::MatrixXcd rho = bell.getUnnormalizedDensityMatrix();
 	if (!approxEqual(bell.TraceOfSquare(), (rho * rho).trace(), 1E-12) ||
@@ -3232,6 +3354,7 @@ static bool DiagnosticsTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulator scaled(2);
+	MPOSeedNext(scaled);
 	MPO_ApplyGHZPrep(scaled);
 	const double scale = 0.37;
 	scaled.ApplyOperator(QC::Gates::SingleQubitGate<>(std::sqrt(scale) * Eigen::MatrixXcd::Identity(2, 2)), 0);
@@ -3247,7 +3370,9 @@ static bool DiagnosticsTestMPO()
 	}
 
 	QC::TensorNetworks::MPOSimulatorImpl mapped(3);
+	MPOSeedNext(mapped);
 	QC::TensorNetworks::MPOSimulator decorator(3);
+	MPOSeedNext(decorator);
 	decorator.SetInitialQubitsMap({ 2, 0, 1 });
 	MPO_ApplyGHZPrep(mapped);
 	MPO_ApplyGHZPrep(decorator);
@@ -3349,6 +3474,7 @@ static bool CanonicalFormTestMPO()
 
 			// unitary evolution preserves the canonical form (the superoperator is unitary in the Hilbert-Schmidt sense)
 			QC::TensorNetworks::MPOSimulatorImpl mpo(nrQubits);
+			MPOSeedNext(mpo);
 			applyRandomCircuit(mpo, 30);
 			if (!CheckCanonicalFormMPO(mpo, tolerance, deviation))
 			{
@@ -3360,6 +3486,7 @@ static bool CanonicalFormTestMPO()
 			for (int variant = 0; variant < 3; ++variant)
 			{
 				QC::TensorNetworks::MPOSimulatorImpl broken(nrQubits);
+				MPOSeedNext(broken);
 				if (variant == 2) broken.setLimitBondDimension(2);
 				applyRandomCircuit(broken, 30);
 
@@ -3398,7 +3525,9 @@ static bool MultithreadingSettingTestMPO()
 	std::cout << "\nMPO simulator multithreading setting test" << std::endl;
 
 	QC::TensorNetworks::MPOSimulatorImpl impl(2);
+	MPOSeedNext(impl);
 	QC::TensorNetworks::MPOSimulator mpo(2);
+	MPOSeedNext(mpo);
 	if (!impl.GetMultithreading() || !mpo.GetMultithreading())
 	{
 		std::cout << "Multithreading is not enabled by default" << std::endl;
@@ -3428,7 +3557,9 @@ static bool MultithreadingSettingTestMPO()
 #endif
 
 	QC::TensorNetworks::MPOSimulator mpoMultithreaded(nrQubits);
+	MPOSeedNext(mpoMultithreaded);
 	QC::TensorNetworks::MPOSimulator mpoSingleThreaded(nrQubits);
+	MPOSeedNext(mpoSingleThreaded);
 	mpoSingleThreaded.SetMultithreading(false);
 
 	for (int i = 0; i < 150; ++i)
@@ -3479,7 +3610,25 @@ static bool MultithreadingSettingTestMPO()
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
-	return ValidationAndStateCompatibilityTestMPO() &&
+	struct RestoreGenerator
+	{
+		std::mt19937 saved = gen;
+		~RestoreGenerator() { gen = saved; }
+	} restoreGenerator;
+	const char* configuredSeed = std::getenv("QCSIM_MPO_TEST_SEED");
+	uint64_t seed = 0x4D504F26ULL;
+	if (configuredSeed && !ParseMPOTestSeed(configuredSeed, seed))
+	{
+		std::cerr << "Invalid QCSIM_MPO_TEST_SEED: expected an unsigned 64-bit integer (decimal, octal or hexadecimal)" << std::endl;
+		return false;
+	}
+	const uint32_t circuitSeed = static_cast<uint32_t>(seed);
+	gen.seed(circuitSeed);
+	mpoNextSamplingSeed = seed;
+	std::cout << "Circuit seed (32 bits): " << circuitSeed << "; starting sampling seed (64 bits): " << seed
+		<< " (override with QCSIM_MPO_TEST_SEED)" << std::endl;
+	return MPOTestSeedParsing() && QC::MPORegression::Run() &&
+		ValidationAndStateCompatibilityTestMPO() &&
 		InitialQubitsMapTestMPO() &&
 		MixtureValidationAndScalingTestMPO() &&
 		WideBasisInitializationTestMPO() &&

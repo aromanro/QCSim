@@ -335,7 +335,7 @@ namespace QC
 
 				const bool result = impl.MeasureQubit(qubitsMap[qubit]);
 				if (bondDimensionCallback)
-					bondDimensionCallback(impl.getBondDimensions());
+					NotifyBondDimensions();
 				return result;
 			}
 
@@ -354,7 +354,7 @@ namespace QC
 					res[qubitsMapInv[qubit]] = val;
 
 				if (bondDimensionCallback)
-					bondDimensionCallback(impl.getBondDimensions());
+					NotifyBondDimensions();
 
 				return res;
 			}
@@ -434,7 +434,7 @@ namespace QC
 					qubitsMapInv[movingQubitReal] = currentLogicalPosQubit;
 
 					if (bondDimensionCallback)
-						bondDimensionCallback(impl.getBondDimensions());
+						NotifyBondDimensions();
 
 					handledQubits.insert(logicalQubit);
 					if (handledQubits.size() == qubits.size())
@@ -492,8 +492,7 @@ namespace QC
 			double getBasisStateProbability(size_t State) const override
 			{
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return 0.;
+				impl.RequireNormalizableTrace(tr);
 
 				return ClampProbability((getBasisStateMatrixElement(State, State) / tr).real());
 			}
@@ -501,8 +500,7 @@ namespace QC
 			double getBasisStateProbability(const std::vector<bool>& State) const override
 			{
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return 0.;
+				impl.RequireNormalizableTrace(tr);
 
 				return ClampProbability((getBasisStateMatrixElement(State, State) / tr).real());
 			}
@@ -548,30 +546,68 @@ namespace QC
 
 			std::complex<double> HilbertSchmidtOverlap(const MPOSimulatorInterface& other) const override
 			{
-				return impl.HilbertSchmidtOverlap(other);
+				if (other.getNrQubits() != getNrQubits())
+					throw std::invalid_argument("MPO register sizes do not match");
+				if (const auto* decorated = dynamic_cast<const MPOSimulator*>(&other))
+				{
+					if (qubitsMap == decorated->qubitsMap)
+						return impl.HilbertSchmidtOverlap(decorated->impl);
+					if (decorated->TensorStorageSize() < TensorStorageSize())
+					{
+						const auto aligned = decorated->CopyWithQubitsMap(qubitsMap);
+						return impl.HilbertSchmidtOverlap(aligned->impl);
+					}
+					const auto aligned = CopyWithQubitsMap(decorated->qubitsMap);
+					return aligned->impl.HilbertSchmidtOverlap(decorated->impl);
+				}
+				if (const auto* physical = dynamic_cast<const MPOSimulatorBase*>(&other))
+				{
+					std::vector<IndexType> identity(getNrQubits());
+					for (size_t q = 0; q < identity.size(); ++q) identity[q] = static_cast<IndexType>(q);
+					if (qubitsMap == identity) return impl.HilbertSchmidtOverlap(*physical);
+					const auto aligned = CopyWithQubitsMap(identity);
+					return aligned->impl.HilbertSchmidtOverlap(*physical);
+				}
+				// An external implementation may expose only the public dense interface.
+				return getDensityMatrix().conjugate().cwiseProduct(other.getDensityMatrix()).sum();
 			}
 
 			double FidelityWithStatevector(const VectorClass& psi) const override
 			{
 				const size_t nrQubits = getNrQubits();
 				const IndexType n = static_cast<IndexType>(nrQubits);
-				const size_t dim = 1ULL << nrQubits;
+				const size_t dim = CheckedStatevectorDimension(nrQubits);
 				if (psi.size() < 0 || static_cast<size_t>(psi.size()) != dim)
 					throw std::invalid_argument("Statevector dimension does not match the register");
 
-				VectorClass psiMapped(dim);
-				for (size_t s = 0; s < dim; ++s)
-				{
-					size_t tmp = s;
-					size_t mapped = 0;
-					for (IndexType i = 0; i < n; ++i)
+				bool identityMap = true;
+				for (IndexType q = 0; q < n; ++q)
+					if (qubitsMap[q] != q) { identityMap = false; break; }
+				if (identityMap) return impl.FidelityWithStatevector(psi);
+
+				auto mapBasisState = [&](IndexType state) {
+					IndexType mapped = 0;
+					for (IndexType q = 0; q < n; ++q)
 					{
-						if (tmp & 1ULL)
-							mapped |= (1ULL << qubitsMap[i]);
-						tmp >>= 1;
+						if (state & 1) mapped |= IndexType{ 1 } << qubitsMap[q];
+						state >>= 1;
 					}
-					psiMapped(static_cast<Eigen::Index>(mapped)) = psi(static_cast<Eigen::Index>(s));
+					return mapped;
+				};
+				// Keep sparse inputs sparse while converting logical indices to physical ones.
+				// Dense inputs stop the scan early and use the usual vector contraction.
+				auto nonzero = impl.CollectSparseStatevector(psi);
+				if (nonzero.size() <= impl.sparseStatevectorLimit)
+				{
+					const auto tr = Trace();
+					impl.RequireNormalizableTrace(tr);
+					for (auto& entry : nonzero) entry.first = mapBasisState(entry.first);
+					return impl.FidelityWithSparseStatevector(nonzero, tr);
 				}
+
+				VectorClass psiMapped(dim);
+				for (IndexType s = 0; s < psi.size(); ++s)
+					psiMapped(mapBasisState(s)) = psi(s);
 
 				return impl.FidelityWithStatevector(psiMapped);
 			}
@@ -653,17 +689,30 @@ namespace QC
 
 			void SaveState()
 			{
-				savedState = getState();
+				// Own the snapshot whose canonical metadata we retain, including in subclasses.
+				savedState = MPOSimulator::getState();
+				savedCanonicalMetadata = impl.GetCanonicalMetadata();
 			}
 
 			void RestoreState()
 			{
 				setState(savedState);
+				if (savedState) impl.RestoreCanonicalMetadata(savedCanonicalMetadata);
 			}
 
 			void RestoreStateDestructive()
 			{
+				// A C++ copy may share the private snapshot. Do not mutate its tensors
+				// behind the other owner's saved canonical metadata.
+				if (savedState && savedState.use_count() > 1)
+				{
+					RestoreState();
+					savedState.reset();
+					return;
+				}
+				const bool hadState = static_cast<bool>(savedState);
 				setStateDestructive(savedState);
+				if (hadState) impl.RestoreCanonicalMetadata(savedCanonicalMetadata);
 			}
 
 			std::unique_ptr<MPOSimulator> Clone() const
@@ -683,6 +732,8 @@ namespace QC
 				sim->impl.enableMultithreading = impl.enableMultithreading;
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
+				sim->impl.RestoreCanonicalMetadata(impl.GetCanonicalMetadata());
+				sim->savedCanonicalMetadata = savedCanonicalMetadata;
 
 				sim->useOptimalMeetingPosition = useOptimalMeetingPosition;
 				sim->meetingPositionCallback = meetingPositionCallback;
@@ -727,13 +778,93 @@ namespace QC
 			}
 
 			// Set a callback that receives the current bond dimensions after an
-			// operation that can change them. Pass nullptr to clear.
+			// operation that can change them. Routed normalized operations notify once
+			// after commit; failed operations do not emit intermediate notifications.
+			// Meeting-position callbacks are planning requests and may precede a failure.
+			// Pass nullptr to clear.
 			void SetBondDimensionCallback(BondDimensionCallback callback)
 			{
 				bondDimensionCallback = std::move(callback);
 			}
 
 		private:
+			std::complex<double> OverlapWithPhysicalChain(const MPOSimulatorInterface& physical) const override
+			{
+				return HilbertSchmidtOverlap(physical);
+			}
+
+			// Queries must not truncate, invoke routing callbacks, or mutate either operand.
+			std::unique_ptr<MPOSimulator> CopyWithQubitsMap(const std::vector<IndexType>& targetMap) const
+			{
+				// This private query workspace is deliberately distinct from Clone(),
+				// whose public contract includes settings, callbacks and the saved state.
+				auto aligned = std::make_unique<MPOSimulator>(getNrQubits());
+				aligned->impl.gammas = impl.gammas;
+				aligned->impl.lambdas = impl.lambdas;
+				aligned->impl.RestoreCanonicalMetadata(impl.GetCanonicalMetadata());
+				aligned->impl.enableMultithreading = impl.enableMultithreading;
+				aligned->qubitsMap = qubitsMap;
+				aligned->qubitsMapInv = qubitsMapInv;
+				if (std::all_of(impl.lambdas.begin(), impl.lambdas.end(), [](const LambdaType& bond) { return bond.size() == 1; }))
+				{
+					for (size_t logical = 0; logical < targetMap.size(); ++logical)
+					{
+						aligned->impl.gammas[targetMap[logical]] = impl.gammas[qubitsMap[logical]];
+						aligned->qubitsMapInv[targetMap[logical]] = static_cast<IndexType>(logical);
+					}
+					aligned->qubitsMap = targetMap;
+					aligned->impl.InvalidateCanonicalForm();
+					return aligned;
+				}
+				std::vector<IndexType> targetInverse(targetMap.size());
+				for (size_t logical = 0; logical < targetMap.size(); ++logical)
+					targetInverse[targetMap[logical]] = static_cast<IndexType>(logical);
+				for (IndexType destination = 0; destination < static_cast<IndexType>(targetMap.size()); ++destination)
+				{
+					const IndexType logical = targetInverse[destination];
+					for (IndexType position = aligned->qubitsMap[logical]; position > destination; --position)
+					{
+						const IndexType displaced = aligned->qubitsMapInv[position - 1];
+						aligned->impl.SwapSitesForOverlap(position - 1);
+						aligned->qubitsMap[logical] = position - 1;
+						aligned->qubitsMap[displaced] = position;
+						aligned->qubitsMapInv[position - 1] = logical;
+						aligned->qubitsMapInv[position] = displaced;
+					}
+				}
+				return aligned;
+			}
+
+			size_t TensorStorageSize() const
+			{
+				size_t result = 0;
+				for (const auto& gamma : impl.gammas) result += static_cast<size_t>(gamma.size());
+				return result;
+			}
+
+			template<class Func> void WithRoutingRollback(Func&& operation)
+			{
+				auto originalLambdas = impl.lambdas;
+				auto originalGammas = impl.gammas;
+				auto originalMap = qubitsMap;
+				auto originalInverse = qubitsMapInv;
+				const auto originalMetadata = impl.GetCanonicalMetadata();
+				MPOSimulatorImpl::ScopedFlag notificationGuard(suppressBondNotifications);
+				try
+				{
+					operation();
+				}
+				catch (...)
+				{
+					impl.lambdas.swap(originalLambdas);
+					impl.gammas.swap(originalGammas);
+					qubitsMap.swap(originalMap);
+					qubitsMapInv.swap(originalInverse);
+					impl.RestoreCanonicalMetadata(originalMetadata);
+					throw;
+				}
+			}
+
 			static size_t ValidateOperatorMatrix(const MatrixClass& op)
 			{
 				if (op.rows() != op.cols() || (op.rows() != 2 && op.rows() != 4))
@@ -808,16 +939,25 @@ namespace QC
 				const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
 				impl.ApplyOperator(op, qubit1, qubit2);
 				if (bondDimensionCallback && qubitsNumber > 1)
-					bondDimensionCallback(impl.getBondDimensions());
+					NotifyBondDimensions();
 			}
 
 			void ApplyValidatedOperatorAndNormalize(const GateClass& op, IndexType qubit,
 				IndexType controllingQubit1, size_t qubitsNumber)
 			{
-				const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
-				impl.ApplyOperatorAndNormalize(op, qubit1, qubit2);
+				ValidateOperatorQubits(qubitsNumber, qubit, controllingQubit1);
+				if (qubitsNumber > 1 && std::abs(qubitsMap[qubit] - qubitsMap[controllingQubit1]) > 1)
+					WithRoutingRollback([&]() {
+						const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
+						impl.ApplyAndNormalizeWithoutBackup(op.getRawOperatorMatrix(), qubitsNumber, qubit1, qubit2);
+					});
+				else
+				{
+					const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
+					impl.ApplyOperatorAndNormalize(op, qubit1, qubit2);
+				}
 				if (bondDimensionCallback && qubitsNumber > 1)
-					bondDimensionCallback(impl.getBondDimensions());
+					NotifyBondDimensions();
 			}
 
 			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, IndexType qubit, IndexType controllingQubit1)
@@ -831,6 +971,14 @@ namespace QC
 						throw std::invalid_argument("All Kraus operators need to have the same number of qubits");
 				ValidateOperatorQubits(qubitsNumber, qubit, controllingQubit1);
 
+				// Strict rejection must precede all routing SWAPs, which may compress the state.
+				if (impl.getKrausCompletenessCheck() == KrausCompletenessCheck::Strict)
+					impl.CheckKrausCompleteness(ops);
+				std::vector<MatrixClass> mappedOps;
+				mappedOps.reserve(ops.size());
+				for (const auto& op : ops)
+					mappedOps.push_back(KrausOperatorMatrix(op));
+
 				IndexType qubit1 = qubitsMap[qubit];
 				IndexType qubit2 = qubitsNumber > 1 ? qubitsMap[controllingQubit1] : qubit1;
 
@@ -843,14 +991,9 @@ namespace QC
 					assert(std::abs(qubit1 - qubit2) == 1);
 				}
 
-				std::vector<MatrixClass> mappedOps;
-				mappedOps.reserve(ops.size());
-				for (const auto& op : ops)
-					mappedOps.push_back(KrausOperatorMatrix(op));
-
 				impl.ApplyKrausOperators(mappedOps, qubit1, qubit2);
 				if (bondDimensionCallback && qubitsNumber > 1)
-					bondDimensionCallback(impl.getBondDimensions());
+					NotifyBondDimensions();
 			}
 
 			static const MatrixClass& KrausOperatorMatrix(const Gates::AppliedGate<MatrixClass>& op)
@@ -1051,7 +1194,7 @@ namespace QC
 					qubitsMapInv[toQubitReal] = movingQubitInv;
 
 					if (bondDimensionCallback)
-						bondDimensionCallback(impl.getBondDimensions());
+						NotifyBondDimensions();
 
 					movingQubitReal = toQubitReal;
 				} while (movingQubitReal != targetQubitReal);
@@ -1100,7 +1243,7 @@ namespace QC
 					qubitsMapInv[to] = logical1;
 
 					if (bondDimensionCallback)
-						bondDimensionCallback(impl.getBondDimensions());
+						NotifyBondDimensions();
 					r1 = to;
 				}
 
@@ -1117,7 +1260,7 @@ namespace QC
 					qubitsMapInv[to] = logical2;
 
 					if (bondDimensionCallback)
-						bondDimensionCallback(impl.getBondDimensions());
+						NotifyBondDimensions();
 					r2 = to;
 				}
 
@@ -1162,6 +1305,14 @@ namespace QC
 			BondDimensionCallback bondDimensionCallback;
 
 			std::shared_ptr<MPOSimulatorStateInterface> savedState;
+			MPOSimulatorBase::CanonicalMetadata savedCanonicalMetadata;
+			bool suppressBondNotifications = false;
+
+			void NotifyBondDimensions() const
+			{
+				if (bondDimensionCallback && !suppressBondNotifications)
+					bondDimensionCallback(impl.getBondDimensions());
+			}
 		};
 
 	}

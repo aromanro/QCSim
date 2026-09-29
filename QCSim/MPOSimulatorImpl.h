@@ -48,25 +48,27 @@ namespace QC {
 					ApplyGate(gate);
 			}
 
-			// Walks over the chain and, wherever a bond dimension is bigger than the currently set
-			// bond dimension limit, contracts the two neighbour sites and re-splits them with a
-			// truncated SVD to bring the bond dimension down to the limit. No gate is applied.
-			// Useful after lowering the bond dimension limit with setLimitBondDimension once the
-			// bonds have already grown beyond the new limit.
+			// Compresses the current state using either or both configured limits, without a gate.
 			void Trim() override
 			{
-				if (!limitSize) return; // nothing to trim against
+				if (!limitSize && !limitEntanglement) return;
+				if (!limitEntanglement && std::all_of(lambdas.begin(), lambdas.end(),
+					[this](const LambdaType& lambda) { return lambda.size() <= chi; })) return;
 
 				bool truncated = false;
 				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
 				{
-					if (lambdas[qubit1].size() <= chi) continue;
+					// After a cut, update each intervening bond's environment even when it
+					// already fits the cap; a later cut must not reuse its old Schmidt weights.
+					if (!limitEntanglement && lambdas[qubit1].size() <= chi && !truncated) continue;
 
-					// contract the two neighbour sites (no gate is applied), then re-split with a truncated SVD
+					const bool canonicalWeights = canonicalFormValid;
+					if (!canonicalWeights) PrepareBond(qubit1);
+					// Contract with orthonormal environments, then apply the requested cut.
 					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
 
-					truncated = DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1) || truncated;
+					truncated = DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1, true, canonicalWeights) || truncated;
 				}
 
 				ApplyPostTruncationPatches(truncated);
@@ -74,33 +76,33 @@ namespace QC {
 
 			void ReCanonicalize() override
 			{
-				// Gauge only: do not apply user-requested chi / singular-value cuts.
+				InvalidateCanonicalForm();
 				const IndexType nrBonds = static_cast<IndexType>(lambdas.size());
 
-				// First sweep from right to left: afterwards all the B tensors except the first one are right orthonormal
-				// (each one is a V^dagger from a SVD), no matter how stale the lambdas used as left environment were
-				// (they are stale after local non unitary operations like projections or Kraus channels).
-				for (IndexType bond = nrBonds - 1; bond >= 0; --bond)
-				{
-					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(bond);
-					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, bond, bond + 1, false);
-				}
+				// QR transfers every component to the left neighbor, without consulting stale
+				// lambdas or dropping small directions that a large left environment may amplify.
+				RunMaybeSingleThreaded(enableMultithreading, [&]() {
+					for (IndexType site = nrBonds; site > 0; --site)
+						RightCanonicalizeSite(site);
+				});
 
-				// Then from left to right: now the left environment used for each bond is the correct one, so the singular values
-				// are the operator Schmidt values. The first bond was already done correctly by the previous sweep, its left environment is trivial.
-				for (IndexType bond = 1; bond < nrBonds; ++bond)
+				// With orthonormal right environments, the left-to-right SVDs now see the
+				// actual operator Schmidt weights. Only numerical rank filtering is allowed.
+				for (IndexType bond = 0; bond < nrBonds; ++bond)
 				{
 					const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(bond);
 					const MatrixClass thetaMatrix = ReshapeTheta(theta);
 					DecomposeAndSetGammas(thetaMatrix, bond, bond + 1, false);
 				}
+				canonicalFormValid = true;
+				centerFirst = centerLast = 0;
 			}
 
 			void Hermitize() override
 			{
 				const bool wasApplying = applyingPostTruncationPatches;
-				applyingPostTruncationPatches = true;
+				ScopedFlag patchGuard(applyingPostTruncationPatches);
+				InvalidateCanonicalForm();
 
 				// the operator is the product of the site tensors, so the adjoint is the product of the adjoint sites
 				std::vector<TensorType> adjointGammas;
@@ -112,19 +114,8 @@ namespace QC {
 				ScaleSite(0, 0.5);
 
 				ReCanonicalize();
-				if (limitSize || limitEntanglement)
-				{
-					for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
-					{
-						if (limitSize && !limitEntanglement && lambdas[qubit1].size() <= chi)
-							continue;
+				Trim();
 
-						const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
-						DecomposeAndSetGammas(ReshapeTheta(theta), qubit1, qubit1 + 1);
-					}
-				}
-
-				applyingPostTruncationPatches = wasApplying;
 				if (restoreTraceAfterTruncation && !wasApplying)
 					RestoreTraceIfSafe();
 			}
@@ -238,6 +229,7 @@ namespace QC {
 
 				ScaleTensor(collapsedGamma, 1. / postTrace);
 				gammas[qubit] = std::move(collapsedGamma);
+				InvalidateCanonicalForm(qubit, qubit);
 
 				return !zeroMeasured;
 			}
@@ -256,6 +248,104 @@ namespace QC {
 			}
 
 		private:
+			class ScopedFlag
+			{
+				bool& flag;
+				const bool previous;
+			public:
+				explicit ScopedFlag(bool& value) : flag(value), previous(value) { flag = true; }
+				~ScopedFlag() { flag = previous; }
+				ScopedFlag(const ScopedFlag&) = delete;
+				ScopedFlag& operator=(const ScopedFlag&) = delete;
+			};
+
+			void PrepareBond(IndexType bond)
+			{
+				InvalidateSamplingCache();
+				RunMaybeSingleThreaded(enableMultithreading, [&]() {
+					while (centerFirst < bond)
+					{
+						LeftCanonicalizeSite(centerFirst);
+						++centerFirst;
+						centerLast = std::max(centerLast, centerFirst);
+					}
+					while (centerLast > bond + 1)
+					{
+						RightCanonicalizeSite(centerLast);
+						--centerLast;
+						centerFirst = std::min(centerFirst, centerLast);
+					}
+				});
+			}
+
+			void LeftCanonicalizeSite(IndexType site)
+			{
+				const auto& gamma = gammas[site];
+				const IndexType L = gamma.dimension(0), R = gamma.dimension(3);
+				const IndexType rank = std::min(4 * L, R);
+				const Eigen::Map<const MatrixClass> matrix(gamma.data(), 4 * L, R);
+				Eigen::HouseholderQR<MatrixClass> qr(matrix);
+				const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(4 * L, rank);
+				const MatrixClass transfer = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
+				const auto& next = gammas[site + 1];
+				const IndexType nextR = next.dimension(3);
+				const Eigen::Map<const MatrixClass> nextMatrix(next.data(), R, 4 * nextR);
+				const MatrixClass right = transfer * nextMatrix;
+				TensorType newLeft(L, 2, 2, rank), newRight(rank, 2, 2, nextR);
+				std::copy(Q.data(), Q.data() + Q.size(), newLeft.data());
+				std::copy(right.data(), right.data() + right.size(), newRight.data());
+				gammas[site] = std::move(newLeft);
+				gammas[site + 1] = std::move(newRight);
+				lambdas[site] = LambdaType::Ones(rank);
+			}
+
+			// Exact physical reordering for an overlap copy, without gate contractions,
+			// user compression, trace patches, callbacks or a global SVD sweep.
+			void SwapSitesForOverlap(IndexType first)
+			{
+				if (canonicalFormValid) InvalidateCanonicalForm(0, 0);
+				PrepareBond(first);
+				const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(first);
+				const Eigen::array<int, 6> permutation{ 0, 3, 4, 1, 2, 5 };
+				const Eigen::Tensor<std::complex<double>, 6> swapped = theta.shuffle(permutation);
+				DecomposeAndSetGammas(ReshapeTheta(swapped), first, first + 1, false, false);
+			}
+
+			void RightCanonicalizeSite(IndexType site)
+			{
+				const TensorType& gamma = gammas[site];
+				const IndexType L = gamma.dimension(0);
+				const IndexType R = gamma.dimension(3);
+				const IndexType rank = std::min(L, 4 * R);
+				MatrixClass adjoint(4 * R, L);
+				for (IndexType ket = 0; ket < 2; ++ket)
+					for (IndexType bra = 0; bra < 2; ++bra)
+						for (IndexType r = 0; r < R; ++r)
+							for (IndexType l = 0; l < L; ++l)
+								adjoint((ket * 2 + bra) * R + r, l) = std::conj(gamma(l, ket, bra, r));
+
+				Eigen::HouseholderQR<MatrixClass> qr(adjoint);
+				const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(4 * R, rank);
+				const MatrixClass triangular = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
+				const MatrixClass transfer = triangular.adjoint();
+				const TensorType& previous = gammas[site - 1];
+				const IndexType previousL = previous.dimension(0);
+				// Tensor storage groups (left, ket, bra) contiguously before the right bond.
+				const Eigen::Map<const MatrixClass> previousMatrix(previous.data(), 4 * previousL, L);
+				const MatrixClass left = previousMatrix * transfer;
+				TensorType newLeft(previousL, 2, 2, rank);
+				std::copy(left.data(), left.data() + left.size(), newLeft.data());
+				TensorType newRight(rank, 2, 2, R);
+				for (IndexType ket = 0; ket < 2; ++ket)
+					for (IndexType bra = 0; bra < 2; ++bra)
+						for (IndexType r = 0; r < R; ++r)
+							for (IndexType l = 0; l < rank; ++l)
+								newRight(l, ket, bra, r) = std::conj(Q((ket * 2 + bra) * R + r, l));
+				gammas[site - 1] = std::move(newLeft);
+				gammas[site] = std::move(newRight);
+				lambdas[site - 1] = LambdaType::Ones(rank);
+			}
+
 			static bool IsFinite(const std::complex<double>& value)
 			{
 				return std::isfinite(value.real()) && std::isfinite(value.imag());
@@ -342,31 +432,43 @@ namespace QC {
 
 			void ApplyValidatedOperator(const MatrixClass& op, size_t operatorQubits, IndexType qubit, IndexType controllingQubit1)
 			{
+				InvalidateSamplingCache();
 				if (operatorQubits == 1)
 					ApplySingleQubitGate(gammas[qubit], op);
 				else
 					ApplyTwoQubitGate(op, qubit, controllingQubit1);
+				if (!(op.adjoint() * op).isIdentity(1E-12))
+					InvalidateCanonicalForm(std::min(qubit, operatorQubits == 1 ? qubit : controllingQubit1),
+						std::max(qubit, operatorQubits == 1 ? qubit : controllingQubit1));
 			}
 
 			void ApplyValidatedOperatorAndNormalize(const MatrixClass& op, size_t operatorQubits, IndexType qubit, IndexType controllingQubit1)
 			{
-				const auto originalLambdas = lambdas;
-				const auto originalGammas = gammas;
+				auto originalLambdas = lambdas;
+				auto originalGammas = gammas;
+				const auto originalMetadata = GetCanonicalMetadata();
 
 				try
 				{
-					ApplyValidatedOperator(op, operatorQubits, qubit, controllingQubit1);
-					const std::complex<double> trace = Trace();
-					if (!IsFinite(trace) || std::abs(trace) <= std::numeric_limits<double>::epsilon())
-						throw std::runtime_error("Cannot normalize an MPO state with zero or non-finite trace");
-					ScaleSite(0, 1. / trace);
+					ApplyAndNormalizeWithoutBackup(op, operatorQubits, qubit, controllingQubit1);
 				}
 				catch (...)
 				{
-					lambdas = originalLambdas;
-					gammas = originalGammas;
+					lambdas.swap(originalLambdas);
+					gammas.swap(originalGammas);
+					RestoreCanonicalMetadata(originalMetadata);
 					throw;
 				}
+			}
+
+			void ApplyAndNormalizeWithoutBackup(const MatrixClass& op, size_t operatorQubits,
+				IndexType qubit, IndexType controllingQubit1)
+			{
+				ApplyValidatedOperator(op, operatorQubits, qubit, controllingQubit1);
+				const auto trace = Trace();
+				if (!IsFinite(trace) || std::abs(trace) <= std::numeric_limits<double>::epsilon())
+					throw std::runtime_error("Cannot normalize an MPO state with zero or non-finite trace");
+				ScaleSite(canonicalFormValid ? 0 : centerFirst, 1. / trace);
 			}
 
 			template<class OperatorsContainer> void ApplyKrausOperatorsImpl(const OperatorsContainer& ops, size_t operatorQubits, IndexType qubit, IndexType controllingQubit1)
@@ -406,6 +508,7 @@ namespace QC {
 
 			template<class OperatorsContainer> void ApplySingleQubitChannel(const OperatorsContainer& ops, IndexType qubit)
 			{
+				InvalidateSamplingCache();
 				const TensorType& original = gammas[qubit];
 				const IndexType L = original.dimension(0);
 				const IndexType R = original.dimension(3);
@@ -430,10 +533,13 @@ namespace QC {
 				}
 
 				gammas[qubit] = std::move(result);
+				InvalidateCanonicalForm(qubit, qubit);
 			}
 
 			template<class OperatorsContainer> void ApplyTwoQubitChannel(const OperatorsContainer& ops, IndexType qubit, IndexType controllingQubit1)
 			{
+				const bool canonicalWeights = canonicalFormValid;
+				if (!canonicalWeights) PrepareBond(std::min(qubit, controllingQubit1));
 				IndexType qubit1 = controllingQubit1;
 				IndexType qubit2 = qubit;
 				bool reversed = false;
@@ -473,11 +579,14 @@ namespace QC {
 				}
 
 				const MatrixClass thetaMatrix = ReshapeThetaBar(result);
-				ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2));
+				ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
+				InvalidateCanonicalForm(qubit1, qubit2);
 			}
 
 			void ApplyTwoQubitGate(const MatrixClass& gate, IndexType qubit, IndexType controllingQubit1)
 			{
+				const bool canonicalWeights = canonicalFormValid;
+				if (!canonicalWeights) PrepareBond(std::min(qubit, controllingQubit1));
 				// contract the tensors for the two qubits (the B tensors already contain the lambdas, except the left one)
 				// apply the gate on the kets and its conjugate on the bras (rho -> U rho U^dagger)
 				// SVD the result (with the left lambda multiplied in) to separate the two qubit tensors and the new lambda in between.
@@ -500,7 +609,7 @@ namespace QC {
 				// (4 * leftBond) x (4 * rightBond) matrix, the physical dimension per site is 4 = 2 (ket) x 2 (bra)
 				const MatrixClass thetaMatrix = ReshapeThetaBar(thetaBar);
 
-				ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2));
+				ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
 			}
 
 			void ApplyPostTruncationPatches(bool truncated)
@@ -508,12 +617,11 @@ namespace QC {
 				if (!truncated || applyingPostTruncationPatches) return;
 				if (!hermitizeAfterTruncation && !restoreTraceAfterTruncation) return;
 
-				applyingPostTruncationPatches = true;
+				ScopedFlag patchGuard(applyingPostTruncationPatches);
 				if (hermitizeAfterTruncation)
 					Hermitize();
 				if (restoreTraceAfterTruncation)
 					RestoreTraceIfSafe();
-				applyingPostTruncationPatches = false;
 			}
 
 			// SVD the (already built) theta matrix and write back the two new site tensors and the
@@ -527,17 +635,20 @@ namespace QC {
 			// then the new right B is V^dagger and the new left B is theta * V (which is lambda_left^-1 * U * S, but computed
 			// without dividing by the lambdas). U is not needed at all.
 			// Nothing is rescaled, so B1 B2 = theta exactly if nothing is cut, and Tr(rho) is preserved.
-			bool DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression = true)
+			bool DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2,
+				bool applyUserCompression = true, bool canonicalWeights = true)
 			{
 				// the SVD and the matrix product for the new left B are the parts Eigen parallelizes
 				bool truncated = false;
-				RunMaybeSingleThreaded(enableMultithreading, [&]() { truncated = DecomposeAndSetGammasImpl(thetaMatrix, qubit1, qubit2, applyUserCompression); });
+				RunMaybeSingleThreaded(enableMultithreading, [&]() { truncated = DecomposeAndSetGammasImpl(thetaMatrix, qubit1, qubit2, applyUserCompression, canonicalWeights); });
 
 				return truncated;
 			}
 
-			bool DecomposeAndSetGammasImpl(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression)
+			bool DecomposeAndSetGammasImpl(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2,
+				bool applyUserCompression, bool canonicalWeights)
 			{
+				InvalidateSamplingCache();
 				const IndexType L = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
 				const IndexType R = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
 
@@ -546,7 +657,7 @@ namespace QC {
 
 				// the rows are (physical index, left bond index) = p * L + l
 				MatrixClass weightedTheta;
-				if (qubit1 != 0)
+				if (canonicalWeights && qubit1 != 0)
 				{
 					const LambdaType& leftLambda = lambdas[qubit1 - 1];
 					weightedTheta.resize(thetaMatrix.rows(), thetaMatrix.cols());
@@ -558,7 +669,7 @@ namespace QC {
 								weightedTheta(pL + l, c) = thetaMatrix(pL + l, c) * leftLambda[l];
 						}
 				}
-				const MatrixClass& svdMatrix = qubit1 == 0 ? thetaMatrix : weightedTheta;
+				const MatrixClass& svdMatrix = !canonicalWeights || qubit1 == 0 ? thetaMatrix : weightedTheta;
 
 #ifdef USE_FAST_SVD
 				const bool computeWithJacobi = svdMatrix.rows() < blockSizeLimit && svdMatrix.cols() < blockSizeLimit;
@@ -604,6 +715,12 @@ namespace QC {
 				lambdas[qubit1] = SvaluesFull.head(sz);
 
 				SetNewGammas(thetaMatrix, VmatrixFull, qubit1, qubit2, L, sz, R);
+				if (!canonicalWeights)
+				{
+					canonicalFormValid = false;
+					centerFirst = centerLast = qubit1;
+				}
+				else if (truncated) InvalidateCanonicalForm(qubit1, qubit1);
 				return truncated;
 			}
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <array>
 #include <iostream>
 #include <chrono>
 #include <random>
@@ -57,9 +58,11 @@ namespace QC {
 		// unitary evolution when user-requested compression is disabled
 		// (L2-normalizing the lambdas, as the MPS does to keep <psi|psi> = 1, would
 		// instead rescale the trace).
-		// Local non unitary operations (projections, Kraus channels) leave the lambdas stale; that's fine
-		// for the represented operator (everything is computed by contracting the whole chain), it only
-		// makes subsequent truncations less than optimal until ReCanonicalize.
+		// Local nonunitary operations leave the lambdas stale. Queries still contract the exact
+		// represented operator, but SVD rank decisions require valid environments. The implementation
+		// uses local QR transport to supply orthonormal environments for a two-site update.
+		// Between full ReCanonicalize calls the tensors may use a mixed canonical gauge;
+		// then only the most recently split bond has current Schmidt weights.
 		//
 		// Compression caveat: limiting the bond dimension or dropping singular values
 		// is ordinary operator-space MPO truncation. It minimizes a local SVD error, but
@@ -110,6 +113,9 @@ namespace QC {
 
 			void Clear() override
 			{
+				InvalidateSamplingCache();
+				canonicalFormValid = true;
+				centerFirst = centerLast = 0;
 				const size_t szm1 = lambdas.size();
 				for (size_t i = 0; i < szm1; ++i)
 				{
@@ -126,6 +132,9 @@ namespace QC {
 
 			void InitOnesState() override
 			{
+				InvalidateSamplingCache();
+				canonicalFormValid = true;
+				centerFirst = centerLast = 0;
 				const size_t szm1 = lambdas.size();
 				for (size_t i = 0; i < szm1; ++i)
 				{
@@ -142,9 +151,9 @@ namespace QC {
 
 			void setToQubitState(IndexType q) override
 			{
-				Clear();
 				if (q < 0 || q >= static_cast<IndexType>(gammas.size()))
-					return;
+					throw std::invalid_argument("Qubit index out of bounds");
+				Clear();
 
 				SetSiteToBasis(gammas[q], 1);
 			}
@@ -152,7 +161,8 @@ namespace QC {
 			void setToBasisState(size_t State) override
 			{
 				constexpr size_t stateBits = std::numeric_limits<size_t>::digits;
-				if (gammas.size() < stateBits && State >= (size_t{ 1 } << gammas.size())) return;
+				if (gammas.size() < stateBits && State >= (size_t{ 1 } << gammas.size()))
+					throw std::invalid_argument("Basis state is outside the MPO register");
 
 				Clear();
 
@@ -300,6 +310,7 @@ namespace QC {
 
 				lambdas.swap(newLambdas);
 				gammas.swap(newGammas);
+				InvalidateCanonicalForm();
 			}
 
 			void setLimitBondDimension(IndexType chival) override
@@ -403,7 +414,7 @@ namespace QC {
 				if (!HasSafelyPositiveTrace(tr))
 					throw std::runtime_error("Cannot restore trace of an MPO operator whose trace is not safely positive");
 
-				ScaleSite(0, 1. / tr);
+				ScaleSite(canonicalFormValid ? 0 : centerFirst, 1. / tr);
 			}
 
 			std::complex<double> Trace() const override
@@ -430,22 +441,14 @@ namespace QC {
 				for (size_t q = 0; q < n; ++q)
 				{
 					const auto& g = gammas[q];
-					const IndexType L = g.dimension(0);
 					const IndexType R = g.dimension(3);
 					MatrixClass next = MatrixClass::Zero(R, R);
 
 					for (IndexType ket = 0; ket < 2; ++ket)
 						for (IndexType bra = 0; bra < 2; ++bra)
 						{
-							MatrixClass Gkb(L, R);
-							MatrixClass Gbk(L, R);
-							for (IndexType r = 0; r < R; ++r)
-								for (IndexType l = 0; l < L; ++l)
-								{
-									Gkb(l, r) = g(l, ket, bra, r);
-									Gbk(l, r) = g(l, bra, ket, r);
-								}
-
+							const auto Gkb = MapSiteSlice(g, ket, bra);
+							const auto Gbk = MapSiteSlice(g, bra, ket);
 							next.noalias() += Gkb.transpose() * env * Gbk;
 						}
 
@@ -467,10 +470,31 @@ namespace QC {
 
 			double HermiticityResidual() const override
 			{
-				const MatrixClass rho = ReconstructOperatorMatrix();
-				if (rho.size() == 0) return 0.;
-
-				return (rho - rho.adjoint()).norm();
+				if (gammas.empty()) return 0.;
+				// QR the difference MPO itself. Subtracting two squared norms would lose
+				// sensitivity near Hermiticity and cannot support the default 1e-10 test.
+				auto difference = gammas;
+				auto bonds = lambdas;
+				std::vector<TensorType> negativeAdjoint;
+				negativeAdjoint.reserve(gammas.size());
+				for (const auto& gamma : gammas) negativeAdjoint.emplace_back(AdjointSite(gamma));
+				for (IndexType i = 0; i < negativeAdjoint[0].size(); ++i) negativeAdjoint[0].data()[i] *= -1.;
+				AddState(bonds, difference, negativeAdjoint);
+				double residual = 0.;
+				RunMaybeSingleThreaded(enableMultithreading, [&]() {
+					MatrixClass transfer = MatrixClass::Ones(1, 1);
+					for (const auto& gamma : difference)
+					{
+						const IndexType R = gamma.dimension(3), rows = transfer.rows();
+						const Eigen::Map<const MatrixClass> site(gamma.data(), gamma.dimension(0), 4 * R);
+						const MatrixClass expanded = transfer * site;
+						const Eigen::Map<const MatrixClass> matrix(expanded.data(), 4 * rows, R);
+						Eigen::HouseholderQR<MatrixClass> qr(matrix);
+						transfer = qr.matrixQR().topRows(std::min(4 * rows, R)).template triangularView<Eigen::Upper>();
+					}
+					residual = transfer.stableNorm();
+				});
+				return residual;
 			}
 
 			bool IsHermitian(double eps = 1E-10) const override
@@ -495,34 +519,41 @@ namespace QC {
 					isKept[static_cast<size_t>(q)] = true;
 				}
 
+				const size_t dimA = CheckedDensityMatrixDimension(numKeep);
 				const std::complex<double> tr = Trace();
-				const size_t dimA = 1ULL << numKeep;
-				MatrixClass rhoA = MatrixClass::Zero(dimA, dimA);
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return rhoA;
-
-				for (size_t rA = 0; rA < dimA; ++rA)
+				RequireNormalizableTrace(tr);
+				// Absorb traced segments once, including gaps between retained sites.
+				// Reuse prefix vectors along the output tree: temporary storage stays
+				// polynomial in bond dimension, even for the largest dense result.
+				MatrixClass gap = MatrixClass::Ones(1, 1);
+				std::vector<std::array<MatrixClass, 4>> reduced;
+				std::vector<size_t> orderedPositions;
+				for (size_t q = 0; q < nrQubits; ++q)
 				{
-					for (size_t cA = 0; cA < dimA; ++cA)
-					{
-						const std::complex<double> val = ContractChain([this, &keepQubits, &isKept, rA, cA](IndexType q) {
-							if (isKept[static_cast<size_t>(q)])
-							{
-								size_t pos = 0;
-								for (size_t i = 0; i < keepQubits.size(); ++i)
-									if (keepQubits[i] == q) { pos = i; break; }
-
-								const int ket = (rA & (1ULL << pos)) ? 1 : 0;
-								const int bra = (cA & (1ULL << pos)) ? 1 : 0;
-								return SiteSelectMatrix(q, ket, bra);
-							}
-							return SiteTraceMatrix(q);
-						});
-
-						rhoA(static_cast<Eigen::Index>(rA), static_cast<Eigen::Index>(cA)) = val / tr;
-					}
+					if (!isKept[q]) { gap = (gap * SiteTraceMatrix(q)).eval(); continue; }
+					reduced.emplace_back();
+					for (IndexType bra = 0; bra < 2; ++bra)
+						for (IndexType ket = 0; ket < 2; ++ket)
+							reduced.back()[ket + 2 * bra].noalias() = gap * SiteSelectMatrix(q, ket, bra);
+					const IndexType R = gammas[q].dimension(3);
+					gap = MatrixClass::Identity(R, R);
+					orderedPositions.push_back(static_cast<size_t>(std::find(keepQubits.begin(), keepQubits.end(), q) - keepQubits.begin()));
 				}
-
+				if (reduced.empty()) return MatrixClass::Ones(1, 1);
+				for (auto& last : reduced.back()) last = (last * gap).eval();
+				std::vector<MatrixClass> prefix(reduced.size() + 1);
+				prefix[0] = MatrixClass::Ones(1, 1);
+				MatrixClass rhoA(dimA, dimA);
+				auto expand = [&](auto&& self, size_t depth, size_t row, size_t col) -> void {
+					if (depth == reduced.size()) { rhoA(row, col) = prefix[depth](0, 0) / tr; return; }
+					for (size_t physical = 0; physical < 4; ++physical)
+					{
+						prefix[depth + 1].noalias() = prefix[depth] * reduced[depth][physical];
+						self(self, depth + 1, row | ((physical & 1) << orderedPositions[depth]),
+							col | ((physical >> 1) << orderedPositions[depth]));
+					}
+				};
+				expand(expand, 0, 0, 0);
 				return rhoA;
 			}
 
@@ -531,13 +562,16 @@ namespace QC {
 				const size_t n = getNrQubits();
 				if (other.getNrQubits() != n)
 					throw std::invalid_argument("MPO register sizes do not match");
+				const auto tr1 = Trace(), tr2 = other.Trace();
+				RequireNormalizableTrace(tr1);
+				RequireNormalizableTrace(tr2);
 
 				const auto* otherBase = dynamic_cast<const MPOSimulatorBase*>(&other);
 				if (!otherBase)
 				{
-					const MatrixClass r1 = getDensityMatrix();
-					const MatrixClass r2 = other.getDensityMatrix();
-					return r1.cwiseProduct(r2.conjugate()).sum();
+					// A decorator knows its logical mapping and can align a copy with this
+					// physical chain. Conjugation reverses the inner-product arguments.
+					return std::conj(other.OverlapWithPhysicalChain(*this));
 				}
 
 				if (n == 0) return 0.;
@@ -552,9 +586,7 @@ namespace QC {
 							const auto& g1 = gammas[q];
 							const auto& g2 = otherBase->gammas[q];
 
-							const IndexType L1 = g1.dimension(0);
 							const IndexType R1 = g1.dimension(3);
-							const IndexType L2 = g2.dimension(0);
 							const IndexType R2 = g2.dimension(3);
 
 							MatrixClass next = MatrixClass::Zero(R1, R2);
@@ -562,17 +594,9 @@ namespace QC {
 							for (IndexType ket = 0; ket < 2; ++ket)
 								for (IndexType bra = 0; bra < 2; ++bra)
 								{
-									MatrixClass G1(L1, R1);
-									MatrixClass G2(L2, R2);
-									for (IndexType r = 0; r < R1; ++r)
-										for (IndexType l = 0; l < L1; ++l)
-											G1(l, r) = g1(l, ket, bra, r);
-
-									for (IndexType r = 0; r < R2; ++r)
-										for (IndexType l = 0; l < L2; ++l)
-											G2(l, r) = std::conj(g2(l, ket, bra, r));
-
-									next.noalias() += G1.transpose() * env * G2;
+									const auto G1 = MapSiteSlice(g1, ket, bra);
+									const auto G2 = MapSiteSlice(g2, ket, bra);
+									next.noalias() += G1.adjoint() * env * G2;
 								}
 
 							// the lambdas are already included in the B tensors
@@ -580,41 +604,48 @@ namespace QC {
 						}
 					});
 
-				const std::complex<double> tr1 = Trace();
-				const std::complex<double> tr2 = other.Trace();
-				if (std::abs(tr1) < std::numeric_limits<double>::epsilon() || std::abs(tr2) < std::numeric_limits<double>::epsilon())
-					return 0.;
-
-				return env(0, 0) / (tr1 * std::conj(tr2));
+				return env(0, 0) / (std::conj(tr1) * tr2);
 			}
 
 			double FidelityWithStatevector(const VectorClass& psi) const override
 			{
 				const size_t nrQubits = getNrQubits();
-				const size_t dim = 1ULL << nrQubits;
+				const size_t dim = CheckedStatevectorDimension(nrQubits);
 				if (psi.size() < 0 || static_cast<size_t>(psi.size()) != dim)
 					throw std::invalid_argument("Statevector dimension does not match the register");
 
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return 0.;
-
-				std::complex<double> acc = 0.;
-				for (size_t r = 0; r < dim; ++r)
+				RequireNormalizableTrace(tr);
+				// Preserve the cheap path for basis states and other sparse vectors.
+				// Dense vectors stop this scan early and use the contraction below.
+				const auto nonzero = CollectSparseStatevector(psi);
+				if (nonzero.size() <= sparseStatevectorLimit)
+					return FidelityWithSparseStatevector(nonzero, tr);
+				// Apply the MPO to the dense vector. At step q, low bits are output
+				// ket bits and high bits are uncontracted input bra bits: 2^N entries
+				// per open bond rather than 4^N separately contracted matrix elements.
+				MatrixClass current = psi;
+				for (size_t q = 0; q < nrQubits; ++q)
 				{
-					const std::complex<double> psiRConj = std::conj(psi(static_cast<Eigen::Index>(r)));
-					if (psiRConj == std::complex<double>(0., 0.)) continue;
-
-					for (size_t c = 0; c < dim; ++c)
-					{
-						const std::complex<double> psiC = psi(static_cast<Eigen::Index>(c));
-						if (psiC == std::complex<double>(0., 0.)) continue;
-
-						acc += psiRConj * getBasisStateMatrixElement(r, c) * psiC;
-					}
+					const auto& gamma = gammas[q];
+					const IndexType L = gamma.dimension(0), R = gamma.dimension(3);
+					const size_t bit = size_t{ 1 } << q;
+					if (dim > static_cast<size_t>(std::numeric_limits<IndexType>::max()) / sizeof(std::complex<double>) / static_cast<size_t>(R))
+						throw std::length_error("MPO-statevector contraction workspace is too large");
+					MatrixClass next = MatrixClass::Zero(static_cast<IndexType>(dim), R);
+					for (IndexType r = 0; r < R; ++r)
+						for (IndexType l = 0; l < L; ++l)
+							for (IndexType bra = 0; bra < 2; ++bra)
+								for (IndexType ket = 0; ket < 2; ++ket)
+								{
+									const auto value = gamma(l, ket, bra, r);
+									if (value == std::complex<double>{}) continue;
+									for (size_t high = 0; high < dim; high += 2 * bit)
+										next.col(r).segment(high + ket * bit, bit) += value * current.col(l).segment(high + bra * bit, bit);
+								}
+					current = std::move(next);
 				}
-
-				return std::clamp((acc / tr).real(), 0., 1.);
+				return std::clamp((psi.dot(current.col(0)) / tr).real(), 0., 1.);
 			}
 
 			std::complex<double> UnnormalizedExpectationValue(const std::string& pauliString) const override
@@ -636,8 +667,7 @@ namespace QC {
 			{
 				const std::complex<double> num = UnnormalizedExpectationValue(pauliString);
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return 0.;
+				RequireNormalizableTrace(tr);
 
 				return num / tr;
 			}
@@ -654,8 +684,7 @@ namespace QC {
 				});
 
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return 0.;
+				RequireNormalizableTrace(tr);
 
 				return ClampProbability((num / tr).real());
 			}
@@ -741,8 +770,7 @@ namespace QC {
 			double getBasisStateProbability(size_t State) const override
 			{
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return 0.;
+				RequireNormalizableTrace(tr);
 
 				return ClampProbability((getBasisStateMatrixElement(State, State) / tr).real());
 			}
@@ -750,8 +778,7 @@ namespace QC {
 			double getBasisStateProbability(const std::vector<bool>& State) const override
 			{
 				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return 0.;
+				RequireNormalizableTrace(tr);
 
 				return ClampProbability((getBasisStateMatrixElement(State, State) / tr).real());
 			}
@@ -800,6 +827,7 @@ namespace QC {
 				std::vector<TensorType> newGammas = stateRef->gammas;
 				lambdas.swap(newLambdas);
 				gammas.swap(newGammas);
+				InvalidateCanonicalForm();
 			}
 
 			void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) override
@@ -809,6 +837,7 @@ namespace QC {
 				auto stateRef = CheckedBaseState(state);
 				lambdas.swap(stateRef->lambdas);
 				gammas.swap(stateRef->gammas);
+				InvalidateCanonicalForm();
 			}
 
 			void print() const override
@@ -839,6 +868,66 @@ namespace QC {
 			}
 
 		protected:
+			using SiteSliceMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
+			static SiteSliceMap MapSiteSlice(const TensorType& gamma, IndexType ket, IndexType bra)
+			{
+				const IndexType L = gamma.dimension(0);
+				// Tensor storage is (left, ket, bra, right); adjacent columns are 4L apart.
+				return SiteSliceMap(gamma.data() + L * (ket + 2 * bra), L, gamma.dimension(3), Eigen::OuterStride<>(4 * L));
+			}
+
+			static constexpr size_t sparseStatevectorLimit = 32;
+			using SparseStatevector = std::vector<std::pair<IndexType, std::complex<double>>>;
+			static SparseStatevector CollectSparseStatevector(const VectorClass& psi)
+			{
+				SparseStatevector nonzero;
+				nonzero.reserve(sparseStatevectorLimit + 1);
+				for (IndexType i = 0; i < psi.size(); ++i)
+					if (psi[i] != std::complex<double>{})
+					{
+						nonzero.emplace_back(i, psi[i]);
+						if (nonzero.size() > sparseStatevectorLimit) break;
+					}
+				return nonzero;
+			}
+			double FidelityWithSparseStatevector(const SparseStatevector& psi, const std::complex<double>& trace) const
+			{
+				std::complex<double> overlap = 0.;
+				for (const auto& row : psi)
+					for (const auto& col : psi)
+						overlap += std::conj(row.second) * getBasisStateMatrixElement(row.first, col.first) * col.second;
+				return std::clamp((overlap / trace).real(), 0., 1.);
+			}
+
+			// Outside this interval the left prefix / right suffix are orthonormal.
+			// A valid Vidal form additionally has current Schmidt weights on every bond.
+			struct CanonicalMetadata
+			{
+				bool valid = true;
+				IndexType first = 0, last = 0;
+			};
+			CanonicalMetadata GetCanonicalMetadata() const { return { canonicalFormValid, centerFirst, centerLast }; }
+			void RestoreCanonicalMetadata(const CanonicalMetadata& metadata)
+			{
+				canonicalFormValid = metadata.valid;
+				centerFirst = metadata.first;
+				centerLast = metadata.last;
+				InvalidateSamplingCache();
+			}
+			void InvalidateSamplingCache() { samplingRight.clear(); }
+			void InvalidateCanonicalForm(IndexType first, IndexType last)
+			{
+				if (canonicalFormValid) centerFirst = centerLast = 0;
+				canonicalFormValid = false;
+				centerFirst = std::min(centerFirst, first);
+				centerLast = std::max(centerLast, last);
+				InvalidateSamplingCache();
+			}
+			void InvalidateCanonicalForm()
+			{
+				InvalidateCanonicalForm(0, static_cast<IndexType>(gammas.size()) - 1);
+			}
+
 			std::shared_ptr<MPOSimulatorBaseState> CheckedBaseState(const std::shared_ptr<MPOSimulatorStateInterface>& state) const
 			{
 				if (typeid(*state) != typeid(MPOSimulatorBaseState))
@@ -892,14 +981,17 @@ namespace QC {
 				return std::isfinite(trace.real()) && std::isfinite(trace.imag()) &&
 					trace.real() > std::numeric_limits<double>::epsilon();
 			}
+			static void RequireNormalizableTrace(const std::complex<double>& trace)
+			{
+				if (!HasSafelyPositiveTrace(trace))
+					throw std::runtime_error("Cannot normalize an MPO operator whose trace is not safely positive");
+			}
 
 			MatrixClass ReconstructOperatorMatrix() const
 			{
 				const size_t sz = gammas.size();
 				if (sz == 0) return {};
-				if (sz > 13) throw std::runtime_error("Too many qubits to build the full density matrix");
-
-				const size_t NrBasisStates = 1ULL << sz;
+				const size_t NrBasisStates = CheckedDensityMatrixDimension(sz);
 				MatrixClass rho(NrBasisStates, NrBasisStates);
 
 				for (size_t r = 0; r < NrBasisStates; ++r)
@@ -932,42 +1024,60 @@ namespace QC {
 				if (limit < 0) limit = 0;
 				if (limit >= n) limit = n - 1;
 
-				const std::complex<double> tr = Trace();
-				if (std::abs(tr) < std::numeric_limits<double>::epsilon())
-					return res;
+				// Reuse traced suffixes until the tensor representation changes. Rescale locally:
+				// their common scale cancels in each conditional probability, avoiding small
+				// joint probabilities and repeated whole-chain contractions.
+				using SiteMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
+				if (samplingRight.empty())
+				{
+					std::vector<MatrixClass> right(static_cast<size_t>(n) + 1);
+					right[n] = MatrixClass::Ones(1, 1);
+					for (IndexType q = n - 1; q >= 0; --q)
+					{
+						const auto& g = gammas[q];
+						const IndexType L = g.dimension(0), R = g.dimension(3);
+						const SiteMap zero(g.data(), L, R, Eigen::OuterStride<>(4 * L));
+						const SiteMap one(g.data() + 3 * L, L, R, Eigen::OuterStride<>(4 * L));
+						right[q].noalias() = zero * right[q + 1];
+						right[q].noalias() += one * right[q + 1];
+						RescaleSamplingEnvironment(right[q]);
+					}
+					samplingRight.swap(right);
+				}
 
-				std::vector<int> outcomes(n, 0);
-
-				// joint probability that qubits [0, upTo) have the outcomes stored in 'outcomes'
-				// (the remaining qubits are traced out)
-				auto jointProbability = [this, &outcomes, tr](IndexType upTo) -> double {
-					const std::complex<double> num = ContractChain([this, &outcomes, upTo](IndexType q) {
-						if (q < upTo)
-							return SiteSelectMatrix(q, outcomes[q], outcomes[q]);
-						return SiteTraceMatrix(q);
-					});
-
-					return ClampProbability((num / tr).real());
-				};
-
-				double priorProb = 1.;
+				MatrixClass left = MatrixClass::Ones(1, 1);
+				MatrixClass left0, left1;
+				res.reserve(static_cast<size_t>(limit) + 1);
 				for (IndexType qubit = 0; qubit <= limit; ++qubit)
 				{
-					// conditional probability of measuring 0 on the current qubit given the previous outcomes
-					outcomes[qubit] = 0;
-					const double joint0 = jointProbability(qubit + 1);
-					const double prob0 = ValidMeasurementProbability(priorProb > std::numeric_limits<double>::epsilon() ? joint0 / priorProb : 0.);
-
-					const double rndVal = 1. - uniformZeroOne(rng);
-					const bool zeroMeasured = rndVal < prob0;
-
-					outcomes[qubit] = zeroMeasured ? 0 : 1;
+					const auto& g = gammas[qubit];
+					const IndexType L = g.dimension(0), R = g.dimension(3);
+					left0.noalias() = left * SiteMap(g.data(), L, R, Eigen::OuterStride<>(4 * L));
+					left1.noalias() = left * SiteMap(g.data() + 3 * L, L, R, Eigen::OuterStride<>(4 * L));
+					const std::complex<double> weight0 = (left0 * samplingRight[qubit + 1])(0, 0);
+					const std::complex<double> weight1 = (left1 * samplingRight[qubit + 1])(0, 0);
+					const std::complex<double> total = weight0 + weight1;
+					if (!std::isfinite(total.real()) || !std::isfinite(total.imag()) || std::abs(total) == 0.)
+						throw std::runtime_error("Cannot sample an MPO with zero or non-finite conditional weight");
+					const double probability = (weight0 / total).real();
+					if (!std::isfinite(probability))
+						throw std::runtime_error("Cannot sample an MPO with a non-finite probability");
+					const double prob0 = ValidMeasurementProbability(probability);
+					const bool zeroMeasured = uniformZeroOne(rng) < prob0;
 					res[qubit] = !zeroMeasured;
-
-					priorProb *= zeroMeasured ? prob0 : 1. - prob0;
+					left.swap(zeroMeasured ? left0 : left1);
+					RescaleSamplingEnvironment(left);
 				}
 
 				return res;
+			}
+
+			static void RescaleSamplingEnvironment(MatrixClass& environment)
+			{
+				const double scale = environment.cwiseAbs().maxCoeff();
+				if (!environment.allFinite() || !std::isfinite(scale) || scale == 0.)
+					throw std::runtime_error("Cannot sample an MPO with zero or non-finite weight");
+				environment /= scale;
 			}
 
 			static void SetSiteToBasis(TensorType& gamma, int basis)
@@ -1097,7 +1207,7 @@ namespace QC {
 				const std::complex<double> tr = Trace();
 				if (!HasSafelyPositiveTrace(tr)) return;
 
-				ScaleSite(0, 1. / tr);
+				ScaleSite(canonicalFormValid ? 0 : centerFirst, 1. / tr);
 			}
 
 			static TensorType AdjointSite(const TensorType& gamma)
@@ -1114,6 +1224,12 @@ namespace QC {
 
 			void ScaleSite(IndexType q, std::complex<double> factor)
 			{
+				InvalidateSamplingCache();
+				if (canonicalFormValid && q == 0 && std::isfinite(std::abs(factor)) && std::abs(factor) > 0.)
+				{
+					for (auto& lambda : lambdas) lambda *= std::abs(factor);
+				}
+				else InvalidateCanonicalForm(q, q);
 				auto& g = gammas[q];
 				for (IndexType r = 0; r < g.dimension(3); ++r)
 					for (IndexType bra = 0; bra < 2; ++bra)
@@ -1218,6 +1334,10 @@ namespace QC {
 			bool enableMultithreading = true;
 			bool restoreTraceAfterTruncation = false;
 			bool hermitizeAfterTruncation = false;
+			// Public snapshots are untrusted; private SaveState snapshots retain this metadata.
+			bool canonicalFormValid = true;
+			IndexType centerFirst = 0, centerLast = 0;
+			std::vector<MatrixClass> samplingRight;
 
 			std::vector<LambdaType> lambdas;
 			std::vector<TensorType> gammas;
