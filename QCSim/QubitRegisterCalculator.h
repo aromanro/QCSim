@@ -123,7 +123,7 @@ namespace QC {
 		// inner loop has indices with a constant stride: 1, or 2^k if the k lowest bits (qubit 0 upwards) are fixed.
 		struct IndexPlan
 		{
-			size_t lowMasks[3]{};
+			size_t lowMasks[4]{};
 			unsigned fixedBits = 0;
 			unsigned strideShift = 0;
 			size_t tileSize = 0;
@@ -135,7 +135,7 @@ namespace QC {
 				while (mask)
 				{
 					const size_t bit = mask & (~mask + 1);
-					assert(fixedBits < 3);
+					assert(fixedBits < 4);
 					lowMasks[fixedBits++] = bit - 1;
 					mask ^= bit;
 				}
@@ -145,6 +145,7 @@ namespace QC {
 				if constexpr (Bits > 0) index = (index & lowMasks[0]) | ((index & ~lowMasks[0]) << 1);
 				if constexpr (Bits > 1) index = (index & lowMasks[1]) | ((index & ~lowMasks[1]) << 1);
 				if constexpr (Bits > 2) index = (index & lowMasks[2]) | ((index & ~lowMasks[2]) << 1);
+				if constexpr (Bits > 3) index = (index & lowMasks[3]) | ((index & ~lowMasks[3]) << 1);
 				return index;
 			}
 		};
@@ -238,6 +239,7 @@ namespace QC {
 			case 1: RunSelected<Parallel, 1>(plan, count, oneMask, function); break;
 			case 2: RunSelected<Parallel, 2>(plan, count, oneMask, function); break;
 			case 3: RunSelected<Parallel, 3>(plan, count, oneMask, function); break;
+			case 4: RunSelected<Parallel, 4>(plan, count, oneMask, function); break;
 			}
 		}
 
@@ -467,6 +469,98 @@ namespace QC {
 				});
 		}
 
+#ifdef QCSIM_AVX2
+		// acc += coefficient * v for two complex amplitudes per vector, with swapped = [im, re] of each.
+		static inline __m256d AddProduct(__m256d acc, __m256d re, __m256d im, __m256d v, __m256d swapped)
+		{
+#ifdef __FMA__
+			return _mm256_fmadd_pd(im, swapped, _mm256_fmadd_pd(re, v, acc));
+#else
+			return _mm256_add_pd(acc, _mm256_add_pd(_mm256_mul_pd(re, v), _mm256_mul_pd(im, swapped)));
+#endif
+		}
+
+		// Dense blocks with 256 bit vectors. Without a target on qubit 0, the amplitudes of two consecutive blocks are
+		// adjacent, so each vector holds one amplitude of each (the index plan then also fixes bit 0). With a target
+		// on qubit 0, a vector holds the two amplitudes of one block that differ in that target. A control on qubit 0
+		// leaves no adjacent pair: the caller uses the 128 bit kernel.
+		template<unsigned Bits, bool Parallel>
+		static inline bool TryWideDenseBlocks(const Amplitudes& state, const std::complex<double>* coefficients,
+			const std::array<size_t, size_t{1} << Bits>& offsets, size_t targets, ControlMasks controls, size_t count)
+		{
+			constexpr size_t dimension = size_t{1} << Bits;
+			if ((controls.zeros | controls.ones) & 1) return false;
+			if (!(targets & 1))
+			{
+				if (count < 2 * dimension) return false;
+				alignas(32) __m256d re[dimension * dimension], im[dimension * dimension];
+				for (size_t i = 0; i < dimension * dimension; ++i)
+				{
+					re[i] = _mm256_set1_pd(coefficients[i].real());
+					im[i] = _mm256_set_pd(coefficients[i].imag(), -coefficients[i].imag(), coefficients[i].imag(), -coefficients[i].imag());
+				}
+				ForEachSelected<Parallel>(count, targets | controls.zeros | 1, controls.ones, [&](size_t base) {
+					__m256d v[dimension], swapped[dimension];
+					for (size_t c = 0; c < dimension; ++c)
+					{
+						v[c] = _mm256_loadu_pd(reinterpret_cast<const double*>(&state(base | offsets[c])));
+						swapped[c] = _mm256_permute_pd(v[c], 5);
+					}
+					for (size_t r = 0; r < dimension; ++r)
+					{
+						__m256d acc = _mm256_setzero_pd();
+						for (size_t c = 0; c < dimension; ++c)
+							acc = AddProduct(acc, re[r * dimension + c], im[r * dimension + c], v[c], swapped[c]);
+						_mm256_storeu_pd(reinterpret_cast<double*>(&state(base | offsets[r])), acc);
+					}
+				});
+				return true;
+			}
+
+			// The target on qubit 0 is local bit `low`: pair (j, j | lowBit) shares a vector.
+			constexpr size_t half = dimension / 2;
+			size_t lowBit = 1;
+			while (!(offsets[lowBit] & 1)) lowBit <<= 1;
+			std::array<size_t, half> pairs{};
+			for (size_t j = 0, index = 0; j < dimension; ++j)
+				if (!(j & lowBit)) pairs[index++] = j;
+			// direct: [m(i0, j0), m(i1, j1)] on [x0, x1]; crossed: [m(i0, j1), m(i1, j0)] on [x1, x0].
+			alignas(32) __m256d directRe[half * half], directIm[half * half], crossedRe[half * half], crossedIm[half * half];
+			for (size_t i = 0; i < half; ++i)
+				for (size_t j = 0; j < half; ++j)
+				{
+					const size_t i0 = pairs[i], i1 = i0 | lowBit, j0 = pairs[j], j1 = j0 | lowBit;
+					const auto a = coefficients[i0 * dimension + j0], d = coefficients[i1 * dimension + j1];
+					const auto b = coefficients[i0 * dimension + j1], c = coefficients[i1 * dimension + j0];
+					directRe[i * half + j] = _mm256_set_pd(d.real(), d.real(), a.real(), a.real());
+					directIm[i * half + j] = _mm256_set_pd(d.imag(), -d.imag(), a.imag(), -a.imag());
+					crossedRe[i * half + j] = _mm256_set_pd(c.real(), c.real(), b.real(), b.real());
+					crossedIm[i * half + j] = _mm256_set_pd(c.imag(), -c.imag(), b.imag(), -b.imag());
+				}
+			ForEachSelected<Parallel>(count, targets | controls.zeros, controls.ones, [&](size_t base) {
+				__m256d v[half], vSwapped[half], x[half], xSwapped[half];
+				for (size_t j = 0; j < half; ++j)
+				{
+					v[j] = _mm256_loadu_pd(reinterpret_cast<const double*>(&state(base | offsets[pairs[j]])));
+					vSwapped[j] = _mm256_permute_pd(v[j], 5);
+					x[j] = _mm256_permute2f128_pd(v[j], v[j], 1);
+					xSwapped[j] = _mm256_permute_pd(x[j], 5);
+				}
+				for (size_t i = 0; i < half; ++i)
+				{
+					__m256d acc = _mm256_setzero_pd();
+					for (size_t j = 0; j < half; ++j)
+					{
+						acc = AddProduct(acc, directRe[i * half + j], directIm[i * half + j], v[j], vSwapped[j]);
+						acc = AddProduct(acc, crossedRe[i * half + j], crossedIm[i * half + j], x[j], xSwapped[j]);
+					}
+					_mm256_storeu_pd(reinterpret_cast<double*>(&state(base | offsets[pairs[i]])), acc);
+				}
+			});
+			return true;
+		}
+#endif
+
 		// Save every input in a coupled block before any output is written.
 		// Matrix entries are copied once per gate, outside the amplitude loop.
 		template<unsigned Bits, bool Parallel, class Operator>
@@ -486,6 +580,39 @@ namespace QC {
 				for (size_t c = 0; c < dimension; ++c)
 					coefficients[r * dimension + c] = matrix(offset + r, offset + c);
 			}
+#ifdef QCSIM_SSE2
+			// Plain std::complex arithmetic keeps this loop scalar (each product also carries a NaN check), about
+			// three times slower per multiplication than the single target kernels.
+			if constexpr (std::is_same_v<Scalar, std::complex<double>>)
+			{
+#ifdef QCSIM_AVX2
+				if constexpr (Amplitudes::contiguous)
+					if (TryWideDenseBlocks<Bits, Parallel>(state, coefficients.data(), offsets, targets, controls, count)) return;
+#endif
+				__m128d re[dimension * dimension], im[dimension * dimension];
+				for (size_t i = 0; i < dimension * dimension; ++i)
+				{
+					re[i] = _mm_set1_pd(coefficients[i].real());
+					im[i] = _mm_set_pd(coefficients[i].imag(), -coefficients[i].imag());
+				}
+				ForEachSelected<Parallel>(count, targets | controls.zeros, controls.ones, [&](size_t base) {
+					__m128d v[dimension], swapped[dimension];
+					for (size_t c = 0; c < dimension; ++c)
+					{
+						v[c] = _mm_loadu_pd(reinterpret_cast<const double*>(&state(base | offsets[c])));
+						swapped[c] = _mm_shuffle_pd(v[c], v[c], 1);
+					}
+					for (size_t r = 0; r < dimension; ++r)
+					{
+						__m128d acc = _mm_setzero_pd();
+						for (size_t c = 0; c < dimension; ++c)
+							acc = _mm_add_pd(acc, _mm_add_pd(_mm_mul_pd(re[r * dimension + c], v[c]), _mm_mul_pd(im[r * dimension + c], swapped[c])));
+						_mm_storeu_pd(reinterpret_cast<double*>(&state(base | offsets[r])), acc);
+					}
+				});
+				return;
+			}
+#endif
 			ForEachSelected<Parallel>(count, targets | controls.zeros, controls.ones, [&](size_t base) {
 				constexpr size_t blockSize = size_t{1} << Bits;
 				std::array<Scalar, blockSize> original;
