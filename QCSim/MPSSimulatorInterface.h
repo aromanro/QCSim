@@ -75,9 +75,10 @@ namespace QC {
 			virtual void SetMultithreading(bool enable = true) = 0;
 			virtual bool GetMultithreading() const = 0;
 			virtual void Trim() = 0;
-			// Restores the canonical form (the right canonical B tensors and the Schmidt values on the bonds) by two-site SVDs. Does not apply setLimitBondDimension or
-			// setLimitEntanglement; those remain the job of two-qubit gates and Trim. Only the singular values
-			// beyond the SVD's numerical rank (not distinguishable from zero in double precision) are dropped.
+			// Restores right-canonical B tensors and current Schmidt values without trusting the old lambdas.
+			// Applies enabled bond-dimension and entanglement limits; whichever keeps fewer Schmidt values wins.
+			// With both limits disabled, preserves the normalized state up to numerical-rank roundoff.
+			// DiscardedWeight is applied once per bond; gauge refresh does not repeatedly spend that budget.
 			virtual void ReCanonicalize() = 0;
 			virtual VectorClass getRegisterStorage() const = 0;
 			virtual void print() const = 0;

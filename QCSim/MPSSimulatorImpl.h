@@ -79,26 +79,34 @@ namespace QC {
 
 			void ReCanonicalize() override
 			{
-				// Gauge only: do not apply user-requested chi / singular-value cuts.
-				const IndexType nrBonds = static_cast<IndexType>(lambdas.size());
+				if (lambdas.empty()) return;
 
-				// First sweep from right to left: afterwards all the B tensors except the first one are right orthonormal
-				// (each one is a V^dagger from a SVD), no matter how good the lambdas used as left environment were.
-				for (IndexType bond = nrBonds - 1; bond >= 0; --bond)
-				{
-					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(bond);
-					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, bond, bond + 1, false);
-				}
+				RunMaybeSingleThreaded(enableMultithreading, [&]() {
+					bool applyUserCompression = true;
+					bool reduced;
+					do
+					{
+						const auto previousDimensions = getBondDimensions();
+						// Repair the basis without trusting old Schmidt weights or dropping directions.
+						for (IndexType site = static_cast<IndexType>(gammas.size()) - 1; site > 0; --site)
+							RightCanonicalizeSite(site);
 
-				// Then from left to right: now the left environment used for each bond is the correct one, so the singular values
-				// are the Schmidt values. The first bond was already done correctly by the previous sweep, its left environment is trivial.
-				for (IndexType bond = 1; bond < nrBonds; ++bond)
-				{
-					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(bond);
-					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-					DecomposeAndSetGammas(thetaMatrix, bond, bond + 1, false);
-				}
+						// The right block is now orthonormal. Starting at bond zero makes each
+						// newly computed lambda the valid left environment of the following bond.
+						for (IndexType bond = 0; bond < static_cast<IndexType>(lambdas.size()); ++bond)
+						{
+							const MatrixClass theta = ReshapeTheta(ContractTwoQubits(bond));
+							DecomposeAndSetGammasImpl(theta, bond, bond + 1, applyUserCompression, lambdas[bond].size());
+						}
+
+						// Truncation can stale earlier Schmidt spectra. Refresh until a pass
+						// changes no dimensions; no bond can grow, so this terminates.
+						reduced = getBondDimensions() != previousDimensions;
+						// A relative cutoff must also hold for the refreshed spectra. Discarded
+						// weight is a per-compression budget: do not spend it again on refresh.
+						applyUserCompression = truncationMode == TruncationMode::RelativeToMax;
+					} while (reduced);
+				});
 			}
 
 			// false if measured 0, true if measured 1
@@ -295,6 +303,40 @@ namespace QC {
 			}
 
 		private:
+
+			// M = B_i reshaped as (L, 2R). QR of M^dagger gives M = R^dagger Q^dagger:
+			// keep Q^dagger at this site and move R^dagger left. No lambda or rank cutoff.
+			void RightCanonicalizeSite(IndexType site)
+			{
+				const GammaType& gamma = gammas[site];
+				const IndexType L = gamma.dimension(0);
+				const IndexType R = gamma.dimension(2);
+				const IndexType rank = std::min(L, 2 * R);
+				MatrixClass adjoint(2 * R, L);
+				for (IndexType physical = 0; physical < 2; ++physical)
+					for (IndexType r = 0; r < R; ++r)
+						for (IndexType l = 0; l < L; ++l)
+							adjoint(physical * R + r, l) = std::conj(gamma(l, physical, r));
+
+				Eigen::HouseholderQR<MatrixClass> qr(adjoint);
+				const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(2 * R, rank);
+				const MatrixClass triangular = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
+				const GammaType& previous = gammas[site - 1];
+				const IndexType previousL = previous.dimension(0);
+				const Eigen::Map<const MatrixClass> previousMatrix(previous.data(), 2 * previousL, L);
+				const MatrixClass left = previousMatrix * triangular.adjoint();
+				GammaType newLeft(previousL, 2, rank);
+				std::copy(left.data(), left.data() + left.size(), newLeft.data());
+				GammaType newRight(rank, 2, R);
+				for (IndexType physical = 0; physical < 2; ++physical)
+					for (IndexType r = 0; r < R; ++r)
+						for (IndexType l = 0; l < rank; ++l)
+							newRight(l, physical, r) = std::conj(Q(physical * R + r, l));
+				gammas[site - 1] = std::move(newLeft);
+				gammas[site] = std::move(newRight);
+				lambdas[site - 1] = LambdaType::Ones(rank); // dimensions only until the forward sweep
+			}
+
 			static double ValidMeasurementProbability(double probability)
 			{
 				constexpr double toleranceLow = 1E-9;
@@ -402,7 +444,7 @@ namespace QC {
 			// SVD the (already built) theta matrix and write back the two new B tensors and the lambda
 			// in between. Shared by two-qubit gates, Trim, and ReCanonicalize. User-requested
 			// chi / entanglement cuts are applied only when applyUserCompression is true (the
-			// default); ReCanonicalize passes false so it is a gauge restore.
+			// default); ReCanonicalize disables them during its final gauge refresh (except relative-cutoff cleanup).
 			//
 			// This is Hastings' method: theta = B1 B2 (with the gate applied) does not contain the left lambda.
 			// The SVD is done on lambda_left * theta = U S V^dagger, which is the two site tensor in the Schmidt basis of the left bond,
@@ -415,7 +457,8 @@ namespace QC {
 				RunMaybeSingleThreaded(enableMultithreading, [&]() { DecomposeAndSetGammasImpl(thetaMatrix, qubit1, qubit2, applyUserCompression); });
 			}
 
-			void DecomposeAndSetGammasImpl(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression)
+			void DecomposeAndSetGammasImpl(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression,
+				IndexType maxBondDimension = std::numeric_limits<IndexType>::max())
 			{
 				const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
 				const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
@@ -474,7 +517,9 @@ namespace QC {
 
 				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
-				const IndexType sz = (applyUserCompression && limitSize) ? std::min<IndexType>(chi, szm) : szm;
+				// A gauge-only update must not grow the incoming bond through roundoff.
+				const IndexType sz = std::min(maxBondDimension,
+					(applyUserCompression && limitSize) ? std::min<IndexType>(chi, szm) : szm);
 
 				assert(sz <= VmatrixFull.cols());
 				assert(2 * szr == VmatrixFull.rows());

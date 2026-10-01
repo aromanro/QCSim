@@ -1289,67 +1289,6 @@ static bool WideBasisInitializationTestMPS()
 	return true;
 }
 
-// ReCanonicalize must restore the canonical form without applying user-requested chi / entanglement
-// cuts. Trim (and two-qubit gates) remain the operations that compress.
-bool ReCanonicalizeDoesNotTruncateTestMPS()
-{
-	std::cout << "\nMPS simulator ReCanonicalize does not apply compression limits" << std::endl;
-
-	QC::Gates::HadamardGate<> h;
-	QC::Gates::CNOTGate<> cnot;
-
-	QC::TensorNetworks::MPSSimulatorImpl mps(4);
-	mps.ApplyGate(h, 0);
-	mps.ApplyGate(cnot, 1, 0);
-	mps.ApplyGate(cnot, 2, 1);
-	mps.ApplyGate(cnot, 3, 2);
-
-	const auto bondsBefore = mps.getBondDimensions();
-	const auto psiBefore = mps.getRegisterStorage();
-	bool hasLargeBond = false;
-	for (const auto dim : bondsBefore)
-		if (dim > 1) hasLargeBond = true;
-	if (!hasLargeBond)
-	{
-		std::cout << "MPS ReCanonicalize test setup did not produce a bond dimension above 1" << std::endl;
-		return false;
-	}
-
-	mps.setLimitBondDimension(1);
-	mps.setLimitEntanglement(0.5);
-	mps.ReCanonicalize();
-
-	const auto bondsAfter = mps.getBondDimensions();
-	if (bondsAfter != bondsBefore)
-	{
-		std::cout << "ReCanonicalize truncated MPS bond dimensions after compression limits were set" << std::endl;
-		return false;
-	}
-
-	const auto psiAfter = mps.getRegisterStorage();
-	for (Eigen::Index s = 0; s < psiBefore.size(); ++s)
-	{
-		if (!approxEqual(psiBefore[s], psiAfter[s], 1E-10))
-		{
-			std::cout << "ReCanonicalize changed the MPS state while compression limits were set" << std::endl;
-			return false;
-		}
-	}
-
-	mps.Trim();
-	for (const auto dim : mps.getBondDimensions())
-	{
-		if (dim > 1)
-		{
-			std::cout << "Trim did not apply the bond-dimension limit after ReCanonicalize" << std::endl;
-			return false;
-		}
-	}
-
-	std::cout << "Success" << std::endl;
-	return true;
-}
-
 // Checks the canonical form the implementation relies on (the sites hold B = Gamma * lambda, see MPSSimulatorBase):
 // for each site sum_s B_s B_s^dagger = I (right canonical) and sum_s B_s^dagger lambda_left^2 B_s = lambda_right^2
 // (together they mean that the lambdas are the Schmidt values)
@@ -1397,6 +1336,165 @@ static bool CheckCanonicalFormMPS(const QC::TensorNetworks::MPSSimulatorImpl& mp
 	}
 
 	return maxDeviation <= tolerance;
+}
+
+// These fixtures start from the B product, independently of the stored Schmidt metadata.
+static std::shared_ptr<QC::TensorNetworks::MPSSimulatorBaseState> CorrelatedStateMPS(
+	int half, const std::vector<double>& probabilities)
+{
+	using Impl = QC::TensorNetworks::MPSSimulatorImpl;
+	auto state = std::make_shared<QC::TensorNetworks::MPSSimulatorBaseState>();
+	for (int q = 0; q < 2 * half; ++q)
+	{
+		const Eigen::Index L = q < half ? Eigen::Index(1) << q : Eigen::Index(1) << (2 * half - q);
+		const Eigen::Index R = q < half ? 2 * L : L / 2;
+		Impl::GammaType b(L, 2, R);
+		b.setZero();
+		for (Eigen::Index l = 0; l < L; ++l)
+			if (q < half)
+				for (int p = 0; p < 2; ++p)
+				{
+					const Eigen::Index r = l + p * L;
+					b(l, p, r) = q == half - 1 ? std::polar(std::sqrt(probabilities[r]), 0.17 * r) : 1.;
+				}
+			else b(l, l % 2, l / 2) = 1.;
+		state->gammas.push_back(std::move(b));
+		if (q + 1 < 2 * half) state->lambdas.push_back(Impl::LambdaType::Constant(R, 1. / std::sqrt(double(R))));
+	}
+	return state;
+}
+
+bool ReCanonicalizeRegressionTestMPS()
+{
+	using Impl = QC::TensorNetworks::MPSSimulatorImpl;
+	using State = QC::TensorNetworks::MPSSimulatorBaseState;
+	using Mode = Impl::TruncationMode;
+	std::cout << "\nMPS simulator recanonicalization: stale weights, gauge repair, and compression" << std::endl;
+	const auto require = [](bool condition, const char* message) {
+		if (!condition) throw std::runtime_error(message);
+	};
+	try
+	{
+		for (int fixture = 0; fixture < 4; ++fixture)
+		{
+			auto state = std::make_shared<State>();
+			state->gammas = {Impl::GammaType(1, 2, 2), Impl::GammaType(2, 2, 2), Impl::GammaType(2, 2, 1)};
+			for (auto& b : state->gammas) b.setZero();
+			for (int p = 0; p < 2; ++p)
+			{
+				state->gammas[0](0, p, p) = 1. / std::sqrt(2.);
+				state->gammas[1](p, p, p) = 1.;
+				state->gammas[2](p, p, 0) = 1.;
+			}
+			state->lambdas = {Impl::LambdaType::Constant(2, 1. / std::sqrt(2.)), Impl::LambdaType::Constant(2, 1. / std::sqrt(2.))};
+			if (fixture == 1 || fixture == 2) state->lambdas[0] << 1., fixture == 1 ? 1E-20 : 0.;
+			if (fixture == 3)
+			{
+				state->gammas[0](0, 0, 0) *= 1E-20;
+				state->gammas[1](0, 0, 0) *= 1E20;
+			}
+			Impl sim(3);
+			sim.SetMultithreading(false);
+			sim.setState(state);
+			const Eigen::VectorXcd expected = sim.getRegisterStorage().normalized();
+			for (int repeat = 0; repeat < 2; ++repeat)
+			{
+				sim.ReCanonicalize();
+				double deviation = 0.;
+				require((sim.getRegisterStorage() - expected).norm() < 1E-12, "Gauge repair changed the GHZ state");
+				require(CheckCanonicalFormMPS(sim, 1E-12, deviation), "GHZ canonical form was not restored");
+			}
+		}
+
+		// Rank 16 exercises BDCSVD; complex amplitudes check conjugation and tensor layouts.
+		for (int half : {1, 4})
+		{
+			const int rank = 1 << half;
+			std::vector<double> weights(rank);
+			for (int i = 0; i < rank; ++i) weights[i] = 2. * (i + 1) / (rank * (rank + 1));
+			Impl sim(2 * half);
+			sim.setState(CorrelatedStateMPS(half, weights));
+			const Eigen::VectorXcd expected = sim.getRegisterStorage().normalized();
+			sim.ReCanonicalize();
+			double deviation = 0.;
+			require((sim.getRegisterStorage() - expected).norm() < 1E-11, "Repair changed a complex correlated state");
+			require(CheckCanonicalFormMPS(sim, 1E-11, deviation), "Correlated state canonical form was not restored");
+			require(sim.getBondDimensions()[half - 1] == rank, "Repair lost a nonzero Schmidt direction");
+		}
+
+		struct Case { Mode mode; int cap; double threshold; int expectedRank; };
+		const Case cases[] = {
+			{Mode::RelativeToMax, 0, -1., 4},
+			{Mode::RelativeToMax, 2, -1., 2},
+			{Mode::RelativeToMax, 0, .5, 2},
+			{Mode::RelativeToMax, 3, .5, 2},
+			{Mode::RelativeToMax, 2, .2, 2},
+			{Mode::DiscardedWeight, 0, .12, 2},
+			{Mode::DiscardedWeight, 3, .12, 2},
+			{Mode::DiscardedWeight, 2, .02, 2},
+			{Mode::DiscardedWeight, 1, .001, 1},
+			{Mode::DiscardedWeight, 0, 0., 4}
+		};
+		for (const auto& c : cases)
+		{
+			Impl sim(4);
+			sim.setState(CorrelatedStateMPS(2, {.64, .25, .10, .01}));
+			Eigen::VectorXcd expected = sim.getRegisterStorage();
+			for (int i = c.expectedRank; i < 4; ++i) expected[i + 4 * i] = 0.;
+			expected.normalize();
+			sim.setTruncationMode(c.mode);
+			if (c.cap) sim.setLimitBondDimension(c.cap);
+			if (c.threshold >= 0.) sim.setLimitEntanglement(c.threshold);
+			sim.ReCanonicalize();
+			double deviation = 0.;
+			require(sim.getBondDimensions()[1] == c.expectedRank, "The stronger compression setting did not win");
+			for (const auto dim : sim.getBondDimensions())
+				require(!c.cap || dim <= c.cap, "Canonical refresh regrew a bond beyond the cap");
+			require((sim.getRegisterStorage() - expected).norm() < 1E-11, "Compression retained the wrong Schmidt components");
+			require(CheckCanonicalFormMPS(sim, 1E-11, deviation), "Compression left stale canonical metadata");
+			if (c.mode == Mode::RelativeToMax && c.threshold >= 0.)
+			{
+				const auto compressed = std::static_pointer_cast<State>(sim.getState());
+				for (const auto& lambda : compressed->lambdas)
+					require(lambda.size() == 1 || lambda.tail(1)[0] >= c.threshold * lambda[0] - 1E-12,
+						"Final Schmidt spectrum violates the relative cutoff");
+			}
+		}
+
+		// One application discards .04, keeping rank 3. Reapplying .06 during refresh
+		// would discard a further .04/.96 and incorrectly reduce the rank to 2.
+		// The large components occupy 00 and 11, keeping the outer bonds balanced.
+		Impl budget(4);
+		budget.setState(CorrelatedStateMPS(2, {.46, .04, .04, .46}));
+		budget.setLimitEntanglement(.06);
+		budget.ReCanonicalize();
+		require(budget.getBondDimensions()[1] == 3, "Refresh repeatedly spent the discarded-weight budget");
+		double deviation = 0.;
+		require(CheckCanonicalFormMPS(budget, 1E-11, deviation), "Budget test left stale canonical metadata");
+		require(std::abs(budget.getRegisterStorage().squaredNorm() - 1.) < 1E-12, "Compression did not normalize the state");
+
+		QC::TensorNetworks::MPSSimulator wrapped(3);
+		wrapped.ApplyGate(QC::Gates::HadamardGate<>(), 0);
+		wrapped.ApplyGate(QC::Gates::CNOTGate<>(), 2, 0);
+		wrapped.setLimitBondDimension(1);
+		wrapped.ReCanonicalize();
+		for (const auto dim : wrapped.getBondDimensions()) require(dim == 1, "Wrapper did not enforce the cap");
+
+		Impl single(1);
+		single.ApplyGate(QC::Gates::HadamardGate<>(), 0);
+		const Eigen::VectorXcd before = single.getRegisterStorage();
+		single.setLimitBondDimension(1);
+		single.setLimitEntanglement(.9);
+		single.ReCanonicalize();
+		require((before - single.getRegisterStorage()).norm() < 1E-12, "Single-site repair changed the state");
+	}
+	catch (const std::exception& error)
+	{
+		std::cout << error.what() << std::endl;
+		return false;
+	}
+	std::cout << "Success" << std::endl;
+	return true;
 }
 
 bool CanonicalFormTestMPS()
@@ -1594,7 +1692,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return MeetingPositionFallbackTestMPS() && WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeDoesNotTruncateTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS();
+	return MeetingPositionFallbackTestMPS() && WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS();
 }
 
 
