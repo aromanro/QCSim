@@ -1694,7 +1694,7 @@ static bool LongChainSamplingAndValidationTestMPS()
 		return false;
 	}
 
-	QC::TensorNetworks::MPSSimulator small(3, 5);
+	QC::TensorNetworks::MPSSimulator smalls(3, 5);
 	const auto expectInvalid = [](auto&& callable, const char* description)
 	{
 		try
@@ -1718,13 +1718,13 @@ static bool LongChainSamplingAndValidationTestMPS()
 	Eigen::MatrixXcd nonFinite = Eigen::MatrixXcd::Identity(4, 4);
 	nonFinite(0, 0) = std::numeric_limits<double>::quiet_NaN();
 	const QC::Gates::TwoQubitsGate<> nonFiniteGate(nonFinite);
-	if (!expectInvalid([&] { small.MeasureQubits({ 0, 99 }); }, "MeasureQubits with an invalid qubit") ||
-		!expectInvalid([&] { small.MeasureNoCollapse(std::set<IndexType>{ 99 }); }, "MeasureNoCollapse with an invalid qubit") ||
-		!expectInvalid([&] { small.MoveAtBeginningOfChain({ 99 }); }, "MoveAtBeginningOfChain with an invalid qubit") ||
-		!expectInvalid([&] { small.ExpectationValue({ QC::Gates::AppliedGate<>(z, 99) }); }, "ExpectationValue with an invalid qubit") ||
-		!expectInvalid([&] { small.ApplyGate(nonFiniteGate, 1, 0); }, "A non-finite two-qubit gate"))
+	if (!expectInvalid([&] { smalls.MeasureQubits({ 0, 99 }); }, "MeasureQubits with an invalid qubit") ||
+		!expectInvalid([&] { smalls.MeasureNoCollapse(std::set<IndexType>{ 99 }); }, "MeasureNoCollapse with an invalid qubit") ||
+		!expectInvalid([&] { smalls.MoveAtBeginningOfChain({ 99 }); }, "MoveAtBeginningOfChain with an invalid qubit") ||
+		!expectInvalid([&] { smalls.ExpectationValue({ QC::Gates::AppliedGate<>(z, 99) }); }, "ExpectationValue with an invalid qubit") ||
+		!expectInvalid([&] { smalls.ApplyGate(nonFiniteGate, 1, 0); }, "A non-finite two-qubit gate"))
 		return false;
-	if (std::abs(small.getBasisStateAmplitude(0) - std::complex<double>(1., 0.)) > 1E-12)
+	if (std::abs(smalls.getBasisStateAmplitude(0) - std::complex<double>(1., 0.)) > 1E-12)
 	{
 		std::cout << "Rejected MPS operations changed the state" << std::endl;
 		return false;
