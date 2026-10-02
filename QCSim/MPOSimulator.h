@@ -621,6 +621,7 @@ namespace QC
 				auto state = std::make_shared<MPOSimulatorState>();
 				state->gammas.swap(baseState->gammas);
 				state->lambdas.swap(baseState->lambdas);
+				state->scaleExponent = baseState->scaleExponent;
 				state->qubitsMap = qubitsMap;
 				state->qubitsMapInv = qubitsMapInv;
 				return state;
@@ -663,6 +664,7 @@ namespace QC
 				auto implState = std::make_shared<MPOSimulatorBaseState>();
 				implState->gammas.swap(simState->gammas);
 				implState->lambdas.swap(simState->lambdas);
+				implState->scaleExponent = simState->scaleExponent;
 				std::shared_ptr<MPOSimulatorStateInterface> implStateInterface = implState;
 
 				try
@@ -684,6 +686,7 @@ namespace QC
 				// they observe the simulator state which was replaced.
 				simState->gammas.swap(implState->gammas);
 				simState->lambdas.swap(implState->lambdas);
+				simState->scaleExponent = implState->scaleExponent;
 				state.reset();
 			}
 
@@ -732,6 +735,7 @@ namespace QC
 				sim->impl.enableMultithreading = impl.enableMultithreading;
 				sim->impl.lambdas = impl.lambdas;
 				sim->impl.gammas = impl.gammas;
+				sim->impl.scaleExponent = impl.scaleExponent;
 				sim->impl.RestoreCanonicalMetadata(impl.GetCanonicalMetadata());
 				sim->savedCanonicalMetadata = savedCanonicalMetadata;
 
@@ -749,6 +753,7 @@ namespace QC
 					auto stateClone = std::make_shared<MPOSimulatorState>();
 					stateClone->gammas = state->gammas;
 					stateClone->lambdas = state->lambdas;
+					stateClone->scaleExponent = state->scaleExponent;
 					stateClone->qubitsMap = state->qubitsMap;
 					stateClone->qubitsMapInv = state->qubitsMapInv;
 					sim->savedState = stateClone;
@@ -801,6 +806,7 @@ namespace QC
 				auto aligned = std::make_unique<MPOSimulator>(getNrQubits());
 				aligned->impl.gammas = impl.gammas;
 				aligned->impl.lambdas = impl.lambdas;
+				aligned->impl.scaleExponent = impl.scaleExponent;
 				aligned->impl.RestoreCanonicalMetadata(impl.GetCanonicalMetadata());
 				aligned->impl.enableMultithreading = impl.enableMultithreading;
 				aligned->qubitsMap = qubitsMap;
@@ -849,6 +855,7 @@ namespace QC
 				auto originalMap = qubitsMap;
 				auto originalInverse = qubitsMapInv;
 				const auto originalMetadata = impl.GetCanonicalMetadata();
+				const int64_t originalExponent = impl.scaleExponent;
 				MPOSimulatorImpl::ScopedFlag notificationGuard(suppressBondNotifications);
 				try
 				{
@@ -858,6 +865,7 @@ namespace QC
 				{
 					impl.lambdas.swap(originalLambdas);
 					impl.gammas.swap(originalGammas);
+					impl.scaleExponent = originalExponent;
 					qubitsMap.swap(originalMap);
 					qubitsMapInv.swap(originalInverse);
 					impl.RestoreCanonicalMetadata(originalMetadata);
@@ -1069,6 +1077,7 @@ namespace QC
 				auto implState = std::make_shared<MPOSimulatorBaseState>();
 				implState->gammas = state.gammas;
 				implState->lambdas = state.lambdas;
+				implState->scaleExponent = state.scaleExponent;
 				return implState;
 			}
 

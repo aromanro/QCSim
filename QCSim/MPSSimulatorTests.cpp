@@ -1663,6 +1663,77 @@ bool MeetingPositionFallbackTestMPS()
 	return true;
 }
 
+// Long chains and invalid input. Sampling keeps its prefix row normalized: the joint probability
+// of the prefix used to underflow past ~1074 unbiased qubits, after which every outcome was 1.
+// Out-of-range qubits throw instead of indexing the qubit map, and non-finite gates are rejected
+// (the SVD of a non-finite block fails and must not be read).
+static bool LongChainSamplingAndValidationTestMPS()
+{
+	std::cout << "\nMPS simulator long-chain sampling and input validation" << std::endl;
+
+	using IndexType = QC::TensorNetworks::MPSSimulatorInterface::IndexType;
+	constexpr int nrQubits = 1300;
+	QC::TensorNetworks::MPSSimulator mps(nrQubits, 17);
+	QC::Gates::HadamardGate<> h;
+	for (int q = 0; q < nrQubits; ++q)
+		mps.ApplyGate(h, q);
+	int ones = 0, sampled = 0;
+	for (int shot = 0; shot < 20; ++shot)
+	{
+		const auto outcome = mps.MeasureNoCollapse();
+		for (int q = 1100; q < nrQubits; ++q)
+		{
+			ones += outcome.at(q) ? 1 : 0;
+			++sampled;
+		}
+	}
+	const double fraction = static_cast<double>(ones) / sampled;
+	if (std::abs(fraction - 0.5) > 0.05)
+	{
+		std::cout << "Sampling qubits 1100+ of a 1300-qubit |+> state gave a one-fraction of " << fraction << std::endl;
+		return false;
+	}
+
+	QC::TensorNetworks::MPSSimulator small(3, 5);
+	const auto expectInvalid = [](auto&& callable, const char* description)
+	{
+		try
+		{
+			callable();
+		}
+		catch (const std::invalid_argument&)
+		{
+			return true;
+		}
+		catch (const std::exception& ex)
+		{
+			std::cout << description << " threw the wrong exception: " << ex.what() << std::endl;
+			return false;
+		}
+		std::cout << description << " did not throw std::invalid_argument" << std::endl;
+		return false;
+	};
+	Eigen::MatrixXcd z = Eigen::MatrixXcd::Identity(2, 2);
+	z(1, 1) = -1.;
+	Eigen::MatrixXcd nonFinite = Eigen::MatrixXcd::Identity(4, 4);
+	nonFinite(0, 0) = std::numeric_limits<double>::quiet_NaN();
+	const QC::Gates::TwoQubitsGate<> nonFiniteGate(nonFinite);
+	if (!expectInvalid([&] { small.MeasureQubits({ 0, 99 }); }, "MeasureQubits with an invalid qubit") ||
+		!expectInvalid([&] { small.MeasureNoCollapse(std::set<IndexType>{ 99 }); }, "MeasureNoCollapse with an invalid qubit") ||
+		!expectInvalid([&] { small.MoveAtBeginningOfChain({ 99 }); }, "MoveAtBeginningOfChain with an invalid qubit") ||
+		!expectInvalid([&] { small.ExpectationValue({ QC::Gates::AppliedGate<>(z, 99) }); }, "ExpectationValue with an invalid qubit") ||
+		!expectInvalid([&] { small.ApplyGate(nonFiniteGate, 1, 0); }, "A non-finite two-qubit gate"))
+		return false;
+	if (std::abs(small.getBasisStateAmplitude(0) - std::complex<double>(1., 0.)) > 1E-12)
+	{
+		std::cout << "Rejected MPS operations changed the state" << std::endl;
+		return false;
+	}
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPSSimulatorTests()
 {
 	std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -1692,7 +1763,7 @@ bool MPSSimulatorTests()
 	}
 	*/
 
-	return MeetingPositionFallbackTestMPS() && WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS();
+	return MeetingPositionFallbackTestMPS() && WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS() && LongChainSamplingAndValidationTestMPS();
 }
 
 

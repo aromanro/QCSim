@@ -286,7 +286,10 @@ namespace QC {
 				const Eigen::Map<const MatrixClass> matrix(gamma.data(), 4 * L, R);
 				Eigen::HouseholderQR<MatrixClass> qr(matrix);
 				const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(4 * L, rank);
-				const MatrixClass transfer = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
+				MatrixClass transfer = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
+				// R carries the norm of the site into the next one: keep it in range (see scaleExponent)
+				int64_t removed = 0;
+				RescaleIfOutOfRange(transfer, removed);
 				const auto& next = gammas[site + 1];
 				const IndexType nextR = next.dimension(3);
 				const Eigen::Map<const MatrixClass> nextMatrix(next.data(), R, 4 * nextR);
@@ -294,9 +297,11 @@ namespace QC {
 				TensorType newLeft(L, 2, 2, rank), newRight(rank, 2, 2, nextR);
 				std::copy(Q.data(), Q.data() + Q.size(), newLeft.data());
 				std::copy(right.data(), right.data() + right.size(), newRight.data());
+				LambdaType placeholder = LambdaType::Ones(rank);
 				gammas[site] = std::move(newLeft);
 				gammas[site + 1] = std::move(newRight);
-				lambdas[site] = LambdaType::Ones(rank);
+				lambdas[site] = std::move(placeholder);
+				scaleExponent += removed;
 			}
 
 			// Exact physical reordering for an overlap copy, without gate contractions,
@@ -327,7 +332,10 @@ namespace QC {
 				Eigen::HouseholderQR<MatrixClass> qr(adjoint);
 				const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(4 * R, rank);
 				const MatrixClass triangular = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
-				const MatrixClass transfer = triangular.adjoint();
+				MatrixClass transfer = triangular.adjoint();
+				// R^dagger carries the norm of the site into the previous one: keep it in range
+				int64_t removed = 0;
+				RescaleIfOutOfRange(transfer, removed);
 				const TensorType& previous = gammas[site - 1];
 				const IndexType previousL = previous.dimension(0);
 				// Tensor storage groups (left, ket, bra) contiguously before the right bond.
@@ -341,9 +349,11 @@ namespace QC {
 						for (IndexType r = 0; r < R; ++r)
 							for (IndexType l = 0; l < rank; ++l)
 								newRight(l, ket, bra, r) = std::conj(Q((ket * 2 + bra) * R + r, l));
+				LambdaType placeholder = LambdaType::Ones(rank);
 				gammas[site - 1] = std::move(newLeft);
 				gammas[site] = std::move(newRight);
-				lambdas[site - 1] = LambdaType::Ones(rank);
+				lambdas[site - 1] = std::move(placeholder);
+				scaleExponent += removed;
 			}
 
 			static bool IsFinite(const std::complex<double>& value)
@@ -447,6 +457,7 @@ namespace QC {
 				auto originalLambdas = lambdas;
 				auto originalGammas = gammas;
 				const auto originalMetadata = GetCanonicalMetadata();
+				const int64_t originalExponent = scaleExponent;
 
 				try
 				{
@@ -456,6 +467,7 @@ namespace QC {
 				{
 					lambdas.swap(originalLambdas);
 					gammas.swap(originalGammas);
+					scaleExponent = originalExponent;
 					RestoreCanonicalMetadata(originalMetadata);
 					throw;
 				}
@@ -684,23 +696,37 @@ namespace QC {
 				else
 					SVD.compute(svdMatrix);
 
+				// A failed decomposition (non-finite input) leaves the previous results in the reused SVD
+				// objects; never read them.
+				if ((computeWithJacobi ? jacobiSVD.info() : SVD.info()) != Eigen::Success)
+					throw std::runtime_error("MPO two-site SVD failed (non-finite or numerically invalid input)");
 				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
 				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
+				const double rankThreshold = computeWithJacobi ? jacobiSVD.threshold() : SVD.threshold();
+				const IndexType nonzeroValues = computeWithJacobi ? jacobiSVD.nonzeroSingularValues() : SVD.nonzeroSingularValues();
+#else
+				if (jacobiSVD.info() != Eigen::Success)
+					throw std::runtime_error("MPO two-site SVD failed (non-finite or numerically invalid input)");
+				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
+				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
+				const double rankThreshold = jacobiSVD.threshold();
+				const IndexType nonzeroValues = jacobiSVD.nonzeroSingularValues();
+#endif
+				// The singular values carry the norm of the operator (2^-n/2 for a maximally mixed
+				// chain): squared weights and Eigen's DBL_MIN rank floor would fail far from 1. Rank
+				// decisions use them scaled by a power of two, which changes nothing in ordinary ranges.
+				const int valuesExponent = OutOfRangeExponent(SvaluesFull.size() > 0 ? SvaluesFull[0] : 0.);
+				const LambdaType Svalues = valuesExponent != 0 ? LambdaType(SvaluesFull * std::ldexp(1., -valuesExponent)) : SvaluesFull;
 
 				// Eigen's own numerical rank (no threshold is set on the SVD objects): only the singular values
 				// below diagSize * epsilon * sigma_max are dropped, they are not distinguishable from zero in double precision.
 				// Any real cut is only the user's choice (setLimitEntanglement / setLimitBondDimension).
-				const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
-#else
-				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
-				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
+				const IndexType numericalRank = NumericalRank(Svalues, nonzeroValues, rankThreshold);
 
-				const IndexType numericalRank = jacobiSVD.rank();
-#endif
 				// If user-requested compression is enabled, further reduce the rank according to
 				// the configured truncation mode, applied on the (still descending-sorted) singular values.
 				IndexType szm = (applyUserCompression && limitEntanglement) ?
-					ComputeCompressedRank(SvaluesFull, numericalRank, truncationMode, singularValueThreshold) : numericalRank;
+					ComputeCompressedRank(Svalues, numericalRank, truncationMode, singularValueThreshold) : numericalRank;
 
 				if (szm == 0) szm = 1;
 
@@ -711,10 +737,16 @@ namespace QC {
 				assert(4 * R == VmatrixFull.rows());
 
 				// the new lambda is the raw singular values: NOT normalized, like the B tensors they are not rescaled
-				// (Tr(rho) is preserved when untruncated)
-				lambdas[qubit1] = SvaluesFull.head(sz);
-
-				SetNewGammas(thetaMatrix, VmatrixFull, qubit1, qubit2, L, sz, R);
+				// (Tr(rho) is preserved when untruncated). Out of the window they are scaled by a power of two:
+				// lambdas only weight later SVD inputs, so their common scale does not matter.
+				// Everything is built first and committed with noexcept moves.
+				LambdaType newLambda = Svalues.head(sz);
+				TensorType newLeft, newRight;
+				const int64_t removed = SetNewGammas(thetaMatrix, VmatrixFull, L, sz, R, newLeft, newRight);
+				lambdas[qubit1] = std::move(newLambda);
+				gammas[qubit1] = std::move(newLeft);
+				gammas[qubit2] = std::move(newRight);
+				scaleExponent += removed;
 				if (!canonicalWeights)
 				{
 					canonicalFormValid = false;
@@ -728,6 +760,16 @@ namespace QC {
 			// identical logic, duplicated here per this codebase's per-file convention (no shared
 			// header between the MPS and MPO impls today). Always keeps at least the largest
 			// singular value.
+			// Eigen's SVDBase::rank() on the given (possibly rescaled) singular values.
+			static IndexType NumericalRank(const LambdaType& sortedDescendingSVs, IndexType nonzero, double threshold)
+			{
+				if (sortedDescendingSVs.size() == 0) return 0;
+				const double premultipliedThreshold = std::max(sortedDescendingSVs[0] * threshold, std::numeric_limits<double>::min());
+				IndexType i = std::min<IndexType>(nonzero, sortedDescendingSVs.size()) - 1;
+				while (i >= 0 && sortedDescendingSVs[i] < premultipliedThreshold) --i;
+				return i + 1;
+			}
+
 			static IndexType ComputeCompressedRank(const LambdaType& sortedDescendingSVs, IndexType rank, TruncationMode mode, double threshold)
 			{
 				if (rank <= 1) return rank;
@@ -887,12 +929,15 @@ namespace QC {
 
 			// the left B is theta * V, the right B is V^dagger
 			// V is the full V from the SVD (4R x rank), only the first sz columns are used
-			void SetNewGammas(const MatrixClass& thetaMatrix, const MatrixClass& Vmatrix, IndexType qubit1, IndexType qubit2, IndexType L, IndexType sz, IndexType R)
+			// Returns the power of two removed from the left B when it is out of range (see scaleExponent).
+			static int64_t SetNewGammas(const MatrixClass& thetaMatrix, const MatrixClass& Vmatrix, IndexType L, IndexType sz, IndexType R,
+				TensorType& Btensor1, TensorType& Btensor2)
 			{
 				// (4L x sz), the rows are (physical index, left bond index) = p * L + l, with p = ket * 2 + bra
-				const MatrixClass leftB = thetaMatrix * Vmatrix.leftCols(sz);
+				MatrixClass leftB = thetaMatrix * Vmatrix.leftCols(sz);
+				int64_t removed = 0;
+				RescaleIfOutOfRange(leftB, removed);
 
-				TensorType& Btensor1 = gammas[qubit1];
 				Btensor1.resize(L, 2, 2, sz);
 				for (IndexType m = 0; m < sz; ++m)
 					for (IndexType bra = 0; bra < 2; ++bra)
@@ -904,7 +949,6 @@ namespace QC {
 						}
 
 				// the columns of V^dagger are (physical index, right bond index) = p * R + r
-				TensorType& Btensor2 = gammas[qubit2];
 				Btensor2.resize(sz, 2, 2, R);
 				for (IndexType r = 0; r < R; ++r)
 					for (IndexType bra = 0; bra < 2; ++bra)
@@ -914,6 +958,7 @@ namespace QC {
 							for (IndexType m = 0; m < sz; ++m)
 								Btensor2(m, ket, bra, r) = std::conj(Vmatrix(idx, m));
 						}
+				return removed;
 			}
 
 			// with Hastings' method the U matrix from the SVD is not needed, only V

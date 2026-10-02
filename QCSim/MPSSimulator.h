@@ -273,6 +273,8 @@ namespace QC
 
 			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
 			{
+				ValidateQubitSet(qubits);
+
 				std::set<IndexType> mappedQubits;
 				for (const auto qubit : qubits)
 					mappedQubits.insert(qubitsMap[qubit]);
@@ -465,6 +467,7 @@ namespace QC
 
 			void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) override
 			{
+				ValidateQubitSet(qubits);
 				std::unordered_set<IndexType> handledQubits;
 
 				IndexType currentQubitPos = 0;
@@ -534,6 +537,8 @@ namespace QC
 				{
 					if (gate.getQubitsNumber() > 1)
 						throw std::invalid_argument("Expectation value for ops applied on more than one qubit not supported yet");
+					if (gate.getQubit1() >= getNrQubits())
+						throw std::invalid_argument("Qubit index out of bounds");
 
 					Gates::AppliedGate<MatrixClass> translated(gate);
 					translated.setQubit1(qubitsMap[gate.getQubit1()]);
@@ -553,6 +558,7 @@ namespace QC
 			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
 			{
 				if (qubits.empty()) return {};
+				ValidateQubitSet(qubits);
 
 				std::set<IndexType> mappedQubits;
 				for (const auto qubit : qubits)
@@ -575,6 +581,14 @@ namespace QC
 
 				for (IndexType i = 0; i < static_cast<IndexType>(getNrQubits()); ++i)
 					qubitsMapInv[i] = qubitsMap[i] = i;
+			}
+
+			// Validates the complete set before either qubit map is read (as MPOSimulator does).
+			void ValidateQubitSet(const std::set<IndexType>& qubits) const
+			{
+				for (const IndexType qubit : qubits)
+					if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
+						throw std::invalid_argument("Qubit index out of bounds");
 			}
 
 			void SwapQubits(IndexType qubit1, IndexType qubit2, bool forceSwapDown = false)

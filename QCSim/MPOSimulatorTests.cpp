@@ -3607,6 +3607,79 @@ static bool MultithreadingSettingTestMPO()
 	return true;
 }
 
+// A maximally mixed chain past ~1000 qubits. QR transport used to pile its 2^-n/2 norm into one
+// tensor until Householder QR dropped underflowing columns: the trace became 2^-9 at 1030 qubits
+// after ReCanonicalize and 0 at 2100. The power-of-two scale exponent keeps every update exact,
+// and every copy of the state (snapshots, clones, public states) carries it.
+static bool LongMixedChainScaleTestMPO()
+{
+	std::cout << "\nMPO simulator long maximally mixed chain (scale exponent)" << std::endl;
+
+	constexpr int nrQubits = 1100;
+	QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+	MPOSeedNext(mpo);
+	Eigen::MatrixXcd i = Eigen::MatrixXcd::Identity(2, 2) * 0.5, x(2, 2), y(2, 2), z(2, 2);
+	x << 0, 0.5, 0.5, 0;
+	y << 0, std::complex<double>(0, -0.5), std::complex<double>(0, 0.5), 0;
+	z << 0.5, 0, 0, -0.5;
+	for (int q = 0; q < nrQubits; ++q)
+		mpo.ApplyKrausOperators(std::vector<Eigen::MatrixXcd>{ i, x, y, z }, q);
+
+	const auto check = [&](const QC::TensorNetworks::MPOSimulatorInterface& sim, const char* step)
+	{
+		const std::complex<double> trace = sim.Trace();
+		const double p0 = sim.GetProbability(0), pLast = sim.GetProbability(nrQubits - 1);
+		if (std::abs(trace - 1.) > 1E-9 || std::abs(p0 - 0.5) > 1E-9 || std::abs(pLast - 0.5) > 1E-9)
+		{
+			std::cout << step << ": trace " << trace << ", P(q0 = 0) " << p0 << ", P(qlast = 0) " << pLast << std::endl;
+			return false;
+		}
+		return true;
+	};
+
+	mpo.ReCanonicalize();
+	if (!check(mpo, "ReCanonicalize")) return false;
+	const auto state = mpo.getState();
+	const auto baseState = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorBaseState>(state);
+	if (!baseState || baseState->scaleExponent == 0)
+	{
+		std::cout << "The long chain did not move its norm into the scale exponent" << std::endl;
+		return false;
+	}
+	mpo.SaveState();
+	const auto clone = mpo.Clone();
+
+	QC::Gates::CNOTGate<> cnot;
+	mpo.ApplyGate(cnot, nrQubits - 1, 0); // routed through the whole chain
+	if (!check(mpo, "Routed CNOT")) return false;
+	const Eigen::MatrixXcd ends = mpo.PartialTrace({ 0, nrQubits - 1 });
+	for (int d = 0; d < 4; ++d)
+		if (std::abs(ends(d, d) - 0.25) > 1E-9)
+		{
+			std::cout << "Reduced state of the chain ends is not maximally mixed" << std::endl;
+			return false;
+		}
+
+	mpo.RestoreState();
+	QC::TensorNetworks::MPOSimulator copy(nrQubits);
+	copy.setState(state);
+	if (!check(mpo, "RestoreState") || !check(*clone, "Clone") || !check(copy, "setState"))
+		return false;
+	// The clone's private snapshot carries the exponent too.
+	clone->ApplyGate(cnot, 1, 0);
+	clone->Clear();
+	clone->RestoreState();
+	if (!check(*clone, "Clone RestoreState"))
+		return false;
+
+	mpo.Hermitize();
+	if (!check(mpo, "Hermitize") || !mpo.IsHermitian())
+		return false;
+
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
 bool MPOSimulatorTests()
 {
 	std::cout << "\nMPO Simulator Tests" << std::endl;
@@ -3670,5 +3743,6 @@ bool MPOSimulatorTests()
 		TraceRestoreAndHermitizeTestMPO() &&
 		DiagnosticsTestMPO() &&
 		CanonicalFormTestMPO() &&
-		MultithreadingSettingTestMPO();
+		MultithreadingSettingTestMPO() &&
+		LongMixedChainScaleTestMPO();
 }

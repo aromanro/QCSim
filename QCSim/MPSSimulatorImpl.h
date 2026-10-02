@@ -42,6 +42,8 @@ namespace QC {
 					throw std::invalid_argument("Qubit index out of bounds");
 				else if (gate.getQubitsNumber() == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
 					throw std::invalid_argument("Two qubit gates need to act on adjacent qubits");
+				else if (!gate.getRawOperatorMatrix().allFinite())
+					throw std::invalid_argument("Gate matrix contains a non-finite value");
 
 
 				if (gate.getQubitsNumber() == 1)
@@ -215,6 +217,8 @@ namespace QC {
 				for (const auto& gate : gates)
 				{
 					const IndexType qubit = gate.getQubit1();
+					if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+						throw std::invalid_argument("Qubit index out of bounds");
 					minQubit = std::min(minQubit, qubit);
 					maxQubit = std::max(maxQubit, qubit);
 				}
@@ -278,6 +282,10 @@ namespace QC {
 
 			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
 			{
+				if (qubits.empty()) return {};
+				if (*qubits.cbegin() < 0 || *qubits.crbegin() >= static_cast<IndexType>(gammas.size()))
+					throw std::invalid_argument("Qubit index out of bounds");
+
 				return MeasureNoCollapse(*qubits.crbegin());
 			}
 
@@ -503,8 +511,14 @@ namespace QC {
 				// Eigen's own numerical rank (no threshold is set on the SVD objects): only the singular values
 				// below diagSize * epsilon * sigma_max are dropped, they are not distinguishable from zero in double precision.
 				// Any real cut is only the user's choice (setLimitEntanglement / setLimitBondDimension).
+				// A failed decomposition (non-finite input) leaves the previous results in the reused SVD
+				// objects; never read them.
+				if ((computeWithJacobi ? jacobiSVD.info() : SVD.info()) != Eigen::Success)
+					throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
 				const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
 #else
+				if (jacobiSVD.info() != Eigen::Success)
+					throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
 				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
 				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
 
@@ -524,16 +538,21 @@ namespace QC {
 				assert(sz <= VmatrixFull.cols());
 				assert(2 * szr == VmatrixFull.rows());
 
-				// now set back lambdas and gammas
-				lambdas[qubit1] = SvaluesFull.head(sz);
-				assert(lambdas[qubit1][0] != 0.);
+				// Build the new lambda and both B tensors first, then commit them together (noexcept moves),
+				// so an allocation failure cannot leave the lambda paired with the old tensors.
+				LambdaType newLambda = SvaluesFull.head(sz);
+				assert(newLambda[0] != 0.);
 
 				// the norm of the kept singular values is the norm of the state after truncation
 				// the lambdas are normalized, and the left B has to be scaled the same way to keep the state normalized
-				const double norm = lambdas[qubit1].norm();
-				if (norm > 0) lambdas[qubit1] /= norm;
+				const double norm = newLambda.norm();
+				if (norm > 0) newLambda /= norm;
 
-				SetNewGammas(thetaMatrix, VmatrixFull, norm > 0 ? 1. / norm : 1., qubit1, qubit2, szl, sz, szr);
+				GammaType newLeft, newRight;
+				SetNewGammas(thetaMatrix, VmatrixFull, norm > 0 ? 1. / norm : 1., szl, sz, szr, newLeft, newRight);
+				lambdas[qubit1] = std::move(newLambda);
+				gammas[qubit1] = std::move(newLeft);
+				gammas[qubit2] = std::move(newRight);
 			}
 
 			// Given the (descending-sorted, already limited to the numerical rank) singular values and a
@@ -614,17 +633,17 @@ namespace QC {
 
 			// the left B is (theta * V) * scale, the right B is V^dagger
 			// V is the full V from the SVD, only the first sz columns are used
-			inline void SetNewGammas(const MatrixClass& thetaMatrix, const MatrixClass& Vmatrix, double scale, IndexType qubit1, IndexType qubit2, IndexType szl, IndexType sz, IndexType szr)
+			static void SetNewGammas(const MatrixClass& thetaMatrix, const MatrixClass& Vmatrix, double scale, IndexType szl, IndexType sz, IndexType szr,
+				GammaType& newLeft, GammaType& rightB)
 			{
 				// left site: the (szl, 2, sz) tensor has the same memory layout as the (2 * szl) x sz matrix with the rows j * szl + i
 				// so the product can be written directly into it
-				gammas[qubit1].resize(szl, 2, sz);
-				Eigen::Map<MatrixClass> leftB(gammas[qubit1].data(), 2 * szl, sz);
+				newLeft.resize(szl, 2, sz);
+				Eigen::Map<MatrixClass> leftB(newLeft.data(), 2 * szl, sz);
 				leftB.noalias() = thetaMatrix * Vmatrix.leftCols(sz);
 				if (scale != 1.) leftB *= scale;
 
 				// right site: the columns of V^dagger are (physical index, right bond index) = j * szr + k
-				GammaType& rightB = gammas[qubit2];
 				rightB.resize(sz, 2, szr);
 				for (IndexType k = 0; k < szr; ++k)
 					for (IndexType j = 0; j < 2; ++j)
@@ -738,11 +757,12 @@ namespace QC {
 				const IndexType limit1 = limit + 1;
 				std::unordered_map<IndexType, bool> res;
 
-				// the product of the B matrices (the lambdas are included in them) for the values measured so far
-				// the sites to the right are in the right canonical form, so the probability is the squared norm of this row vector
+				// the product of the B matrices (the lambdas are included in them) for the values measured so far,
+				// divided by the square root of their probability: the sites to the right are in the right canonical
+				// form, so the conditional probability of 0 is the squared norm of the zero branch of this row vector.
+				// Keeping the row normalized avoids the joint probability of the prefix, which underflows for
+				// long chains (2^-n for n unbiased qubits) and made every later outcome 1.
 				Eigen::RowVectorXcd vec = Eigen::RowVectorXcd::Ones(1);
-
-				double totalProb = 1.;
 
 				// the matrix for a physical index p starts at offset p * dim1 in the tensor data, the columns are 2 * dim1 apart
 				using SliceMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
@@ -757,29 +777,25 @@ namespace QC {
 					const SliceMap zeroMat(gammas[qubit].data(), dim1, dim2, Eigen::OuterStride<>(2 * dim1));
 					Eigen::RowVectorXcd zeroVec = vec * zeroMat;
 
-					// this is the probability of measuring all the qubits with the picked up values using the random number generator, up to this one
-					// including a measured zero value for the current qubit
-
-					const double allProbability = zeroVec.squaredNorm();
-
-					// to get the probability for the current qubit to be 0, we need to divide by the probability of measuring all the previous qubits
-					const double prob0 = ValidMeasurementProbability(allProbability / totalProb);
+					// the probability for the current qubit to be 0, conditioned on the values picked so far
+					const double prob0 = ValidMeasurementProbability(zeroVec.squaredNorm());
 
 					// 2. use that probability to measure the qubit
 					const double rndVal = 1. - uniformZeroOne(rng);
 					const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
 					res[qubit] = !zeroMeasured;
 
-					// accumulate the probability for measuring the current qubit to whatever was picked by using the random number generator
-					totalProb *= zeroMeasured ? prob0 : 1. - prob0;
-
-					// now update the vector
+					// now update the vector, renormalized by the probability of the picked value
 					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
+					{
 						vec.swap(zeroVec);
+						vec /= std::sqrt(prob0);
+					}
 					else
 					{
 						const SliceMap oneMat(gammas[qubit].data() + dim1, dim1, dim2, Eigen::OuterStride<>(2 * dim1));
 						vec = vec * oneMat;
+						vec /= std::sqrt(1. - prob0);
 					}
 				}
 

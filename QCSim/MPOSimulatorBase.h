@@ -34,6 +34,8 @@ namespace QC {
 
 			std::vector<MPOSimulatorInterface::LambdaType> lambdas;
 			std::vector<MPOSimulatorInterface::TensorType> gammas;
+			// rho = 2^scaleExponent * B[0] B[1] ... B[N-1] (see MPOSimulatorBase)
+			int64_t scaleExponent = 0;
 		};
 
 		// As for the MPS simulator, this base class is separated from the actual
@@ -63,6 +65,16 @@ namespace QC {
 		// uses local QR transport to supply orthonormal environments for a two-site update.
 		// Between full ReCanonicalize calls the tensors may use a mixed canonical gauge;
 		// then only the most recently split bond has current Schmidt weights.
+		//
+		// Scale: the represented operator is 2^scaleExponent * B[0] ... B[N-1]. The exponent stays 0
+		// while the magnitudes are ordinary; the QR transport and the two-site split move a power of
+		// two out of a tensor only when its largest component leaves [2^-64, 2^64]. Without that, the
+		// transport piles the norm of every visited site into one tensor (2^-n/2 for a maximally mixed
+		// chain), and Householder QR silently drops columns whose squared norm underflows: the trace
+		// of a 1030-qubit maximally mixed chain became 2^-9 after ReCanonicalize. The lambdas only
+		// weight SVD inputs, so they are rescaled freely and do not enter the exponent. Readers
+		// rescale their contractions the same way and restore the exponent in the result. Powers of
+		// two are exact, so nothing changes for ordinary magnitudes.
 		//
 		// Compression caveat: limiting the bond dimension or dropping singular values
 		// is ordinary operator-space MPO truncation. It minimizes a local SVD error, but
@@ -120,6 +132,7 @@ namespace QC {
 			void Clear() override
 			{
 				InvalidateSamplingCache();
+				scaleExponent = 0;
 				canonicalFormValid = true;
 				centerFirst = centerLast = 0;
 				const size_t szm1 = lambdas.size();
@@ -139,6 +152,7 @@ namespace QC {
 			void InitOnesState() override
 			{
 				InvalidateSamplingCache();
+				scaleExponent = 0;
 				canonicalFormValid = true;
 				centerFirst = centerLast = 0;
 				const size_t szm1 = lambdas.size();
@@ -316,6 +330,7 @@ namespace QC {
 
 				lambdas.swap(newLambdas);
 				gammas.swap(newGammas);
+				scaleExponent = 0;
 				InvalidateCanonicalForm();
 			}
 
@@ -443,6 +458,7 @@ namespace QC {
 				if (n == 0) return 0.;
 
 				MatrixClass env = MatrixClass::Ones(1, 1);
+				int64_t exponent = 2 * scaleExponent;
 
 				for (size_t q = 0; q < n; ++q)
 				{
@@ -460,9 +476,10 @@ namespace QC {
 
 					// the lambdas are already included in the B tensors
 					env = std::move(next);
+					RescaleIfOutOfRange(env, exponent);
 				}
 
-				return env(0, 0);
+				return ScaleByPowerOfTwo(env(0, 0), exponent);
 			}
 
 			double Purity() const override
@@ -489,16 +506,19 @@ namespace QC {
 				double residual = 0.;
 				RunMaybeSingleThreaded(enableMultithreading, [&]() {
 					MatrixClass transfer = MatrixClass::Ones(1, 1);
+					int64_t exponent = scaleExponent;
 					for (const auto& gamma : difference)
 					{
 						const IndexType R = gamma.dimension(3), rows = transfer.rows();
 						const Eigen::Map<const MatrixClass> site(gamma.data(), gamma.dimension(0), 4 * R);
-						const MatrixClass expanded = transfer * site;
+						MatrixClass expanded = transfer * site;
+						// keep the QR input in range: the transfer accumulates the norm of the sweep
+						RescaleIfOutOfRange(expanded, exponent);
 						const Eigen::Map<const MatrixClass> matrix(expanded.data(), 4 * rows, R);
 						Eigen::HouseholderQR<MatrixClass> qr(matrix);
 						transfer = qr.matrixQR().topRows(std::min(4 * rows, R)).template triangularView<Eigen::Upper>();
 					}
-					residual = transfer.stableNorm();
+					residual = std::ldexp(transfer.stableNorm(), ClampExponent(exponent));
 				});
 				return residual;
 			}
@@ -532,11 +552,13 @@ namespace QC {
 				// Reuse prefix vectors along the output tree: temporary storage stays
 				// polynomial in bond dimension, even for the largest dense result.
 				MatrixClass gap = MatrixClass::Ones(1, 1);
+				// each rescale of the gap scales exactly one factor of every output element
+				int64_t exponent = scaleExponent;
 				std::vector<std::array<MatrixClass, 4>> reduced;
 				std::vector<size_t> orderedPositions;
 				for (size_t q = 0; q < nrQubits; ++q)
 				{
-					if (!isKept[q]) { gap = (gap * SiteTraceMatrix(q)).eval(); continue; }
+					if (!isKept[q]) { gap = (gap * SiteTraceMatrix(q)).eval(); RescaleIfOutOfRange(gap, exponent); continue; }
 					reduced.emplace_back();
 					for (IndexType bra = 0; bra < 2; ++bra)
 						for (IndexType ket = 0; ket < 2; ++ket)
@@ -551,7 +573,7 @@ namespace QC {
 				prefix[0] = MatrixClass::Ones(1, 1);
 				MatrixClass rhoA(dimA, dimA);
 				auto expand = [&](auto&& self, size_t depth, size_t row, size_t col) -> void {
-					if (depth == reduced.size()) { rhoA(row, col) = prefix[depth](0, 0) / tr; return; }
+					if (depth == reduced.size()) { rhoA(row, col) = ScaleByPowerOfTwo(prefix[depth](0, 0), exponent) / tr; return; }
 					for (size_t physical = 0; physical < 4; ++physical)
 					{
 						prefix[depth + 1].noalias() = prefix[depth] * reduced[depth][physical];
@@ -583,6 +605,7 @@ namespace QC {
 				if (n == 0) return 0.;
 
 				MatrixClass env = MatrixClass::Ones(1, 1);
+				int64_t exponent = scaleExponent + otherBase->scaleExponent;
 
 				// the environment matrix products are parallelized by Eigen
 				RunMaybeSingleThreaded(enableMultithreading, [&]()
@@ -607,10 +630,11 @@ namespace QC {
 
 							// the lambdas are already included in the B tensors
 							env = std::move(next);
+							RescaleIfOutOfRange(env, exponent);
 						}
 					});
 
-				return env(0, 0) / (std::conj(tr1) * tr2);
+				return ScaleByPowerOfTwo(env(0, 0), exponent) / (std::conj(tr1) * tr2);
 			}
 
 			double FidelityWithStatevector(const VectorClass& psi) const override
@@ -651,7 +675,7 @@ namespace QC {
 								}
 					current = std::move(next);
 				}
-				return std::clamp((psi.dot(current.col(0)) / tr).real(), 0., 1.);
+				return std::clamp((ScaleByPowerOfTwo(psi.dot(current.col(0)), scaleExponent) / tr).real(), 0., 1.);
 			}
 
 			std::complex<double> UnnormalizedExpectationValue(const std::string& pauliString) const override
@@ -820,6 +844,7 @@ namespace QC {
 				auto state = std::make_shared<MPOSimulatorBaseState>();
 				state->lambdas = lambdas;
 				state->gammas = gammas;
+				state->scaleExponent = scaleExponent;
 
 				return state;
 			}
@@ -833,6 +858,7 @@ namespace QC {
 				std::vector<TensorType> newGammas = stateRef->gammas;
 				lambdas.swap(newLambdas);
 				gammas.swap(newGammas);
+				scaleExponent = stateRef->scaleExponent;
 				InvalidateCanonicalForm();
 			}
 
@@ -843,6 +869,7 @@ namespace QC {
 				auto stateRef = CheckedBaseState(state);
 				lambdas.swap(stateRef->lambdas);
 				gammas.swap(stateRef->gammas);
+				std::swap(scaleExponent, stateRef->scaleExponent);
 				InvalidateCanonicalForm();
 			}
 
@@ -975,6 +1002,52 @@ namespace QC {
 				if (probability > 1. && probability < 1. + tolerance) return 1.;
 
 				return probability;
+			}
+
+			// ---- power-of-two scale handling (see the class comment) ----
+			static constexpr int scaleWindowExponent = 64;
+
+			// The exponent e with x / 2^e in [0.5, 1) when the magnitude x is outside the window,
+			// otherwise 0. Zero and non-finite magnitudes are left alone.
+			static int OutOfRangeExponent(double magnitude)
+			{
+				if (!(magnitude > 0.) || !std::isfinite(magnitude)) return 0;
+				int e = 0;
+				std::frexp(magnitude, &e);
+				return (e < -scaleWindowExponent || e > scaleWindowExponent) ? e : 0;
+			}
+
+			// The largest real or imaginary component: within sqrt(2) of the largest magnitude, which
+			// is all the window needs, and without a hypot per element.
+			template<class Derived> static double MaxAbs(const Eigen::MatrixBase<Derived>& m)
+			{
+				if (m.size() == 0) return 0.;
+				return std::max(m.real().cwiseAbs().maxCoeff(), m.imag().cwiseAbs().maxCoeff());
+			}
+
+			// Divides m by 2^e, with e from its largest component when that is out of the window,
+			// and adds e to exponent. Returns e.
+			template<class Derived> static int RescaleIfOutOfRange(Eigen::MatrixBase<Derived>& m, int64_t& exponent)
+			{
+				const int e = OutOfRangeExponent(MaxAbs(m));
+				if (e != 0)
+				{
+					m *= std::ldexp(1., -e);
+					exponent += e;
+				}
+				return e;
+			}
+
+			static int ClampExponent(int64_t exponent)
+			{
+				constexpr int64_t limit = int64_t{ 1 } << 20; // far beyond the double range; ldexp saturates
+				return static_cast<int>(std::clamp<int64_t>(exponent, -limit, limit));
+			}
+
+			static std::complex<double> ScaleByPowerOfTwo(const std::complex<double>& value, int64_t exponent)
+			{
+				const int e = ClampExponent(exponent);
+				return { std::ldexp(value.real(), e), std::ldexp(value.imag(), e) };
 			}
 
 			static bool HasSafelyPositiveTrace(const std::complex<double>& trace)
@@ -1193,14 +1266,17 @@ namespace QC {
 				if (n == 0) return 0.;
 
 				MatrixClass res = siteMatrix(0);
+				int64_t exponent = scaleExponent;
+				RescaleIfOutOfRange(res, exponent);
 
 				for (size_t q = 1; q < n; ++q)
 				{
 					const MatrixClass sm = siteMatrix(static_cast<IndexType>(q));
 					res = (res * sm).eval();
+					RescaleIfOutOfRange(res, exponent);
 				}
 
-				return res(0, 0);
+				return ScaleByPowerOfTwo(res(0, 0), exponent);
 			}
 
 			void RestoreTraceIfSafe()
@@ -1342,6 +1418,8 @@ namespace QC {
 
 			std::vector<LambdaType> lambdas;
 			std::vector<TensorType> gammas;
+			// rho = 2^scaleExponent * B[0] ... B[N-1], see the class comment
+			int64_t scaleExponent = 0;
 
 			std::mt19937_64 rng;
 			std::uniform_real_distribution<double> uniformZeroOne{ 0, 1 };
