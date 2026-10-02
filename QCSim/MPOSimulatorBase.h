@@ -73,6 +73,12 @@ namespace QC {
 		class MPOSimulatorBase : public MPOSimulatorInterface
 		{
 		public:
+			struct CanonicalMetadata
+			{
+				bool valid = true;
+				IndexType first = 0, last = 0;
+			};
+
 			MPOSimulatorBase() = delete;
 
 			MPOSimulatorBase(size_t N, unsigned int addseed = 0)
@@ -901,11 +907,6 @@ namespace QC {
 
 			// Outside this interval the left prefix / right suffix are orthonormal.
 			// A valid Vidal form additionally has current Schmidt weights on every bond.
-			struct CanonicalMetadata
-			{
-				bool valid = true;
-				IndexType first = 0, last = 0;
-			};
 			CanonicalMetadata GetCanonicalMetadata() const { return { canonicalFormValid, centerFirst, centerLast }; }
 			void RestoreCanonicalMetadata(const CanonicalMetadata& metadata)
 			{
