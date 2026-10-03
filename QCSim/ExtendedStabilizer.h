@@ -98,6 +98,7 @@ namespace QC {
 		{
 			std::seed_seq seed{ uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32) };
 			gen.seed(seed);
+			dist.reset();
 		}
 
 		size_t GetNrQubits() const
