@@ -500,17 +500,18 @@ namespace QC {
 					im[i] = _mm256_set_pd(coefficients[i].imag(), -coefficients[i].imag(), coefficients[i].imag(), -coefficients[i].imag());
 				}
 				ForEachSelected<Parallel>(count, targets | controls.zeros | 1, controls.ones, [&](size_t base) {
-					__m256d v[dimension], swapped[dimension];
-					for (size_t c = 0; c < dimension; ++c)
+					constexpr size_t dim = size_t{ 1 } << Bits;
+					__m256d v[dim], swapped[dim];
+					for (size_t c = 0; c < dim; ++c)
 					{
 						v[c] = _mm256_loadu_pd(reinterpret_cast<const double*>(&state(base | offsets[c])));
 						swapped[c] = _mm256_permute_pd(v[c], 5);
 					}
-					for (size_t r = 0; r < dimension; ++r)
+					for (size_t r = 0; r < dim; ++r)
 					{
 						__m256d acc = _mm256_setzero_pd();
-						for (size_t c = 0; c < dimension; ++c)
-							acc = AddProduct(acc, re[r * dimension + c], im[r * dimension + c], v[c], swapped[c]);
+						for (size_t c = 0; c < dim; ++c)
+							acc = AddProduct(acc, re[r * dim + c], im[r * dim + c], v[c], swapped[c]);
 						_mm256_storeu_pd(reinterpret_cast<double*>(&state(base | offsets[r])), acc);
 					}
 				});
@@ -538,21 +539,22 @@ namespace QC {
 					crossedIm[i * half + j] = _mm256_set_pd(c.imag(), -c.imag(), b.imag(), -b.imag());
 				}
 			ForEachSelected<Parallel>(count, targets | controls.zeros, controls.ones, [&](size_t base) {
-				__m256d v[half], vSwapped[half], x[half], xSwapped[half];
-				for (size_t j = 0; j < half; ++j)
+				constexpr size_t hl = (size_t{ 1 } << Bits) / 2;
+				__m256d v[hl], vSwapped[hl], x[hl], xSwapped[hl];
+				for (size_t j = 0; j < hl; ++j)
 				{
 					v[j] = _mm256_loadu_pd(reinterpret_cast<const double*>(&state(base | offsets[pairs[j]])));
 					vSwapped[j] = _mm256_permute_pd(v[j], 5);
 					x[j] = _mm256_permute2f128_pd(v[j], v[j], 1);
 					xSwapped[j] = _mm256_permute_pd(x[j], 5);
 				}
-				for (size_t i = 0; i < half; ++i)
+				for (size_t i = 0; i < hl; ++i)
 				{
 					__m256d acc = _mm256_setzero_pd();
-					for (size_t j = 0; j < half; ++j)
+					for (size_t j = 0; j < hl; ++j)
 					{
-						acc = AddProduct(acc, directRe[i * half + j], directIm[i * half + j], v[j], vSwapped[j]);
-						acc = AddProduct(acc, crossedRe[i * half + j], crossedIm[i * half + j], x[j], xSwapped[j]);
+						acc = AddProduct(acc, directRe[i * hl + j], directIm[i * hl + j], v[j], vSwapped[j]);
+						acc = AddProduct(acc, crossedRe[i * hl + j], crossedIm[i * hl + j], x[j], xSwapped[j]);
 					}
 					_mm256_storeu_pd(reinterpret_cast<double*>(&state(base | offsets[pairs[i]])), acc);
 				}
@@ -596,17 +598,18 @@ namespace QC {
 					im[i] = _mm_set_pd(coefficients[i].imag(), -coefficients[i].imag());
 				}
 				ForEachSelected<Parallel>(count, targets | controls.zeros, controls.ones, [&](size_t base) {
-					__m128d v[dimension], swapped[dimension];
-					for (size_t c = 0; c < dimension; ++c)
+					constexpr size_t dim = size_t{ 1 } << Bits;
+					__m128d v[dim], swapped[dim];
+					for (size_t c = 0; c < dim; ++c)
 					{
 						v[c] = _mm_loadu_pd(reinterpret_cast<const double*>(&state(base | offsets[c])));
 						swapped[c] = _mm_shuffle_pd(v[c], v[c], 1);
 					}
-					for (size_t r = 0; r < dimension; ++r)
+					for (size_t r = 0; r < dim; ++r)
 					{
 						__m128d acc = _mm_setzero_pd();
-						for (size_t c = 0; c < dimension; ++c)
-							acc = _mm_add_pd(acc, _mm_add_pd(_mm_mul_pd(re[r * dimension + c], v[c]), _mm_mul_pd(im[r * dimension + c], swapped[c])));
+						for (size_t c = 0; c < dim; ++c)
+							acc = _mm_add_pd(acc, _mm_add_pd(_mm_mul_pd(re[r * dim + c], v[c]), _mm_mul_pd(im[r * dim + c], swapped[c])));
 						_mm_storeu_pd(reinterpret_cast<double*>(&state(base | offsets[r])), acc);
 					}
 				});
