@@ -1,6 +1,7 @@
 #include "Tests.h"
 #include "QubitRegister.h"
 #include "ExtendedStabilizer.h"
+#include "NonCliffordTestGates.h"
 
 #include <cstring>
 #include <limits>
@@ -33,8 +34,10 @@ void ApplyTwoQubitsGate(QC::ExtendedStabilizer& simulator, int code, int qubit1,
 }
 
 
-void ApplyGate(QC::ExtendedStabilizer& simulator, int code, int qubit1, int qubit2, double angle = 0.0)
+void ApplyGate(QC::ExtendedStabilizer& simulator, int code, int qubit1, int qubit2,
+	double angle = 0.0, int qubit3 = 0)
 {
+	const auto angles = DeriveGateAngles(angle);
 	switch (code)
 	{
 	case 0:
@@ -73,6 +76,21 @@ void ApplyGate(QC::ExtendedStabilizer& simulator, int code, int qubit1, int qubi
 	case 17:
 		simulator.ApplyRz(qubit1, angle);
 		break;
+	case CodeU: simulator.ApplyU(qubit1, angles.theta, angles.phi, angles.lambda); break;
+	case CodeCU:
+		simulator.ApplyCU(qubit1, qubit2, angles.theta, angles.phi, angles.lambda, angles.gamma);
+		break;
+	case CodeCRx: simulator.ApplyCRx(qubit1, qubit2, angle); break;
+	case CodeCRy: simulator.ApplyCRy(qubit1, qubit2, angle); break;
+	case CodeCRz: simulator.ApplyCRz(qubit1, qubit2, angle); break;
+	case CodeCP: simulator.ApplyCP(qubit1, qubit2, angle); break;
+	case CodeCS: simulator.ApplyCS(qubit1, qubit2); break;
+	case CodeCSdg: simulator.ApplyCSdg(qubit1, qubit2); break;
+	case CodeCSx: simulator.ApplyCSx(qubit1, qubit2); break;
+	case CodeCSxDag: simulator.ApplyCSxDag(qubit1, qubit2); break;
+	case CodeCH: simulator.ApplyCH(qubit1, qubit2); break;
+	case CodeCCX: simulator.ApplyCCX(qubit1, qubit2, qubit3); break;
+	case CodeCSwap: simulator.ApplyCSwap(qubit1, qubit2, qubit3); break;
 	default:
 		ApplyTwoQubitsGate(simulator, code, qubit1, qubit2);
 		break;
@@ -81,11 +99,11 @@ void ApplyGate(QC::ExtendedStabilizer& simulator, int code, int qubit1, int qubi
 
 
 static void ApplyExtStabilizerTestGate(QC::QubitRegister<>& qubitRegister, QC::ExtendedStabilizer& simulator,
-	int code, size_t qubit1, size_t qubit2 = 0, double angle = 0.0)
+	int code, size_t qubit1, size_t qubit2 = 0, double angle = 0.0, size_t qubit3 = 0)
 {
-	auto gate = GetGate(code, angle);
-	qubitRegister.ApplyGate(*gate, qubit1, qubit2);
-	ApplyGate(simulator, code, static_cast<int>(qubit1), static_cast<int>(qubit2), angle);
+	ApplyStatevectorGate(qubitRegister, code, qubit1, qubit2, angle, qubit3);
+	ApplyGate(simulator, code, static_cast<int>(qubit1), static_cast<int>(qubit2), angle,
+		static_cast<int>(qubit3));
 }
 
 
@@ -528,7 +546,7 @@ static bool TestExtStabilizerLargerMixedCircuits()
 
 		QC::QubitRegister<> qubitRegister(configuration.nrQubits);
 		QC::ExtendedStabilizer simulator(configuration.nrQubits);
-		size_t nrRotations = 0;
+		size_t nrNonClifford = 0;
 
 		for (size_t gateIndex = 0; gateIndex < configuration.nrGates; ++gateIndex)
 		{
@@ -540,18 +558,19 @@ static bool TestExtStabilizerLargerMixedCircuits()
 			double angle = 0.0;
 			if (gateIndex % 4 == 3)
 			{
-				// Cycle through every supported non-Clifford axis and use a
-				// non-special, reproducibly generated angle for each rotation.
-				code = 15 + static_cast<int>(nrRotations % 3);
+				// Every supported non-Clifford gate, with a reproducibly
+				// generated angle.
+				code = RandomNonCliffordCode(circuitGenerator, configuration.nrQubits);
 				angle = angleDistribution(circuitGenerator);
-				++nrRotations;
+				++nrNonClifford;
 			}
 			else if (gateIndex % 3 == 1)
 				code = twoQubitCliffordDistribution(circuitGenerator);
 			else
 				code = singleCliffordDistribution(circuitGenerator);
 
-			ApplyExtStabilizerTestGate(qubitRegister, simulator, code, qubit1, qubit2, angle);
+			ApplyExtStabilizerTestGate(qubitRegister, simulator, code, qubit1, qubit2, angle,
+				ThirdQubit(configuration.nrQubits, qubit1, qubit2));
 
 			if (gateIndex + 1 == configuration.nrGates / 2)
 			{
@@ -566,7 +585,7 @@ static bool TestExtStabilizerLargerMixedCircuits()
 		const std::string context = "Large mixed circuit final state on "
 			+ std::to_string(configuration.nrQubits) + " qubits after "
 			+ std::to_string(configuration.nrGates) + " gates and "
-			+ std::to_string(nrRotations) + " rotations";
+			+ std::to_string(nrNonClifford) + " non-Clifford gates";
 		if (!CheckExtStabilizerSampledState(qubitRegister, simulator, context,
 			configuration.seed ^ 0x2468ACE0U, 24))
 			return false;
@@ -593,6 +612,7 @@ static bool TestExtStabilizerClone()
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 16, 2, 0, -0.41);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 9, 2, 1);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 15, 1, 0, 0.23);
+	ApplyExtStabilizerTestGate(qubitRegister, simulator, CodeCCX, 2, 0, 0.0, 1);
 	simulator.SaveState();
 	auto savedStatevector = qubitRegister.Clone();
 
@@ -600,6 +620,7 @@ static bool TestExtStabilizerClone()
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 17, 2, 0, -0.18);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 11, 0, 2);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 16, 0, 0, 0.31);
+	ApplyExtStabilizerTestGate(qubitRegister, simulator, CodeCP, 1, 2, 0.43);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 1, 1);
 	auto clone = simulator.Clone();
 
@@ -623,6 +644,8 @@ static bool TestExtStabilizerClone()
 	ApplyExtStabilizerTestGate(*cloneBranchStatevector, *clone, 3, 2);
 	ApplyExtStabilizerTestGate(*cloneBranchStatevector, *clone, 17, 1, 0, -0.27);
 	ApplyExtStabilizerTestGate(*cloneBranchStatevector, *clone, 15, 0, 0, 0.19);
+	ApplyExtStabilizerTestGate(*cloneBranchStatevector, *clone, CodeCSwap, 0, 1, 0.0, 2);
+	ApplyExtStabilizerTestGate(*cloneBranchStatevector, *clone, CodeCU, 2, 1, 0.33);
 	if (!CheckExtStabilizerState(*cloneBranchStatevector, *clone,
 		"Clone test independently mutated state C")
 		|| !CheckExtStabilizerState(qubitRegister, simulator,
@@ -1185,13 +1208,16 @@ static bool TestExtStabilizerApproximationDifferential()
 		size_t qubit1;
 		size_t qubit2;
 		double angle;
+		size_t qubit3 = 0;
 	};
 	const std::vector<TestGate> gates = {
 		{ 16, 0, 0, 0.32 }, { 15, 1, 0, 0.18 }, { 0, 2, 0, 0.0 },
 		{ 9, 2, 0, 0.0 }, { 17, 2, 0, 0.27 }, { 16, 2, 0, -0.23 },
 		{ 0, 0, 0, 0.0 }, { 11, 1, 2, 0.0 }, { 15, 0, 0, 0.41 },
 		{ 1, 1, 0, 0.0 }, { 16, 1, 0, -0.35 }, { 9, 0, 2, 0.0 },
-		{ 17, 2, 0, 0.19 }
+		{ 17, 2, 0, 0.19 }, { CodeCU, 1, 0, 0.44 }, { CodeCCX, 2, 0, 0.0, 1 },
+		{ CodeCP, 0, 2, 0.57 }, { CodeCSwap, 0, 1, 0.0, 2 }, { CodeCH, 1, 2, 0.0 },
+		{ CodeU, 2, 0, 0.36 }, { CodeCRy, 0, 1, -0.48 }, { CodeCSx, 2, 1, 0.0 }
 	};
 
 	for (size_t policyIndex = 0; policyIndex < policies.size(); ++policyIndex)
@@ -1203,7 +1229,7 @@ static bool TestExtStabilizerApproximationDifferential()
 		{
 			const auto& gate = gates[gateIndex];
 			ApplyExtStabilizerTestGate(qubitRegister, simulator,
-				gate.code, gate.qubit1, gate.qubit2, gate.angle);
+				gate.code, gate.qubit1, gate.qubit2, gate.angle, gate.qubit3);
 			const std::string context = "Approximation policy "
 				+ std::to_string(policyIndex) + " after gate "
 				+ std::to_string(gateIndex);
@@ -1287,6 +1313,8 @@ static bool TestExtStabilizerApproximateMeasurements()
 		ApplyExtStabilizerTestGate(statevector, *simulator, 15, 0, 0, 0.31);
 		ApplyExtStabilizerTestGate(statevector, *simulator, 11, 0, 1);
 		ApplyExtStabilizerTestGate(statevector, *simulator, 16, 1, 0, -0.22);
+		ApplyExtStabilizerTestGate(statevector, *simulator, CodeCRy, 1, 0, 0.44);
+		ApplyExtStabilizerTestGate(statevector, *simulator, CodeCH, 0, 1);
 		if (!CheckExtStabilizerState(statevector, *simulator,
 			"Approximate diagonal post-measurement evolution"))
 			return false;
@@ -1327,6 +1355,8 @@ static bool TestExtStabilizerApproximateMeasurements()
 		ApplyExtStabilizerTestGate(statevector, *simulator, 17, 1, 0, 0.27);
 		ApplyExtStabilizerTestGate(statevector, *simulator, 9, 1, 0);
 		ApplyExtStabilizerTestGate(statevector, *simulator, 15, 0, 0, -0.19);
+		ApplyExtStabilizerTestGate(statevector, *simulator, CodeCU, 0, 1, -0.37);
+		ApplyExtStabilizerTestGate(statevector, *simulator, CodeCP, 1, 0, 0.61);
 		if (!CheckExtStabilizerState(statevector, *simulator,
 			"Approximate off-diagonal post-measurement evolution"))
 			return false;
@@ -1351,13 +1381,13 @@ static bool TestExtStabilizerPackedBoundaryOracle()
 		simulator.SetRandomSeed(static_cast<unsigned int>(0xB0A0D000U + nrQubits));
 
 		auto applyMappedGate = [&](int code, size_t qubit1,
-			size_t qubit2 = 0, double angle = 0.0)
+			size_t qubit2 = 0, double angle = 0.0, size_t qubit3 = 0)
 		{
-			auto gate = GetGate(code, angle);
-			statevector.ApplyGate(*gate, qubit1, qubit2);
+			ApplyStatevectorGate(statevector, code, qubit1, qubit2, angle, qubit3);
 			ApplyGate(simulator, code,
 				static_cast<int>(physicalQubits[qubit1]),
-				static_cast<int>(physicalQubits[qubit2]), angle);
+				static_cast<int>(physicalQubits[qubit2]), angle,
+				static_cast<int>(physicalQubits[qubit3]));
 		};
 
 		auto checkMappedState = [&](const std::string& context)
@@ -1403,6 +1433,8 @@ static bool TestExtStabilizerPackedBoundaryOracle()
 		applyMappedGate(9, 1, 0);
 		applyMappedGate(11, 2, 1);
 		applyMappedGate(17, 0, 0, 0.23);
+		applyMappedGate(CodeCCX, 0, 1, 0.0, 2);
+		applyMappedGate(CodeCU, 1, 2, 0.47);
 		applyMappedGate(0, 2);
 		if (simulator.GetFrames().front().GetFrameSize() <= 1
 			|| !checkMappedState("Wide state before measurement on "
@@ -1427,6 +1459,9 @@ static bool TestExtStabilizerPackedBoundaryOracle()
 		applyMappedGate(16, 1, 0, -0.33);
 		applyMappedGate(12, 0, 1);
 		applyMappedGate(17, 2, 0, 0.21);
+		applyMappedGate(CodeCSwap, 1, 2, 0.0, 0);
+		applyMappedGate(CodeCP, 0, 1, 0.53);
+		applyMappedGate(CodeCRx, 2, 0, -0.38);
 		if (!checkMappedState("Wide post-measurement state on "
 			+ std::to_string(nrQubits) + " qubits"))
 			return false;
@@ -1481,7 +1516,6 @@ static bool TestExtStabilizerInterleavedDifferential()
 	std::mt19937 circuitGenerator(0xD1FF3E17U);
 	std::uniform_int_distribution<int> singleCliffordDistribution(0, 8);
 	std::uniform_int_distribution<int> twoQubitCliffordDistribution(9, 14);
-	std::uniform_int_distribution<int> rotationDistribution(15, 17);
 	std::uniform_real_distribution<double> angleDistribution(-1.4, 1.4);
 
 	for (size_t nrQubits = 1; nrQubits <= 4; ++nrQubits)
@@ -1536,24 +1570,26 @@ static bool TestExtStabilizerInterleavedDifferential()
 
 				const size_t qubit1 = static_cast<size_t>(
 					qubitDistribution(circuitGenerator));
-				size_t qubit2 = 0;
+				size_t qubit2 = 0, qubit3 = 0;
+				if (nrQubits > 1)
+				{
+					qubit2 = (qubit1 + 1 + circuit) % nrQubits;
+					if (qubit2 == qubit1) qubit2 = (qubit1 + 1) % nrQubits;
+				}
+				if (nrQubits > 2) qubit3 = ThirdQubit(nrQubits, qubit1, qubit2);
 				int code;
 				double angle = 0.0;
 				if (step % 3 == 0)
 				{
-					code = rotationDistribution(circuitGenerator);
+					code = RandomNonCliffordCode(circuitGenerator, nrQubits);
 					angle = angleDistribution(circuitGenerator);
 				}
 				else if (nrQubits > 1 && step % 4 == 2)
-				{
 					code = twoQubitCliffordDistribution(circuitGenerator);
-					qubit2 = (qubit1 + 1 + circuit) % nrQubits;
-					if (qubit2 == qubit1) qubit2 = (qubit1 + 1) % nrQubits;
-				}
 				else
 					code = singleCliffordDistribution(circuitGenerator);
 				ApplyExtStabilizerTestGate(statevector, simulator,
-					code, qubit1, qubit2, angle);
+					code, qubit1, qubit2, angle, qubit3);
 				if (!CheckExtStabilizerInvariants(simulator, context))
 					return false;
 			}
@@ -1577,8 +1613,8 @@ static bool TestExtStabilizerLogicalBasisInvariance()
 	QC::QubitRegister<> qubitRegister(4);
 	QC::ExtendedStabilizer simulator(4);
 
-	// Use every rotation axis to create several coherent components in a
-	// nontrivial Clifford basis. Component amplitudes and logical labels must
+	// Use every rotation axis, CU and CCX to create several coherent components
+	// in a nontrivial Clifford basis. Component amplitudes and logical labels must
 	// then remain exactly unchanged while later Clifford gates rotate that basis.
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 0, 2);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 9, 3, 2);
@@ -1586,6 +1622,8 @@ static bool TestExtStabilizerLogicalBasisInvariance()
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 15, 0, 0, 0.37);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 16, 1, 0, -0.41);
 	ApplyExtStabilizerTestGate(qubitRegister, simulator, 17, 2, 0, 0.29);
+	ApplyExtStabilizerTestGate(qubitRegister, simulator, CodeCU, 3, 0, 0.52);
+	ApplyExtStabilizerTestGate(qubitRegister, simulator, CodeCCX, 1, 2, 0.0, 3);
 
 	const auto& preparedFrame = simulator.GetFrames().front();
 	if (preparedFrame.GetFrameSize() <= 1)
@@ -2226,35 +2264,55 @@ static bool TestExtStabilizerNonCliffordRotations()
 	return true;
 }
 
-void ExecuteCircuit(QC::QubitRegister<>& qubitRegister,
-	QC::ExtendedStabilizer& extstabSim, const std::vector<int>& gates,
-	const std::vector<size_t>& qubits1, const std::vector<size_t>& qubits2)
-{
-	for (int j = 0; j < static_cast<int>(gates.size()); ++j)
+struct ExtStabilizerCircuit {
+	explicit ExtStabilizerCircuit(size_t nrGates)
+		: gates(nrGates), qubits1(nrGates), qubits2(nrGates), qubits3(nrGates), angles(nrGates)
 	{
-		auto gateptr = GetGate(gates[j]);
-		qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
-		ApplyGate(extstabSim, gates[j], static_cast<int>(qubits1[j]),
-			static_cast<int>(qubits2[j]));
 	}
+
+	std::vector<int> gates;
+	std::vector<size_t> qubits1, qubits2, qubits3;
+	std::vector<double> angles;
+};
+
+
+static void ExecuteCircuit(QC::QubitRegister<>& qubitRegister,
+	QC::ExtendedStabilizer& extstabSim, const ExtStabilizerCircuit& circuit)
+{
+	for (size_t j = 0; j < circuit.gates.size(); ++j)
+		ApplyExtStabilizerTestGate(qubitRegister, extstabSim, circuit.gates[j],
+			circuit.qubits1[j], circuit.qubits2[j], circuit.angles[j], circuit.qubits3[j]);
 }
 
 
-static void ConstructExtStabilizerCircuit(size_t nrQubits,
-	std::vector<int>& gates, std::vector<size_t>& qubits1,
-	std::vector<size_t>& qubits2, std::uniform_int_distribution<int>& gateDistribution,
-	std::uniform_int_distribution<int>& qubitDistribution, std::mt19937& generator)
+// Gates from gateDistribution, except that the given fraction are any supported
+// non-Clifford gate that fits the register.
+static void ConstructExtStabilizerCircuit(size_t nrQubits, ExtStabilizerCircuit& circuit,
+	std::uniform_int_distribution<int>& gateDistribution,
+	std::uniform_int_distribution<int>& qubitDistribution, std::mt19937& generator,
+	double nonCliffordFraction)
 {
 	std::bernoulli_distribution swapDistribution(0.5);
-	for (size_t gate = 0; gate < gates.size(); ++gate)
+	std::bernoulli_distribution nonCliffordDistribution(nonCliffordFraction);
+	std::uniform_real_distribution<double> angleDistribution(-1.5, 1.5);
+	for (size_t gate = 0; gate < circuit.gates.size(); ++gate)
 	{
-		gates[gate] = gateDistribution(generator);
-		qubits1[gate] = static_cast<size_t>(qubitDistribution(generator));
-		qubits2[gate] = static_cast<size_t>(qubitDistribution(generator));
-		if (qubits2[gate] == qubits1[gate])
-			qubits2[gate] = (qubits1[gate] + 1) % nrQubits;
+		auto& qubit1 = circuit.qubits1[gate];
+		auto& qubit2 = circuit.qubits2[gate];
+		qubit1 = static_cast<size_t>(qubitDistribution(generator));
+		qubit2 = static_cast<size_t>(qubitDistribution(generator));
+		if (qubit2 == qubit1)
+			qubit2 = (qubit1 + 1) % nrQubits;
 		if (swapDistribution(generator))
-			std::swap(qubits1[gate], qubits2[gate]);
+			std::swap(qubit1, qubit2);
+		if (nonCliffordDistribution(generator))
+		{
+			circuit.gates[gate] = RandomNonCliffordCode(generator, nrQubits);
+			circuit.angles[gate] = angleDistribution(generator);
+		}
+		else
+			circuit.gates[gate] = gateDistribution(generator);
+		if (nrQubits > 2) circuit.qubits3[gate] = ThirdQubit(nrQubits, qubit1, qubit2);
 	}
 }
 
@@ -2279,13 +2337,9 @@ static bool TestExtStabilizerMeasurements()
 
 		for (size_t t = 0; t < nrTests; ++t)
 		{
-			const size_t nrGates = nrGatesDistr(circuitGenerator);
-			std::vector<int> gates(nrGates);
-			std::vector<size_t> qubits1(nrGates);
-			std::vector<size_t> qubits2(nrGates);
-
-			ConstructExtStabilizerCircuit(nrQubits, gates, qubits1, qubits2,
-				gateDistr, qubitDistr, circuitGenerator);
+			ExtStabilizerCircuit circuit(nrGatesDistr(circuitGenerator));
+			ConstructExtStabilizerCircuit(nrQubits, circuit, gateDistr, qubitDistr,
+				circuitGenerator, 0.125);
 
 			// test 1: repeated measurement on the same qubit must be consistent
 			{
@@ -2293,7 +2347,7 @@ static bool TestExtStabilizerMeasurements()
 				sim.SetRandomSeed(static_cast<unsigned int>(
 					0x5A6D0000U + 32 * nrQubits + t));
 				QC::QubitRegister<> reg(nrQubits);
-				ExecuteCircuit(reg, sim, gates, qubits1, qubits2);
+				ExecuteCircuit(reg, sim, circuit);
 
 				for (size_t q = 0; q < nrQubits; ++q)
 				{
@@ -2315,7 +2369,7 @@ static bool TestExtStabilizerMeasurements()
 				sim.SetRandomSeed(static_cast<unsigned int>(
 					0x5A6E0000U + 32 * nrQubits + t));
 
-				ExecuteCircuit(reg, sim, gates, qubits1, qubits2);
+				ExecuteCircuit(reg, sim, circuit);
 
 				sim.SaveState();
 				for (size_t shot = 0; shot < nrShots; ++shot)
@@ -2348,7 +2402,10 @@ static bool TestExtStabilizerMeasurements()
 						}
 						continue;
 					}
-					if (stabResults.count(basisState) == 0)
+					// Non-Clifford circuits have rare supported states; require
+					// one only when missing it is overwhelmingly unlikely.
+					if (expectedProbability * nrShots >= 20.0
+						&& stabResults.count(basisState) == 0)
 					{
 						std::cout << "\nMeasurement omitted supported basis state "
 							<< basisState << " on " << nrQubits << " qubits"
@@ -2386,6 +2443,10 @@ static bool TestExtStabilizerMeasurements()
 	std::cout << "\nSuccess" << std::endl;
 	return true;
 }
+
+static bool TestExtStabilizerNewFeatures();
+static bool TestExtStabilizerSampling();
+static bool TestExtStabilizerMultiQubitGates();
 
 bool TestExtStabilizer()
 {
@@ -2431,18 +2492,14 @@ bool TestExtStabilizer()
 		for (size_t t = 0; t < nrTests; ++t)
 		{
 			// Generate a fixed-seed circuit so failures can always be reproduced.
-			const size_t nrGates = nrGatesDistr(circuitGenerator);
-			std::vector<int> gates(nrGates);
-			std::vector<size_t> qubits1(nrGates);
-			std::vector<size_t> qubits2(nrGates);
-
-			ConstructExtStabilizerCircuit(nrQubits, gates, qubits1, qubits2,
-				gateDistr, qubitDistr, circuitGenerator);
+			ExtStabilizerCircuit circuit(nrGatesDistr(circuitGenerator));
+			ConstructExtStabilizerCircuit(nrQubits, circuit, gateDistr, qubitDistr,
+				circuitGenerator, 0.0);
 
 			QC::ExtendedStabilizer extstabSim(nrQubits);
 			QC::QubitRegister qubitRegister(nrQubits);
 
-			ExecuteCircuit(qubitRegister, extstabSim, gates, qubits1, qubits2);
+			ExecuteCircuit(qubitRegister, extstabSim, circuit);
 			if (!CheckExtStabilizerInvariants(extstabSim,
 				"Fixed-seed random Clifford circuit"))
 				return false;
@@ -2492,7 +2549,8 @@ bool TestExtStabilizer()
 	if (!TestExtStabilizerMeasurements())
 		return false;
 
-	return true;
+	return TestExtStabilizerNewFeatures() && TestExtStabilizerSampling()
+		&& TestExtStabilizerMultiQubitGates();
 }
 
 static bool TestExtStabilizerNewFeatures()
@@ -2535,11 +2593,392 @@ static bool TestExtStabilizerNewFeatures()
 		return false;
 	}
 
+	// Numeric states never alias: higher bits than the register are impossible,
+	// and qubits from 64 up are zero rather than repeating the low bits.
+	if (sim.getBasisStateProbability(8) != 0.0 || sim.getBasisStateProbability(15) != 0.0)
+	{
+		std::cout << "getBasisStateProbability accepted a state outside the register" << std::endl;
+		return false;
+	}
+	bool rejected = false;
+	try { sim.setToBasisState(size_t(8)); }
+	catch (const std::invalid_argument&) { rejected = true; }
+	if (!rejected)
+	{
+		std::cout << "setToBasisState accepted a state outside the register" << std::endl;
+		return false;
+	}
+
+	QC::ExtendedStabilizer wide(100);
+	const size_t lowAndTop = (size_t(1) << 63) | 1U;
+	wide.setToBasisState(lowAndTop);
+	std::vector<bool> expected(100, false);
+	expected[0] = expected[63] = true;
+	if (wide.GetQubitProbability(0) != 1.0 || wide.GetQubitProbability(63) != 1.0
+		|| wide.GetQubitProbability(64) != 0.0 || wide.GetQubitProbability(99) != 0.0
+		|| wide.getBasisStateProbability(lowAndTop) != 1.0
+		|| wide.getBasisStateProbability(expected) != 1.0
+		|| wide.getBasisStateProbability(size_t(1)) != 0.0)
+	{
+		std::cout << "Numeric basis states above 64 qubits alias lower qubits" << std::endl;
+		return false;
+	}
+
 	std::cout << "Success" << std::endl;
 	return true;
 }
 
-bool ExtendedStabilizerTests()
+static bool SameFrames(const std::vector<QC::ExtendedFrame>& left, const std::vector<QC::ExtendedFrame>& right)
 {
-	return TestExtStabilizer() && TestExtStabilizerNewFeatures();
+	if (left.size() != right.size()) return false;
+	for (size_t frame = 0; frame < left.size(); ++frame)
+	{
+		const auto& a = left[frame];
+		const auto& b = right[frame];
+		if (a.amplitudes != b.amplitudes || a.signs != b.signs
+			|| a.GetNrQubits() != b.GetNrQubits())
+			return false;
+		for (size_t qubit = 0; qubit < a.GetNrQubits(); ++qubit)
+			if (!(a.cliffordBasis.ImageX(qubit) == b.cliffordBasis.ImageX(qubit))
+				|| !(a.cliffordBasis.ImageZ(qubit) == b.cliffordBasis.ImageZ(qubit)))
+				return false;
+	}
+	return true;
+}
+
+// Product of conditional qubit probabilities on a measured copy; this is the
+// general path, used as the reference for the single-component support.
+static double SequentialBasisStateProbability(const QC::ExtendedStabilizer& simulator,
+	const std::vector<bool>& state)
+{
+	auto copy = simulator.Clone();
+	double probability = 1.0;
+	for (size_t qubit = 0; qubit < state.size(); ++qubit)
+	{
+		const double one = copy->GetQubitProbability(qubit);
+		const double target = state[qubit] ? one : 1.0 - one;
+		if (target <= 1E-15) return 0.0;
+		probability *= target;
+		copy->MeasureConditioned(qubit, state[qubit]);
+	}
+	return probability;
+}
+
+// Sampling must preserve the live and saved states and draw exactly what the
+// same shots of sequential measurements from a restored copy draw, both for
+// single basis states (affine support) and for superpositions (fallback).
+static bool TestExtStabilizerSampling()
+{
+	std::cout << "\nExtended Stabilizer sampling tests" << std::endl;
+
+	std::mt19937_64 rng(0x5A3D1E5ULL);
+	std::mt19937 sampleGenerator(0x5A3D1E6U);
+	size_t comparisons = 0, superpositions = 0, wide = 0;
+	for (size_t nrQubits : { 1, 2, 5, 31, 64, 65, 130 })
+		for (int circuit = 0; circuit < 16; ++circuit)
+		{
+			QC::ExtendedStabilizer simulator(nrQubits);
+			size_t rotations = 0;
+			for (size_t gate = 0; gate < 8 * nrQubits + 8; ++gate)
+			{
+				const size_t a = rng() % nrQubits;
+				const size_t b = (a + 1 + rng() % std::max<size_t>(nrQubits - 1, 1)) % nrQubits;
+				switch (rng() % 7)
+				{
+				case 0: simulator.ApplyH(a); break;
+				case 1: simulator.ApplyS(a); break;
+				case 2: simulator.ApplyY(a); break;
+				case 3: case 4: if (nrQubits > 1) simulator.ApplyCX(a, b); break;
+				case 5:
+					// Odd circuits become superpositions of a few basis states.
+					if (circuit % 2 && rotations < 4 && rng() % 3 == 0)
+					{
+						const int code = RandomNonCliffordCode(sampleGenerator, nrQubits);
+						ApplyGate(simulator, code, static_cast<int>(a), static_cast<int>(b),
+							0.4 + 0.1 * circuit, static_cast<int>(nrQubits > 2 ? ThirdQubit(nrQubits, a, b) : 0));
+						++rotations;
+					}
+					else simulator.ApplySx(a);
+					break;
+				default: if (rng() % 4 == 0) simulator.Measure(a); break;
+				}
+			}
+			const auto savedFrames = simulator.GetFrames();
+			simulator.SaveState();
+			simulator.ApplyH(rng() % nrQubits);
+			const auto liveFrames = simulator.GetFrames();
+			if (simulator.GetFrames().front().GetFrameSize() > 1) ++superpositions;
+
+			std::vector<size_t> qubits;
+			const size_t width = 1 + rng() % std::min<size_t>(nrQubits + 3, 70);
+			for (size_t bit = 0; bit < width; ++bit) qubits.push_back(rng() % nrQubits);
+			if (width > 32) ++wide;
+			const size_t shots = 1 + rng() % 40;
+
+			auto reference = simulator.Clone();
+			const uint64_t seed = rng();
+			simulator.SetSeed(seed);
+			reference->SetSeed(seed);
+			std::unordered_map<std::vector<bool>, size_t> expected;
+			std::unordered_map<size_t, size_t> expectedPacked;
+			reference->SaveState();
+			for (size_t pass = 0; pass < 2; ++pass)
+				for (size_t shot = 0; shot < shots; ++shot)
+				{
+					reference->RestoreState();
+					std::vector<bool> outcome(qubits.size());
+					size_t packed = 0;
+					for (size_t bit = 0; bit < qubits.size(); ++bit)
+					{
+						outcome[bit] = reference->Measure(qubits[bit]);
+						if (outcome[bit] && bit < 64) packed |= size_t(1) << bit;
+					}
+					if (pass == 0) ++expected[outcome];
+					else ++expectedPacked[packed];
+				}
+
+			const auto actual = simulator.SampleCountsMany(qubits, shots);
+			bool packedMatches = true;
+			if (qubits.size() <= 64)
+				packedMatches = simulator.SampleCounts(qubits, shots) == expectedPacked;
+			else
+			{
+				// Advance like the reference's second pass to keep the RNGs aligned.
+				simulator.SampleCountsMany(qubits, shots);
+				bool rejected = false;
+				try { simulator.SampleCounts(qubits, shots); }
+				catch (const std::invalid_argument&) { rejected = true; }
+				if (!rejected)
+				{
+					std::cout << "SampleCounts accepted an outcome wider than size_t" << std::endl;
+					return false;
+				}
+			}
+			if (actual != expected || !packedMatches)
+			{
+				std::cout << "Sampled counts differ from sequential measurements for " << nrQubits
+					<< " qubits, circuit " << circuit << std::endl;
+				return false;
+			}
+
+			// Same RNG state afterwards: measuring identical states agrees.
+			auto continued = simulator.Clone();
+			reference->RestoreState();
+			for (size_t qubit = 0; qubit < nrQubits; ++qubit)
+				if (continued->Measure(qubit) != reference->Measure(qubit))
+				{
+					std::cout << "Sampling advanced the RNG differently from sequential measurements" << std::endl;
+					return false;
+				}
+
+			if (!SameFrames(simulator.GetFrames(), liveFrames))
+			{
+				std::cout << "Sampling changed the live state" << std::endl;
+				return false;
+			}
+			simulator.RestoreState();
+			if (!SameFrames(simulator.GetFrames(), savedFrames))
+			{
+				std::cout << "Sampling changed the saved state" << std::endl;
+				return false;
+			}
+			++comparisons;
+
+			if (nrQubits <= 5 && simulator.GetFrames().front().GetFrameSize() == 1)
+			{
+				double total = 0.0;
+				for (size_t state = 0; state < (size_t(1) << nrQubits); ++state)
+				{
+					std::vector<bool> bits(nrQubits);
+					for (size_t qubit = 0; qubit < nrQubits; ++qubit) bits[qubit] = (state >> qubit) & 1U;
+					const double probability = simulator.getBasisStateProbability(bits);
+					total += probability;
+					if (!approxEqual(probability, SequentialBasisStateProbability(simulator, bits), 1E-12))
+					{
+						std::cout << "Basis-state probability differs from sequential conditioning" << std::endl;
+						return false;
+					}
+				}
+				if (!approxEqual(total, 1.0, 1E-12))
+				{
+					std::cout << "Basis-state probabilities do not sum to one" << std::endl;
+					return false;
+				}
+			}
+		}
+
+	QC::ExtendedStabilizer edgeCases(3);
+	bool rejected = false;
+	try { edgeCases.SampleCounts({ 3 }, 1); }
+	catch (const std::out_of_range&) { rejected = true; }
+	if (!rejected || !edgeCases.SampleCounts({}, 5).empty() || !edgeCases.SampleCountsMany({ 0 }, 0).empty())
+	{
+		std::cout << "Sampling edge cases failed" << std::endl;
+		return false;
+	}
+
+	std::cout << comparisons << " sampled selections (" << superpositions << " superpositions, "
+		<< wide << " wider than 32 bits)" << std::endl;
+	std::cout << "Success" << std::endl;
+	return true;
+}
+
+
+// U, CU, CRx/CRy/CRz, CP, CS, CSx, CH, CCX and CSwap are each applied as one
+// Pauli sum plus Clifford basis updates. Compare with the statevector after
+// every gate, at random angles and at angles where the gate is a Clifford.
+// Permutation gates on basis states and Clifford angles must not grow the
+// frame, and nothing may leave rounding residue on basis states.
+static bool TestExtStabilizerMultiQubitGates()
+{
+	std::cout << "\nExtended Stabilizer multi-qubit gate tests" << std::endl;
+
+	const double pi = std::acos(-1.0);
+	std::mt19937_64 rng(0xC0FFEEULL);
+	const auto angle = [&]() {
+		switch (rng() % 4)
+		{
+		case 0: return double(int(rng() % 9) - 4) * 0.5 * pi;  // Clifford angles, including 0
+		case 1: return double(int(rng() % 9) - 4) * 0.25 * pi;
+		default: return -4.0 + 8.0 * double(rng() % 100000) / 100000.0;
+		}
+	};
+
+	const QC::Gates::HadamardGate<> hadamard;
+	const QC::Gates::SGate<> phase;
+	const QC::Gates::CNOTGate<> cnot;
+	const QC::Gates::ControlledHadamardGate<> controlledHadamard;
+	const QC::Gates::ControlledSquareRootNOTGate<> controlledSx;
+	const QC::Gates::ControlledSquareRootNOTDagGate<> controlledSxDag;
+	const QC::Gates::ToffoliGate<> toffoli;
+	const QC::Gates::FredkinGate<> fredkin;
+
+	size_t checks = 0;
+	for (size_t nrQubits : { 3, 4, 5 })
+		for (int circuit = 0; circuit < (nrQubits == 5 ? 8 : 24); ++circuit)
+		{
+			QC::QubitRegister<> reg(nrQubits);
+			QC::ExtendedStabilizer sim(nrQubits);
+			for (int step = 0; step < 10; ++step)
+			{
+				const size_t a = rng() % nrQubits;
+				const size_t b = (a + 1 + rng() % (nrQubits - 1)) % nrQubits;
+				switch (rng() % 4)
+				{
+				case 0: sim.ApplyH(a); reg.ApplyGate(hadamard, a); break;
+				case 1: sim.ApplyS(a); reg.ApplyGate(phase, a); break;
+				case 2: sim.ApplyCX(a, b); reg.ApplyGate(cnot, a, b); break;
+				default:
+				{
+					const double theta = 0.2 + 0.1 * step;
+					sim.ApplyRy(a, theta);
+					reg.ApplyGate(QC::Gates::RyGate<>(theta), a);
+					break;
+				}
+				}
+			}
+
+			for (int step = 0; step < 12; ++step)
+			{
+				size_t q[3];
+				q[0] = rng() % nrQubits;
+				do q[1] = rng() % nrQubits; while (q[1] == q[0]);
+				do q[2] = rng() % nrQubits; while (q[2] == q[0] || q[2] == q[1]);
+				const double theta = angle(), phi = angle(), lambda = angle(), gamma = angle();
+				const int gate = int(rng() % 13);
+				switch (gate)
+				{
+				case 0: sim.ApplyU(q[0], theta, phi, lambda); reg.ApplyGate(QC::Gates::UGate<>(theta, phi, lambda), q[0]); break;
+				case 1: sim.ApplyCU(q[0], q[1], theta, phi, lambda, gamma); reg.ApplyGate(QC::Gates::ControlledUGate<>(theta, phi, lambda, gamma), q[0], q[1]); break;
+				case 2: sim.ApplyCRx(q[0], q[1], theta); reg.ApplyGate(QC::Gates::ControlledRxGate<>(theta), q[0], q[1]); break;
+				case 3: sim.ApplyCRy(q[0], q[1], theta); reg.ApplyGate(QC::Gates::ControlledRyGate<>(theta), q[0], q[1]); break;
+				case 4: sim.ApplyCRz(q[0], q[1], theta); reg.ApplyGate(QC::Gates::ControlledRzGate<>(theta), q[0], q[1]); break;
+				case 5: sim.ApplyCP(q[0], q[1], lambda); reg.ApplyGate(QC::Gates::ControlledPhaseShiftGate<>(lambda), q[0], q[1]); break;
+				case 6: sim.ApplyCS(q[0], q[1]); reg.ApplyGate(QC::Gates::ControlledPhaseShiftGate<>(0.5 * pi), q[0], q[1]); break;
+				case 7: sim.ApplyCSdg(q[0], q[1]); reg.ApplyGate(QC::Gates::ControlledPhaseShiftGate<>(-0.5 * pi), q[0], q[1]); break;
+				case 8: sim.ApplyCSx(q[0], q[1]); reg.ApplyGate(controlledSx, q[0], q[1]); break;
+				case 9: sim.ApplyCSxDag(q[0], q[1]); reg.ApplyGate(controlledSxDag, q[0], q[1]); break;
+				case 10: sim.ApplyCH(q[0], q[1]); reg.ApplyGate(controlledHadamard, q[0], q[1]); break;
+				case 11: sim.ApplyCCX(q[0], q[1], q[2]); reg.ApplyGate(toffoli, q[0], q[1], q[2]); break;
+				default: sim.ApplyCSwap(q[0], q[1], q[2]); reg.ApplyGate(fredkin, q[0], q[1], q[2]); break;
+				}
+				++checks;
+				if (!CheckExtStabilizerState(reg, sim, "multi-qubit gate " + std::to_string(gate)
+					+ " on " + std::to_string(nrQubits) + " qubits, circuit " + std::to_string(circuit)
+					+ ", step " + std::to_string(step)))
+					return false;
+			}
+		}
+
+	// Permutation gates map basis states to basis states exactly.
+	for (size_t basis = 0; basis < 8; ++basis)
+	{
+		QC::ExtendedStabilizer sim(3);
+		QC::QubitRegister<> reg(3);
+		for (size_t qubit = 0; qubit < 3; ++qubit)
+			if ((basis >> qubit) & 1U)
+			{
+				sim.ApplyX(qubit);
+				reg.ApplyGate(QC::Gates::PauliXGate<>(), qubit);
+			}
+		for (int repeat = 0; repeat < 5; ++repeat)
+		{
+			sim.ApplyCCX(2, 0, 1); reg.ApplyGate(toffoli, 2, 0, 1);
+			sim.ApplyCSwap(0, 1, 2); reg.ApplyGate(fredkin, 0, 1, 2);
+			sim.ApplyCSx(1, 0); sim.ApplyCSxDag(1, 0);
+		}
+		if (sim.GetFrames().front().GetFrameSize() != 1
+			|| !CheckExtStabilizerState(reg, sim, "basis-state permutations"))
+		{
+			std::cout << "Permutation gates left " << sim.GetFrames().front().GetFrameSize()
+				<< " components on a basis state" << std::endl;
+			return false;
+		}
+	}
+
+	// At Clifford angles the gates only update the basis.
+	{
+		QC::ExtendedStabilizer sim(3);
+		QC::QubitRegister<> reg(3);
+		for (size_t qubit = 0; qubit < 3; ++qubit) { sim.ApplyH(qubit); reg.ApplyGate(hadamard, qubit); }
+		sim.ApplyCX(1, 0); reg.ApplyGate(cnot, 1, 0);
+		sim.ApplyCU(2, 1, pi, 0.0, pi); reg.ApplyGate(QC::Gates::ControlledUGate<>(pi, 0.0, pi), 2, 1);
+		sim.ApplyCP(0, 2, pi); reg.ApplyGate(QC::Gates::ControlledPhaseShiftGate<>(pi), 0, 2);
+		sim.ApplyCRz(1, 0, pi); reg.ApplyGate(QC::Gates::ControlledRzGate<>(pi), 1, 0);
+		sim.ApplyCRx(2, 0, 3.0 * pi); reg.ApplyGate(QC::Gates::ControlledRxGate<>(3.0 * pi), 2, 0);
+		sim.ApplyCRy(0, 1, 2.0 * pi); reg.ApplyGate(QC::Gates::ControlledRyGate<>(2.0 * pi), 0, 1);
+		sim.ApplyU(1, 0.5 * pi, 0.0, pi); reg.ApplyGate(QC::Gates::UGate<>(0.5 * pi, 0.0, pi), 1);
+		sim.ApplyCP(1, 2, 4.0 * pi); reg.ApplyGate(QC::Gates::ControlledPhaseShiftGate<>(4.0 * pi), 1, 2);
+		if (sim.GetFrames().front().GetFrameSize() != 1
+			|| !CheckExtStabilizerState(reg, sim, "Clifford angles"))
+		{
+			std::cout << "Clifford-angle gates grew the frame to "
+				<< sim.GetFrames().front().GetFrameSize() << " components" << std::endl;
+			return false;
+		}
+	}
+
+	// Invalid input is rejected before anything changes.
+	{
+		QC::ExtendedStabilizer sim(3);
+		const auto rejects = [](auto apply) {
+			try { apply(); }
+			catch (const std::invalid_argument&) { return true; }
+			catch (const std::out_of_range&) { return true; }
+			return false;
+		};
+		if (!rejects([&] { sim.ApplyCCX(0, 0, 1); }) || !rejects([&] { sim.ApplyCSwap(0, 1, 1); })
+			|| !rejects([&] { sim.ApplyCCX(0, 1, 3); }) || !rejects([&] { sim.ApplyCP(0, 0, 0.3); })
+			|| !rejects([&] { sim.ApplyCU(0, 1, std::nan(""), 0.0, 0.0); })
+			|| !rejects([&] { sim.ApplyU(3, 0.1, 0.2, 0.3); })
+			|| sim.GetFrames().front().GetFrameSize() != 1)
+		{
+			std::cout << "Invalid multi-qubit gate input was not rejected" << std::endl;
+			return false;
+		}
+	}
+
+	std::cout << checks << " gate applications checked against the statevector" << std::endl;
+	std::cout << "Success" << std::endl;
+	return true;
 }

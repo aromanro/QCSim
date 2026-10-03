@@ -1309,7 +1309,7 @@ static bool DensityMatrixSamplingTest()
 			return false;
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;

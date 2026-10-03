@@ -11,45 +11,29 @@ public:
     StabilizerSimulator() = default;
     explicit StabilizerSimulator(size_t n) : StabilizerState(n) {}
 
-    // Appending G to U maps inverse images by U^dagger G^dagger P G U.
-    // Gates touch a constant number of packed rows, with no parallel launch.
-    void ApplyH(size_t q) { BeginGate(q); detail::SwapRows(inverseX[q], inverseZ[q]); }
-    void ApplyS(size_t q) { ValidateQubit(q); S(q, 3); }
-    void ApplySdg(size_t q) { ValidateQubit(q); S(q, 1); }
-    void ApplyX(size_t q) { ValidateQubit(q); inverseZ[q].PhaseSign ^= true; FlipDistributionBit(q); }
-    void ApplyY(size_t q) { ValidateQubit(q); inverseX[q].PhaseSign ^= true; inverseZ[q].PhaseSign ^= true; FlipDistributionBit(q); }
-    void ApplyZ(size_t q) { ValidateQubit(q); inverseX[q].PhaseSign ^= true; }
-    void ApplySx(size_t q) { BeginGate(q); inverseZ[q].Multiply(inverseX[q], 3); }
-    void ApplySxDag(size_t q) { BeginGate(q); inverseZ[q].Multiply(inverseX[q], 1); }
-    void ApplyK(size_t q)
-    {
-        BeginGate(q);
-        inverseZ[q].Multiply(inverseX[q], 3);
-        inverseX[q].PhaseSign ^= true;
-    }
-    void ApplyCX(size_t target, size_t control) { BeginPair(target, control); CX(target, control); }
-    void ApplyCY(size_t target, size_t control)
-    {
-        BeginPair(target, control);
-        S(target, 1); CX(target, control); S(target, 3);
-    }
-    void ApplyCZ(size_t target, size_t control) { ValidatePair(target, control); CZ(target, control); }
+    // Gate updates are shared with the extended stabilizer's frame map, see
+    // detail::InverseMap. Gates touch a constant number of packed rows, with no
+    // parallel launch. Diagonal gates leave the computational-basis cache valid.
+    void ApplyH(size_t q) { BeginGate(q); Map().ApplyH(q); }
+    void ApplyS(size_t q) { ValidateQubit(q); Map().ApplyS(q); }
+    void ApplySdg(size_t q) { ValidateQubit(q); Map().ApplySdg(q); }
+    void ApplyX(size_t q) { ValidateQubit(q); Map().ApplyX(q); FlipDistributionBit(q); }
+    void ApplyY(size_t q) { ValidateQubit(q); Map().ApplyY(q); FlipDistributionBit(q); }
+    void ApplyZ(size_t q) { ValidateQubit(q); Map().ApplyZ(q); }
+    void ApplySx(size_t q) { BeginGate(q); Map().ApplySx(q); }
+    void ApplySxDag(size_t q) { BeginGate(q); Map().ApplySxDag(q); }
+    void ApplyK(size_t q) { BeginGate(q); Map().ApplyK(q); }
+    void ApplyCX(size_t target, size_t control) { BeginPair(target, control); Map().ApplyCX(target, control); }
+    void ApplyCY(size_t target, size_t control) { BeginPair(target, control); Map().ApplyCY(target, control); }
+    void ApplyCZ(size_t target, size_t control) { ValidatePair(target, control); Map().ApplyCZ(target, control); }
     void ApplySwap(size_t a, size_t b)
     {
         ValidatePair(a, b, true);
         if (a == b) return;
-        InvalidateDistribution(); Swap(a, b);
+        InvalidateDistribution(); Map().ApplySwap(a, b);
     }
-    void ApplyISwap(size_t a, size_t b)
-    {
-        BeginPair(a, b);
-        S(a, 3); S(b, 3); CZ(a, b); Swap(a, b);
-    }
-    void ApplyISwapDag(size_t a, size_t b)
-    {
-        BeginPair(a, b);
-        S(a, 1); S(b, 1); CZ(a, b); Swap(a, b);
-    }
+    void ApplyISwap(size_t a, size_t b) { BeginPair(a, b); Map().ApplyISwap(a, b); }
+    void ApplyISwapDag(size_t a, size_t b) { BeginPair(a, b); Map().ApplyISwapDag(a, b); }
 
     double ExpectationValue(const std::string& pauliString) const
     {
@@ -115,11 +99,7 @@ public:
         if (result.HasX()) return 0.0;
         if (allDiagonal) return diagonalSign ? -1.0 : 1.0;
         result.Clear();
-        for (const auto& op : positions)
-        {
-            if (op.second != 'Z') result.Multiply(inverseX[op.first]);
-            if (op.second != 'X') result.Multiply(inverseZ[op.first], op.second == 'Y' ? 1 : 0);
-        }
+        for (const auto& op : positions) detail::MultiplyImage(result, inverseX, inverseZ, op.first, op.second);
         return result.PhaseSign ? -1.0 : 1.0;
     }
 
@@ -128,22 +108,6 @@ public:
 private:
     void BeginGate(size_t q) { ValidateQubit(q); InvalidateDistribution(); }
     void BeginPair(size_t a, size_t b) { ValidatePair(a, b); InvalidateDistribution(); }
-    void S(size_t q, unsigned phase) noexcept { inverseX[q].Multiply(inverseZ[q], phase); }
-    void CX(size_t target, size_t control) noexcept
-    {
-        inverseX[control].Multiply(inverseX[target]);
-        inverseZ[target].Multiply(inverseZ[control]);
-    }
-    void CZ(size_t target, size_t control) noexcept
-    {
-        inverseX[target].Multiply(inverseZ[control]);
-        inverseX[control].Multiply(inverseZ[target]);
-    }
-    void Swap(size_t a, size_t b) noexcept
-    {
-        detail::SwapRows(inverseX[a], inverseX[b]);
-        detail::SwapRows(inverseZ[a], inverseZ[b]);
-    }
 };
 
 }}

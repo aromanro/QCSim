@@ -1,6 +1,7 @@
 #pragma once
 
 #define QCSIM_PAULI_PROPAGATOR_BATCH_API 1
+#define QCSIM_PAULI_PROPAGATOR_NATIVE_GATES 1
 
 #include "PauliPropagationEngine.h"
 #include <numeric>
@@ -67,8 +68,9 @@ namespace QC
 				throw std::invalid_argument("Negative Pauli register width");
 			for (const auto& op : *operations)
 			{
-				if (op.q0 >= n || (op.type >= OperationType::CX && op.type < OperationType::PROJ && op.q1 >= n))
-					throw std::invalid_argument("Pauli circuit exceeds register width");
+				for (int q = 0; q < PauliOperationArity(op.type); ++q)
+					if (op.Qubit(q) >= n)
+						throw std::invalid_argument("Pauli circuit exceeds register width");
 			}
 			nrQubits = n;
 		}
@@ -296,6 +298,30 @@ namespace QC
 			AddRotation(OperationType::RZ, q, angle);
 		}
 
+		// Native gates are single recorded operations. Trimming/deduplication
+		// intervals therefore count complete gates, including at special angles.
+		// Controlled-gate arguments follow this class's control/target convention.
+		void ApplyU(int q, double theta, double phi, double lambda, double gamma = 0.)
+		{
+			if (!std::isfinite(gamma)) throw std::invalid_argument("Gate angle must be finite");
+			AddLocal(OperationType::U, q, 0, 0, PauliDetail::ParameterizedTransfer(OperationType::U, theta, phi, lambda));
+		}
+		void ApplyCU(int control, int target, double theta, double phi, double lambda, double gamma = 0.)
+		{
+			AddLocal(OperationType::CU, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CU, theta, phi, lambda, gamma));
+		}
+		void ApplyCRX(int control, int target, double angle) { AddLocal(OperationType::CRX, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CRX, angle)); }
+		void ApplyCRY(int control, int target, double angle) { AddLocal(OperationType::CRY, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CRY, angle)); }
+		void ApplyCRZ(int control, int target, double angle) { AddLocal(OperationType::CRZ, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CRZ, angle)); }
+		void ApplyCP(int control, int target, double angle) { AddLocal(OperationType::CP, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CP, angle)); }
+		void ApplyCS(int control, int target) { AddFixed(OperationType::CS, target, control); }
+		void ApplyCSDAG(int control, int target) { AddFixed(OperationType::CSDAG, target, control); }
+		void ApplyCSX(int control, int target) { AddFixed(OperationType::CSX, target, control); }
+		void ApplyCSXDAG(int control, int target) { AddFixed(OperationType::CSXDAG, target, control); }
+		void ApplyCH(int control, int target) { AddFixed(OperationType::CH, target, control); }
+		void ApplyCCX(int control1, int control2, int target) { AddFixed(OperationType::CCX, target, control1, control2); }
+		void ApplyCSwap(int control, int target1, int target2) { AddFixed(OperationType::CSWAP, target1, target2, control); }
+
 		std::vector<std::unique_ptr<Operator>> GetOperations() const
 		{
 			std::vector<std::unique_ptr<Operator>> result;
@@ -311,12 +337,12 @@ namespace QC
 			for (auto& op : input)
 			{
 				auto compiled = PauliDetail::Operation::Import(std::move(op));
-				CheckQubit(compiled.q0);
-				if (compiled.type >= OperationType::CX && compiled.type < OperationType::PROJ)
+				for (int q = 0; q < PauliOperationArity(compiled.type); ++q)
 				{
-					CheckQubit(compiled.q1);
-					if (compiled.q0 == compiled.q1)
-						throw std::invalid_argument("Repeated gate qubit");
+					CheckQubit(compiled.Qubit(q));
+					for (int other = 0; other < q; ++other)
+						if (compiled.Qubit(q) == compiled.Qubit(other))
+							throw std::invalid_argument("Repeated gate qubit");
 				}
 				program->push_back(std::move(compiled));
 			}
@@ -331,7 +357,7 @@ namespace QC
 				throw std::invalid_argument("Pauli clone width mismatch");
 			// Custom operators may contain mutable state; retain their Clone contract.
 			const bool custom = std::any_of(source.operations->begin(), source.operations->end(),
-											[](const PauliDetail::Operation& op) { return bool(op.custom); });
+											[](const PauliDetail::Operation& op) { return bool(op.Custom()); });
 			if (custom)
 				SetOperations(source.GetOperations());
 			else
@@ -594,6 +620,20 @@ namespace QC
 			op.projectOne = one;
 			op.coefficient = coefficient;
 			MutableOperations().push_back(std::move(op));
+		}
+		void AddLocal(OperationType type, int a, int b, int c, std::shared_ptr<const PauliDetail::LocalTransfer> table)
+		{
+			const int qubits[] = {a, b, c};
+			for (int q = 0; q < PauliOperationArity(type); ++q) {
+				CheckQubit(qubits[q]);
+				for (int other = 0; other < q; ++other)
+					if (qubits[q] == qubits[other]) throw std::invalid_argument("Repeated gate qubit");
+			}
+			MutableOperations().push_back(PauliDetail::Operation::Local(type, a, b, c, std::move(table)));
+		}
+		void AddFixed(OperationType type, int a, int b, int c = 0)
+		{
+			AddLocal(type, a, b, c, PauliDetail::FixedTransfer(type));
 		}
 		PauliDetail::Settings Settings() const
 		{

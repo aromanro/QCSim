@@ -8,15 +8,22 @@ namespace QC { namespace Clifford { namespace detail {
 
 // Computational-basis support is an affine binary space. Pure-Z stabilizers
 // supply its parity constraints; all supported outcomes have probability 2^-r.
+// The state is U|label>, with U given by its inverse Z images; a null label is
+// the zero input. U|b> = (U X^b)|0>, so a label only flips each image's sign
+// by the parity of its Z part on b.
 class BasisDistribution
 {
 public:
-    void BuildFromInverse(const PackedTableau& inverseZ)
+    void BuildFromInverse(const PackedTableau& inverseZ, const Word* label = nullptr)
     {
-        Build(PackedTableau(inverseZ));
+        PackedTableau work(inverseZ);
+        if (label)
+            for (size_t row = 0; row < work.size(); ++row) ApplyLabel(work[row], label);
+        Build(std::move(work));
     }
 
-    void BuildFromInverse(const PackedTableau& inverseZ, const std::vector<size_t>& qubits)
+    void BuildFromInverse(const PackedTableau& inverseZ, const std::vector<size_t>& qubits,
+        const Word* label = nullptr)
     {
         const size_t n = qubits.size();
         PackedTableau work(n, inverseZ.GetNrQubits()), expressions(n, n);
@@ -26,6 +33,7 @@ public:
         {
             auto row = work[output], expression = expressions[output];
             row.CopyFrom(inverseZ[qubits[output]]);
+            if (label) ApplyLabel(row, label);
             for (size_t p = 0; p < freeOutputs.size(); ++p)
                 if (row.X[logicalPivots[p]])
                 {
@@ -83,6 +91,13 @@ public:
     }
 
 private:
+    static void ApplyLabel(TableauRow<false> row, const Word* label) noexcept
+    {
+        Word parity = 0;
+        for (size_t w = 0; w < row.Words(); ++w) parity ^= row.Z.words[w] & label[w];
+        row.PhaseSign ^= (Popcount(parity) & 1) != 0;
+    }
+
     void Build(PackedTableau work)
     {
         const size_t n = work.size(), logicalQubits = work.GetNrQubits();
@@ -189,7 +204,8 @@ public:
         }
     }
 
-    template<class Engine> std::vector<bool> Sample(Engine& engine, std::bernoulli_distribution& random) const
+    // random(engine) supplies one fair random bit per independent output.
+    template<class Engine, class Random> std::vector<bool> Sample(Engine& engine, Random& random) const
     {
         std::vector<Word> bits(offset.size());
         std::vector<bool> result(basis.GetNrQubits());
@@ -200,8 +216,8 @@ public:
 
     size_t Words() const noexcept { return offset.size(); }
 
-    template<class Engine> void SampleInto(std::vector<Word>& bits, Engine& engine,
-        std::bernoulli_distribution& random) const
+    template<class Engine, class Random> void SampleInto(std::vector<Word>& bits, Engine& engine,
+        Random& random) const
     {
         assert(bits.size() == offset.size());
         std::copy(offset.begin(), offset.end(), bits.begin());

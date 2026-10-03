@@ -4,9 +4,6 @@
 #include <limits>
 #include <stdexcept>
 #include <unordered_map>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 #include "PauliStringXZ.h"
 #include "CliffordProbability.h"
 
@@ -58,8 +55,7 @@ public:
     void Reset() noexcept
     {
         InvalidateDistribution();
-        inverseX.Clear(); inverseZ.Clear();
-        for (size_t q = 0; q < getNrQubits(); ++q) { inverseX[q].X[q] = true; inverseZ[q].Z[q] = true; }
+        Map().SetIdentity();
     }
 
     bool MeasureQubit(size_t qubit)
@@ -330,76 +326,18 @@ protected:
         ValidateQubit(a); ValidateQubit(b);
         if (!allowEqual && a == b) throw std::invalid_argument("Two-qubit gate requires distinct qubits");
     }
+    detail::InverseMap Map() noexcept { return {inverseX, inverseZ}; }
+
     bool IsRandomResult(size_t qubit, size_t& pivot) const noexcept
     {
-        const auto row = inverseZ[qubit];
-        for (size_t w = 0; w < row.Words(); ++w)
-        {
-            detail::Word value = row.X.words[w];
-            if (!value) continue;
-            pivot = 64 * w + detail::TrailingZero(value);
-            return true;
-        }
-        return false;
+        return detail::FindPivot(inverseZ[qubit], pivot);
     }
 
     void CollapseRandomQubit(size_t qubit, size_t pivot, bool outcome) noexcept
     {
         InvalidateDistribution();
-        auto measured = measurementScratch[0];
-        measured.CopyFrom(inverseZ[qubit]);
-        unsigned measuredY = 0;
-        for (size_t w = 0; w < measured.Words(); ++w)
-            measuredY += detail::Popcount(measured.X.words[w] & measured.Z.words[w]);
-        const size_t pivotWord = pivot / 64;
-        const detail::Word mask = detail::Word(1) << (pivot % 64);
-        const auto update = [&](auto row, bool anticommutes) {
-            // Only the image of physical X_qubit anticommutes with measured Z.
-            // Rows without logical X_p need only their two pivot bits changed.
-            if (!row.X[pivot])
-            {
-                row.X[pivot] = anticommutes;
-                row.Z[pivot] = false;
-                return;
-            }
-            const bool sign = bool(row.PhaseSign) ^ bool(measured.PhaseSign) ^ anticommutes ^ outcome;
-            unsigned phase = 2 * unsigned(sign) + measuredY;
-            for (size_t w = 0; w < row.Words(); ++w)
-            {
-                const detail::Word x = row.X.words[w], z = row.Z.words[w];
-                detail::Word nx = x ^ measured.X.words[w], nz = z ^ measured.Z.words[w];
-                if (w == pivotWord)
-                {
-                    nx = (nx & ~mask) | (anticommutes ? mask : 0);
-                    nz |= mask;
-                }
-                // Convert between Hermitian-Pauli and ordered X/Z phases;
-                // absorb the observed outcome into the new logical-Z signs.
-                phase += detail::Popcount(x & z) - detail::Popcount(nx & nz)
-                    + 2 * detail::Popcount(x & measured.Z.words[w]);
-                row.X.words[w] = nx; row.Z.words[w] = nz;
-            }
-            assert((phase & 1) == 0);
-            row.PhaseSign = (phase & 2) != 0;
-        };
-        const size_t n = getNrQubits();
-        int threads = 1;
-#ifdef _OPENMP
-        // Packed rows need far less work than the former bit-by-bit kernel.
-        // Keep at least 128 rows per worker and respect the caller's limit.
-        if (enableMultithreading && n >= 512)
-            threads = static_cast<int>(std::min(n / 128, size_t(omp_get_max_threads())));
-#endif
-        if (threads == 1)
-        {
-            for (size_t q = 0; q < n; ++q) { update(inverseX[q], q == qubit); update(inverseZ[q], false); }
-        }
-        else
-        {
-#pragma omp parallel for num_threads(threads)
-            for (long long q = 0; q < static_cast<long long>(n); ++q)
-            { update(inverseX[q], size_t(q) == qubit); update(inverseZ[q], false); }
-        }
+        Map().CollapseZ(qubit, pivot, outcome, measurementScratch[0],
+            detail::CollapseWorkers(getNrQubits(), enableMultithreading));
     }
 
     void SwapQuantumState(StabilizerState& other) noexcept

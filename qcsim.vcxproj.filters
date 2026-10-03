@@ -281,6 +281,15 @@
     <ClInclude Include="QCSim\PauliPropOper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\PauliPropTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliTransfer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliNativeRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="QCSim\ThreadPool.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -288,6 +297,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\Frame.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\BitOps.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\LocalPauli.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\LocalPauliSum.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\NonCliffordTestGates.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\PauliStringXZCoeff.h">

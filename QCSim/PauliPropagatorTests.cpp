@@ -3,6 +3,7 @@
 #include "QubitRegister.h"
 #include "PauliPropagator.h"
 #include "PauliPropagatorRegressionTests.h"
+#include "NonCliffordTestGates.h"
 
 
 void ApplyTwoQubitsGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2)
@@ -31,8 +32,11 @@ void ApplyTwoQubitsGate(QC::PauliPropagator& simulator, int code, int qubit1, in
 }
 
 
-void ApplyGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2, double angle = 0.0)
+// The codes of NonCliffordTestGates.h, where qubit1 is the target and qubit2
+// the control; the simulator takes controls first.
+void ApplyGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2, double angle = 0.0, int qubit3 = 0)
 {
+	const auto angles = DeriveGateAngles(angle);
 	switch (code)
 	{
 	case 0:
@@ -71,6 +75,21 @@ void ApplyGate(QC::PauliPropagator& simulator, int code, int qubit1, int qubit2,
 	case 17:
 		simulator.ApplyRZ(qubit1, angle);
 		break;
+	case CodeU: simulator.ApplyU(qubit1, angles.theta, angles.phi, angles.lambda); break;
+	case CodeCU:
+		simulator.ApplyCU(qubit2, qubit1, angles.theta, angles.phi, angles.lambda, angles.gamma);
+		break;
+	case CodeCRx: simulator.ApplyCRX(qubit2, qubit1, angle); break;
+	case CodeCRy: simulator.ApplyCRY(qubit2, qubit1, angle); break;
+	case CodeCRz: simulator.ApplyCRZ(qubit2, qubit1, angle); break;
+	case CodeCP: simulator.ApplyCP(qubit2, qubit1, angle); break;
+	case CodeCS: simulator.ApplyCS(qubit2, qubit1); break;
+	case CodeCSdg: simulator.ApplyCSDAG(qubit2, qubit1); break;
+	case CodeCSx: simulator.ApplyCSX(qubit2, qubit1); break;
+	case CodeCSxDag: simulator.ApplyCSXDAG(qubit2, qubit1); break;
+	case CodeCH: simulator.ApplyCH(qubit2, qubit1); break;
+	case CodeCCX: simulator.ApplyCCX(qubit2, qubit3, qubit1); break;
+	case CodeCSwap: simulator.ApplyCSwap(qubit3, qubit1, qubit2); break;
 	default:
 		ApplyTwoQubitsGate(simulator, code, qubit1, qubit2);
 		break;
@@ -113,22 +132,26 @@ bool CheckProbability(int nrQubits, QC::PauliPropagator& pauliSimulator, QC::Qub
 	return true;
 }
 
-void ExecuteCircuit(QC::QubitRegister<>& qubitRegister, QC::PauliPropagator& pauliSimulator, std::vector<int>& gates, std::vector<size_t>& qubits1, std::vector<size_t>& qubits2, std::uniform_real_distribution<double>& angleDistr, std::bernoulli_distribution& boolDistr, std::uniform_int_distribution<int>& rotationGateDistr, bool clifford)
+// Without clifford, a fifth of the gates become rotations or other supported
+// non-Clifford gates; a third of their angles are multiples of pi/2.
+void ExecuteCircuit(QC::QubitRegister<>& qubitRegister, QC::PauliPropagator& pauliSimulator, std::vector<int>& gates, std::vector<size_t>& qubits1, std::vector<size_t>& qubits2, std::uniform_real_distribution<double>& angleDistr, std::bernoulli_distribution& boolDistr, bool clifford)
 {
+	const size_t nrQubits = qubitRegister.getNrQubits();
+	std::uniform_int_distribution<int> quarterTurns(-4, 4);
 	for (int j = 0; j < static_cast<int>(gates.size()); ++j)
 	{
-		auto gateptr = GetGate(gates[j]);
 		double angle = 0.0;
+		size_t qubit3 = 0;
 		if (!clifford && boolDistr(gen))
 		{
-			gates[j] = rotationGateDistr(gen);
-			angle = angleDistr(gen);
-			gateptr = GetGate(gates[j], angle);
+			gates[j] = RandomNonCliffordCode(gen, nrQubits);
+			angle = quarterTurns(gen) % 3 == 0 ? 0.5 * M_PI * quarterTurns(gen) : angleDistr(gen);
+			if (gates[j] >= CodeCCX) qubit3 = ThirdQubit(nrQubits, qubits1[j], qubits2[j]);
 		}
 
-		qubitRegister.ApplyGate(*gateptr, qubits1[j], qubits2[j]);
+		ApplyStatevectorGate(qubitRegister, gates[j], qubits1[j], qubits2[j], angle, qubit3);
 
-		ApplyGate(pauliSimulator, gates[j], (int)qubits1[j], (int)qubits2[j], angle);
+		ApplyGate(pauliSimulator, gates[j], (int)qubits1[j], (int)qubits2[j], angle, (int)qubit3);
 	}
 }
 
@@ -191,7 +214,6 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 	std::uniform_int_distribution nrGatesDistr(5, 20);
 	std::uniform_real_distribution angleDistr(-2. * M_PI, 2. * M_PI);
 	std::bernoulli_distribution boolDistr(0.2);
-	std::uniform_int_distribution rotationGateDistr(15, 17); // RX, RY, RZ
 
 	QC::PauliPropagator pauliSimulator;
 	pauliSimulator.EnableParallel();
@@ -217,7 +239,7 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
 
 			QC::QubitRegister qubitRegister(nrQubits);
 
-			ExecuteCircuit(qubitRegister, pauliSimulator, gates, qubits1, qubits2, angleDistr, boolDistr, rotationGateDistr, clifford);
+			ExecuteCircuit(qubitRegister, pauliSimulator, gates, qubits1, qubits2, angleDistr, boolDistr, clifford);
 
 			std::vector<QC::Gates::AppliedGate<>> expGates;
 			expGates.reserve(nrQubits);

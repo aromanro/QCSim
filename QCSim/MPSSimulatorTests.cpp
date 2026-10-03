@@ -262,7 +262,7 @@ bool TestMeasurementsWithOneAndTwoQubitGatesCircuits()
 					++measurementsMPSMap[measurementsMPS];
 				}
 
-				std::cout << ".";
+				std::cout << "." << std::flush;
 
 				for (const auto& [key, value] : measurementsRegMap)
 				{
@@ -595,7 +595,7 @@ bool TestMappedMeasurementsWithOneAndTwoQubitGatesCircuits()
 				for (size_t i = 0; i < nrThreads; ++i)
 					tasks[i].get();
 
-				std::cout << ".";
+				std::cout << "." << std::flush;
 
 				const bool res = CheckMeasurements(nrQubits, nrMeasurements, measurementsRegMap, measurementsMPSMap, measurementsMPSMapOpt, measurementsMPSMapAll);
 

@@ -311,6 +311,7 @@
     <ClInclude Include="QCSim\CatEntangler.h" />
     <ClInclude Include="QCSim\CheckCHSHInequality.h" />
     <ClInclude Include="QCSim\Clifford.h" />
+    <ClInclude Include="QCSim\BitOps.h" />
     <ClInclude Include="QCSim\CliffordTableau.h" />
     <ClInclude Include="QCSim\CliffordProbability.h" />
     <ClInclude Include="QCSim\CoinFlipping.h" />
@@ -332,7 +333,10 @@
     <ClInclude Include="QCSim\HadamardTransform.h" />
     <ClInclude Include="QCSim\HardyParadox.h" />
     <ClInclude Include="QCSim\IsingModel.h" />
+    <ClInclude Include="QCSim\LocalPauli.h" />
+    <ClInclude Include="QCSim\LocalPauliSum.h" />
     <ClInclude Include="QCSim\MagicSquare.h" />
+    <ClInclude Include="QCSim\NonCliffordTestGates.h" />
     <ClInclude Include="QCSim\MPOSimulator.h" />
     <ClInclude Include="QCSim\MPOSimulatorBase.h" />
     <ClInclude Include="QCSim\MPOSimulatorImpl.h" />
@@ -355,6 +359,9 @@
     <ClInclude Include="QCSim\PauliPropagator.h" />
     <ClInclude Include="QCSim\PauliPropagatorRegressionTests.h" />
     <ClInclude Include="QCSim\PauliPropOper.h" />
+    <ClInclude Include="QCSim\PauliPropTypes.h" />
+    <ClInclude Include="QCSim\PauliTransfer.h" />
+    <ClInclude Include="QCSim\PauliNativeRegressionTests.h" />
     <ClInclude Include="QCSim\PauliString.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />
     <ClInclude Include="QCSim\PauliStringXZ.h" />

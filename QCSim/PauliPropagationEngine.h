@@ -9,6 +9,7 @@
 #include <exception>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <typeinfo>
 
 namespace QC
@@ -81,42 +82,49 @@ namespace QC
 			return p;
 		}
 
-		// Recorded operations have no per-gate heap allocation. Unknown user-defined
-		// Operator subclasses retain their virtual Apply/Clone behavior.
+		// Primitive gates have no per-gate heap allocation. The payload owns either
+		// an immutable local table or a custom operator, distinguished by userDefined.
+		// Sharing this slot keeps the primitive descriptor's original size.
 		struct Operation
 		{
 			OperationType type;
-			int q0, q1;
+			int q0, q1, q2 = 0;
 			double angle = 0., sine = 0., cosine = 1., coefficient = 1.;
 			bool projectOne = false;
-			std::shared_ptr<const Operator> custom;
-			Operation(OperationType t = OperationType::X, int a = 0, int b = 0) : type(t), q0(a), q1(b) {}
+			bool userDefined = false, clifford = false;
+			std::shared_ptr<const void> payload;
+			Operation(OperationType t = OperationType::X, int a = 0, int b = 0)
+				: type(t), q0(a), q1(b), clifford(IsPauliClifford(t)) {}
+			const Operator* Custom() const { return userDefined ? static_cast<const Operator*>(payload.get()) : nullptr; }
+			const LocalTransfer& Transfer() const { return *static_cast<const LocalTransfer*>(payload.get()); }
+			int Qubit(int index) const { return index == 0 ? q0 : index == 1 ? q1 : q2; }
+			static Operation Local(OperationType type, int a, int b, int c, std::shared_ptr<const LocalTransfer> table)
+			{
+				Operation op(type, a, b);
+				op.q2 = c;
+				op.clifford = table->clifford;
+				op.payload = std::move(table);
+				return op;
+			}
 			bool Clifford() const
 			{
-				return !custom && type < OperationType::PROJ;
+				return !userDefined && clifford;
 			}
 			static Operation Rotation(OperationType t, int q, double angle)
 			{
 				Operation op(t, q);
 				op.angle = angle;
-				constexpr double halfPi = 1.57079632679489661923132169163975144;
-				if (std::isfinite(angle) && std::remainder(angle, halfPi) == 0.)
-				{
-					const int quadrant = static_cast<int>(std::remainder(angle, 4. * halfPi) / halfPi);
-					op.sine = quadrant == 1 ? 1. : quadrant == -1 ? -1. : 0.;
-					op.cosine = quadrant == 0 ? 1. : (quadrant == 2 || quadrant == -2) ? -1. : 0.;
-				}
-				else
-				{
-					op.sine = std::sin(angle);
-					op.cosine = std::cos(angle);
-				}
+				// Exact quarter turns never branch and can share Clifford dispatch.
+				if (detail::QuarterTurnCosSin(angle, op.cosine, op.sine))
+					op.clifford = true;
 				return op;
 			}
 			std::unique_ptr<Operator> Legacy() const
 			{
-				if (custom)
-					return custom->Clone();
+				if (Custom())
+					return Custom()->Clone();
+				if (IsPauliLocalGate(type))
+					return std::make_unique<OperatorLocal>(type, q0, q1, q2, std::static_pointer_cast<const LocalTransfer>(payload));
 #define QC_PP_OP(name)                                                                                                                     \
 	case OperationType::name:                                                                                                              \
 		return std::make_unique<Operator##name>(q0)
@@ -148,6 +156,8 @@ namespace QC
 					return std::make_unique<OperatorRY>(q0, angle);
 				case OperationType::RZ:
 					return std::make_unique<OperatorRZ>(q0, angle);
+				default:
+					break;
 				}
 #undef QC_PP_OP
 #undef QC_PP_OP2
@@ -158,6 +168,9 @@ namespace QC
 				if (!p)
 					throw std::invalid_argument("Null Pauli operation");
 				Operation op(p->GetType(), p->GetQubit(0), p->GetNrQubits() > 1 ? p->GetQubit(1) : 0);
+				op.q2 = p->GetNrQubits() > 2 ? p->GetQubit(2) : 0;
+				if (IsPauliLocalGate(op.type) && typeid(*p) == typeid(OperatorLocal))
+					return Local(op.type, op.q0, op.q1, op.q2, static_cast<const OperatorLocal&>(*p).GetTransfer());
 				bool builtin = false;
 #define QC_PP_MATCH(name)                                                                                                                  \
 	case OperationType::name:                                                                                                              \
@@ -186,11 +199,16 @@ namespace QC
 				case OperationType::PROJ:
 					builtin = typeid(*p) == typeid(Projector);
 					break;
+				default:
+					break;
 				}
 #undef QC_PP_MATCH
 				if (!builtin)
-					op.custom = std::move(p);
-				else if (op.type >= OperationType::RX)
+				{
+					op.userDefined = true;
+					op.payload = std::shared_ptr<const Operator>(std::move(p));
+				}
+				else if (IsPauliRotation(op.type))
 					op = Rotation(op.type, op.q0, static_cast<const OperatorRotation&>(*p).GetAngle());
 				else if (op.type == OperationType::PROJ)
 				{
@@ -280,16 +298,125 @@ namespace QC
 			}
 		}
 
+		// Word and bit positions of the K gate qubits, and the local table label of
+		// a term there, with x,z bits interleaved.
+		template <unsigned K>
+		void LocalPositions(const Operation& op, std::array<size_t,K>& words, std::array<unsigned,K>& shifts)
+		{
+			for (unsigned q = 0; q < K; ++q) {
+				words[q] = static_cast<size_t>(op.Qubit(q)) / 64;
+				shifts[q] = unsigned(op.Qubit(q)) % 64;
+			}
+		}
+		template <unsigned K, class T>
+		unsigned LocalLabel(const T& t, const std::array<size_t,K>& words, const std::array<unsigned,K>& shifts)
+		{
+			unsigned input = 0;
+			for (unsigned q = 0; q < K; ++q)
+				input |= unsigned((t.X[words[q]] >> shifts[q]) & 1) << (2*q)
+					| unsigned((t.Z[words[q]] >> shifts[q]) & 1) << (2*q+1);
+			return input;
+		}
+
+		template <unsigned K, bool SameWord, class T>
+		void ApplyLocalKernel(const Operation& op, std::vector<T>& terms, size_t begin, size_t end, std::vector<T>& extra,
+			bool preallocated, size_t write, bool append)
+		{
+			const auto& table = op.Transfer();
+			std::array<size_t,K> words;
+			std::array<unsigned,K> shifts;
+			LocalPositions<K>(op, words, shifts);
+			std::array<uint64_t,K> bits;
+			for (unsigned q = 0; q < K; ++q)
+				bits[q] = uint64_t(1) << shifts[q];
+			const auto label = [&](const T& t) { return LocalLabel<K>(t, words, shifts); };
+			if (!preallocated) write = extra.size();
+			if (!preallocated && table.maxOutputs > 1) {
+				size_t count = extra.size();
+				for (size_t i = begin; i < end; ++i) if (terms[i].Coefficient != 0.) {
+					const unsigned input = label(terms[i]);
+					const auto outputs = table.offsets[input+1] - table.offsets[input];
+					const size_t branches = outputs > 1 ? outputs - 1 : 0;
+					if (branches > extra.max_size() - count) throw std::length_error("Pauli expansion exceeds vector capacity");
+					count += branches;
+				}
+				extra.resize(count);
+			}
+			std::array<uint64_t, 1U << (2*K)> xChanges{}, zChanges{};
+			const bool useMasks = SameWord && end - begin >= 32;
+			if (useMasks)
+				for (unsigned delta = 0; delta < xChanges.size(); ++delta)
+					for (unsigned q = 0; q < K; ++q) {
+						xChanges[delta] |= (uint64_t(0) - ((delta >> (2*q)) & 1U)) & bits[q];
+						zChanges[delta] |= (uint64_t(0) - ((delta >> (2*q+1)) & 1U)) & bits[q];
+					}
+			for (size_t i = begin; i < end; ++i) {
+				auto& t = terms[i];
+				if (t.Coefficient == 0.) continue;
+				const unsigned input = label(t);
+				if ((table.unchanged >> input) & 1U) continue;
+				const auto first = table.offsets[input], last = table.offsets[input+1];
+				const double coefficient = t.Coefficient;
+				const uint64_t xWord = t.X[words[0]], zWord = t.Z[words[0]];
+				const auto set = [&](T& out, const LocalTransfer::Entry& e) {
+					out.Coefficient = coefficient * e.coefficient;
+					const unsigned delta = input ^ e.pauli;
+					if constexpr (SameWord) {
+						if (useMasks) {
+							out.X[words[0]] = xWord ^ xChanges[delta]; out.Z[words[0]] = zWord ^ zChanges[delta];
+							return;
+						}
+						uint64_t x = 0, z = 0;
+						for (unsigned q = 0; q < K; ++q) {
+							x |= (uint64_t(0) - ((delta >> (2*q)) & 1U)) & bits[q];
+							z |= (uint64_t(0) - ((delta >> (2*q+1)) & 1U)) & bits[q];
+						}
+						out.X[words[0]] = xWord ^ x; out.Z[words[0]] = zWord ^ z;
+					} else {
+						for (unsigned q = 0; q < K; ++q) {
+							out.X[words[q]] ^= (uint64_t(0) - ((delta >> (2*q)) & 1U)) & bits[q];
+							out.Z[words[q]] ^= (uint64_t(0) - ((delta >> (2*q+1)) & 1U)) & bits[q];
+						}
+					}
+				};
+				for (auto j = first+1; j < last; ++j) {
+					if constexpr (std::is_same_v<T, Term<0>> || std::is_same_v<T, Term<4>>) {
+						if (append) {
+							extra.push_back(t);
+							set(extra.back(), table.entries[j]);
+							continue;
+						}
+					}
+					auto& out = extra[write++]; out = t; set(out, table.entries[j]);
+				}
+				if (first == last) t.Coefficient = 0.;
+				else set(t, table.entries[first]);
+			}
+		}
+		template <class T>
+		void ApplyLocal(const Operation& op, std::vector<T>& terms, size_t begin, size_t end, std::vector<T>& extra,
+			bool preallocated = false, size_t write = 0, bool append = false)
+		{
+			if (op.Transfer().qubits == 1) ApplyLocalKernel<1,true>(op,terms,begin,end,extra,preallocated,write,append);
+			else if (op.Transfer().qubits == 2) {
+				if (op.q0 / 64 == op.q1 / 64) ApplyLocalKernel<2,true>(op,terms,begin,end,extra,preallocated,write,append);
+				else ApplyLocalKernel<2,false>(op,terms,begin,end,extra,preallocated,write,append);
+			} else {
+				if (op.q0 / 64 == op.q1 / 64 && op.q0 / 64 == op.q2 / 64) ApplyLocalKernel<3,true>(op,terms,begin,end,extra,preallocated,write,append);
+				else ApplyLocalKernel<3,false>(op,terms,begin,end,extra,preallocated,write,append);
+			}
+		}
+
 		template <class T>
 		void Apply(const Operation& op, std::vector<T>& terms, size_t begin, size_t end, std::vector<T>& extra, size_t qubits)
 		{
-			if (op.custom)
+			if (op.Custom())
 			{
 				for (size_t i = begin; i < end; ++i)
 				{
 					auto p = Unpack(terms[i], qubits);
 					PauliStringStorage output;
-					op.custom->Apply(p, output);
+					op.Custom()->Apply(p, output);
 					terms[i] = Pack<T>(p, qubits);
 					for (const auto& child : output)
 						extra.push_back(Pack<T>(child, qubits));
@@ -300,6 +427,21 @@ namespace QC
 			const uint64_t bit = uint64_t(1) << (op.q0 % 64);
 			switch (op.type)
 			{
+			case OperationType::U:
+			case OperationType::CU:
+			case OperationType::CRX:
+			case OperationType::CRY:
+			case OperationType::CRZ:
+			case OperationType::CP:
+			case OperationType::CS:
+			case OperationType::CSDAG:
+			case OperationType::CSX:
+			case OperationType::CSXDAG:
+			case OperationType::CH:
+			case OperationType::CCX:
+			case OperationType::CSWAP:
+				ApplyLocal(op, terms, begin, end, extra);
+				return;
 			case OperationType::X:
 				for (size_t i = begin; i < end; ++i)
 					if (terms[i].Z[w] & bit)
@@ -384,7 +526,7 @@ namespace QC
 			default:
 				break;
 			}
-			const bool two = op.type >= OperationType::CX;
+			const bool two = PauliOperationArity(op.type) == 2;
 			const size_t w1 = two ? static_cast<size_t>(op.q1) / 64 : w;
 			const uint64_t bit1 = two ? uint64_t(1) << (op.q1 % 64) : 0;
 			const auto& map = CliffordMaps()[static_cast<size_t>(op.type)];
@@ -592,6 +734,59 @@ namespace QC
 				std::rethrow_exception(error);
 		}
 
+		// Native columns tell us the exact output size. Reserve disjoint ranges before
+		// launching workers, then write branches straight into the final vector. This
+		// avoids a second branch buffer and a second pass copying the full register.
+		template <unsigned K, class T> size_t LocalBranchCount(const std::vector<T>& terms, const Operation& op, size_t begin, size_t end)
+		{
+			const auto& table = op.Transfer();
+			std::array<size_t,K> words;
+			std::array<unsigned,K> shifts;
+			LocalPositions<K>(op, words, shifts);
+			size_t count = 0;
+			for (size_t i = begin; i < end; ++i) {
+				const auto& t = terms[i];
+				if (t.Coefficient == 0.) continue;
+				const unsigned input = LocalLabel<K>(t, words, shifts);
+				const auto outputs = table.offsets[input+1] - table.offsets[input];
+				count += outputs > 1 ? outputs-1 : 0;
+			}
+			return count;
+		}
+		template <class T> void ExecuteLocal(std::vector<T>& terms, const Operation& op, const Settings& s)
+		{
+			const auto& table = op.Transfer();
+			const size_t size = terms.size();
+			const size_t parts = Parts(size, s.parallelThreshold, s.batch, s.pool);
+			const size_t grain = parts == 1 ? size : Grain(size, parts, s.batch);
+			const size_t chunks = parts == 1 ? 1 : ChunkCount(size, grain);
+			std::vector<size_t> offsets(parts == 1 ? 0 : chunks);
+			size_t total = size;
+			if (table.maxOutputs > 1 && size > (terms.max_size()-size) / (table.maxOutputs-1))
+				throw std::length_error("Pauli expansion exceeds vector capacity");
+			for (size_t job = 0; job < chunks; ++job) {
+				if (parts > 1) offsets[job] = total;
+				const size_t begin = job*grain;
+				const size_t end = std::min(size, (job+1)*grain);
+				total += table.qubits == 1 ? LocalBranchCount<1>(terms,op,begin,end)
+					: table.qubits == 2 ? LocalBranchCount<2>(terms,op,begin,end) : LocalBranchCount<3>(terms,op,begin,end);
+			}
+			if constexpr (std::is_same_v<T, Term<0>> || std::is_same_v<T, Term<4>>) {
+				if (parts == 1) {
+					// Copy-construct wide terms directly instead of initializing words
+					// that will be overwritten. Reserving first keeps sources stable.
+					terms.reserve(total);
+					ApplyLocal(op,terms,0,size,terms,true,size,true);
+					return;
+				}
+			}
+			terms.resize(total);
+			if (parts == 1) ApplyLocal(op,terms,0,size,terms,true,size);
+			else Chunks(size, parts, s.pool, [&](size_t job, size_t begin, size_t end) {
+				ApplyLocal(op,terms,begin,end,terms,true,offsets[job]);
+			}, grain);
+		}
+
 		template <class T> double Execute(Workspace<T>& ws, const std::vector<Operation>& operations, const Settings& s)
 		{
 			auto& terms = ws.terms;
@@ -605,9 +800,16 @@ namespace QC
 					while (low && !s.Dedup(low) && !s.Trim(low) && operations[low - 1].Clifford())
 						--low;
 				const auto& op = operations[high];
+				if (!op.Clifford() && !op.Custom() && IsPauliLocalGate(op.type)) {
+					ExecuteLocal(terms, op, s);
+					if (s.Dedup(high)) Deduplicate(ws, s);
+					else if (s.Trim(high)) Trim(terms, s);
+					next = high;
+					continue;
+				}
 				const size_t size = terms.size();
 				const size_t threshold = op.Clifford() ? std::max<size_t>(1, s.parallelThreshold / (high - low + 1)) : s.parallelThreshold;
-				const size_t parts = op.custom ? 1 : Parts(size, threshold, s.batch, s.pool);
+				const size_t parts = op.Custom() ? 1 : Parts(size, threshold, s.batch, s.pool);
 				// Avoid chunk-count division on the common sequential path.
 				const size_t grain = parts == 1 ? size : Grain(size, parts, s.batch);
 				const size_t chunks = parts == 1 ? 1 : ChunkCount(size, grain);
@@ -618,7 +820,7 @@ namespace QC
 				const auto applyChunk = [&](size_t job, size_t begin, size_t end)
 				{
 					auto& extra = ws.extra[job];
-					if (!op.Clifford())
+					if (!op.Clifford() && (op.Custom() || !IsPauliLocalGate(op.type)))
 						extra.reserve(end - begin);
 					for (size_t pos = high + 1; pos > low;)
 						Apply(operations[--pos], terms, begin, end, extra, s.qubits);
@@ -629,7 +831,7 @@ namespace QC
 					applyChunk(0, 0, size);
 				else
 					Chunks(size, parts, s.pool, applyChunk, grain);
-				if (!op.custom && op.type == OperationType::PROJ)
+				if (!op.Custom() && op.type == OperationType::PROJ)
 				{
 					// Compact only after every worker has released its vector range.
 					// Custom Apply implementations may observe or revive zero terms;
@@ -637,7 +839,7 @@ namespace QC
 					if (!checkedCustom)
 					{
 						firstCustom = static_cast<size_t>(
-							std::find_if(operations.begin(), operations.end(), [](const Operation& gate) { return bool(gate.custom); }) -
+							std::find_if(operations.begin(), operations.end(), [](const Operation& gate) { return bool(gate.Custom()); }) -
 							operations.begin());
 						checkedCustom = true;
 					}

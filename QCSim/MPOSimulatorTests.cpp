@@ -224,7 +224,7 @@ static bool OneAndTwoQubitGatesTestMPO()
 			if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
 				return false;
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -281,7 +281,7 @@ static bool NonAdjacentGatesTestMPO()
 			if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
 				return false;
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -734,7 +734,7 @@ static bool TraceAndProbabilitiesTestMPO()
 				}
 			}
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -803,7 +803,7 @@ static bool MeasurementsTestMPO()
 			++measurementsMPOMap[measurementsMPO];
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 
 		for (const auto& [key, value] : measurementsRegMap)
 		{
@@ -880,7 +880,7 @@ static bool MixtureOfBasisStatesTestMPO()
 				return false;
 			}
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -904,7 +904,7 @@ static bool MixtureOfBasisStatesTestMPO()
 		if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
 			return false;
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;
@@ -986,7 +986,7 @@ static bool MixtureEvolutionTestMPO()
 			if (!CompareDensityMatrices(rhoRef, rhoMPO, nrQubits))
 				return false;
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -1157,7 +1157,7 @@ static bool CompressionLosslessTestMPO()
 					return false;
 			}
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -1210,7 +1210,7 @@ static bool CompressionTruncationTestMPO()
 						return false;
 					}
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -1502,7 +1502,7 @@ static bool ApplyOperatorAndNormalizeTestMPO()
 			return false;
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;
@@ -1571,7 +1571,7 @@ static bool TwoQubitKrausOperatorsTestMPO()
 			return false;
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;
@@ -1656,7 +1656,7 @@ static bool StateSaveRestoreTestMPO()
 			if (!CompareDensityMatrices(rhoA, clone->getDensityMatrix(), nrQubits))
 				return false;
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -1826,7 +1826,7 @@ static bool UnitaryCircuitVsDensityMatrixMPO()
 			if (!CompareDensityMatrices(dm.getDensityMatrix(), mpo.getDensityMatrix(), nrQubits))
 				return false;
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -1893,7 +1893,7 @@ static bool SingleQubitKrausVsDensityMatrixMPO()
 			return false;
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;
@@ -1976,7 +1976,7 @@ static bool NoiseChannelsVsDensityMatrixMPO()
 			}
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;
@@ -2036,7 +2036,7 @@ static bool TwoQubitKrausVsDensityMatrixMPO()
 			return false;
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;
@@ -2092,7 +2092,7 @@ static bool MixtureEvolutionVsDensityMatrixMPO()
 			if (!CompareDensityMatrices(dm.getDensityMatrix(), mpo.getDensityMatrix(), nrQubits))
 				return false;
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -2149,7 +2149,7 @@ static bool PauliExpectationVsDensityMatrixMPO()
 				}
 			}
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -2265,7 +2265,7 @@ static bool InvariantsTestMPO()
 				return false;
 			}
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -2349,7 +2349,7 @@ static bool DecoratorVsImplTestMPO()
 					return false;
 				}
 
-			std::cout << ".";
+			std::cout << "." << std::flush;
 		}
 	}
 
@@ -2408,7 +2408,7 @@ static bool MeasurementVsDensityMatrixAndThrowsTestMPO()
 			}
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	// error handling on the implementation layer (adjacency and index validation)
@@ -2575,7 +2575,7 @@ static bool SamplingNoCollapseTestMPO()
 			}
 		}
 
-		std::cout << ".";
+		std::cout << "." << std::flush;
 	}
 
 	std::cout << "\nSuccess" << std::endl;

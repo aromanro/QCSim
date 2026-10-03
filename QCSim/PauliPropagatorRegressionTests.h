@@ -1,4 +1,5 @@
 #pragma once
+#include "PauliNativeRegressionTests.h"
 
 #include "PauliPropagator.h"
 #include <atomic>
@@ -697,6 +698,7 @@ namespace QC
 			RegressionAndLifetime();
 			CustomAndConcurrent();
 			ReviewRegressions();
+			PauliNativeRegression::Run();
 			std::cout << "ALL CHECKS PASSED\n";
 		}
 	} // namespace PauliRegression

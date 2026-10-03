@@ -4,33 +4,11 @@
 #include <cmath>
 #include <utility>
 #include "PauliStringXZCoeff.h"
+#include "PauliTransfer.h"
 
 namespace QC
 {
 	using PauliStringStorage = std::vector<PauliStringXZWithCoefficient>;
-
-	enum class OperationType : unsigned char
-	{
-		X,
-		Y,
-		Z,
-		H,
-		K,
-		S,
-		SDG,
-		SX,
-		SXDG,
-		CX,
-		CY,
-		CZ,
-		SWAP,
-		ISWAP,
-		ISWAPDG,
-		PROJ,
-		RX,
-		RY,
-		RZ
-	};
 
 	class Operator {
 	public:
@@ -38,12 +16,14 @@ namespace QC
 
 		Operator() : type(OperationType::X), qubits(1, 0) {}
 
-		Operator(OperationType type, int q1 = 0, int q2 = 0)
-			: type(type), qubits(GetNrQubitsForType(type))
+		Operator(OperationType type, int q1 = 0, int q2 = 0, int q3 = 0)
+			: type(type), qubits(PauliOperationArity(type))
 		{
 			qubits[0] = q1;
 			if (GetNrQubits() > 1)
 				qubits[1] = q2;
+			if (GetNrQubits() > 2)
+				qubits[2] = q3;
 		}
 
 		int GetNrQubits() const
@@ -73,16 +53,49 @@ namespace QC
 		}
 
 	private:
-		static int GetNrQubitsForType(OperationType type)
-		{
-			if (static_cast<int>(type) >= static_cast<int>(OperationType::CX) && static_cast<int>(type) < static_cast<int>(OperationType::PROJ))
-				return 2;
-
-			return 1;
-		}
-
 		OperationType type;
 		std::vector<int> qubits;
+	};
+
+	// Public operation snapshots preserve the compiled action and share its immutable
+	// table. Exact-type imports use the packed kernel; subclasses retain virtual Apply.
+	class OperatorLocal : public Operator {
+	public:
+		OperatorLocal(OperationType type, int q0, int q1, int q2,
+			std::shared_ptr<const PauliDetail::LocalTransfer> table)
+			: Operator(type, q0, q1, q2), table(std::move(table))
+		{
+			if (!IsPauliLocalGate(type) || !this->table || this->table->qubits != PauliOperationArity(type))
+				throw std::invalid_argument("Invalid local Pauli operation");
+		}
+		const std::shared_ptr<const PauliDetail::LocalTransfer>& GetTransfer() const { return table; }
+		std::unique_ptr<Operator> Clone() const override { return std::make_unique<OperatorLocal>(*this); }
+		void Apply(PauliStringXZWithCoefficient& term, PauliStringStorage& extra) const override
+		{
+			if (term.Coefficient == 0.) return;
+			unsigned input = 0;
+			for (unsigned q = 0; q < table->qubits; ++q)
+				input |= unsigned(term.X[GetQubit(q)]) << (2*q) | unsigned(term.Z[GetQubit(q)]) << (2*q+1);
+			const auto first = table->offsets[input], last = table->offsets[input+1];
+			const auto set = [&](PauliStringXZWithCoefficient& out, const PauliDetail::LocalTransfer::Entry& e) {
+				out.Coefficient *= e.coefficient;
+				for (unsigned q = 0; q < table->qubits; ++q) {
+					out.X[GetQubit(q)] = (e.pauli >> (2*q)) & 1;
+					out.Z[GetQubit(q)] = (e.pauli >> (2*q+1)) & 1;
+				}
+			};
+			// The caller may pass a member of extra as term; retain the source before
+			// appending, and finish the in-place update before a possible reallocation.
+			const auto original = term;
+			if (first == last) { term.Coefficient = 0.; return; }
+			set(term, table->entries[first]);
+			for (auto i = first+1; i < last; ++i) {
+				extra.push_back(original);
+				set(extra.back(), table->entries[i]);
+			}
+		}
+	private:
+		std::shared_ptr<const PauliDetail::LocalTransfer> table;
 	};
 
 	class Projector : public Operator {
