@@ -81,6 +81,9 @@
     <Filter Include="Header Files">
       <UniqueIdentifier>{dff03ef0-639c-493e-8439-93a29090ffe1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Simulators">
+      <UniqueIdentifier>{ad38017e-f1f2-4f01-b10e-d77ab3da13cf}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QCSim\BernsteinVazirani.h">
@@ -138,12 +141,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\QuantumFourierTransform.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\QuantumGate.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\QubitRegister.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\QubitsSwapper.h">
@@ -221,128 +218,134 @@
     <ClInclude Include="QCSim\IsingModel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\QubitRegisterCalculator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PauliString.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\VQE.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPOSimulator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPOSimulatorBase.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPOSimulatorImpl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPOSimulatorInterface.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPSSimulator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\Operators.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPSSimulatorBase.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPSSimulatorImpl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\MPSSimulatorInterface.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\SimpleGates.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\SingleThreaded.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\Clifford.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\StabilizerState.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\QubitRegisterDebug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\PauliStringXZ.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PauliPropagator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PauliPropOper.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PauliPropTypes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PauliTransfer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\PauliNativeRegressionTests.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\ThreadPool.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\ExtendedStabilizer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\Frame.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\BitOps.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\LocalPauli.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\LocalPauliSum.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\NonCliffordTestGates.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\PauliStringXZCoeff.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PathIntegral.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\DensityMatrix.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\GateStructure.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PathIntegralGate.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PathIntegralStorage.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QCSim\PauliPropagationEngine.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\PauliPropagatorRegressionTests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\BitOps.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\Clifford.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
     <ClInclude Include="QCSim\CliffordProbability.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Simulators</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\CliffordTableau.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\DensityMatrix.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\ExtendedStabilizer.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\Frame.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\GateStructure.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\LocalPauli.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\LocalPauliSum.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPOSimulator.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPOSimulatorBase.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPSSimulatorInterface.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPOSimulatorImpl.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPOSimulatorInterface.h">
+      <Filter>Header Files\Simulators</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\MPOSimulatorRegressionTests.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPSSimulator.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPSSimulatorBase.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPSSimulatorImpl.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\Operators.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegral.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralGate.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralStorage.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliPropagationEngine.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliPropagator.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliPropOper.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliPropTypes.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliString.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliStringXZ.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliStringXZCoeff.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliTransfer.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\QuantumGate.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\QubitRegister.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\QubitRegisterCalculator.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\SimpleGates.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\StabilizerState.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\SingleThreaded.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\ThreadPool.h">
+      <Filter>Header Files\Simulators</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

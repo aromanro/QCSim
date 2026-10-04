@@ -1,8 +1,5 @@
 #pragma once
 
-#define QCSIM_PAULI_PROPAGATOR_BATCH_API 1
-#define QCSIM_PAULI_PROPAGATOR_NATIVE_GATES 1
-
 #include "PauliPropagationEngine.h"
 #include <numeric>
 #include <random>
