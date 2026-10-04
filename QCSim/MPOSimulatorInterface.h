@@ -1,386 +1,390 @@
 #pragma once
 
-#include <set>
 #include <cmath>
-#include <vector>
-#include <memory>
 #include <complex>
-#include <stdexcept>
-#include <utility>
 #include <limits>
+#include <memory>
+#include <set>
+#include <stdexcept>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <Eigen/Eigen>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 #include "SimpleGates.h"
 
-namespace QC {
+namespace QC
+{
 
-	namespace TensorNetworks {
+namespace TensorNetworks
+{
 
-		// A Matrix Product Operator (MPO) simulator.
-		//
-		// While the MPS simulator (see MPSSimulatorInterface.h) is the tensor-network
-		// analogue of a state vector |psi>, this one is the analogue of a density
-		// matrix rho.
-		//
-		// In the MPS each qubit is described by a rank-3 tensor with two virtual
-		// (bond) legs and one physical leg. Here, each qubit is described by a rank-4
-		// tensor with two virtual (bond) legs and two physical legs: a 'ket' (row) leg
-		// and a 'bra' (column) leg. The leg order used everywhere is:
-		//
-		//        (leftBond, ket, bra, rightBond)
-		//
-		// Applying a unitary gate U evolves the density matrix as rho -> U rho U^dagger,
-		// so the gate tensor is contracted with the ket legs and its adjoint (the
-		// conjugate gate tensor) is contracted with the bra legs.
-		//
-		// Compression caveat: without user-requested compression this is an MPO
-		// representation of the density matrix that is exact to numerical precision.
-		// Only the singular values beyond the SVD's numerical rank (below diagSize * epsilon * sigma_max,
-		// not distinguishable from zero in double precision) are dropped. When bond dimension or
-		// singular-value truncation is enabled, the simulator becomes an approximate
-		// operator-space MPO simulator.
-		// The compressed operator is not guaranteed to remain a physical density matrix:
-		// trace may drift, Hermiticity may be approximate and positivity is not preserved
-		// by ordinary MPO SVD truncation.
+// A Matrix Product Operator (MPO) simulator.
+//
+// While the MPS simulator (see MPSSimulatorInterface.h) is the tensor-network
+// analogue of a state vector |psi>, this one is the analogue of a density
+// matrix rho.
+//
+// In the MPS each qubit is described by a rank-3 tensor with two virtual
+// (bond) legs and one physical leg. Here, each qubit is described by a rank-4
+// tensor with two virtual (bond) legs and two physical legs: a 'ket' (row) leg
+// and a 'bra' (column) leg. The leg order used everywhere is:
+//
+//        (leftBond, ket, bra, rightBond)
+//
+// Applying a unitary gate U evolves the density matrix as rho -> U rho U^dagger,
+// so the gate tensor is contracted with the ket legs and its adjoint (the
+// conjugate gate tensor) is contracted with the bra legs.
+//
+// Compression caveat: without user-requested compression this is an MPO
+// representation of the density matrix that is exact to numerical precision.
+// Only the singular values beyond the SVD's numerical rank (below diagSize * epsilon * sigma_max,
+// not distinguishable from zero in double precision) are dropped. When bond dimension or
+// singular-value truncation is enabled, the simulator becomes an approximate
+// operator-space MPO simulator.
+// The compressed operator is not guaranteed to remain a physical density matrix:
+// trace may drift, Hermiticity may be approximate and positivity is not preserved
+// by ordinary MPO SVD truncation.
 
-		class MPOSimulatorStateInterface
-		{
-		public:
-			virtual ~MPOSimulatorStateInterface() = default;
-		};
+class MPOSimulatorStateInterface
+{
+  public:
+    virtual ~MPOSimulatorStateInterface() = default;
+};
 
-		class MPOSimulatorInterface
-		{
-		public:
-			using LambdaType = Eigen::VectorXd;
-			// rank-4 site tensor: (leftBond, ket, bra, rightBond)
-			using TensorType = Eigen::Tensor<std::complex<double>, 4>;
-			using MatrixTensorType = Eigen::Tensor<std::complex<double>, 2>;
-			using MatrixClass = Eigen::MatrixXcd;
-			using VectorClass = Eigen::VectorXcd;
-			using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
-			using IndexType = Eigen::Index;
-			using IntIndexPair = Eigen::IndexPair<int>;
-			using Indexes = Eigen::array<IntIndexPair, 1>;
-			using Indexes2 = Eigen::array<IntIndexPair, 2>;
-			using OneQubitGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2>>;
-			using TwoQubitsGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>>;
+class MPOSimulatorInterface
+{
+  public:
+    using LambdaType = Eigen::VectorXd;
+    // rank-4 site tensor: (leftBond, ket, bra, rightBond)
+    using TensorType = Eigen::Tensor<std::complex<double>, 4>;
+    using MatrixTensorType = Eigen::Tensor<std::complex<double>, 2>;
+    using MatrixClass = Eigen::MatrixXcd;
+    using VectorClass = Eigen::VectorXcd;
+    using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
+    using IndexType = Eigen::Index;
+    using IntIndexPair = Eigen::IndexPair<int>;
+    using Indexes = Eigen::array<IntIndexPair, 1>;
+    using Indexes2 = Eigen::array<IntIndexPair, 2>;
+    using OneQubitGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2>>;
+    using TwoQubitsGateTensor = Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>>;
 
-			// See MPSSimulatorInterface::TruncationMode for the full explanation - same two modes,
-			// same DiscardedWeight default (set in MPOSimulatorBase), same rationale. Declared
-			// separately here (rather than shared with MPSSimulatorInterface) to keep each
-			// interface self-contained, matching how IndexType/LambdaType/etc. are already
-			// declared per-interface in this codebase.
-			enum class TruncationMode
-			{
-				RelativeToMax,
-				DiscardedWeight
-			};
+    // See MPSSimulatorInterface::TruncationMode for the full explanation - same two modes,
+    // same DiscardedWeight default (set in MPOSimulatorBase), same rationale. Declared
+    // separately here (rather than shared with MPSSimulatorInterface) to keep each
+    // interface self-contained, matching how IndexType/LambdaType/etc. are already
+    // declared per-interface in this codebase.
+    enum class TruncationMode
+    {
+        RelativeToMax,
+        DiscardedWeight
+    };
 
-			// Whether ApplyKrausOperators checks Σ_i K_i^dagger K_i = I.
-			// Ignore (default) allows leaky / non-TP maps. Warn prints to stderr and still
-			// applies the map. Strict throws std::invalid_argument if the residual exceeds
-			// the completeness tolerance.
-			enum class KrausCompletenessCheck
-			{
-				Ignore,
-				Warn,
-				Strict
-			};
+    // Whether ApplyKrausOperators checks Σ_i K_i^dagger K_i = I.
+    // Ignore (default) allows leaky / non-TP maps. Warn prints to stderr and still
+    // applies the map. Strict throws std::invalid_argument if the residual exceeds
+    // the completeness tolerance.
+    enum class KrausCompletenessCheck
+    {
+        Ignore,
+        Warn,
+        Strict
+    };
 
-			MPOSimulatorInterface() = default;
-			virtual ~MPOSimulatorInterface() = default;
+    MPOSimulatorInterface() = default;
+    virtual ~MPOSimulatorInterface() = default;
 
-			virtual size_t getNrQubits() const = 0;
-			virtual void Clear() = 0;
-			virtual void InitOnesState() = 0;
-			// Invalid qubit indices are rejected before changing the register.
-			virtual void setToQubitState(IndexType q) = 0;
-			// Out-of-range integer states are rejected without changing the register.
-			virtual void setToBasisState(size_t State) = 0;
-			// Bit i selects qubit i. This overload also represents basis states wider
-			// than size_t; shorter vectors are zero-extended and oversized vectors are rejected.
-			virtual void setToBasisState(const std::vector<bool>& State) = 0;
+    virtual size_t getNrQubits() const = 0;
+    virtual void Clear() = 0;
+    virtual void InitOnesState() = 0;
+    // Invalid qubit indices are rejected before changing the register.
+    virtual void setToQubitState(IndexType q) = 0;
+    // Out-of-range integer states are rejected without changing the register.
+    virtual void setToBasisState(size_t State) = 0;
+    // Bit i selects qubit i. This overload also represents basis states wider
+    // than size_t; shorter vectors are zero-extended and oversized vectors are rejected.
+    virtual void setToBasisState(const std::vector<bool> &State) = 0;
 
-			// Unlike a state vector, a density matrix can represent a statistical
-			// (classical) mixture of pure states. These set rho to a mixture of basis
-			// states: rho = sum_i prob_i |state_i><state_i|. Weights must be finite;
-			// non-positive weights and out-of-range states are ignored, and at least one
-			// usable positive term is required. Weights are normalized so Tr(rho) = 1.
-			virtual void setToMixtureOfBasisStates(const std::vector<std::pair<size_t, double>>& mixture) = 0;
-			virtual void setToMixtureOfBasisStates(const std::vector<std::pair<std::vector<bool>, double>>& mixture) = 0;
+    // Unlike a state vector, a density matrix can represent a statistical
+    // (classical) mixture of pure states. These set rho to a mixture of basis
+    // states: rho = sum_i prob_i |state_i><state_i|. Weights must be finite;
+    // non-positive weights and out-of-range states are ignored, and at least one
+    // usable positive term is required. Weights are normalized so Tr(rho) = 1.
+    virtual void setToMixtureOfBasisStates(const std::vector<std::pair<size_t, double>> &mixture) = 0;
+    virtual void setToMixtureOfBasisStates(const std::vector<std::pair<std::vector<bool>, double>> &mixture) = 0;
 
-			void setToMixtureOfBasisStates(std::initializer_list<std::pair<size_t, double>> mixture)
-			{
-				setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>(mixture));
-			}
+    void setToMixtureOfBasisStates(std::initializer_list<std::pair<size_t, double>> mixture)
+    {
+        setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>(mixture));
+    }
 
-			virtual void setLimitBondDimension(IndexType chival) = 0;
-			virtual void setLimitEntanglement(double svdThreshold) = 0;
-			virtual void dontLimitBondDimension() = 0;
-			virtual void dontLimitEntanglement() = 0;
-			// See MPSSimulatorInterface::setTruncationMode for the return-value contract.
-			virtual bool setTruncationMode(TruncationMode mode) = 0;
-			virtual TruncationMode getTruncationMode() const = 0;
-			// Enables (the default) or disables the multithreading of the simulator, which is inside the SVDs and matrix
-			// products (Eigen parallelizes them with OpenMP). Disable it when several simulators run in parallel in
-			// different threads, to avoid having too many threads. It affects only this simulator (see RunSingleThreaded).
-			virtual void SetMultithreading(bool enable = true) = 0;
-			virtual bool GetMultithreading() const = 0;
-			// Applies the configured bond cap and/or singular-value threshold to the existing state.
-			virtual void Trim() = 0;
-			// Restores the canonical form (right orthonormal B tensors, operator Schmidt values on the bonds)
-			// by a non-truncating QR sweep followed by two-site SVDs. Does not apply setLimitBondDimension or
-			// setLimitEntanglement; those remain the job of two-qubit gates and Trim. Only the singular values
-			// beyond the SVD's numerical rank (not distinguishable from zero in double precision) are dropped.
-			virtual void ReCanonicalize() = 0;
+    virtual void setLimitBondDimension(IndexType chival) = 0;
+    virtual void setLimitEntanglement(double svdThreshold) = 0;
+    virtual void dontLimitBondDimension() = 0;
+    virtual void dontLimitEntanglement() = 0;
+    // See MPSSimulatorInterface::setTruncationMode for the return-value contract.
+    virtual bool setTruncationMode(TruncationMode mode) = 0;
+    virtual TruncationMode getTruncationMode() const = 0;
+    // Enables (the default) or disables the multithreading of the simulator, which is inside the SVDs and matrix
+    // products (Eigen parallelizes them with OpenMP). Disable it when several simulators run in parallel in
+    // different threads, to avoid having too many threads. It affects only this simulator (see RunSingleThreaded).
+    virtual void SetMultithreading(bool enable = true) = 0;
+    virtual bool GetMultithreading() const = 0;
+    // Applies the configured bond cap and/or singular-value threshold to the existing state.
+    virtual void Trim() = 0;
+    // Restores the canonical form (right orthonormal B tensors, operator Schmidt values on the bonds)
+    // by a non-truncating QR sweep followed by two-site SVDs. Does not apply setLimitBondDimension or
+    // setLimitEntanglement; those remain the job of two-qubit gates and Trim. Only the singular values
+    // beyond the SVD's numerical rank (not distinguishable from zero in double precision) are dropped.
+    virtual void ReCanonicalize() = 0;
 
-			virtual bool setKrausCompletenessCheck(KrausCompletenessCheck mode) = 0;
-			virtual KrausCompletenessCheck getKrausCompletenessCheck() const = 0;
+    virtual bool setKrausCompletenessCheck(KrausCompletenessCheck mode) = 0;
+    virtual KrausCompletenessCheck getKrausCompletenessCheck() const = 0;
 
-			// Optional patches after a user-requested truncating SVD (two-qubit updates and Trim).
-			// Both default to off so compression stays a raw operator-space approximation unless
-			// the caller opts in. RestoreTraceAfterTruncation rescales Γ[0] by 1/Tr(ρ) when
-			// Re(Tr ρ) is safely positive; it restores trace, not positivity. HermitizeAfterTruncation
-			// replaces ρ with (ρ + ρ†)/2. A later truncated SVD can make the operator non-Hermitian
-			// again. Neither patch runs during ReCanonicalize (gauge only).
-			virtual void setRestoreTraceAfterTruncation(bool enable) = 0;
-			virtual bool getRestoreTraceAfterTruncation() const = 0;
-			virtual void setHermitizeAfterTruncation(bool enable) = 0;
-			virtual bool getHermitizeAfterTruncation() const = 0;
+    // Optional patches after a user-requested truncating SVD (two-qubit updates and Trim).
+    // Both default to off so compression stays a raw operator-space approximation unless
+    // the caller opts in. RestoreTraceAfterTruncation rescales Γ[0] by 1/Tr(ρ) when
+    // Re(Tr ρ) is safely positive; it restores trace, not positivity. HermitizeAfterTruncation
+    // replaces ρ with (ρ + ρ†)/2. A later truncated SVD can make the operator non-Hermitian
+    // again. Neither patch runs during ReCanonicalize (gauge only).
+    virtual void setRestoreTraceAfterTruncation(bool enable) = 0;
+    virtual bool getRestoreTraceAfterTruncation() const = 0;
+    virtual void setHermitizeAfterTruncation(bool enable) = 0;
+    virtual bool getHermitizeAfterTruncation() const = 0;
 
-			// Manual versions of the same patches. RestoreTrace throws if Re(Tr ρ) is not safely
-			// positive. Hermitize always builds (ρ + ρ†)/2 from the tensors (conjugate + ket↔bra),
-			// recanonicalizes, and compresses if a bond or entanglement limit is set.
-			virtual void RestoreTrace() = 0;
-			virtual void Hermitize() = 0;
+    // Manual versions of the same patches. RestoreTrace throws if Re(Tr ρ) is not safely
+    // positive. Hermitize always builds (ρ + ρ†)/2 from the tensors (conjugate + ket↔bra),
+    // recanonicalizes, and compresses if a bond or entanglement limit is set.
+    virtual void RestoreTrace() = 0;
+    virtual void Hermitize() = 0;
 
-			// the analogue of MPS getRegisterStorage(): the full 2^N x 2^N density matrix
-			// of the trace-normalized state rho / Tr(rho). Throws if Re(Tr(rho)) is not safely
-			// positive. For the raw MPO operator, including after a non-TP map or truncation
-			// that drifted the trace, use getUnnormalizedDensityMatrix().
-			virtual MatrixClass getDensityMatrix() const = 0;
-			virtual MatrixClass getUnnormalizedDensityMatrix() const = 0;
-			virtual void print() const = 0;
+    // the analogue of MPS getRegisterStorage(): the full 2^N x 2^N density matrix
+    // of the trace-normalized state rho / Tr(rho). Throws if Re(Tr(rho)) is not safely
+    // positive. For the raw MPO operator, including after a non-TP map or truncation
+    // that drifted the trace, use getUnnormalizedDensityMatrix().
+    virtual MatrixClass getDensityMatrix() const = 0;
+    virtual MatrixClass getUnnormalizedDensityMatrix() const = 0;
+    virtual void print() const = 0;
 
-			virtual void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) = 0;
-			virtual void ApplyGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
-			virtual void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) = 0;
+    virtual void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) = 0;
+    virtual void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+    virtual void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) = 0;
 
-			// Explicit non-unitary-capable local operator API. Applies rho -> A rho A^dagger.
-			// If A is not unitary the trace is generally not preserved; the normalized variants
-			// condition on the operation succeeding by dividing the resulting state by its trace.
-			virtual void ApplyOperator(const Gates::AppliedGate<MatrixClass>& op) = 0;
-			virtual void ApplyOperator(const GateClass& op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
-			virtual void ApplyOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) = 0;
-			virtual void ApplyOperatorAndNormalize(const Gates::AppliedGate<MatrixClass>& op) = 0;
-			virtual void ApplyOperatorAndNormalize(const GateClass& op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+    // Explicit non-unitary-capable local operator API. Applies rho -> A rho A^dagger.
+    // If A is not unitary the trace is generally not preserved; the normalized variants
+    // condition on the operation succeeding by dividing the resulting state by its trace.
+    virtual void ApplyOperator(const Gates::AppliedGate<MatrixClass> &op) = 0;
+    virtual void ApplyOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+    virtual void ApplyOperators(const std::vector<Gates::AppliedGate<MatrixClass>> &ops) = 0;
+    virtual void ApplyOperatorAndNormalize(const Gates::AppliedGate<MatrixClass> &op) = 0;
+    virtual void ApplyOperatorAndNormalize(const GateClass &op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
 
-			// Applies a multi-Kraus channel: rho -> sum_i K_i rho K_i^dagger.
-			// Completeness Σ_i K_i^dagger K_i = I is controlled by setKrausCompletenessCheck;
-			// the default (Ignore) allows non trace-preserving maps.
-			virtual void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>>& ops) = 0;
-			virtual void ApplyKrausOperators(const std::vector<MatrixClass>& ops, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+    // Applies a multi-Kraus channel: rho -> sum_i K_i rho K_i^dagger.
+    // Completeness Σ_i K_i^dagger K_i = I is controlled by setKrausCompletenessCheck;
+    // the default (Ignore) allows non trace-preserving maps.
+    virtual void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>> &ops) = 0;
+    virtual void ApplyKrausOperators(const std::vector<MatrixClass> &ops, IndexType qubit,
+                                     IndexType controllingQubit1 = 0) = 0;
 
-			// ---- predefined single qubit noise channels ----
-			//
-			// Convenience wrappers over ApplyKrausOperators, expressed with the standard Kraus
-			// operators of each channel. They are trace preserving (up to MPO truncation error).
+    // ---- predefined single qubit noise channels ----
+    //
+    // Convenience wrappers over ApplyKrausOperators, expressed with the standard Kraus
+    // operators of each channel. They are trace preserving (up to MPO truncation error).
 
-			// bit flip: rho -> (1 - p) rho + p X rho X
-			void ApplyBitFlipNoise(IndexType qubit, double p)
-			{
-				ValidateNoiseProbability(p);
-				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliX() }, qubit);
-			}
+    // bit flip: rho -> (1 - p) rho + p X rho X
+    void ApplyBitFlipNoise(IndexType qubit, double p)
+    {
+        ValidateNoiseProbability(p);
+        ApplyKrausOperators({std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliX()}, qubit);
+    }
 
-			// phase flip: rho -> (1 - p) rho + p Z rho Z
-			void ApplyPhaseFlipNoise(IndexType qubit, double p)
-			{
-				ValidateNoiseProbability(p);
-				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliZ() }, qubit);
-			}
+    // phase flip: rho -> (1 - p) rho + p Z rho Z
+    void ApplyPhaseFlipNoise(IndexType qubit, double p)
+    {
+        ValidateNoiseProbability(p);
+        ApplyKrausOperators({std::sqrt(1. - p) * NoisePauliI(), std::sqrt(p) * NoisePauliZ()}, qubit);
+    }
 
-			// depolarizing: rho -> (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
-			void ApplyDepolarizingNoise(IndexType qubit, double p)
-			{
-				ValidateNoiseProbability(p);
-				const double s = std::sqrt(p / 3.);
-				ApplyKrausOperators({ std::sqrt(1. - p) * NoisePauliI(), s * NoisePauliX(), s * NoisePauliY(), s * NoisePauliZ() }, qubit);
-			}
+    // depolarizing: rho -> (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
+    void ApplyDepolarizingNoise(IndexType qubit, double p)
+    {
+        ValidateNoiseProbability(p);
+        const double s = std::sqrt(p / 3.);
+        ApplyKrausOperators(
+            {std::sqrt(1. - p) * NoisePauliI(), s * NoisePauliX(), s * NoisePauliY(), s * NoisePauliZ()}, qubit);
+    }
 
-			// amplitude damping (|1> -> |0> relaxation with probability gamma)
-			void ApplyAmplitudeDamping(IndexType qubit, double gamma)
-			{
-				ValidateNoiseProbability(gamma);
-				MatrixClass E0 = MatrixClass::Zero(2, 2);
-				E0(0, 0) = 1.;
-				E0(1, 1) = std::sqrt(1. - gamma);
+    // amplitude damping (|1> -> |0> relaxation with probability gamma)
+    void ApplyAmplitudeDamping(IndexType qubit, double gamma)
+    {
+        ValidateNoiseProbability(gamma);
+        MatrixClass E0 = MatrixClass::Zero(2, 2);
+        E0(0, 0) = 1.;
+        E0(1, 1) = std::sqrt(1. - gamma);
 
-				MatrixClass E1 = MatrixClass::Zero(2, 2);
-				E1(0, 1) = std::sqrt(gamma);
+        MatrixClass E1 = MatrixClass::Zero(2, 2);
+        E1(0, 1) = std::sqrt(gamma);
 
-				ApplyKrausOperators({ E0, E1 }, qubit);
-			}
+        ApplyKrausOperators({E0, E1}, qubit);
+    }
 
-			// phase damping / dephasing, suppresses the off diagonal coherences by lambda = sqrt(1 - gamma)
-			void ApplyPhaseDamping(IndexType qubit, double gamma)
-			{
-				ValidateNoiseProbability(gamma);
-				MatrixClass E0 = MatrixClass::Zero(2, 2);
-				E0(0, 0) = 1.;
-				E0(1, 1) = std::sqrt(1. - gamma);
+    // phase damping / dephasing, suppresses the off diagonal coherences by lambda = sqrt(1 - gamma)
+    void ApplyPhaseDamping(IndexType qubit, double gamma)
+    {
+        ValidateNoiseProbability(gamma);
+        MatrixClass E0 = MatrixClass::Zero(2, 2);
+        E0(0, 0) = 1.;
+        E0(1, 1) = std::sqrt(1. - gamma);
 
-				MatrixClass E1 = MatrixClass::Zero(2, 2);
-				E1(1, 1) = std::sqrt(gamma);
+        MatrixClass E1 = MatrixClass::Zero(2, 2);
+        E1(1, 1) = std::sqrt(gamma);
 
-				ApplyKrausOperators({ E0, E1 }, qubit);
-			}
+        ApplyKrausOperators({E0, E1}, qubit);
+    }
 
-			// reset a qubit to |0>: E0 = |0><0|, E1 = |0><1|
-			void ApplyReset(IndexType qubit)
-			{
-				MatrixClass E0 = MatrixClass::Zero(2, 2);
-				E0(0, 0) = 1.;
+    // reset a qubit to |0>: E0 = |0><0|, E1 = |0><1|
+    void ApplyReset(IndexType qubit)
+    {
+        MatrixClass E0 = MatrixClass::Zero(2, 2);
+        E0(0, 0) = 1.;
 
-				MatrixClass E1 = MatrixClass::Zero(2, 2);
-				E1(0, 1) = 1.;
+        MatrixClass E1 = MatrixClass::Zero(2, 2);
+        E1(0, 1) = 1.;
 
-				ApplyKrausOperators({ E0, E1 }, qubit);
-			}
+        ApplyKrausOperators({E0, E1}, qubit);
+    }
 
-			virtual bool MeasureQubit(IndexType qubit) = 0;
-			virtual std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) = 0;
-			virtual double GetProbability(IndexType qubit, bool zeroVal = true) const = 0;
+    virtual bool MeasureQubit(IndexType qubit) = 0;
+    virtual std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType> &qubits) = 0;
+    virtual double GetProbability(IndexType qubit, bool zeroVal = true) const = 0;
 
-			// samples a full computational basis outcome from the density matrix populations without
-			// collapsing the state - useful for repeated sampling that avoids re-executing the circuit.
-			// The map keys are the qubit indices and the values are the sampled measurement results.
-			// Throws for a zero or non-finite conditional weight. Uses normalized environments so
-			// exponentially small probabilities of complete outcomes do not bias subsequent bits.
-			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse() = 0;
+    // samples a full computational basis outcome from the density matrix populations without
+    // collapsing the state - useful for repeated sampling that avoids re-executing the circuit.
+    // The map keys are the qubit indices and the values are the sampled measurement results.
+    // Throws for a zero or non-finite conditional weight. Uses normalized environments so
+    // exponentially small probabilities of complete outcomes do not bias subsequent bits.
+    virtual std::unordered_map<IndexType, bool> MeasureNoCollapse() = 0;
 
-			// samples only the given subset of qubits without collapsing the state.
-			virtual std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) = 0;
+    // samples only the given subset of qubits without collapsing the state.
+    virtual std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType> &qubits) = 0;
 
-			// moves the given qubits at the beginning of the chain (helps with sampling a subset of qubits faster).
-			virtual void MoveAtBeginningOfChain(const std::set<IndexType>& qubits) = 0;
+    // moves the given qubits at the beginning of the chain (helps with sampling a subset of qubits faster).
+    virtual void MoveAtBeginningOfChain(const std::set<IndexType> &qubits) = 0;
 
-			// rho is a density matrix, so the basis-state 'amplitude' is a matrix element <row|rho|col>
-			virtual std::complex<double> getBasisStateMatrixElement(size_t row, size_t col) const = 0;
-			virtual std::complex<double> getBasisStateMatrixElement(const std::vector<bool>& row, const std::vector<bool>& col) const = 0;
-			virtual double getBasisStateProbability(size_t State) const = 0;
-			virtual double getBasisStateProbability(const std::vector<bool>& State) const = 0;
+    // rho is a density matrix, so the basis-state 'amplitude' is a matrix element <row|rho|col>
+    virtual std::complex<double> getBasisStateMatrixElement(size_t row, size_t col) const = 0;
+    virtual std::complex<double> getBasisStateMatrixElement(const std::vector<bool> &row,
+                                                            const std::vector<bool> &col) const = 0;
+    virtual double getBasisStateProbability(size_t State) const = 0;
+    virtual double getBasisStateProbability(const std::vector<bool> &State) const = 0;
 
-			// trace of the density matrix, should be 1 for a properly normalized state
-			virtual std::complex<double> Trace() const = 0;
-			// Tr(ρ²) by contracting two MPO copies. Does not build the 2^N matrix. The result can
-			// have a small imaginary part if truncation left a non-Hermitian leftover.
-			virtual std::complex<double> TraceOfSquare() const = 0;
-			// Tr(ρ²) / [Tr(ρ)]² when Re(Tr ρ) is safely positive. Throws otherwise, matching
-			// getDensityMatrix(). For a physical state this is the usual purity in [2^{-N}, 1].
-			virtual double Purity() const = 0;
-			// Frobenius ||ρ − ρ†|| of the raw operator, using QR on the difference MPO.
-			// Does not reconstruct a dense matrix or require a nonzero trace.
-			virtual double HermiticityResidual() const = 0;
-			virtual bool IsHermitian(double eps = 1E-10) const = 0;
+    // trace of the density matrix, should be 1 for a properly normalized state
+    virtual std::complex<double> Trace() const = 0;
+    // Tr(ρ²) by contracting two MPO copies. Does not build the 2^N matrix. The result can
+    // have a small imaginary part if truncation left a non-Hermitian leftover.
+    virtual std::complex<double> TraceOfSquare() const = 0;
+    // Tr(ρ²) / [Tr(ρ)]² when Re(Tr ρ) is safely positive. Throws otherwise, matching
+    // getDensityMatrix(). For a physical state this is the usual purity in [2^{-N}, 1].
+    virtual double Purity() const = 0;
+    // Frobenius ||ρ − ρ†|| of the raw operator, using QR on the difference MPO.
+    // Does not reconstruct a dense matrix or require a nonzero trace.
+    virtual double HermiticityResidual() const = 0;
+    virtual bool IsHermitian(double eps = 1E-10) const = 0;
 
-			// Partial Trace: computes the trace-normalized reduced density matrix for keepQubits.
-			// Their order determines the output bit order. At most 13 qubits may be retained,
-			// matching the allocation limit of getDensityMatrix(); the full register may be larger.
-			// All trace-normalized queries throw if Re(Tr rho) is not safely positive or the trace is non-finite.
-			virtual MatrixClass PartialTrace(const std::vector<IndexType>& keepQubits) const = 0;
+    // Partial Trace: computes the trace-normalized reduced density matrix for keepQubits.
+    // Their order determines the output bit order. At most 13 qubits may be retained,
+    // matching the allocation limit of getDensityMatrix(); the full register may be larger.
+    // All trace-normalized queries throw if Re(Tr rho) is not safely positive or the trace is non-finite.
+    virtual MatrixClass PartialTrace(const std::vector<IndexType> &keepQubits) const = 0;
 
-			// Hilbert-Schmidt overlap Tr(rho_1^dagger rho_2) / (conj(Tr rho_1) Tr rho_2).
-			// Logical qubit ordering is respected; different mappings may require routing a copy.
-			// Exact reordering can increase bond dimensions; no user compression is applied to queries.
-			virtual std::complex<double> HilbertSchmidtOverlap(const MPOSimulatorInterface& other) const = 0;
+    // Hilbert-Schmidt overlap Tr(rho_1^dagger rho_2) / (conj(Tr rho_1) Tr rho_2).
+    // Logical qubit ordering is respected; different mappings may require routing a copy.
+    // Exact reordering can increase bond dimensions; no user compression is applied to queries.
+    virtual std::complex<double> HilbertSchmidtOverlap(const MPOSimulatorInterface &other) const = 0;
 
-			// Fidelity <psi|rho|psi> / Tr(rho) with a pure statevector psi
-			virtual double FidelityWithStatevector(const VectorClass& psi) const = 0;
+    // Fidelity <psi|rho|psi> / Tr(rho) with a pure statevector psi
+    virtual double FidelityWithStatevector(const VectorClass &psi) const = 0;
 
-			// Born expectation <P> = Tr(rho P) / Tr(rho) for a Pauli string P = (x) P_i, where
-			// character i of the string is the single qubit Pauli ('I', 'X', 'Y' or 'Z') acting
-			// on qubit i (qubit 0 is the rightmost / least significant bit, character 0 in the
-			// string). This matches getDensityMatrix() / getBasisStateProbability() in dividing
-			// by the current trace. UnnormalizedExpectationValue returns the raw Tr(rho P),
-			// matching DensityMatrix::ExpectationValue when Tr(rho) is not 1.
-			// It contracts the MPO chain site by site, so it avoids building the full density matrix.
-			virtual std::complex<double> ExpectationValue(const std::string& pauliString) const = 0;
-			virtual std::complex<double> UnnormalizedExpectationValue(const std::string& pauliString) const = 0;
+    // Born expectation <P> = Tr(rho P) / Tr(rho) for a Pauli string P = (x) P_i, where
+    // character i of the string is the single qubit Pauli ('I', 'X', 'Y' or 'Z') acting
+    // on qubit i (qubit 0 is the rightmost / least significant bit, character 0 in the
+    // string). This matches getDensityMatrix() / getBasisStateProbability() in dividing
+    // by the current trace. UnnormalizedExpectationValue returns the raw Tr(rho P),
+    // matching DensityMatrix::ExpectationValue when Tr(rho) is not 1.
+    // It contracts the MPO chain site by site, so it avoids building the full density matrix.
+    virtual std::complex<double> ExpectationValue(const std::string &pauliString) const = 0;
+    virtual std::complex<double> UnnormalizedExpectationValue(const std::string &pauliString) const = 0;
 
-			virtual std::shared_ptr<MPOSimulatorStateInterface> getState() const = 0;
-			virtual void setState(const std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
-			virtual void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface>& state) = 0;
+    virtual std::shared_ptr<MPOSimulatorStateInterface> getState() const = 0;
+    virtual void setState(const std::shared_ptr<MPOSimulatorStateInterface> &state) = 0;
+    virtual void setStateDestructive(std::shared_ptr<MPOSimulatorStateInterface> &state) = 0;
 
-		protected:
-			friend class MPOSimulatorBase;
-			// Double dispatch lets a mapping-aware decorator align against a physical chain.
-			// External implementations retain a dense fallback without recursive delegation.
-			virtual std::complex<double> OverlapWithPhysicalChain(const MPOSimulatorInterface& physical) const
-			{
-				return getDensityMatrix().conjugate().cwiseProduct(physical.getDensityMatrix()).sum();
-			}
+  protected:
+    friend class MPOSimulatorBase;
+    // Double dispatch lets a mapping-aware decorator align against a physical chain.
+    // External implementations retain a dense fallback without recursive delegation.
+    virtual std::complex<double> OverlapWithPhysicalChain(const MPOSimulatorInterface &physical) const
+    {
+        return getDensityMatrix().conjugate().cwiseProduct(physical.getDensityMatrix()).sum();
+    }
 
-			static size_t CheckedStatevectorDimension(size_t qubits)
-			{
-				if (qubits >= std::numeric_limits<size_t>::digits ||
-					qubits >= std::numeric_limits<IndexType>::digits)
-					throw std::invalid_argument("Statevector dimension is not representable");
-				const size_t dimension = size_t{ 1 } << qubits;
-				if (dimension > std::numeric_limits<size_t>::max() / sizeof(std::complex<double>))
-					throw std::invalid_argument("Statevector allocation size is not representable");
-				return dimension;
-			}
+    static size_t CheckedStatevectorDimension(size_t qubits)
+    {
+        if (qubits >= std::numeric_limits<size_t>::digits || qubits >= std::numeric_limits<IndexType>::digits)
+            throw std::invalid_argument("Statevector dimension is not representable");
+        const size_t dimension = size_t{1} << qubits;
+        if (dimension > std::numeric_limits<size_t>::max() / sizeof(std::complex<double>))
+            throw std::invalid_argument("Statevector allocation size is not representable");
+        return dimension;
+    }
 
-			static size_t CheckedDensityMatrixDimension(size_t qubits)
-			{
-				if (qubits > 13)
-					throw std::runtime_error("Too many qubits to build the full density matrix");
-				return CheckedStatevectorDimension(qubits);
-			}
+    static size_t CheckedDensityMatrixDimension(size_t qubits)
+    {
+        if (qubits > 13)
+            throw std::runtime_error("Too many qubits to build the full density matrix");
+        return CheckedStatevectorDimension(qubits);
+    }
 
-			static void ValidateNoiseProbability(double probability)
-			{
-				if (!std::isfinite(probability) || probability < 0. || probability > 1.)
-					throw std::invalid_argument("Noise probability must be finite and in [0, 1]");
-			}
+    static void ValidateNoiseProbability(double probability)
+    {
+        if (!std::isfinite(probability) || probability < 0. || probability > 1.)
+            throw std::invalid_argument("Noise probability must be finite and in [0, 1]");
+    }
 
-			// single-qubit Pauli matrices used to build the predefined noise channels
-			static MatrixClass NoisePauliI()
-			{
-				MatrixClass m = MatrixClass::Identity(2, 2);
-				return m;
-			}
+    // single-qubit Pauli matrices used to build the predefined noise channels
+    static MatrixClass NoisePauliI()
+    {
+        MatrixClass m = MatrixClass::Identity(2, 2);
+        return m;
+    }
 
-			static MatrixClass NoisePauliX()
-			{
-				MatrixClass m = MatrixClass::Zero(2, 2);
-				m(0, 1) = 1.;
-				m(1, 0) = 1.;
-				return m;
-			}
+    static MatrixClass NoisePauliX()
+    {
+        MatrixClass m = MatrixClass::Zero(2, 2);
+        m(0, 1) = 1.;
+        m(1, 0) = 1.;
+        return m;
+    }
 
-			static MatrixClass NoisePauliY()
-			{
-				MatrixClass m = MatrixClass::Zero(2, 2);
-				m(0, 1) = std::complex<double>(0., -1.);
-				m(1, 0) = std::complex<double>(0., 1.);
-				return m;
-			}
+    static MatrixClass NoisePauliY()
+    {
+        MatrixClass m = MatrixClass::Zero(2, 2);
+        m(0, 1) = std::complex<double>(0., -1.);
+        m(1, 0) = std::complex<double>(0., 1.);
+        return m;
+    }
 
-			static MatrixClass NoisePauliZ()
-			{
-				MatrixClass m = MatrixClass::Zero(2, 2);
-				m(0, 0) = 1.;
-				m(1, 1) = -1.;
-				return m;
-			}
-		};
+    static MatrixClass NoisePauliZ()
+    {
+        MatrixClass m = MatrixClass::Zero(2, 2);
+        m(0, 0) = 1.;
+        m(1, 1) = -1.;
+        return m;
+    }
+};
 
-	}
+} // namespace TensorNetworks
 
-}
+} // namespace QC

@@ -6,7 +6,12 @@
 #include <intrin.h>
 #endif
 
-namespace QC { namespace Clifford { namespace detail {
+namespace QC
+{
+namespace Clifford
+{
+namespace detail
+{
 
 using Word = uint64_t;
 inline unsigned Popcount(Word value) noexcept
@@ -34,16 +39,23 @@ inline unsigned TrailingZero(Word value) noexcept
     return bit;
 #elif defined(_MSC_VER) && defined(_M_IX86)
     unsigned long bit;
-    if (_BitScanForward(&bit, static_cast<unsigned long>(value))) return bit;
+    if (_BitScanForward(&bit, static_cast<unsigned long>(value)))
+        return bit;
     _BitScanForward(&bit, static_cast<unsigned long>(value >> 32));
     return bit + 32;
 #elif defined(__GNUC__) || defined(__clang__)
     return static_cast<unsigned>(__builtin_ctzll(value));
 #else
     unsigned bit = 0;
-    while ((value & 1) == 0) { value >>= 1; ++bit; }
+    while ((value & 1) == 0)
+    {
+        value >>= 1;
+        ++bit;
+    }
     return bit;
 #endif
 }
 
-}}}
+} // namespace detail
+} // namespace Clifford
+} // namespace QC

@@ -4,811 +4,853 @@
 
 #define USE_FAST_SVD 1
 
+namespace QC
+{
 
-namespace QC {
+namespace TensorNetworks
+{
 
-	namespace TensorNetworks {
+class MPSSimulatorImpl : public MPSSimulatorBase
+{
+  public:
+    friend class MPSSimulator;
 
-		class MPSSimulatorImpl : public MPSSimulatorBase
-		{
-		public:
-			friend class MPSSimulator;
-
-			MPSSimulatorImpl(size_t N, unsigned int addseed = 0)
-				: MPSSimulatorBase(N, addseed)
-			{
+    MPSSimulatorImpl(size_t N, unsigned int addseed = 0) : MPSSimulatorBase(N, addseed)
+    {
 #ifdef USE_FAST_SVD
-				// 16 is Eigen's default. With the Vidal form (dividing by the lambdas) it caused precision issues in tests against statevector,
-				// so it used to be 64, but with Hastings' method it's as precise as Jacobi and much faster for bond dimensions between 8 and 32
-				SVD.setSwitchSize(blockSizeLimit); // lower sizes will use Jacobi
+        // 16 is Eigen's default. With the Vidal form (dividing by the lambdas) it caused precision issues in tests
+        // against statevector, so it used to be 64, but with Hastings' method it's as precise as Jacobi and much faster
+        // for bond dimensions between 8 and 32
+        SVD.setSwitchSize(blockSizeLimit); // lower sizes will use Jacobi
 #endif
-			}
-
-			void ApplyGate(const Gates::AppliedGate<MatrixClass>& gate) override
-			{
-				ApplyGate(gate, gate.getQubit1(), gate.getQubit2());
-			}
-
-			// three qubit gates not supported, convert them to two qubit gates
-			// also two qubit gates need to act on adjacent qubits
-			// don't try to apply a gate that doesn't satisfy these conditions
-			// use swap gates to move qubits around
-			// this is wrapped up into a higher level simulator that swaps the qubits for you and maps them to minimize swaps
-			// so this should not be used directly
-			void ApplyGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1 = 0) override
-			{
-				if (gate.getQubitsNumber() > 2) throw std::invalid_argument("Three qubit gates not supported");
-				else if ((qubit < 0 || qubit >= static_cast<IndexType>(gammas.size())) || (gate.getQubitsNumber() == 2 && (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(gammas.size()))))
-					throw std::invalid_argument("Qubit index out of bounds");
-				else if (gate.getQubitsNumber() == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
-					throw std::invalid_argument("Two qubit gates need to act on adjacent qubits");
-				else if (!gate.getRawOperatorMatrix().allFinite())
-					throw std::invalid_argument("Gate matrix contains a non-finite value");
-
-
-				if (gate.getQubitsNumber() == 1)
-					ApplySingleQubitGate(gate, qubit);
-				else
-					ApplyTwoQubitGate(gate, qubit, controllingQubit1);
-			}
-
-			void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
-			{
-				for (const auto& gate : gates)
-					ApplyGate(gate);
-			}
-
-			// Walks over the chain and, wherever a bond dimension is bigger than the currently set
-			// bond dimension limit, contracts the two neighbour sites and re-splits them with a
-			// truncated SVD to bring the bond dimension down to the limit. No gate is applied.
-			// Useful after lowering the bond dimension limit with setLimitBondDimension once the
-			// bonds have already grown beyond the new limit.
-			void Trim() override
-			{
-				if (!limitSize) return; // nothing to trim against
-
-				for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
-				{
-					if (lambdas[qubit1].size() <= chi) continue;
-
-					// contract the two neighbour sites (no gate is applied), then re-split with a truncated SVD
-					const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
-					const MatrixClass thetaMatrix = ReshapeTheta(theta);
-
-					DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
-				}
-			}
-
-			void ReCanonicalize() override
-			{
-				if (lambdas.empty()) return;
-
-				RunMaybeSingleThreaded(enableMultithreading, [&]() {
-					bool applyUserCompression = true;
-					bool reduced;
-					do
-					{
-						const auto previousDimensions = getBondDimensions();
-						// Repair the basis without trusting old Schmidt weights or dropping directions.
-						for (IndexType site = static_cast<IndexType>(gammas.size()) - 1; site > 0; --site)
-							RightCanonicalizeSite(site);
-
-						// The right block is now orthonormal. Starting at bond zero makes each
-						// newly computed lambda the valid left environment of the following bond.
-						for (IndexType bond = 0; bond < static_cast<IndexType>(lambdas.size()); ++bond)
-						{
-							const MatrixClass theta = ReshapeTheta(ContractTwoQubits(bond));
-							DecomposeAndSetGammasImpl(theta, bond, bond + 1, applyUserCompression, lambdas[bond].size());
-						}
-
-						// Truncation can stale earlier Schmidt spectra. Refresh until a pass
-						// changes no dimensions; no bond can grow, so this terminates.
-						reduced = getBondDimensions() != previousDimensions;
-						// A relative cutoff must also hold for the refreshed spectra. Discarded
-						// weight is a per-compression budget: do not spend it again on refresh.
-						applyUserCompression = truncationMode == TruncationMode::RelativeToMax;
-					} while (reduced);
-				});
-			}
-
-			// false if measured 0, true if measured 1
-			bool MeasureQubit(IndexType qubit) override
-			{
-				if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
-					throw std::invalid_argument("Qubit index out of bounds");
-
-				const double rndVal = 1. - uniformZeroOne(rng);
-				const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
-				const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
-
-				MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
-				const QC::Gates::SingleQubitGate projOp(std::move(projMat));
-
-				ApplySingleQubitGate(projOp, qubit);
-
-				// propagate to the other qubits to the right and left until the end or there is no entanglement with the next one
-
-				for (IndexType q = qubit; q < static_cast<IndexType>(lambdas.size()); ++q)
-				{
-					if (lambdas[q].size() == 1) break;
-					ApplyTwoQubitGate(projOp, q, q + 1, true);
-				}
-
-				for (IndexType q = qubit; q > 0; --q)
-				{
-					const IndexType q1 = q - 1;
-					if (lambdas[q1].size() == 1) break;
-					ApplyTwoQubitGate(projOp, q1, q, true);
-				}
-
-				return !zeroMeasured;
-			}
-
-			std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType>& qubits) override
-			{
-				if (qubits.empty()) return {};
-
-				std::unordered_map<IndexType, bool> res;
-				if (qubits.size() == 1)
-				{
-					const IndexType qubit = *qubits.begin();
-					res[qubit] = MeasureQubit(qubit);
-					return res;
-				}
-
-				const auto lastIt = --qubits.end();
-
-				for (auto it = qubits.begin(); it != lastIt; )
-				{
-					const auto qubit = *it;
-					++it;
-					const auto nextQubit = *it;
-
-					const double rndVal = 1. - uniformZeroOne(rng);
-					const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
-					const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
-
-					res[qubit] = !zeroMeasured;
-
-					MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0) : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
-					const QC::Gates::SingleQubitGate projOp(std::move(projMat));
-
-					ApplySingleQubitGate(projOp, qubit);
-
-					for (IndexType q = qubit; q < nextQubit; ++q)
-					{
-						if (lambdas[q].size() == 1) break;
-						ApplyTwoQubitGate(projOp, q, q + 1, true);
-					}
-
-					for (IndexType q = qubit; q > 0; --q)
-					{
-						const IndexType q1 = q - 1;
-						if (lambdas[q1].size() == 1) break;
-						ApplyTwoQubitGate(projOp, q1, q, true);
-					}
-				}
-
-				const auto lastQubit = *lastIt;
-				res[lastQubit] = MeasureQubit(lastQubit);
-
-				return res;
-			}
-
-			// does not check for hermicity, that's why it returns a complex number
-			// the caller should ensure the hermicity and extract the real part
-			// also (for now, at least) it supports only one qubit ops
-			// the problem with two qubit gates is that they will swap qubits around
-			// so instead of only saving the state to compute <psi|U|psi>, and then use it to restore the state,
-			// it would need to save the state twice, once for restoring and one for computing the expectation value - the last one having the qubits swapped as the one on which the gates are applied
-			// anyway, this would be probably used mostly on Pauli strings, so...
-			std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>>& gates) override
-			{
-				if (gates.empty()) return 1.;
-
-				// at this point it doesn't check if the gates are one qubit, that's done at the higher level
-				// 	
-				const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
-
-				// no need to zip up the whole chain, contracting the ends of the chain that are not touched by the operators should give 1.
-				IndexType minQubit = lastQubit;
-				IndexType maxQubit = 0;
-
-				for (const auto& gate : gates)
-				{
-					const IndexType qubit = gate.getQubit1();
-					if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
-						throw std::invalid_argument("Qubit index out of bounds");
-					minQubit = std::min(minQubit, qubit);
-					maxQubit = std::max(maxQubit, qubit);
-				}
-
-				const IndexType nrSites = maxQubit - minQubit + 1;
-
-				// lambdas are not modified by the single qubit gates
-
-				std::vector<GammaType> modGammas(nrSites);
-				for (IndexType s = 0; s < nrSites; ++s)
-					modGammas[s] = gammas[minQubit + s];
-
-				// the right lambdas are already in the B tensors, only the left one needs to be multiplied in
-				// the lambdas multiplication goes for both dagger and non-dagger gammas,
-				// so the dagger are computed after the lambdas are applied
-				MultiplyFirstModGammaWithLeftLambda(modGammas[0], minQubit);
-
-				std::vector<GammaType> daggerGammas(nrSites);
-				for (IndexType s = 0; s < nrSites; ++s)
-					daggerGammas[s] = modGammas[s].conjugate();
-
-				// apply the gates
-				for (const auto& gate : gates)
-					ApplySingleQubitGate(modGammas[gate.getQubit1() - minQubit], gate);
-
-				// contract the saved dagger chain with the one with the gates applied
-				// we need to do that only for the qubits in the range [minQubit, maxQubit]
-
-				static const Eigen::array<IntIndexPair, 2> contract_dim{ IntIndexPair(0, 0), IntIndexPair(1, 1) };
-				static const Indexes contract_dim1{ IntIndexPair(0, 0) };
-
-				// start by contracting the first gamma with the first dagger gamma
-				//  -O-         |
-				// | |     ==>  O
-				//  -O-         |
-				Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(daggerGammas[0], contract_dim);
-
-				// now contract the rest of the gammas with the dagger gammas
-				for (IndexType s = 1; s < nrSites; ++s)
-				{
-					//  /-O-       -O-        |
-					// O  |   ==> | |    ==>  O
-					//  \-O-       -O-        |
-
-					// bug in eigen, does not work as expected without using an intermediate result?
-					// fails even with eval() after the first contract, so I use a separate variable for the first contract
-					const Eigen::Tensor<std::complex<double>, 3> intermediateResult = resTensor.contract(modGammas[s], contract_dim1);
-					resTensor = intermediateResult.contract(daggerGammas[s], contract_dim);
-				}
-
-				const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
-
-				return t(0);
-			}
-
-			std::unordered_map<IndexType, bool> MeasureNoCollapse() override
-			{
-				const size_t nrQubits = gammas.size();
-				return MeasureNoCollapse(static_cast<IndexType>(nrQubits - 1));
-			}
-
-			std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType>& qubits) override
-			{
-				if (qubits.empty()) return {};
-				if (*qubits.cbegin() < 0 || *qubits.crbegin() >= static_cast<IndexType>(gammas.size()))
-					throw std::invalid_argument("Qubit index out of bounds");
-
-				return MeasureNoCollapse(*qubits.crbegin());
-			}
-
-			// Computes <0|Psi> by contracting the current MPS chain with the zero state
-			// useful for maestro/composer for checking some stuff
-			std::complex<double> ProjectOnZero() const override
-			{
-				const size_t nrQubits = getNrQubits();
-				if (nrQubits == 0) return 0.;
-
-				static const Indexes product_dims{ IntIndexPair(1, 0) };
-				MatrixTensorType res = gammas[0].chip(0, 1);
-
-				// the lambdas are already included in the B tensors
-				for (size_t q = 1; q < nrQubits; ++q)
-				{
-					// why? Needs this intermediary variable here, not even calling eval() works if assigning directly to res
-					MatrixTensorType tmp = res.contract(gammas[q].chip(0, 1), product_dims);
-					res = std::move(tmp);
-				}
-
-				return res(0, 0);
-			}
-
-		private:
-
-			// M = B_i reshaped as (L, 2R). QR of M^dagger gives M = R^dagger Q^dagger:
-			// keep Q^dagger at this site and move R^dagger left. No lambda or rank cutoff.
-			void RightCanonicalizeSite(IndexType site)
-			{
-				const GammaType& gamma = gammas[site];
-				const IndexType L = gamma.dimension(0);
-				const IndexType R = gamma.dimension(2);
-				const IndexType rank = std::min(L, 2 * R);
-				MatrixClass adjoint(2 * R, L);
-				for (IndexType physical = 0; physical < 2; ++physical)
-					for (IndexType r = 0; r < R; ++r)
-						for (IndexType l = 0; l < L; ++l)
-							adjoint(physical * R + r, l) = std::conj(gamma(l, physical, r));
-
-				Eigen::HouseholderQR<MatrixClass> qr(adjoint);
-				const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(2 * R, rank);
-				const MatrixClass triangular = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
-				const GammaType& previous = gammas[site - 1];
-				const IndexType previousL = previous.dimension(0);
-				const Eigen::Map<const MatrixClass> previousMatrix(previous.data(), 2 * previousL, L);
-				const MatrixClass left = previousMatrix * triangular.adjoint();
-				GammaType newLeft(previousL, 2, rank);
-				std::copy(left.data(), left.data() + left.size(), newLeft.data());
-				GammaType newRight(rank, 2, R);
-				for (IndexType physical = 0; physical < 2; ++physical)
-					for (IndexType r = 0; r < R; ++r)
-						for (IndexType l = 0; l < rank; ++l)
-							newRight(l, physical, r) = std::conj(Q(physical * R + r, l));
-				gammas[site - 1] = std::move(newLeft);
-				gammas[site] = std::move(newRight);
-				lambdas[site - 1] = LambdaType::Ones(rank); // dimensions only until the forward sweep
-			}
-
-			static double ValidMeasurementProbability(double probability)
-			{
-				constexpr double toleranceLow = 1E-9;
-				constexpr double toleranceHigh = 1E-5;
-				if (probability < -toleranceLow || probability > 1. + toleranceHigh)
-					std::cerr << "Invalid measurement probability produced by the MPS state" << std::endl;
-
-				return ClampProbability(std::clamp(probability, 0., 1.));
-			}
-
-			static bool PickZeroMeasurement(double rndVal, double prob0)
-			{
-				if (prob0 <= 0.) return false;
-				if (prob0 >= 1.) return true;
-
-				return rndVal < prob0;
-			}
-
-			void MultiplyFirstModGammaWithLeftLambda(GammaType& firstModGamma, IndexType minQubit) const
-			{
-				if (minQubit == 0) return; // no left lambda for the first qubit
-
-				const IndexType prev = minQubit - 1;
-				const IndexType szl = firstModGamma.dimension(0);
-				const IndexType szr = firstModGamma.dimension(2);
-
-				for (IndexType r = 0; r < szr; ++r)
-					for (IndexType p = 0; p < 2; ++p)
-						for (IndexType l = 0; l < szl; ++l)
-							firstModGamma(l, p, r) *= lambdas[prev][l];
-			}
-
-			static void SwapTheta(Eigen::Tensor<std::complex<double>, 4>& theta)
-			{
-				for (IndexType j = 0; j < theta.dimension(3); ++j)
-					for (IndexType i = 0; i < theta.dimension(0); ++i)
-						std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
-			}
-
-			MatrixClass ConstructTheta(const GateClass& gate, IndexType qubit1, bool dontApplyGate, bool isSwapGate, bool reversed)
-			{
-				MatrixClass thetaMatrix;
-
-				// TODO: optimize for some gates? The most important would be the swap gate, as it's applied a lot to move qubits near each other before applying other two qubit gates
-				// something like:
-				if (dontApplyGate || isSwapGate)
-				{
-					Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
-					// eiter apply the swap gate, optimized
-					// or this case is for dealing with entanglement with the qubits entangled with a measured one
-					// see 'Measure' function for details
-
-					// NOTE: with proper data structures this could be way more optimized
-					// instead of those generic eigen tensors for example, a more optimized tensor for this would hold Eigen matrices inside and
-					// the physical indices would select among them
-					// that way swapping will reduce to swapping pointers, it would be very fast
-					// but I'm lazy so I use the generic implementation
-
-					// qiskit aer does it, though
-
-					// it's less important than it appears, because usually SVD will take the most time (unless severely limited or having some particularly easy circuits)
-
-					if (isSwapGate) SwapTheta(theta);
-
-					thetaMatrix = ReshapeTheta(theta);
-				}
-				else
-				{
-					const Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>> U = GetTwoQubitsGateTensor(gate, reversed);
-					const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructThetaBar(qubit1, U);
-
-					thetaMatrix = ReshapeThetaBar(thetabar);
-				}
-
-				return thetaMatrix;
-			}
-
-			void ApplyTwoQubitGate(const GateClass& gate, IndexType qubit, IndexType controllingQubit1, bool dontApplyGate = false)
-			{
-				// it's more complex than the single qubit gate
-				// very shortly:
-				// contract tensors for the two qubits (the B tensors already contain the lambdas, except the left one)
-				// shape the gate into a tensor
-				// contract the gate tensor with the two qubit tensor
-				// apply SVD (with the left lambda multiplied in) to separate out the resulting tensor into the two qubit tensors and the lambda between them
-
-				IndexType qubit1 = controllingQubit1;
-				IndexType qubit2 = qubit;
-				bool reversed = false;
-
-				if (qubit1 > qubit2)
-				{
-					std::swap(qubit1, qubit2);
-					reversed = true;
-				}
-
-				const bool isSwapGate = gate.isSwapGate();
-
-				// the size is (2 * left bond dim) x (2 * right bond dim)
-				const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
-
-				DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
-			}
-
-			// SVD the (already built) theta matrix and write back the two new B tensors and the lambda
-			// in between. Shared by two-qubit gates, Trim, and ReCanonicalize. User-requested
-			// chi / entanglement cuts are applied only when applyUserCompression is true (the
-			// default); ReCanonicalize disables them during its final gauge refresh (except relative-cutoff cleanup).
-			//
-			// This is Hastings' method: theta = B1 B2 (with the gate applied) does not contain the left lambda.
-			// The SVD is done on lambda_left * theta = U S V^dagger, which is the two site tensor in the Schmidt basis of the left bond,
-			// so the singular values are the Schmidt values of the middle bond.
-			// Then the new right B is V^dagger and the new left B is theta * V (which is lambda_left^-1 * U * S, but computed without dividing).
-			// U is not needed at all.
-			void DecomposeAndSetGammas(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression = true)
-			{
-				// the SVD and the matrix product for the new left B are the parts Eigen parallelizes
-				RunMaybeSingleThreaded(enableMultithreading, [&]() { DecomposeAndSetGammasImpl(thetaMatrix, qubit1, qubit2, applyUserCompression); });
-			}
-
-			void DecomposeAndSetGammasImpl(const MatrixClass& thetaMatrix, IndexType qubit1, IndexType qubit2, bool applyUserCompression,
-				IndexType maxBondDimension = std::numeric_limits<IndexType>::max())
-			{
-				const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
-				const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
-
-				assert(2 * szl == thetaMatrix.rows());
-				assert(2 * szr == thetaMatrix.cols());
-
-				// the rows are (physical index, left bond index) = j * szl + i
-				MatrixClass weightedTheta;
-				if (qubit1 != 0)
-				{
-					const LambdaType& leftLambda = lambdas[qubit1 - 1];
-					weightedTheta.resize(thetaMatrix.rows(), thetaMatrix.cols());
-					for (IndexType c = 0; c < thetaMatrix.cols(); ++c)
-						for (IndexType j = 0; j < 2; ++j)
-						{
-							const IndexType jszl = j * szl;
-							for (IndexType i = 0; i < szl; ++i)
-								weightedTheta(jszl + i, c) = thetaMatrix(jszl + i, c) * leftLambda[i];
-						}
-				}
-				const MatrixClass& svdMatrix = qubit1 == 0 ? thetaMatrix : weightedTheta;
+    }
+
+    void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) override
+    {
+        ApplyGate(gate, gate.getQubit1(), gate.getQubit2());
+    }
+
+    // three qubit gates not supported, convert them to two qubit gates
+    // also two qubit gates need to act on adjacent qubits
+    // don't try to apply a gate that doesn't satisfy these conditions
+    // use swap gates to move qubits around
+    // this is wrapped up into a higher level simulator that swaps the qubits for you and maps them to minimize swaps
+    // so this should not be used directly
+    void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) override
+    {
+        if (gate.getQubitsNumber() > 2)
+            throw std::invalid_argument("Three qubit gates not supported");
+        else if ((qubit < 0 || qubit >= static_cast<IndexType>(gammas.size())) ||
+                 (gate.getQubitsNumber() == 2 &&
+                  (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(gammas.size()))))
+            throw std::invalid_argument("Qubit index out of bounds");
+        else if (gate.getQubitsNumber() == 2 &&
+                 std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
+            throw std::invalid_argument("Two qubit gates need to act on adjacent qubits");
+        else if (!gate.getRawOperatorMatrix().allFinite())
+            throw std::invalid_argument("Gate matrix contains a non-finite value");
+
+        if (gate.getQubitsNumber() == 1)
+            ApplySingleQubitGate(gate, qubit);
+        else
+            ApplyTwoQubitGate(gate, qubit, controllingQubit1);
+    }
+
+    void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
+    {
+        for (const auto &gate : gates)
+            ApplyGate(gate);
+    }
+
+    // Walks over the chain and, wherever a bond dimension is bigger than the currently set
+    // bond dimension limit, contracts the two neighbour sites and re-splits them with a
+    // truncated SVD to bring the bond dimension down to the limit. No gate is applied.
+    // Useful after lowering the bond dimension limit with setLimitBondDimension once the
+    // bonds have already grown beyond the new limit.
+    void Trim() override
+    {
+        if (!limitSize)
+            return; // nothing to trim against
+
+        for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
+        {
+            if (lambdas[qubit1].size() <= chi)
+                continue;
+
+            // contract the two neighbour sites (no gate is applied), then re-split with a truncated SVD
+            const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+            const MatrixClass thetaMatrix = ReshapeTheta(theta);
+
+            DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1);
+        }
+    }
+
+    void ReCanonicalize() override
+    {
+        if (lambdas.empty())
+            return;
+
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            bool applyUserCompression = true;
+            bool reduced;
+            do
+            {
+                const auto previousDimensions = getBondDimensions();
+                // Repair the basis without trusting old Schmidt weights or dropping directions.
+                for (IndexType site = static_cast<IndexType>(gammas.size()) - 1; site > 0; --site)
+                    RightCanonicalizeSite(site);
+
+                // The right block is now orthonormal. Starting at bond zero makes each
+                // newly computed lambda the valid left environment of the following bond.
+                for (IndexType bond = 0; bond < static_cast<IndexType>(lambdas.size()); ++bond)
+                {
+                    const MatrixClass theta = ReshapeTheta(ContractTwoQubits(bond));
+                    DecomposeAndSetGammasImpl(theta, bond, bond + 1, applyUserCompression, lambdas[bond].size());
+                }
+
+                // Truncation can stale earlier Schmidt spectra. Refresh until a pass
+                // changes no dimensions; no bond can grow, so this terminates.
+                reduced = getBondDimensions() != previousDimensions;
+                // A relative cutoff must also hold for the refreshed spectra. Discarded
+                // weight is a per-compression budget: do not spend it again on refresh.
+                applyUserCompression = truncationMode == TruncationMode::RelativeToMax;
+            } while (reduced);
+        });
+    }
+
+    // false if measured 0, true if measured 1
+    bool MeasureQubit(IndexType qubit) override
+    {
+        if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+
+        const double rndVal = 1. - uniformZeroOne(rng);
+        const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
+        const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
+
+        MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0)
+                                           : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
+        const QC::Gates::SingleQubitGate projOp(std::move(projMat));
+
+        ApplySingleQubitGate(projOp, qubit);
+
+        // propagate to the other qubits to the right and left until the end or there is no entanglement with the next
+        // one
+
+        for (IndexType q = qubit; q < static_cast<IndexType>(lambdas.size()); ++q)
+        {
+            if (lambdas[q].size() == 1)
+                break;
+            ApplyTwoQubitGate(projOp, q, q + 1, true);
+        }
+
+        for (IndexType q = qubit; q > 0; --q)
+        {
+            const IndexType q1 = q - 1;
+            if (lambdas[q1].size() == 1)
+                break;
+            ApplyTwoQubitGate(projOp, q1, q, true);
+        }
+
+        return !zeroMeasured;
+    }
+
+    std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType> &qubits) override
+    {
+        if (qubits.empty())
+            return {};
+
+        std::unordered_map<IndexType, bool> res;
+        if (qubits.size() == 1)
+        {
+            const IndexType qubit = *qubits.begin();
+            res[qubit] = MeasureQubit(qubit);
+            return res;
+        }
+
+        const auto lastIt = --qubits.end();
+
+        for (auto it = qubits.begin(); it != lastIt;)
+        {
+            const auto qubit = *it;
+            ++it;
+            const auto nextQubit = *it;
+
+            const double rndVal = 1. - uniformZeroOne(rng);
+            const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
+            const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
+
+            res[qubit] = !zeroMeasured;
+
+            MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0)
+                                               : oneProjection.getRawOperatorMatrix() * 1. / sqrt(1. - prob0);
+            const QC::Gates::SingleQubitGate projOp(std::move(projMat));
+
+            ApplySingleQubitGate(projOp, qubit);
+
+            for (IndexType q = qubit; q < nextQubit; ++q)
+            {
+                if (lambdas[q].size() == 1)
+                    break;
+                ApplyTwoQubitGate(projOp, q, q + 1, true);
+            }
+
+            for (IndexType q = qubit; q > 0; --q)
+            {
+                const IndexType q1 = q - 1;
+                if (lambdas[q1].size() == 1)
+                    break;
+                ApplyTwoQubitGate(projOp, q1, q, true);
+            }
+        }
+
+        const auto lastQubit = *lastIt;
+        res[lastQubit] = MeasureQubit(lastQubit);
+
+        return res;
+    }
+
+    // does not check for hermicity, that's why it returns a complex number
+    // the caller should ensure the hermicity and extract the real part
+    // also (for now, at least) it supports only one qubit ops
+    // the problem with two qubit gates is that they will swap qubits around
+    // so instead of only saving the state to compute <psi|U|psi>, and then use it to restore the state,
+    // it would need to save the state twice, once for restoring and one for computing the expectation value - the last
+    // one having the qubits swapped as the one on which the gates are applied anyway, this would be probably used
+    // mostly on Pauli strings, so...
+    std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
+    {
+        if (gates.empty())
+            return 1.;
+
+        // at this point it doesn't check if the gates are one qubit, that's done at the higher level
+        //
+        const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
+
+        // no need to zip up the whole chain, contracting the ends of the chain that are not touched by the operators
+        // should give 1.
+        IndexType minQubit = lastQubit;
+        IndexType maxQubit = 0;
+
+        for (const auto &gate : gates)
+        {
+            const IndexType qubit = gate.getQubit1();
+            if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+                throw std::invalid_argument("Qubit index out of bounds");
+            minQubit = std::min(minQubit, qubit);
+            maxQubit = std::max(maxQubit, qubit);
+        }
+
+        const IndexType nrSites = maxQubit - minQubit + 1;
+
+        // lambdas are not modified by the single qubit gates
+
+        std::vector<GammaType> modGammas(nrSites);
+        for (IndexType s = 0; s < nrSites; ++s)
+            modGammas[s] = gammas[minQubit + s];
+
+        // the right lambdas are already in the B tensors, only the left one needs to be multiplied in
+        // the lambdas multiplication goes for both dagger and non-dagger gammas,
+        // so the dagger are computed after the lambdas are applied
+        MultiplyFirstModGammaWithLeftLambda(modGammas[0], minQubit);
+
+        std::vector<GammaType> daggerGammas(nrSites);
+        for (IndexType s = 0; s < nrSites; ++s)
+            daggerGammas[s] = modGammas[s].conjugate();
+
+        // apply the gates
+        for (const auto &gate : gates)
+            ApplySingleQubitGate(modGammas[gate.getQubit1() - minQubit], gate);
+
+        // contract the saved dagger chain with the one with the gates applied
+        // we need to do that only for the qubits in the range [minQubit, maxQubit]
+
+        static const Eigen::array<IntIndexPair, 2> contract_dim{IntIndexPair(0, 0), IntIndexPair(1, 1)};
+        static const Indexes contract_dim1{IntIndexPair(0, 0)};
+
+        // start by contracting the first gamma with the first dagger gamma
+        //  -O-         |
+        // | |     ==>  O
+        //  -O-         |
+        Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(daggerGammas[0], contract_dim);
+
+        // now contract the rest of the gammas with the dagger gammas
+        for (IndexType s = 1; s < nrSites; ++s)
+        {
+            //  /-O-       -O-        |
+            // O  |   ==> | |    ==>  O
+            //  \-O-       -O-        |
+
+            // bug in eigen, does not work as expected without using an intermediate result?
+            // fails even with eval() after the first contract, so I use a separate variable for the first contract
+            const Eigen::Tensor<std::complex<double>, 3> intermediateResult =
+                resTensor.contract(modGammas[s], contract_dim1);
+            resTensor = intermediateResult.contract(daggerGammas[s], contract_dim);
+        }
+
+        const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
+
+        return t(0);
+    }
+
+    std::unordered_map<IndexType, bool> MeasureNoCollapse() override
+    {
+        const size_t nrQubits = gammas.size();
+        return MeasureNoCollapse(static_cast<IndexType>(nrQubits - 1));
+    }
+
+    std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType> &qubits) override
+    {
+        if (qubits.empty())
+            return {};
+        if (*qubits.cbegin() < 0 || *qubits.crbegin() >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+
+        return MeasureNoCollapse(*qubits.crbegin());
+    }
+
+    // Computes <0|Psi> by contracting the current MPS chain with the zero state
+    // useful for maestro/composer for checking some stuff
+    std::complex<double> ProjectOnZero() const override
+    {
+        const size_t nrQubits = getNrQubits();
+        if (nrQubits == 0)
+            return 0.;
+
+        static const Indexes product_dims{IntIndexPair(1, 0)};
+        MatrixTensorType res = gammas[0].chip(0, 1);
+
+        // the lambdas are already included in the B tensors
+        for (size_t q = 1; q < nrQubits; ++q)
+        {
+            // why? Needs this intermediary variable here, not even calling eval() works if assigning directly to res
+            MatrixTensorType tmp = res.contract(gammas[q].chip(0, 1), product_dims);
+            res = std::move(tmp);
+        }
+
+        return res(0, 0);
+    }
+
+  private:
+    // M = B_i reshaped as (L, 2R). QR of M^dagger gives M = R^dagger Q^dagger:
+    // keep Q^dagger at this site and move R^dagger left. No lambda or rank cutoff.
+    void RightCanonicalizeSite(IndexType site)
+    {
+        const GammaType &gamma = gammas[site];
+        const IndexType L = gamma.dimension(0);
+        const IndexType R = gamma.dimension(2);
+        const IndexType rank = std::min(L, 2 * R);
+        MatrixClass adjoint(2 * R, L);
+        for (IndexType physical = 0; physical < 2; ++physical)
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType l = 0; l < L; ++l)
+                    adjoint(physical * R + r, l) = std::conj(gamma(l, physical, r));
+
+        Eigen::HouseholderQR<MatrixClass> qr(adjoint);
+        const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(2 * R, rank);
+        const MatrixClass triangular = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
+        const GammaType &previous = gammas[site - 1];
+        const IndexType previousL = previous.dimension(0);
+        const Eigen::Map<const MatrixClass> previousMatrix(previous.data(), 2 * previousL, L);
+        const MatrixClass left = previousMatrix * triangular.adjoint();
+        GammaType newLeft(previousL, 2, rank);
+        std::copy(left.data(), left.data() + left.size(), newLeft.data());
+        GammaType newRight(rank, 2, R);
+        for (IndexType physical = 0; physical < 2; ++physical)
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType l = 0; l < rank; ++l)
+                    newRight(l, physical, r) = std::conj(Q(physical * R + r, l));
+        gammas[site - 1] = std::move(newLeft);
+        gammas[site] = std::move(newRight);
+        lambdas[site - 1] = LambdaType::Ones(rank); // dimensions only until the forward sweep
+    }
+
+    static double ValidMeasurementProbability(double probability)
+    {
+        constexpr double toleranceLow = 1E-9;
+        constexpr double toleranceHigh = 1E-5;
+        if (probability < -toleranceLow || probability > 1. + toleranceHigh)
+            std::cerr << "Invalid measurement probability produced by the MPS state" << std::endl;
+
+        return ClampProbability(std::clamp(probability, 0., 1.));
+    }
+
+    static bool PickZeroMeasurement(double rndVal, double prob0)
+    {
+        if (prob0 <= 0.)
+            return false;
+        if (prob0 >= 1.)
+            return true;
+
+        return rndVal < prob0;
+    }
+
+    void MultiplyFirstModGammaWithLeftLambda(GammaType &firstModGamma, IndexType minQubit) const
+    {
+        if (minQubit == 0)
+            return; // no left lambda for the first qubit
+
+        const IndexType prev = minQubit - 1;
+        const IndexType szl = firstModGamma.dimension(0);
+        const IndexType szr = firstModGamma.dimension(2);
+
+        for (IndexType r = 0; r < szr; ++r)
+            for (IndexType p = 0; p < 2; ++p)
+                for (IndexType l = 0; l < szl; ++l)
+                    firstModGamma(l, p, r) *= lambdas[prev][l];
+    }
+
+    static void SwapTheta(Eigen::Tensor<std::complex<double>, 4> &theta)
+    {
+        for (IndexType j = 0; j < theta.dimension(3); ++j)
+            for (IndexType i = 0; i < theta.dimension(0); ++i)
+                std::swap(theta(i, 0, 1, j), theta(i, 1, 0, j));
+    }
+
+    MatrixClass ConstructTheta(const GateClass &gate, IndexType qubit1, bool dontApplyGate, bool isSwapGate,
+                               bool reversed)
+    {
+        MatrixClass thetaMatrix;
+
+        // TODO: optimize for some gates? The most important would be the swap gate, as it's applied a lot to move
+        // qubits near each other before applying other two qubit gates something like:
+        if (dontApplyGate || isSwapGate)
+        {
+            Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+            // eiter apply the swap gate, optimized
+            // or this case is for dealing with entanglement with the qubits entangled with a measured one
+            // see 'Measure' function for details
+
+            // NOTE: with proper data structures this could be way more optimized
+            // instead of those generic eigen tensors for example, a more optimized tensor for this would hold Eigen
+            // matrices inside and the physical indices would select among them that way swapping will reduce to
+            // swapping pointers, it would be very fast but I'm lazy so I use the generic implementation
+
+            // qiskit aer does it, though
+
+            // it's less important than it appears, because usually SVD will take the most time (unless severely limited
+            // or having some particularly easy circuits)
+
+            if (isSwapGate)
+                SwapTheta(theta);
+
+            thetaMatrix = ReshapeTheta(theta);
+        }
+        else
+        {
+            const Eigen::TensorFixedSize<std::complex<double>, Eigen::Sizes<2, 2, 2, 2>> U =
+                GetTwoQubitsGateTensor(gate, reversed);
+            const Eigen::Tensor<std::complex<double>, 4> thetabar = ConstructThetaBar(qubit1, U);
+
+            thetaMatrix = ReshapeThetaBar(thetabar);
+        }
+
+        return thetaMatrix;
+    }
+
+    void ApplyTwoQubitGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
+                           bool dontApplyGate = false)
+    {
+        // it's more complex than the single qubit gate
+        // very shortly:
+        // contract tensors for the two qubits (the B tensors already contain the lambdas, except the left one)
+        // shape the gate into a tensor
+        // contract the gate tensor with the two qubit tensor
+        // apply SVD (with the left lambda multiplied in) to separate out the resulting tensor into the two qubit
+        // tensors and the lambda between them
+
+        IndexType qubit1 = controllingQubit1;
+        IndexType qubit2 = qubit;
+        bool reversed = false;
+
+        if (qubit1 > qubit2)
+        {
+            std::swap(qubit1, qubit2);
+            reversed = true;
+        }
+
+        const bool isSwapGate = gate.isSwapGate();
+
+        // the size is (2 * left bond dim) x (2 * right bond dim)
+        const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
+
+        DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
+    }
+
+    // SVD the (already built) theta matrix and write back the two new B tensors and the lambda
+    // in between. Shared by two-qubit gates, Trim, and ReCanonicalize. User-requested
+    // chi / entanglement cuts are applied only when applyUserCompression is true (the
+    // default); ReCanonicalize disables them during its final gauge refresh (except relative-cutoff cleanup).
+    //
+    // This is Hastings' method: theta = B1 B2 (with the gate applied) does not contain the left lambda.
+    // The SVD is done on lambda_left * theta = U S V^dagger, which is the two site tensor in the Schmidt basis of the
+    // left bond, so the singular values are the Schmidt values of the middle bond. Then the new right B is V^dagger and
+    // the new left B is theta * V (which is lambda_left^-1 * U * S, but computed without dividing). U is not needed at
+    // all.
+    void DecomposeAndSetGammas(const MatrixClass &thetaMatrix, IndexType qubit1, IndexType qubit2,
+                               bool applyUserCompression = true)
+    {
+        // the SVD and the matrix product for the new left B are the parts Eigen parallelizes
+        RunMaybeSingleThreaded(enableMultithreading,
+                               [&]() { DecomposeAndSetGammasImpl(thetaMatrix, qubit1, qubit2, applyUserCompression); });
+    }
+
+    void DecomposeAndSetGammasImpl(const MatrixClass &thetaMatrix, IndexType qubit1, IndexType qubit2,
+                                   bool applyUserCompression,
+                                   IndexType maxBondDimension = std::numeric_limits<IndexType>::max())
+    {
+        const IndexType szl = qubit1 == 0 ? 1 : lambdas[qubit1 - 1].size();
+        const IndexType szr = qubit2 == static_cast<IndexType>(lambdas.size()) ? 1 : lambdas[qubit2].size();
+
+        assert(2 * szl == thetaMatrix.rows());
+        assert(2 * szr == thetaMatrix.cols());
+
+        // the rows are (physical index, left bond index) = j * szl + i
+        MatrixClass weightedTheta;
+        if (qubit1 != 0)
+        {
+            const LambdaType &leftLambda = lambdas[qubit1 - 1];
+            weightedTheta.resize(thetaMatrix.rows(), thetaMatrix.cols());
+            for (IndexType c = 0; c < thetaMatrix.cols(); ++c)
+                for (IndexType j = 0; j < 2; ++j)
+                {
+                    const IndexType jszl = j * szl;
+                    for (IndexType i = 0; i < szl; ++i)
+                        weightedTheta(jszl + i, c) = thetaMatrix(jszl + i, c) * leftLambda[i];
+                }
+        }
+        const MatrixClass &svdMatrix = qubit1 == 0 ? thetaMatrix : weightedTheta;
 
 #ifdef USE_FAST_SVD
-				const bool computeWithJacobi = svdMatrix.rows() < blockSizeLimit && svdMatrix.cols() < blockSizeLimit;
+        const bool computeWithJacobi = svdMatrix.rows() < blockSizeLimit && svdMatrix.cols() < blockSizeLimit;
 #endif
 
-				// n x p is decomposed into U = n x n, singular vals diagonal matrix = n x p, V^t = p x p
-				// the thin version U = n x min(n, p), singular vals diagonal matrix = min(n,p) x min(n,p), V^t = min(n,p) x p
-				// only V is computed, U is not needed
+        // n x p is decomposed into U = n x n, singular vals diagonal matrix = n x p, V^t = p x p
+        // the thin version U = n x min(n, p), singular vals diagonal matrix = min(n,p) x min(n,p), V^t = min(n,p) x p
+        // only V is computed, U is not needed
 #ifdef USE_FAST_SVD
-				if (computeWithJacobi)
+        if (computeWithJacobi)
 #endif
-					jacobiSVD.compute(svdMatrix);
+            jacobiSVD.compute(svdMatrix);
 #ifdef USE_FAST_SVD
-				else
-					SVD.compute(svdMatrix);
+        else
+            SVD.compute(svdMatrix);
 
-				const MatrixClass& VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
-				const LambdaType& SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
+        const MatrixClass &VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
+        const LambdaType &SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
 
-				// Eigen's own numerical rank (no threshold is set on the SVD objects): only the singular values
-				// below diagSize * epsilon * sigma_max are dropped, they are not distinguishable from zero in double precision.
-				// Any real cut is only the user's choice (setLimitEntanglement / setLimitBondDimension).
-				// A failed decomposition (non-finite input) leaves the previous results in the reused SVD
-				// objects; never read them.
-				if ((computeWithJacobi ? jacobiSVD.info() : SVD.info()) != Eigen::Success)
-					throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
-				const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
+        // Eigen's own numerical rank (no threshold is set on the SVD objects): only the singular values
+        // below diagSize * epsilon * sigma_max are dropped, they are not distinguishable from zero in double precision.
+        // Any real cut is only the user's choice (setLimitEntanglement / setLimitBondDimension).
+        // A failed decomposition (non-finite input) leaves the previous results in the reused SVD
+        // objects; never read them.
+        if ((computeWithJacobi ? jacobiSVD.info() : SVD.info()) != Eigen::Success)
+            throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
+        const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
 #else
-				if (jacobiSVD.info() != Eigen::Success)
-					throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
-				const MatrixClass& VmatrixFull = jacobiSVD.matrixV();
-				const LambdaType& SvaluesFull = jacobiSVD.singularValues();
+        if (jacobiSVD.info() != Eigen::Success)
+            throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
+        const MatrixClass &VmatrixFull = jacobiSVD.matrixV();
+        const LambdaType &SvaluesFull = jacobiSVD.singularValues();
 
-				const IndexType numericalRank = jacobiSVD.rank();
+        const IndexType numericalRank = jacobiSVD.rank();
 #endif
-				// If user-requested compression is enabled, further reduce the rank according to
-				// the configured truncation mode, applied on the (still descending-sorted) singular values.
-				IndexType szm = (applyUserCompression && limitEntanglement) ?
-					ComputeCompressedRank(SvaluesFull, numericalRank, truncationMode, singularValueThreshold) : numericalRank;
+        // If user-requested compression is enabled, further reduce the rank according to
+        // the configured truncation mode, applied on the (still descending-sorted) singular values.
+        IndexType szm = (applyUserCompression && limitEntanglement)
+                            ? ComputeCompressedRank(SvaluesFull, numericalRank, truncationMode, singularValueThreshold)
+                            : numericalRank;
 
-				if (szm == 0) szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
+        if (szm == 0)
+            szm = 1; // Shouldn't happen (unless some big limit was put on 'zero')!
 
-				// A gauge-only update must not grow the incoming bond through roundoff.
-				const IndexType sz = std::min(maxBondDimension,
-					(applyUserCompression && limitSize) ? std::min<IndexType>(chi, szm) : szm);
+        // A gauge-only update must not grow the incoming bond through roundoff.
+        const IndexType sz =
+            std::min(maxBondDimension, (applyUserCompression && limitSize) ? std::min<IndexType>(chi, szm) : szm);
 
-				assert(sz <= VmatrixFull.cols());
-				assert(2 * szr == VmatrixFull.rows());
+        assert(sz <= VmatrixFull.cols());
+        assert(2 * szr == VmatrixFull.rows());
 
-				// Build the new lambda and both B tensors first, then commit them together (noexcept moves),
-				// so an allocation failure cannot leave the lambda paired with the old tensors.
-				LambdaType newLambda = SvaluesFull.head(sz);
-				assert(newLambda[0] != 0.);
+        // Build the new lambda and both B tensors first, then commit them together (noexcept moves),
+        // so an allocation failure cannot leave the lambda paired with the old tensors.
+        LambdaType newLambda = SvaluesFull.head(sz);
+        assert(newLambda[0] != 0.);
 
-				// the norm of the kept singular values is the norm of the state after truncation
-				// the lambdas are normalized, and the left B has to be scaled the same way to keep the state normalized
-				const double norm = newLambda.norm();
-				if (norm > 0) newLambda /= norm;
+        // the norm of the kept singular values is the norm of the state after truncation
+        // the lambdas are normalized, and the left B has to be scaled the same way to keep the state normalized
+        const double norm = newLambda.norm();
+        if (norm > 0)
+            newLambda /= norm;
 
-				GammaType newLeft, newRight;
-				SetNewGammas(thetaMatrix, VmatrixFull, norm > 0 ? 1. / norm : 1., szl, sz, szr, newLeft, newRight);
-				lambdas[qubit1] = std::move(newLambda);
-				gammas[qubit1] = std::move(newLeft);
-				gammas[qubit2] = std::move(newRight);
-			}
+        GammaType newLeft, newRight;
+        SetNewGammas(thetaMatrix, VmatrixFull, norm > 0 ? 1. / norm : 1., szl, sz, szr, newLeft, newRight);
+        lambdas[qubit1] = std::move(newLambda);
+        gammas[qubit1] = std::move(newLeft);
+        gammas[qubit2] = std::move(newRight);
+    }
 
-			// Given the (descending-sorted, already limited to the numerical rank) singular values and a
-			// user-requested compression threshold, returns how many of them to keep according to
-			// the selected truncation mode. Always keeps at least the largest singular value.
-			static IndexType ComputeCompressedRank(const LambdaType& sortedDescendingSVs, IndexType rank, TruncationMode mode, double threshold)
-			{
-				if (rank <= 1) return rank;
+    // Given the (descending-sorted, already limited to the numerical rank) singular values and a
+    // user-requested compression threshold, returns how many of them to keep according to
+    // the selected truncation mode. Always keeps at least the largest singular value.
+    static IndexType ComputeCompressedRank(const LambdaType &sortedDescendingSVs, IndexType rank, TruncationMode mode,
+                                           double threshold)
+    {
+        if (rank <= 1)
+            return rank;
 
-				if (mode == TruncationMode::RelativeToMax)
-				{
-					// Reproduces Eigen::SVDBase::rank() exactly: a singular value is kept iff it is
-					// strictly greater than threshold * sigma_max (with the same guard against a
-					// zero sigma_max that Eigen's own premultiplied threshold uses). This is this
-					// simulator's original (pre-mode-switch) truncation behavior.
-					const double premultipliedThreshold = std::max(threshold * sortedDescendingSVs[0], std::numeric_limits<double>::min());
-					IndexType i = rank - 1;
-					while (i >= 0 && sortedDescendingSVs[i] < premultipliedThreshold) --i;
-					return i + 1;
-				}
+        if (mode == TruncationMode::RelativeToMax)
+        {
+            // Reproduces Eigen::SVDBase::rank() exactly: a singular value is kept iff it is
+            // strictly greater than threshold * sigma_max (with the same guard against a
+            // zero sigma_max that Eigen's own premultiplied threshold uses). This is this
+            // simulator's original (pre-mode-switch) truncation behavior.
+            const double premultipliedThreshold =
+                std::max(threshold * sortedDescendingSVs[0], std::numeric_limits<double>::min());
+            IndexType i = rank - 1;
+            while (i >= 0 && sortedDescendingSVs[i] < premultipliedThreshold)
+                --i;
+            return i + 1;
+        }
 
-				// DiscardedWeight: discard the smallest singular values while the cumulative sum of
-				// their squares, normalized by the sum of squares of all of them (at this bond),
-				// stays below the threshold. Matches Qiskit Aer's reduce_zeros (see
-				// build/qiskit-aer/src/simulators/matrix_product_state/svd.cpp in the maestro repo)
-				// and ITensor's default 'cutoff'. Never discards the largest singular value.
-				const double total = sortedDescendingSVs.head(rank).squaredNorm();
-				if (total <= 0.) return rank;
+        // DiscardedWeight: discard the smallest singular values while the cumulative sum of
+        // their squares, normalized by the sum of squares of all of them (at this bond),
+        // stays below the threshold. Matches Qiskit Aer's reduce_zeros (see
+        // build/qiskit-aer/src/simulators/matrix_product_state/svd.cpp in the maestro repo)
+        // and ITensor's default 'cutoff'. Never discards the largest singular value.
+        const double total = sortedDescendingSVs.head(rank).squaredNorm();
+        if (total <= 0.)
+            return rank;
 
-				double discarded = 0.;
-				IndexType keep = rank;
-				for (IndexType i = rank - 1; i > 0; --i)
-				{
-					const double sq = sortedDescendingSVs[i] * sortedDescendingSVs[i];
-					if ((discarded + sq) / total >= threshold) break;
+        double discarded = 0.;
+        IndexType keep = rank;
+        for (IndexType i = rank - 1; i > 0; --i)
+        {
+            const double sq = sortedDescendingSVs[i] * sortedDescendingSVs[i];
+            if ((discarded + sq) / total >= threshold)
+                break;
 
-					discarded += sq;
-					keep = i;
-				}
+            discarded += sq;
+            keep = i;
+        }
 
-				return keep;
-			}
+        return keep;
+    }
 
-			static TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass& gate, bool reversed)
-			{
-				TwoQubitsGateTensor result;
+    static TwoQubitsGateTensor GetTwoQubitsGateTensor(const GateClass &gate, bool reversed)
+    {
+        TwoQubitsGateTensor result;
 
-				const auto& gateMat = gate.getRawOperatorMatrix();
+        const auto &gateMat = gate.getRawOperatorMatrix();
 
-				if (reversed)
-					for (int q0l = 0; q0l < 2; ++q0l)
-					{
-						const int l0 = q0l << 1;
-						for (int q0c = 0; q0c < 2; ++q0c)
-						{
-							const int c0 = q0c << 1;
-							for (int q1l = 0; q1l < 2; ++q1l)
-								for (int q1c = 0; q1c < 2; ++q1c)
-									result(q1l, q0l, q1c, q0c) = gateMat(l0 | q1l, c0 | q1c);
-						}
-					}
-				else
-					for (int q0l = 0; q0l < 2; ++q0l) // ctrl qubit
-					{
-						const int l0 = q0l << 1;
-						for (int q0c = 0; q0c < 2; ++q0c) // ctrl qubit
-						{
-							const int c0 = q0c << 1;
-							for (int q1l = 0; q1l < 2; ++q1l)
-								for (int q1c = 0; q1c < 2; ++q1c)
-									result(q0l, q1l, q0c, q1c) = gateMat(l0 | q1l, c0 | q1c);
-						}
-					}
+        if (reversed)
+            for (int q0l = 0; q0l < 2; ++q0l)
+            {
+                const int l0 = q0l << 1;
+                for (int q0c = 0; q0c < 2; ++q0c)
+                {
+                    const int c0 = q0c << 1;
+                    for (int q1l = 0; q1l < 2; ++q1l)
+                        for (int q1c = 0; q1c < 2; ++q1c)
+                            result(q1l, q0l, q1c, q0c) = gateMat(l0 | q1l, c0 | q1c);
+                }
+            }
+        else
+            for (int q0l = 0; q0l < 2; ++q0l) // ctrl qubit
+            {
+                const int l0 = q0l << 1;
+                for (int q0c = 0; q0c < 2; ++q0c) // ctrl qubit
+                {
+                    const int c0 = q0c << 1;
+                    for (int q1l = 0; q1l < 2; ++q1l)
+                        for (int q1c = 0; q1c < 2; ++q1c)
+                            result(q0l, q1l, q0c, q1c) = gateMat(l0 | q1l, c0 | q1c);
+                }
+            }
 
+        return result;
+    }
 
-				return result;
-			}
+    // the left B is (theta * V) * scale, the right B is V^dagger
+    // V is the full V from the SVD, only the first sz columns are used
+    static void SetNewGammas(const MatrixClass &thetaMatrix, const MatrixClass &Vmatrix, double scale, IndexType szl,
+                             IndexType sz, IndexType szr, GammaType &newLeft, GammaType &rightB)
+    {
+        // left site: the (szl, 2, sz) tensor has the same memory layout as the (2 * szl) x sz matrix with the rows j *
+        // szl + i so the product can be written directly into it
+        newLeft.resize(szl, 2, sz);
+        Eigen::Map<MatrixClass> leftB(newLeft.data(), 2 * szl, sz);
+        leftB.noalias() = thetaMatrix * Vmatrix.leftCols(sz);
+        if (scale != 1.)
+            leftB *= scale;
 
-			// the left B is (theta * V) * scale, the right B is V^dagger
-			// V is the full V from the SVD, only the first sz columns are used
-			static void SetNewGammas(const MatrixClass& thetaMatrix, const MatrixClass& Vmatrix, double scale, IndexType szl, IndexType sz, IndexType szr,
-				GammaType& newLeft, GammaType& rightB)
-			{
-				// left site: the (szl, 2, sz) tensor has the same memory layout as the (2 * szl) x sz matrix with the rows j * szl + i
-				// so the product can be written directly into it
-				newLeft.resize(szl, 2, sz);
-				Eigen::Map<MatrixClass> leftB(newLeft.data(), 2 * szl, sz);
-				leftB.noalias() = thetaMatrix * Vmatrix.leftCols(sz);
-				if (scale != 1.) leftB *= scale;
+        // right site: the columns of V^dagger are (physical index, right bond index) = j * szr + k
+        rightB.resize(sz, 2, szr);
+        for (IndexType k = 0; k < szr; ++k)
+            for (IndexType j = 0; j < 2; ++j)
+            {
+                const IndexType jind = j * szr + k;
+                for (IndexType i = 0; i < sz; ++i)
+                    rightB(i, j, k) = std::conj(Vmatrix(jind, i));
+            }
+    }
 
-				// right site: the columns of V^dagger are (physical index, right bond index) = j * szr + k
-				rightB.resize(sz, 2, szr);
-				for (IndexType k = 0; k < szr; ++k)
-					for (IndexType j = 0; j < 2; ++j)
-					{
-						const IndexType jind = j * szr + k;
-						for (IndexType i = 0; i < sz; ++i)
-							rightB(i, j, k) = std::conj(Vmatrix(jind, i));
-					}
-			}
+    // the B tensors already contain the lambdas: the middle one is in the left B, the right one in the right B
+    // the left lambda is not included, it's needed only for the SVD (see DecomposeAndSetGammas)
+    Eigen::Tensor<std::complex<double>, 4> ContractTwoQubits(IndexType qubit1) const
+    {
+        const IndexType qubit2 = qubit1 + 1;
 
-			// the B tensors already contain the lambdas: the middle one is in the left B, the right one in the right B
-			// the left lambda is not included, it's needed only for the SVD (see DecomposeAndSetGammas)
-			Eigen::Tensor<std::complex<double>, 4> ContractTwoQubits(IndexType qubit1) const
-			{
-				const IndexType qubit2 = qubit1 + 1;
+        static const Indexes product_dims_int{IntIndexPair(2, 0)};
 
-				static const Indexes product_dims_int{ IntIndexPair(2, 0) };
+        assert(gammas[qubit1].dimension(2) == gammas[qubit2].dimension(0));
 
-				assert(gammas[qubit1].dimension(2) == gammas[qubit2].dimension(0));
+        // contract the first B with the next one
+        // the resulting tensor has four legs, 1 and 2 are the physical ones
 
-				// contract the first B with the next one
-				// the resulting tensor has four legs, 1 and 2 are the physical ones
+        return gammas[qubit1].contract(gammas[qubit2], product_dims_int);
+    }
 
-				return gammas[qubit1].contract(gammas[qubit2], product_dims_int);
-			}
+    // for the two qubit gate - U is the gate tensor
+    Eigen::Tensor<std::complex<double>, 4> ConstructThetaBar(IndexType qubit1, const TwoQubitsGateTensor &U)
+    {
+        const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
 
-			// for the two qubit gate - U is the gate tensor
-			Eigen::Tensor<std::complex<double>, 4> ConstructThetaBar(IndexType qubit1, const TwoQubitsGateTensor& U)
-			{
-				const Eigen::Tensor<std::complex<double>, 4> theta = ContractTwoQubits(qubit1);
+        // apply evolution/gate operator
+        using DimPair = Eigen::Tensor<std::complex<double>, 4>::DimensionPair;
 
-				// apply evolution/gate operator
-				using DimPair = Eigen::Tensor<std::complex<double>, 4>::DimensionPair;
+        // from theta the physical indexes are contracted out
+        // the last two become the physical indexes
 
-				// from theta the physical indexes are contracted out
-				// the last two become the physical indexes
+        static const Eigen::array<DimPair, 2> product_dim{DimPair(1, 2), DimPair(2, 3)};
 
-				static const Eigen::array<DimPair, 2> product_dim{ DimPair(1, 2), DimPair(2, 3) };
+        // this applies the time evolution/gate operator U
+        return theta.contract(U, product_dim);
+    }
 
-				// this applies the time evolution/gate operator U
-				return theta.contract(U, product_dim);
-			}
+    MatrixClass ReshapeThetaBar(const Eigen::Tensor<std::complex<double>, 4> &theta)
+    {
+        // get it into a matrix for SVD - use JacobiSVD
+        IndexType sz0 = theta.dimension(0);
+        IndexType sz1 = theta.dimension(1);
 
-			MatrixClass ReshapeThetaBar(const Eigen::Tensor<std::complex<double>, 4>& theta)
-			{
-				// get it into a matrix for SVD - use JacobiSVD
-				IndexType sz0 = theta.dimension(0);
-				IndexType sz1 = theta.dimension(1);
+        assert(sz0 > 0);
+        assert(sz1 > 0);
 
-				assert(sz0 > 0);
-				assert(sz1 > 0);
+        assert(2 == theta.dimension(2));
+        assert(2 == theta.dimension(3));
 
-				assert(2 == theta.dimension(2));
-				assert(2 == theta.dimension(3));
+        MatrixClass thetaMatrix(2 * sz0, 2 * sz1);
 
-				MatrixClass thetaMatrix(2 * sz0, 2 * sz1);
+        for (IndexType l = 0; l < 2; ++l)
+        {
+            const IndexType lsz1 = l * sz1;
+            for (IndexType k = 0; k < 2; ++k)
+            {
+                const IndexType ksz0 = k * sz0;
+                for (IndexType j = 0; j < sz1; ++j)
+                {
+                    const IndexType lsz1j = lsz1 + j;
+                    for (IndexType i = 0; i < sz0; ++i)
+                        // 2, 0, 3, 1 - k & l from theta are the physical indexes
+                        thetaMatrix(ksz0 + i, lsz1j) = theta(i, j, k, l);
+                }
+            }
+        }
 
-				for (IndexType l = 0; l < 2; ++l)
-				{
-					const IndexType lsz1 = l * sz1;
-					for (IndexType k = 0; k < 2; ++k)
-					{
-						const IndexType ksz0 = k * sz0;
-						for (IndexType j = 0; j < sz1; ++j)
-						{
-							const IndexType lsz1j = lsz1 + j;
-							for (IndexType i = 0; i < sz0; ++i)
-								// 2, 0, 3, 1 - k & l from theta are the physical indexes
-								thetaMatrix(ksz0 + i, lsz1j) = theta(i, j, k, l);
-						}
-					}
-				}
+        return thetaMatrix;
+    }
 
-				return thetaMatrix;
-			}
+    static MatrixClass ReshapeTheta(const Eigen::Tensor<std::complex<double>, 4> &theta)
+    {
+        // get it into a matrix for SVD - use JacobiSVD
+        IndexType sz0 = theta.dimension(0);
+        assert(sz0 > 0);
 
-			static MatrixClass ReshapeTheta(const Eigen::Tensor<std::complex<double>, 4>& theta)
-			{
-				// get it into a matrix for SVD - use JacobiSVD
-				IndexType sz0 = theta.dimension(0);
-				assert(sz0 > 0);
+        assert(2 == theta.dimension(1));
+        assert(2 == theta.dimension(2));
 
-				assert(2 == theta.dimension(1));
-				assert(2 == theta.dimension(2));
+        IndexType sz3 = theta.dimension(3);
+        assert(sz3 > 0);
 
-				IndexType sz3 = theta.dimension(3);
-				assert(sz3 > 0);
+        MatrixClass thetaMatrix(2 * sz0, 2 * sz3);
 
-				MatrixClass thetaMatrix(2 * sz0, 2 * sz3);
+        for (IndexType l = 0; l < sz3; ++l)
+            for (IndexType k = 0; k < 2; ++k)
+            {
+                const IndexType ksz3l = k * sz3 + l;
+                for (IndexType j = 0; j < 2; ++j)
+                {
+                    const IndexType jsz0 = j * sz0;
+                    for (IndexType i = 0; i < sz0; ++i)
+                        // j & k from theta are the physical indexes
+                        thetaMatrix(jsz0 + i, ksz3l) = theta(i, j, k, l);
+                }
+            }
 
-				for (IndexType l = 0; l < sz3; ++l)
-					for (IndexType k = 0; k < 2; ++k)
-					{
-						const IndexType ksz3l = k * sz3 + l;
-						for (IndexType j = 0; j < 2; ++j)
-						{
-							const IndexType jsz0 = j * sz0;
-							for (IndexType i = 0; i < sz0; ++i)
-								// j & k from theta are the physical indexes
-								thetaMatrix(jsz0 + i, ksz3l) = theta(i, j, k, l);
-						}
-					}
+        return thetaMatrix;
+    }
 
-				return thetaMatrix;
-			}
+    std::unordered_map<IndexType, bool> MeasureNoCollapse(IndexType limit)
+    {
+        if (gammas.empty())
+            return {};
 
-			std::unordered_map<IndexType, bool> MeasureNoCollapse(IndexType limit)
-			{
-				if (gammas.empty()) return {};
+        const IndexType limit1 = limit + 1;
+        std::unordered_map<IndexType, bool> res;
 
-				const IndexType limit1 = limit + 1;
-				std::unordered_map<IndexType, bool> res;
+        // the product of the B matrices (the lambdas are included in them) for the values measured so far,
+        // divided by the square root of their probability: the sites to the right are in the right canonical
+        // form, so the conditional probability of 0 is the squared norm of the zero branch of this row vector.
+        // Keeping the row normalized avoids the joint probability of the prefix, which underflows for
+        // long chains (2^-n for n unbiased qubits) and made every later outcome 1.
+        Eigen::RowVectorXcd vec = Eigen::RowVectorXcd::Ones(1);
 
-				// the product of the B matrices (the lambdas are included in them) for the values measured so far,
-				// divided by the square root of their probability: the sites to the right are in the right canonical
-				// form, so the conditional probability of 0 is the squared norm of the zero branch of this row vector.
-				// Keeping the row normalized avoids the joint probability of the prefix, which underflows for
-				// long chains (2^-n for n unbiased qubits) and made every later outcome 1.
-				Eigen::RowVectorXcd vec = Eigen::RowVectorXcd::Ones(1);
+        // the matrix for a physical index p starts at offset p * dim1 in the tensor data, the columns are 2 * dim1
+        // apart
+        using SliceMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
 
-				// the matrix for a physical index p starts at offset p * dim1 in the tensor data, the columns are 2 * dim1 apart
-				using SliceMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
+        for (IndexType qubit = 0; qubit < limit1; ++qubit)
+        {
+            const IndexType dim1 = gammas[qubit].dimension(0);
+            const IndexType dim2 = gammas[qubit].dimension(2);
 
-				for (IndexType qubit = 0; qubit < limit1; ++qubit)
-				{
-					const IndexType dim1 = gammas[qubit].dimension(0);
-					const IndexType dim2 = gammas[qubit].dimension(2);
+            // 1. First, compute probability for measuring 0
+            // zero matrix
+            const SliceMap zeroMat(gammas[qubit].data(), dim1, dim2, Eigen::OuterStride<>(2 * dim1));
+            Eigen::RowVectorXcd zeroVec = vec * zeroMat;
 
-					// 1. First, compute probability for measuring 0
-					// zero matrix
-					const SliceMap zeroMat(gammas[qubit].data(), dim1, dim2, Eigen::OuterStride<>(2 * dim1));
-					Eigen::RowVectorXcd zeroVec = vec * zeroMat;
+            // the probability for the current qubit to be 0, conditioned on the values picked so far
+            const double prob0 = ValidMeasurementProbability(zeroVec.squaredNorm());
 
-					// the probability for the current qubit to be 0, conditioned on the values picked so far
-					const double prob0 = ValidMeasurementProbability(zeroVec.squaredNorm());
+            // 2. use that probability to measure the qubit
+            const double rndVal = 1. - uniformZeroOne(rng);
+            const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
+            res[qubit] = !zeroMeasured;
 
-					// 2. use that probability to measure the qubit
-					const double rndVal = 1. - uniformZeroOne(rng);
-					const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
-					res[qubit] = !zeroMeasured;
+            // now update the vector, renormalized by the probability of the picked value
+            if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
+            {
+                vec.swap(zeroVec);
+                vec /= std::sqrt(prob0);
+            }
+            else
+            {
+                const SliceMap oneMat(gammas[qubit].data() + dim1, dim1, dim2, Eigen::OuterStride<>(2 * dim1));
+                vec = vec * oneMat;
+                vec /= std::sqrt(1. - prob0);
+            }
+        }
 
-					// now update the vector, renormalized by the probability of the picked value
-					if (zeroMeasured) // no need to compute it again if 0 was measured, it was already computed above
-					{
-						vec.swap(zeroVec);
-						vec /= std::sqrt(prob0);
-					}
-					else
-					{
-						const SliceMap oneMat(gammas[qubit].data() + dim1, dim1, dim2, Eigen::OuterStride<>(2 * dim1));
-						vec = vec * oneMat;
-						vec /= std::sqrt(1. - prob0);
-					}
-				}
+        return res;
+    }
 
-				return res;
-			}
-
-			// with Hastings' method the U matrix from the SVD is not needed, only V
+    // with Hastings' method the U matrix from the SVD is not needed, only V
 #ifdef USE_FAST_SVD
-			constexpr static IndexType blockSizeLimit = 16;
-			Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinV> SVD;
+    constexpr static IndexType blockSizeLimit = 16;
+    Eigen::BDCSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinV> SVD;
 #endif
-			Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
-		};
+    Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
+};
 
-	}
-}
+} // namespace TensorNetworks
+} // namespace QC

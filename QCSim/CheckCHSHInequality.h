@@ -4,131 +4,139 @@
 #include "QuantumGate.h"
 #include "Utils.h"
 
-namespace BellInequalities {
+namespace BellInequalities
+{
 
-	// also named 'CHSH game'
-	template<class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class CheckCHSHInequality :
-		public QC::QuantumAlgorithm<VectorClass, MatrixClass>
-	{
-	public:
-		using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
+// also named 'CHSH game'
+template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd>
+class CheckCHSHInequality : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
+{
+  public:
+    using BaseClass = QC::QuantumAlgorithm<VectorClass, MatrixClass>;
 
-		explicit CheckCHSHInequality(unsigned int addseed = 0)
-			: BaseClass(2, addseed),
-			S((-Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (-Z-X)/sqrt(2)=-H
-			T((Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (Z-X)/sqrt(2)
-			QSaccum(0), RSaccum(0), RTaccum(0), QTaccum(0), QScount(0), RScount(0), RTcount(0), QTcount(0)
-		{
-			const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
-			std::seed_seq seed{ uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32) };
-			rng.seed(seed);
-		};
+    explicit CheckCHSHInequality(unsigned int addseed = 0)
+        : BaseClass(2, addseed),
+          S((-Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)), // (-Z-X)/sqrt(2)=-H
+          T((Q.getRawOperatorMatrix() - R.getRawOperatorMatrix()) / sqrt(2.)),  // (Z-X)/sqrt(2)
+          QSaccum(0), RSaccum(0), RTaccum(0), QTaccum(0), QScount(0), RScount(0), RTcount(0), QTcount(0)
+    {
+        const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count() + addseed;
+        std::seed_seq seed{uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed >> 32)};
+        rng.seed(seed);
+    };
 
-		void ResetStatistics()
-		{
-			QSaccum = RSaccum = RTaccum = QTaccum = 0;
-			QScount = RScount = RTcount = QTcount = 0;
-		}
+    void ResetStatistics()
+    {
+        QSaccum = RSaccum = RTaccum = QTaccum = 0;
+        QScount = RScount = RTcount = QTcount = 0;
+    }
 
-		double getValue() const
-		{
-			return (QScount ? static_cast<double>(QSaccum) / QScount : 0.) + (RScount ? static_cast<double>(RSaccum) / RScount : 0.) + (RTcount ? static_cast<double>(RTaccum) / RTcount : 0.) - (QTcount ? static_cast<double>(QTaccum) / QTcount : 0.);
-		}
+    double getValue() const
+    {
+        return (QScount ? static_cast<double>(QSaccum) / QScount : 0.) +
+               (RScount ? static_cast<double>(RSaccum) / RScount : 0.) +
+               (RTcount ? static_cast<double>(RTaccum) / RTcount : 0.) -
+               (QTcount ? static_cast<double>(QTaccum) / QTcount : 0.);
+    }
 
-		size_t Execute() override
-		{
-			return Check();
-		}
+    size_t Execute() override
+    {
+        return Check();
+    }
 
-		// allows separate measurements on qubits, obviously the results should be the same but it's better to have a way to test it
-		size_t Check(bool separateMeasurements = false)
-		{
-			// start with the Bell state:
-			bellState.setBellState11(BaseClass::reg);
+    // allows separate measurements on qubits, obviously the results should be the same but it's better to have a way to
+    // test it
+    size_t Check(bool separateMeasurements = false)
+    {
+        // start with the Bell state:
+        bellState.setBellState11(BaseClass::reg);
 
-			// Alice and Bob each get a qubit, they perform measurements on them
+        // Alice and Bob each get a qubit, they perform measurements on them
 
-			// pick which one to measure at random
-			// Alice: 
-			const bool aM = dist_bool(rng);
-			const QC::Gates::SingleQubitGate<MatrixClass>& aliceMeasurement = aM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(R) : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass>&>(Q);
-			measurementBasis.switchToOperatorBasis(BaseClass::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
+        // pick which one to measure at random
+        // Alice:
+        const bool aM = dist_bool(rng);
+        const QC::Gates::SingleQubitGate<MatrixClass> &aliceMeasurement =
+            aM ? dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass> &>(R)
+               : dynamic_cast<QC::Gates::SingleQubitGate<MatrixClass> &>(Q);
+        measurementBasis.switchToOperatorBasis(BaseClass::reg, aliceMeasurement.getRawOperatorMatrix(), 0);
 
-			size_t state = 0;
+        size_t state = 0;
 
-			int res1 = -1;
-			if (separateMeasurements)
-			{
-				state = BaseClass::Measure(0);
-				if (state) res1 = 1;
-			}
+        int res1 = -1;
+        if (separateMeasurements)
+        {
+            state = BaseClass::Measure(0);
+            if (state)
+                res1 = 1;
+        }
 
-			// Bob:
-			const bool bM = dist_bool(rng);
-			const QC::Gates::SingleQubitGate<MatrixClass>& bobMeasurement = bM ? T : S;
-			measurementBasis.switchToOperatorBasis(BaseClass::reg, bobMeasurement.getRawOperatorMatrix(), 1);
+        // Bob:
+        const bool bM = dist_bool(rng);
+        const QC::Gates::SingleQubitGate<MatrixClass> &bobMeasurement = bM ? T : S;
+        measurementBasis.switchToOperatorBasis(BaseClass::reg, bobMeasurement.getRawOperatorMatrix(), 1);
 
-			int res2 = -1;
-			if (separateMeasurements)
-				state |= BaseClass::Measure(1) << 1;
-			else
-			{
-				state = BaseClass::Measure();
-				if (state & 1) res1 = 1;
-			}
-			if (state & 2) res2 = 1;
+        int res2 = -1;
+        if (separateMeasurements)
+            state |= BaseClass::Measure(1) << 1;
+        else
+        {
+            state = BaseClass::Measure();
+            if (state & 1)
+                res1 = 1;
+        }
+        if (state & 2)
+            res2 = 1;
 
-			const int prod = res1 * res2;
+        const int prod = res1 * res2;
 
-			if (aM && bM) // RT
-			{
-				RTaccum += prod;
-				++RTcount;
-			}
-			else if (aM) // RS
-			{
-				RSaccum += prod;
-				++RScount;
-			}
-			else if (bM) // QT
-			{
-				QTaccum += prod;
-				++QTcount;
-			}
-			else // QS
-			{
-				QSaccum += prod;
-				++QScount;
-			}
+        if (aM && bM) // RT
+        {
+            RTaccum += prod;
+            ++RTcount;
+        }
+        else if (aM) // RS
+        {
+            RSaccum += prod;
+            ++RScount;
+        }
+        else if (bM) // QT
+        {
+            QTaccum += prod;
+            ++QTcount;
+        }
+        else // QS
+        {
+            QSaccum += prod;
+            ++QScount;
+        }
 
-			return state;
-		}
+        return state;
+    }
 
-	protected:
-		QC::BellState<VectorClass, MatrixClass> bellState;
-		QC::MeasurementBasis<VectorClass, MatrixClass> measurementBasis;
+  protected:
+    QC::BellState<VectorClass, MatrixClass> bellState;
+    QC::MeasurementBasis<VectorClass, MatrixClass> measurementBasis;
 
-		// Alice measurement basis operators
-		QC::Gates::PauliZGate<MatrixClass> Q;
-		QC::Gates::PauliXGate<MatrixClass> R;
+    // Alice measurement basis operators
+    QC::Gates::PauliZGate<MatrixClass> Q;
+    QC::Gates::PauliXGate<MatrixClass> R;
 
-		// Bob measurement basis operators
-		QC::Gates::SingleQubitGate<MatrixClass> S;
-		QC::Gates::SingleQubitGate<MatrixClass> T;
+    // Bob measurement basis operators
+    QC::Gates::SingleQubitGate<MatrixClass> S;
+    QC::Gates::SingleQubitGate<MatrixClass> T;
 
-		std::mt19937_64 rng;
-		std::bernoulli_distribution dist_bool;
+    std::mt19937_64 rng;
+    std::bernoulli_distribution dist_bool;
 
-		long long int QSaccum;
-		long long int RSaccum;
-		long long int RTaccum;
-		long long int QTaccum;
-		unsigned long long int QScount;
-		unsigned long long int RScount;
-		unsigned long long int RTcount;
-		unsigned long long int QTcount;
-	};
+    long long int QSaccum;
+    long long int RSaccum;
+    long long int RTaccum;
+    long long int QTaccum;
+    unsigned long long int QScount;
+    unsigned long long int RScount;
+    unsigned long long int RTcount;
+    unsigned long long int QTcount;
+};
 
-}
-
-
+} // namespace BellInequalities

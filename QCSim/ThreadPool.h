@@ -1,28 +1,29 @@
 #pragma once
 
-#include <vector>
-#include <queue>
-#include <thread>
-#include <mutex>
 #include <condition_variable>
 #include <functional>
 #include <future>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <vector>
 
 #include "QubitRegisterCalculator.h"
 
 namespace QC
 {
-    template<typename Return = double> class ThreadPool
+template <typename Return = double> class ThreadPool
+{
+  public:
+    explicit ThreadPool(size_t numThreads = 0)
     {
-    public:
-        explicit ThreadPool(size_t numThreads = 0)
-        {
-            if (numThreads == 0)
-                numThreads = QubitRegisterCalculator<>::GetNumberOfThreads();
-            if (numThreads == 0)
-                numThreads = 4;
+        if (numThreads == 0)
+            numThreads = QubitRegisterCalculator<>::GetNumberOfThreads();
+        if (numThreads == 0)
+            numThreads = 4;
 
-            try {
+        try
+        {
             for (size_t i = 0; i < numThreads; ++i)
             {
                 workers.emplace_back([this] {
@@ -35,7 +36,7 @@ namespace QC
                             cv.wait(lock, [this] { return stopped || !tasks.empty(); });
                             if (stopped && tasks.empty())
                                 return;
-                            //taskRunning = true;
+                            // taskRunning = true;
                             task = std::move(tasks.front());
                             tasks.pop();
                         }
@@ -45,78 +46,87 @@ namespace QC
                             std::unique_lock<std::mutex> lock(mtx);
                             taskRunning = false;
                         }
-						cvDone.notify_all();
+                        cvDone.notify_all();
                         */
                     }
                 });
             }
-            } catch (...) {
-                { std::lock_guard<std::mutex> lock(mtx); stopped = true; }
-                cv.notify_all();
-                for (auto& worker : workers) worker.join();
-                throw;
-            }
         }
-
-        ~ThreadPool()
+        catch (...)
         {
             {
-                std::unique_lock<std::mutex> lock(mtx);
+                std::lock_guard<std::mutex> lock(mtx);
                 stopped = true;
             }
             cv.notify_all();
-            for (auto& worker : workers)
+            for (auto &worker : workers)
                 worker.join();
+            throw;
         }
+    }
 
-        ThreadPool(const ThreadPool&) = delete;
-        ThreadPool& operator=(const ThreadPool&) = delete;
-        ThreadPool(ThreadPool&&) = delete;
-        ThreadPool& operator=(ThreadPool&&) = delete;
-
-        template<typename F>
-        std::future<Return> Enqueue(F&& f)
-        {
-            auto task = std::make_shared<std::packaged_task<Return()>>(std::forward<F>(f));
-            std::future<Return> theFuture = task->get_future();
-            {
-                std::unique_lock<std::mutex> lock(mtx);
-                tasks.emplace([task = std::move(task)]() { 
-                    (*task)(); 
-                    });
-            }
-            cv.notify_one();
-            return theFuture;
-        }
-
-        /*
-        bool HasWork()
+    ~ThreadPool()
+    {
         {
             std::unique_lock<std::mutex> lock(mtx);
-            return !tasks.empty() || taskRunning;
-		}
+            stopped = true;
+        }
+        cv.notify_all();
+        for (auto &worker : workers)
+            worker.join();
+    }
 
-        bool WaitForFinish()
+    ThreadPool(const ThreadPool &) = delete;
+    ThreadPool &operator=(const ThreadPool &) = delete;
+    ThreadPool(ThreadPool &&) = delete;
+    ThreadPool &operator=(ThreadPool &&) = delete;
+
+    template <typename F> std::future<Return> Enqueue(F &&f)
+    {
+        auto task = std::make_shared<std::packaged_task<Return()>>(std::forward<F>(f));
+        std::future<Return> theFuture = task->get_future();
         {
             std::unique_lock<std::mutex> lock(mtx);
-            if (tasks.empty() && !taskRunning)
-				return true;
-			cvDone.wait(lock, [this] { return tasks.empty() && !taskRunning; });
-            return tasks.empty() && !taskRunning;
+            tasks.emplace([task = std::move(task)]() { (*task)(); });
         }
-        */
+        cv.notify_one();
+        return theFuture;
+    }
 
-        size_t GetThreadCount() const { return workers.size(); }
-        bool IsWorkerThread() const { return currentPool == this; }
+    /*
+    bool HasWork()
+    {
+        std::unique_lock<std::mutex> lock(mtx);
+        return !tasks.empty() || taskRunning;
+    }
 
-    private:
-        inline static thread_local const ThreadPool* currentPool = nullptr;
-        std::vector<std::thread> workers;
-        std::queue<std::function<void()>> tasks;
-        std::mutex mtx;
-        std::condition_variable cv;
-        //std::condition_variable cvDone;
-        bool stopped = false;
-		//bool taskRunning = false;
-    };
-}
+    bool WaitForFinish()
+    {
+        std::unique_lock<std::mutex> lock(mtx);
+        if (tasks.empty() && !taskRunning)
+            return true;
+        cvDone.wait(lock, [this] { return tasks.empty() && !taskRunning; });
+        return tasks.empty() && !taskRunning;
+    }
+    */
+
+    size_t GetThreadCount() const
+    {
+        return workers.size();
+    }
+    bool IsWorkerThread() const
+    {
+        return currentPool == this;
+    }
+
+  private:
+    inline static thread_local const ThreadPool *currentPool = nullptr;
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+    std::mutex mtx;
+    std::condition_variable cv;
+    // std::condition_variable cvDone;
+    bool stopped = false;
+    // bool taskRunning = false;
+};
+} // namespace QC

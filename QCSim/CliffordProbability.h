@@ -1,10 +1,15 @@
 #pragma once
 
+#include "CliffordTableau.h"
 #include <cmath>
 #include <random>
-#include "CliffordTableau.h"
 
-namespace QC { namespace Clifford { namespace detail {
+namespace QC
+{
+namespace Clifford
+{
+namespace detail
+{
 
 // Computational-basis support is an affine binary space. Pure-Z stabilizers
 // supply its parity constraints; all supported outcomes have probability 2^-r.
@@ -13,27 +18,29 @@ namespace QC { namespace Clifford { namespace detail {
 // by the parity of its Z part on b.
 class BasisDistribution
 {
-public:
-    void BuildFromInverse(const PackedTableau& inverseZ, const Word* label = nullptr)
+  public:
+    void BuildFromInverse(const PackedTableau &inverseZ, const Word *label = nullptr)
     {
         PackedTableau work(inverseZ);
         if (label)
-            for (size_t row = 0; row < work.size(); ++row) ApplyLabel(work[row], label);
+            for (size_t row = 0; row < work.size(); ++row)
+                ApplyLabel(work[row], label);
         Build(std::move(work));
     }
 
-    void BuildFromInverse(const PackedTableau& inverseZ, const std::vector<size_t>& qubits,
-        const Word* label = nullptr)
+    void BuildFromInverse(const PackedTableau &inverseZ, const std::vector<size_t> &qubits, const Word *label = nullptr)
     {
         const size_t n = qubits.size();
         PackedTableau work(n, inverseZ.GetNrQubits()), expressions(n, n);
         std::vector<size_t> freeOutputs, logicalPivots;
-        freeOutputs.reserve(n); logicalPivots.reserve(n);
+        freeOutputs.reserve(n);
+        logicalPivots.reserve(n);
         for (size_t output = 0; output < n; ++output)
         {
             auto row = work[output], expression = expressions[output];
             row.CopyFrom(inverseZ[qubits[output]]);
-            if (label) ApplyLabel(row, label);
+            if (label)
+                ApplyLabel(row, label);
             for (size_t p = 0; p < freeOutputs.size(); ++p)
                 if (row.X[logicalPivots[p]])
                 {
@@ -44,7 +51,8 @@ public:
                     expression.PhaseSign ^= bool(previous.PhaseSign);
                 }
             size_t word = 0;
-            while (word < row.Words() && !row.X.words[word]) ++word;
+            while (word < row.Words() && !row.X.words[word])
+                ++word;
             if (word < row.Words())
             {
                 // This physical output is the next independent random bit.
@@ -54,7 +62,8 @@ public:
                 freeOutputs.push_back(output);
                 expression.X[output] = true;
             }
-            else expression.PhaseSign ^= bool(row.PhaseSign);
+            else
+                expression.PhaseSign ^= bool(row.PhaseSign);
         }
 
         PackedTableau nextConstraints(n - freeOutputs.size(), n), nextBasis(freeOutputs.size(), n);
@@ -74,7 +83,8 @@ public:
             constraint.Z[output] = true;
             constraint.PhaseSign = bool(expression.PhaseSign);
             nextPivots.push_back(output);
-            if (expression.PhaseSign) nextOffset[output / 64] |= Word(1) << (output % 64);
+            if (expression.PhaseSign)
+                nextOffset[output / 64] |= Word(1) << (output % 64);
             for (size_t p = 0; p < freeOutputs.size(); ++p)
                 if (expression.X[freeOutputs[p]])
                 {
@@ -85,16 +95,19 @@ public:
         // No second elimination is needed: these expressions already solve
         // dependent outputs in terms of earlier random outputs, consuming RNG
         // draws in exactly the same order as sequential measurements.
-        constraints.swap(nextConstraints); basis.swap(nextBasis);
-        offset.swap(nextOffset); pivotColumns.swap(nextPivots);
+        constraints.swap(nextConstraints);
+        basis.swap(nextBasis);
+        offset.swap(nextOffset);
+        pivotColumns.swap(nextPivots);
         probability = freeOutputs.size() > 1074 ? 0.0 : std::ldexp(1.0, -static_cast<int>(freeOutputs.size()));
     }
 
-private:
-    static void ApplyLabel(TableauRow<false> row, const Word* label) noexcept
+  private:
+    static void ApplyLabel(TableauRow<false> row, const Word *label) noexcept
     {
         Word parity = 0;
-        for (size_t w = 0; w < row.Words(); ++w) parity ^= row.Z.words[w] & label[w];
+        for (size_t w = 0; w < row.Words(); ++w)
+            parity ^= row.Z.words[w] & label[w];
         row.PhaseSign ^= (Popcount(parity) & 1) != 0;
     }
 
@@ -104,16 +117,20 @@ private:
         // Track which physical Z operators produced each inverse image.
         PackedTableau labels;
         const auto ensureLabels = [&] {
-            if (!labels.empty()) return;
+            if (!labels.empty())
+                return;
             labels = PackedTableau(n, n);
-            for (size_t q = 0; q < n; ++q) labels[q].Z[q] = true;
+            for (size_t q = 0; q < n; ++q)
+                labels[q].Z[q] = true;
         };
         size_t rank = 0;
         for (size_t q = 0; q < logicalQubits && rank < n; ++q)
         {
             size_t pivot = rank;
-            while (pivot < n && !work[pivot].X[q]) ++pivot;
-            if (pivot == n) continue;
+            while (pivot < n && !work[pivot].X[q])
+                ++pivot;
+            if (pivot == n)
+                continue;
             if (rank != pivot)
             {
                 ensureLabels();
@@ -133,14 +150,16 @@ private:
         PackedTableau constraints(n - rank, n);
         for (size_t row = 0; row < constraints.size(); ++row)
         {
-            if (labels.empty()) constraints[row].Z[rank + row] = true;
-            else constraints[row].CopyFrom(labels[rank + row]);
+            if (labels.empty())
+                constraints[row].Z[rank + row] = true;
+            else
+                constraints[row].CopyFrom(labels[rank + row]);
             constraints[row].PhaseSign = bool(work[rank + row].PhaseSign);
         }
         Finish(std::move(constraints), rank);
     }
 
-public:
+  public:
     bool Contains(size_t state) const noexcept
     {
         // Higher qubits are zero in the size_t overload.
@@ -148,33 +167,40 @@ public:
         {
             const auto r = constraints[row];
             const bool parity = r.Words() && (Popcount(r.Z.words[0] & static_cast<Word>(state)) & 1);
-            if (parity != bool(r.PhaseSign)) return false;
+            if (parity != bool(r.PhaseSign))
+                return false;
         }
         return true;
     }
 
-    bool Contains(const std::vector<bool>& state) const
+    bool Contains(const std::vector<bool> &state) const
     {
-        if (constraints.empty()) return true;
+        if (constraints.empty())
+            return true;
         std::vector<Word> bits(offset.size());
-        for (size_t q = 0; q < state.size(); ++q) if (state[q]) bits[q / 64] |= Word(1) << (q % 64);
+        for (size_t q = 0; q < state.size(); ++q)
+            if (state[q])
+                bits[q / 64] |= Word(1) << (q % 64);
         for (size_t row = 0; row < constraints.size(); ++row)
         {
             const auto r = constraints[row];
             Word parity = 0;
-            for (size_t w = 0; w < bits.size(); ++w) parity ^= r.Z.words[w] & bits[w];
-            if (bool(Popcount(parity) & 1) != bool(r.PhaseSign)) return false;
+            for (size_t w = 0; w < bits.size(); ++w)
+                parity ^= r.Z.words[w] & bits[w];
+            if (bool(Popcount(parity) & 1) != bool(r.PhaseSign))
+                return false;
         }
         return true;
     }
 
-    template<class State> double Probability(const State& state) const
-    { return Contains(state) ? probability : 0.0; }
-
-    template<class State> double Log2Probability(const State& state) const
+    template <class State> double Probability(const State &state) const
     {
-        return Contains(state) ? -static_cast<double>(basis.size())
-            : -std::numeric_limits<double>::infinity();
+        return Contains(state) ? probability : 0.0;
+    }
+
+    template <class State> double Log2Probability(const State &state) const
+    {
+        return Contains(state) ? -static_cast<double>(basis.size()) : -std::numeric_limits<double>::infinity();
     }
 
     void FlipBit(size_t qubit) noexcept
@@ -190,7 +216,7 @@ public:
             }
     }
 
-    void FillProbabilities(std::vector<double>& probabilities) const noexcept
+    void FillProbabilities(std::vector<double> &probabilities) const noexcept
     {
         size_t state = offset.empty() ? 0 : static_cast<size_t>(offset[0]);
         probabilities[state] = probability;
@@ -205,28 +231,32 @@ public:
     }
 
     // random(engine) supplies one fair random bit per independent output.
-    template<class Engine, class Random> std::vector<bool> Sample(Engine& engine, Random& random) const
+    template <class Engine, class Random> std::vector<bool> Sample(Engine &engine, Random &random) const
     {
         std::vector<Word> bits(offset.size());
         std::vector<bool> result(basis.GetNrQubits());
         SampleInto(bits, engine, random);
-        for (size_t q = 0; q < result.size(); ++q) result[q] = (bits[q / 64] >> (q % 64)) & 1;
+        for (size_t q = 0; q < result.size(); ++q)
+            result[q] = (bits[q / 64] >> (q % 64)) & 1;
         return result;
     }
 
-    size_t Words() const noexcept { return offset.size(); }
+    size_t Words() const noexcept
+    {
+        return offset.size();
+    }
 
-    template<class Engine, class Random> void SampleInto(std::vector<Word>& bits, Engine& engine,
-        Random& random) const
+    template <class Engine, class Random> void SampleInto(std::vector<Word> &bits, Engine &engine, Random &random) const
     {
         assert(bits.size() == offset.size());
         std::copy(offset.begin(), offset.end(), bits.begin());
         for (size_t row = 0; row < basis.size(); ++row)
             if (random(engine))
-                for (size_t w = 0; w < bits.size(); ++w) bits[w] ^= basis[row].X.words[w];
+                for (size_t w = 0; w < bits.size(); ++w)
+                    bits[w] ^= basis[row].X.words[w];
     }
 
-private:
+  private:
     void Finish(PackedTableau nextConstraints, size_t dimension)
     {
         const size_t n = nextConstraints.GetNrQubits();
@@ -237,15 +267,18 @@ private:
         {
             const size_t next = pivots.size();
             size_t pivot = next;
-            while (pivot < nextConstraints.size() && !nextConstraints[pivot].Z[q]) ++pivot;
-            if (pivot == nextConstraints.size()) continue;
+            while (pivot < nextConstraints.size() && !nextConstraints[pivot].Z[q])
+                ++pivot;
+            if (pivot == nextConstraints.size())
+                continue;
             nextConstraints.SwapRows(next, pivot);
             for (size_t row = 0; row < nextConstraints.size(); ++row)
                 if (row != next && nextConstraints[row].Z[q])
                 {
                     auto r = nextConstraints[row];
                     const auto p = nextConstraints[next];
-                    for (size_t w = 0; w < r.Words(); ++w) r.Z.words[w] ^= p.Z.words[w];
+                    for (size_t w = 0; w < r.Words(); ++w)
+                        r.Z.words[w] ^= p.Z.words[w];
                     r.PhaseSign ^= bool(p.PhaseSign);
                 }
             pivots.push_back(q);
@@ -254,14 +287,20 @@ private:
         PackedTableau nextBasis(dimension, n);
         std::vector<Word> nextOffset(n / 64 + (n % 64 != 0));
         for (size_t row = 0; row < pivots.size(); ++row)
-            if (nextConstraints[row].PhaseSign) nextOffset[pivots[row] / 64] |= Word(1) << (pivots[row] % 64);
+            if (nextConstraints[row].PhaseSign)
+                nextOffset[pivots[row] / 64] |= Word(1) << (pivots[row] % 64);
         size_t free = 0, pivot = 0;
         for (size_t q = 0; q < n; ++q)
         {
-            if (pivot < pivots.size() && pivots[pivot] == q) { ++pivot; continue; }
+            if (pivot < pivots.size() && pivots[pivot] == q)
+            {
+                ++pivot;
+                continue;
+            }
             auto r = nextBasis[free++];
             r.X[q] = true;
-            for (size_t row = 0; row < pivots.size(); ++row) r.X[pivots[row]] = nextConstraints[row].Z[q];
+            for (size_t row = 0; row < pivots.size(); ++row)
+                r.X[pivots[row]] = nextConstraints[row].Z[q];
         }
         assert(free == dimension);
         // Publish only after every allocation and elimination has succeeded.
@@ -278,4 +317,6 @@ private:
     double probability = 1.0;
 };
 
-}}}
+} // namespace detail
+} // namespace Clifford
+} // namespace QC

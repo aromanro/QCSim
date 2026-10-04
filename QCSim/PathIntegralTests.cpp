@@ -1,7 +1,7 @@
 #include "Tests.h"
 
-#include "QubitRegister.h"
 #include "PathIntegral.h"
+#include "QubitRegister.h"
 
 bool TestPathIntegral()
 {
@@ -52,26 +52,30 @@ bool TestPathIntegral()
 
             if (!approxEqual(regAmpl, piAmpl, 1E-7))
             {
-                std::cout << std::endl << "Amplitude mismatch for path integral and statevector simulator for state " << state << " with " << nrQubits << " qubits" << std::endl;
+                std::cout << std::endl
+                          << "Amplitude mismatch for path integral and statevector simulator for state " << state
+                          << " with " << nrQubits << " qubits" << std::endl;
                 std::cout << "Statevector: " << regAmpl << " vs Path integral: " << piAmpl << std::endl;
                 return false;
             }
         }
 
-        // the above went with the paths from end state towards the 'middle' and from start state to meet them in the middle,
-        // for qubits probabilities must go from start to end with all of them
+        // the above went with the paths from end state towards the 'middle' and from start state to meet them in the
+        // middle, for qubits probabilities must go from start to end with all of them
         piSim.PropagateAll(circuit);
 
         for (size_t q = 0; q < nrQubits; ++q)
         {
-			const auto qubitProb = qubitRegister.GetQubitProbability(q);
-			const auto piQubitProb = piSim.QubitProbability(q);
+            const auto qubitProb = qubitRegister.GetQubitProbability(q);
+            const auto piQubitProb = piSim.QubitProbability(q);
 
             if (!approxEqual(qubitProb, piQubitProb, 1E-7))
             {
-                std::cout << std::endl << "Qubit probability mismatch for path integral and statevector simulator for qubit " << q << " with " << nrQubits << " qubits" << std::endl;
+                std::cout << std::endl
+                          << "Qubit probability mismatch for path integral and statevector simulator for qubit " << q
+                          << " with " << nrQubits << " qubits" << std::endl;
                 std::cout << "Statevector: " << qubitProb << " vs Path integral: " << piQubitProb << std::endl;
-				return false;
+                return false;
             }
         }
 
