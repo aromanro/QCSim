@@ -19,10 +19,12 @@ class FFTWPlan
     FFTWPlan() = default;
     FFTWPlan(const FFTWPlan &) = delete;
     FFTWPlan &operator=(const FFTWPlan &) = delete;
+
     FFTWPlan(FFTWPlan &&other) noexcept : plan(other.plan)
     {
         other.plan = nullptr;
     }
+
     FFTWPlan &operator=(FFTWPlan &&other) noexcept
     {
         plan = other.plan;
@@ -272,6 +274,7 @@ class FFT
     {
         return src == dst;
     }
+
     inline bool Aligned(const void *src, const void *dst)
     {
         return ((reinterpret_cast<size_t>(src) & 0xF) | (reinterpret_cast<size_t>(dst) & 0xF)) == 0;

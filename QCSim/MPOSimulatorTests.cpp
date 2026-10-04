@@ -32,6 +32,7 @@
 // Each fresh simulator gets a distinct, reproducible stream, including ensembles
 // that construct a new simulator for every shot. The suite prints the starting seed.
 static uint64_t mpoNextSamplingSeed = 0x4D504F26ULL;
+
 static bool ParseMPOTestSeed(const char *text, uint64_t &seed)
 {
     if (!text || !*text || *text < '0' || *text > '9')
@@ -61,6 +62,7 @@ static bool MPOTestSeedParsing()
            !ParseMPOTestSeed("-1", seed) && !ParseMPOTestSeed("123junk", seed) &&
            !ParseMPOTestSeed("18446744073709551616", seed);
 }
+
 template <class Sim> static void MPOSeedNext(Sim &simulator)
 {
     simulator.SetSeed(mpoNextSamplingSeed++);
@@ -3857,14 +3859,17 @@ static bool LongMixedChainScaleTestMPO()
 bool MPOSimulatorTests()
 {
     std::cout << "\nMPO Simulator Tests" << std::endl;
+
     struct RestoreGenerator
     {
         std::mt19937 saved = gen;
+
         ~RestoreGenerator()
         {
             gen = saved;
         }
     } restoreGenerator;
+
     const char *configuredSeed = std::getenv("QCSIM_MPO_TEST_SEED");
     uint64_t seed = 0x4D504F26ULL;
     if (configuredSeed && !ParseMPOTestSeed(configuredSeed, seed))

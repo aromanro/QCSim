@@ -25,15 +25,18 @@ struct BitReference
 {
     Word *word;
     Word mask;
+
     operator bool() const noexcept
     {
         return (*word & mask) != 0;
     }
+
     BitReference &operator=(bool value) noexcept
     {
         *word = (*word & ~mask) | (value ? mask : 0);
         return *this;
     }
+
     BitReference &operator=(const BitReference &other) noexcept
     {
         return *this = bool(other);
@@ -45,10 +48,12 @@ template <bool Const> struct BitSpan
     using Pointer = std::conditional_t<Const, const Word *, Word *>;
     Pointer words;
     size_t bits;
+
     size_t size() const noexcept
     {
         return bits;
     }
+
     auto operator[](size_t bit) const noexcept
     {
         assert(bit < bits);
@@ -62,20 +67,24 @@ template <bool Const> struct BitSpan
 template <bool Const> struct SignReference
 {
     std::conditional_t<Const, const uint8_t *, uint8_t *> value;
+
     operator bool() const noexcept
     {
         return *value != 0;
     }
+
     SignReference &operator=(bool sign) noexcept
     {
         static_assert(!Const, "Read-only row");
         *value = sign;
         return *this;
     }
+
     SignReference &operator=(const SignReference &other) noexcept
     {
         return *this = bool(other);
     }
+
     SignReference &operator^=(bool flip) noexcept
     {
         return *this = (bool(*this) != flip);
@@ -91,14 +100,17 @@ template <bool Const> struct TableauRow
     // Copy construction aliases a complete view; assigning its proxy members
     // would rebind the bits but write through the old sign pointer.
     TableauRow &operator=(const TableauRow &) = delete;
+
     size_t Words() const noexcept
     {
         return X.bits / 64 + (X.bits % 64 != 0);
     }
+
     size_t GetNrQubits() const noexcept
     {
         return X.bits;
     }
+
     template <bool C> bool operator==(const TableauRow<C> &other) const noexcept
     {
         if (X.bits != other.X.bits || bool(PhaseSign) != bool(other.PhaseSign))
@@ -108,6 +120,7 @@ template <bool Const> struct TableauRow
                 return false;
         return true;
     }
+
     void Clear() noexcept
     {
         static_assert(!Const, "Read-only row");
@@ -115,6 +128,7 @@ template <bool Const> struct TableauRow
         std::fill_n(Z.words, Words(), Word(0));
         PhaseSign = false;
     }
+
     template <bool C> void CopyFrom(const TableauRow<C> &source) noexcept
     {
         assert(X.bits == source.X.bits);
@@ -125,6 +139,7 @@ template <bool Const> struct TableauRow
         }
         PhaseSign = bool(source.PhaseSign);
     }
+
     template <bool C> bool Anticommutes(const TableauRow<C> &other) const noexcept
     {
         Word parity = 0;
@@ -132,6 +147,7 @@ template <bool Const> struct TableauRow
             parity ^= (X.words[w] & other.Z.words[w]) ^ (Z.words[w] & other.X.words[w]);
         return (Popcount(parity) & 1) != 0;
     }
+
     bool HasX() const noexcept
     {
         for (size_t w = 0; w < Words(); ++w)
@@ -139,6 +155,7 @@ template <bool Const> struct TableauRow
                 return true;
         return false;
     }
+
     // P(x,z) = (-1)^sign i^popcount(x&z) X^x Z^z. The extra phase
     // allows products of anticommuting rows when conjugating inverse images.
     template <bool C> void Multiply(const TableauRow<C> &right, unsigned extraPhase = 0) noexcept
@@ -175,9 +192,11 @@ class PackedTableau
 {
   public:
     PackedTableau() = default;
+
     explicit PackedTableau(size_t rows) : PackedTableau(rows, rows)
     {
     }
+
     PackedTableau(size_t rows, size_t qubits) : rows(rows), qubits(qubits), words(qubits / 64 + (qubits % 64 != 0))
     {
         if (words > bits.max_size() / 2 || (words && rows > bits.max_size() / (2 * words)))
@@ -185,11 +204,14 @@ class PackedTableau
         bits.resize(2 * rows * words);
         signs.resize(rows);
     }
+
     PackedTableau(const PackedTableau &) = default;
+
     PackedTableau(PackedTableau &&other) noexcept
     {
         swap(other);
     }
+
     PackedTableau &operator=(const PackedTableau &other)
     {
         if (this != &other)
@@ -199,27 +221,33 @@ class PackedTableau
         }
         return *this;
     }
+
     PackedTableau &operator=(PackedTableau &&other) noexcept
     {
         swap(other);
         return *this;
     }
+
     size_t size() const noexcept
     {
         return rows;
     }
+
     size_t GetNrQubits() const noexcept
     {
         return qubits;
     }
+
     bool empty() const noexcept
     {
         return rows == 0;
     }
+
     bool HasSameShape(const PackedTableau &other) const noexcept
     {
         return rows == other.rows && qubits == other.qubits;
     }
+
     void CopyFrom(const PackedTableau &other) noexcept
     {
         assert(HasSameShape(other));
@@ -228,16 +256,19 @@ class PackedTableau
         std::copy(other.bits.begin(), other.bits.end(), bits.begin());
         std::copy(other.signs.begin(), other.signs.end(), signs.begin());
     }
+
     void clear() noexcept
     {
         PackedTableau empty;
         swap(empty);
     }
+
     void Clear() noexcept
     {
         std::fill(bits.begin(), bits.end(), Word(0));
         std::fill(signs.begin(), signs.end(), uint8_t(0));
     }
+
     void swap(PackedTableau &other) noexcept
     {
         std::swap(rows, other.rows);
@@ -246,18 +277,21 @@ class PackedTableau
         bits.swap(other.bits);
         signs.swap(other.signs);
     }
+
     TableauRow<false> operator[](size_t row) noexcept
     {
         assert(row < rows);
         Word *x = words ? bits.data() + 2 * row * words : nullptr;
         return {{x, qubits}, {words ? x + words : nullptr, qubits}, {signs.data() + row}};
     }
+
     TableauRow<true> operator[](size_t row) const noexcept
     {
         assert(row < rows);
         const Word *x = words ? bits.data() + 2 * row * words : nullptr;
         return {{x, qubits}, {words ? x + words : nullptr, qubits}, {signs.data() + row}};
     }
+
     void SwapRows(size_t a, size_t b) noexcept
     {
         if (a == b)
@@ -266,6 +300,7 @@ class PackedTableau
             std::swap(bits[2 * a * words + w], bits[2 * b * words + w]);
         std::swap(signs[a], signs[b]);
     }
+
     bool operator==(const PackedTableau &other) const noexcept
     {
         return rows == other.rows && qubits == other.qubits && bits == other.bits && signs == other.signs;
@@ -359,61 +394,74 @@ class InverseMap
     {
         SwapRows(x[q], z[q]);
     }
+
     void ApplyS(size_t q) noexcept
     {
         x[q].Multiply(z[q], 3);
     }
+
     void ApplySdg(size_t q) noexcept
     {
         x[q].Multiply(z[q], 1);
     }
+
     void ApplyX(size_t q) noexcept
     {
         z[q].PhaseSign ^= true;
     }
+
     void ApplyY(size_t q) noexcept
     {
         x[q].PhaseSign ^= true;
         z[q].PhaseSign ^= true;
     }
+
     void ApplyZ(size_t q) noexcept
     {
         x[q].PhaseSign ^= true;
     }
+
     void ApplySx(size_t q) noexcept
     {
         z[q].Multiply(x[q], 3);
     }
+
     void ApplySxDag(size_t q) noexcept
     {
         z[q].Multiply(x[q], 1);
     }
+
     void ApplyK(size_t q) noexcept
     {
         z[q].Multiply(x[q], 3);
         x[q].PhaseSign ^= true;
     }
+
     void ApplyCX(size_t target, size_t control) noexcept
     {
         x[control].Multiply(x[target]);
         z[target].Multiply(z[control]);
     }
+
     void ApplyCY(size_t target, size_t control) noexcept
     {
         ApplySdg(target);
         ApplyCX(target, control);
         ApplyS(target);
     }
+
     void ApplyCZ(size_t target, size_t control) noexcept
     {
         x[target].Multiply(z[control]);
         x[control].Multiply(z[target]);
     }
+
     void ApplySwap(size_t a, size_t b) noexcept
     {
         SwapRows(x[a], x[b]);
         SwapRows(z[a], z[b]);
     }
+
     void ApplyISwap(size_t a, size_t b) noexcept
     {
         ApplyS(a);
@@ -421,6 +469,7 @@ class InverseMap
         ApplyCZ(a, b);
         ApplySwap(a, b);
     }
+
     void ApplyISwapDag(size_t a, size_t b) noexcept
     {
         ApplySdg(a);

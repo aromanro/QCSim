@@ -24,6 +24,7 @@ struct LocalTransfer
         double coefficient;
         unsigned char pauli;
     };
+
     std::array<unsigned short, 65> offsets{};
     std::vector<Entry> entries;
     uint64_t unchanged = 0;
@@ -34,6 +35,7 @@ struct LocalTransfer
     {
         entries.reserve(width == 3 ? 232 : width == 2 ? 104 : 10);
     }
+
     template <size_t N> void Column(unsigned input, const std::array<double, N> &values)
     {
         offsets[input] = static_cast<unsigned short>(entries.size());
@@ -53,6 +55,7 @@ struct Trig
 {
     double c, s;
     bool quarter;
+
     explicit Trig(double angle)
     {
         if (!std::isfinite(angle))
@@ -62,6 +65,7 @@ struct Trig
 };
 
 using Rotation3 = std::array<std::array<double, 3>, 3>;
+
 inline Rotation3 Multiply(const Rotation3 &a, const Rotation3 &b)
 {
     Rotation3 result{};
@@ -71,6 +75,7 @@ inline Rotation3 Multiply(const Rotation3 &a, const Rotation3 &b)
                 result[i][j] += a[i][k] * b[k][j];
     return result;
 }
+
 inline Rotation3 AxisRotation(int axis, const Trig &t)
 {
     Rotation3 r{};
@@ -81,14 +86,17 @@ inline Rotation3 AxisRotation(int axis, const Trig &t)
     r[b][a] = -t.s;
     return r;
 }
+
 inline Rotation3 URotation(double theta, double phi, double lambda)
 {
     return Multiply(Multiply(AxisRotation(2, Trig(lambda)), AxisRotation(1, Trig(theta))), AxisRotation(2, Trig(phi)));
 }
+
 inline unsigned AxisCode(size_t axis)
 {
     return axis == 0 ? 1U : axis == 1 ? 3U : 2U;
 }
+
 inline size_t CodeAxis(unsigned code)
 {
     return code == 1 ? 0 : code == 3 ? 1 : 2;
@@ -104,6 +112,7 @@ inline detail::LocalPauli DecodeLocal(unsigned code, unsigned qubits)
     }
     return p;
 }
+
 inline unsigned EncodeLocal(detail::LocalPauli p, unsigned qubits)
 {
     unsigned code = 0;
@@ -303,6 +312,7 @@ inline std::shared_ptr<const LocalTransfer> ParameterizedTransfer(OperationType 
         std::array<uint64_t, 4> bits{};
         std::shared_ptr<const LocalTransfer> table;
     };
+
     thread_local std::array<Slot, 16> cache;
     const double angles[] = {a, b, c, d};
     std::array<uint64_t, 4> bits;

@@ -65,6 +65,7 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
     {
         return NrQubits;
     };
+
     size_t getNrBasisStates() const
     {
         return NrBasisStates;

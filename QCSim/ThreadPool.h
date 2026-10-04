@@ -114,6 +114,7 @@ template <typename Return = double> class ThreadPool
     {
         return workers.size();
     }
+
     bool IsWorkerThread() const
     {
         return currentPool == this;

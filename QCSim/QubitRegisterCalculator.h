@@ -151,6 +151,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         unsigned fixedBits = 0;
         unsigned strideShift = 0;
         size_t tileSize = 0;
+
         IndexPlan(size_t mask)
         {
             while ((mask >> strideShift) & 1)
@@ -165,6 +166,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 mask ^= bit;
             }
         }
+
         template <unsigned Bits> size_t Expand(size_t index) const
         {
             if constexpr (Bits > 0)
@@ -327,11 +329,13 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     struct WideCoefficient
     {
         __m256d re, im;
+
         WideCoefficient(const std::complex<double> &first, const std::complex<double> &second)
             : re(_mm256_set_pd(second.real(), second.real(), first.real(), first.real())),
               im(_mm256_set_pd(second.imag(), -second.imag(), first.imag(), -first.imag()))
         {
         }
+
         __m256d Multiply(__m256d v) const
         {
             return _mm256_add_pd(_mm256_mul_pd(re, v), _mm256_mul_pd(im, _mm256_permute_pd(v, 5)));
@@ -764,6 +768,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     {
         const MatrixClass &matrix;
         std::array<size_t, 8> indices{};
+
         auto operator()(size_t row, size_t col) const
         {
             return matrix(indices[row], indices[col]);

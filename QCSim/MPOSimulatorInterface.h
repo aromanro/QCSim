@@ -323,6 +323,7 @@ class MPOSimulatorInterface
 
   protected:
     friend class MPOSimulatorBase;
+
     // Double dispatch lets a mapping-aware decorator align against a physical chain.
     // External implementations retain a dense fallback without recursive delegation.
     virtual std::complex<double> OverlapWithPhysicalChain(const MPOSimulatorInterface &physical) const

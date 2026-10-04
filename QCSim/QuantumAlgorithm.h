@@ -24,6 +24,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     {
         return reg.getNrQubits();
     };
+
     size_t getNrBasisStates() const
     {
         return reg.getNrBasisStates();
@@ -240,6 +241,7 @@ class QuantumSubAlgorithmOnSubregister : public QuantumSubAlgorithm<VectorClass,
     {
         return sQubit;
     };
+
     size_t getEndQubit() const
     {
         return eQubit;

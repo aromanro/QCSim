@@ -512,6 +512,7 @@ static bool TestExtStabilizerLargerMixedCircuits()
         size_t nrGates;
         unsigned int seed;
     };
+
     const std::vector<CircuitConfiguration> configurations = {
         {5, 48, 0x51A7C001U}, {6, 56, 0x61A7C002U}, {7, 64, 0x71A7C003U}, {8, 72, 0x81A7C004U}};
 
@@ -1084,6 +1085,7 @@ static bool TestExtStabilizerApproximationDifferential()
         QC::ExtendedStabilizerApproximationPolicy::Approximate(0.08),
         QC::ExtendedStabilizerApproximationPolicy::Approximate(0.0, 3),
         QC::ExtendedStabilizerApproximationPolicy::Approximate(0.035, 4)};
+
     struct TestGate
     {
         int code;
@@ -1092,6 +1094,7 @@ static bool TestExtStabilizerApproximationDifferential()
         double angle;
         size_t qubit3 = 0;
     };
+
     const std::vector<TestGate> gates = {{16, 0, 0, 0.32},     {15, 1, 0, 0.18},          {0, 2, 0, 0.0},
                                          {9, 2, 0, 0.0},       {17, 2, 0, 0.27},          {16, 2, 0, -0.23},
                                          {0, 0, 0, 0.0},       {11, 1, 2, 0.0},           {15, 0, 0, 0.41},
@@ -1468,6 +1471,7 @@ static bool TestExtStabilizerLogicalBasisInvariance()
         size_t qubit1;
         size_t qubit2;
     };
+
     const std::vector<CliffordGate> cliffordGates = {{0, 3, 0},  // H
                                                      {1, 0, 0},  // S
                                                      {3, 1, 0},  // X
@@ -1850,6 +1854,7 @@ static bool TestExtStabilizerNonCliffordRotations()
             size_t qubit2;
             double angle;
         };
+
         const std::vector<PostMeasurementGate> postMeasurementGates = {
             {0, 3, 0, 0.0}, {9, 2, 1, 0.0},    {15, 0, 0, 0.31}, {16, 2, 0, -0.47}, {17, 3, 0, 0.28}, {11, 0, 3, 0.0},
             {6, 1, 0, 0.0}, {15, 1, 0, -0.19}, {16, 3, 0, 0.22}, {17, 0, 0, -0.41}, {12, 0, 2, 0.0}};

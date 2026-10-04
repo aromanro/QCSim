@@ -23,6 +23,7 @@ class StabilizerState
     StabilizerState() : StabilizerState(0)
     {
     }
+
     explicit StabilizerState(size_t n)
         : inverseX(n), inverseZ(n), measurementScratch(1, n), gen(std::random_device{}()), rnd(0.5)
     {
@@ -51,6 +52,7 @@ class StabilizerState
         }
         return *this;
     }
+
     StabilizerState &operator=(StabilizerState &&other) noexcept
     {
         if (this != &other)
@@ -118,6 +120,7 @@ class StabilizerState
         EnsureDistribution();
         return distribution.Contains(state);
     }
+
     bool ContainsBasisState(const std::vector<bool> &state)
     {
         if (state.size() != getNrQubits())
@@ -125,6 +128,7 @@ class StabilizerState
         EnsureDistribution();
         return distribution.Contains(state);
     }
+
     double Log2BasisStateProbability(size_t state)
     {
         const size_t n = getNrQubits();
@@ -133,6 +137,7 @@ class StabilizerState
         EnsureDistribution();
         return distribution.Log2Probability(state);
     }
+
     double Log2BasisStateProbability(const std::vector<bool> &state)
     {
         if (state.size() != getNrQubits())
@@ -227,6 +232,7 @@ class StabilizerState
         savedX.swap(x);
         savedZ.swap(z);
     }
+
     void RestoreState() noexcept
     {
         if (savedX.empty())
@@ -235,6 +241,7 @@ class StabilizerState
         inverseZ.CopyFrom(savedZ);
         InvalidateDistribution();
     }
+
     void RestoreSavedStateDestructive() noexcept
     {
         if (savedX.empty())
@@ -244,15 +251,18 @@ class StabilizerState
         ClearSavedState();
         InvalidateDistribution();
     }
+
     void ClearSavedState() noexcept
     {
         savedX.clear();
         savedZ.clear();
     }
+
     void SetMultithreading(bool enable = true) noexcept
     {
         enableMultithreading = enable;
     }
+
     bool GetMultithreading() const noexcept
     {
         return enableMultithreading;
@@ -268,12 +278,14 @@ class StabilizerState
                 if (marginalQubits[bit] == qubit)
                     marginalDistribution.FlipBit(bit);
     }
+
     // Keep both validity flags in one byte: ordinary gates invalidate both
     // caches with one store, regardless of the amount of cached storage.
     void InvalidateDistribution() noexcept
     {
         validDistributions = 0;
     }
+
     void EnsureDistribution()
     {
         if (!(validDistributions & FullDistribution))
@@ -282,11 +294,13 @@ class StabilizerState
             validDistributions |= FullDistribution;
         }
     }
+
     void ValidateSampleQubits(const std::vector<size_t> &qubits) const
     {
         for (size_t q : qubits)
             ValidateQubit(q);
     }
+
     void EnsureMarginalDistribution(const std::vector<size_t> &qubits)
     {
         if ((validDistributions & MarginalDistribution) && marginalQubits == qubits)
@@ -296,6 +310,7 @@ class StabilizerState
         marginalQubits.swap(nextQubits);
         validDistributions |= MarginalDistribution;
     }
+
     template <class Consumer> bool TrySimpleSample(const std::vector<size_t> &qubits, Consumer consume)
     {
         size_t first = getNrQubits();
@@ -345,6 +360,7 @@ class StabilizerState
         consume(bits);
         return true;
     }
+
     template <class Consumer> void ForEachSample(const std::vector<size_t> &qubits, size_t shots, Consumer consume)
     {
         // A single wide cold shot need not pay for full Gaussian elimination.
@@ -375,11 +391,13 @@ class StabilizerState
             consume(bits);
         }
     }
+
     void ValidateQubit(size_t q) const
     {
         if (q >= getNrQubits())
             throw std::out_of_range("Qubit index out of range");
     }
+
     void ValidatePair(size_t a, size_t b, bool allowEqual = false) const
     {
         ValidateQubit(a);
@@ -387,6 +405,7 @@ class StabilizerState
         if (!allowEqual && a == b)
             throw std::invalid_argument("Two-qubit gate requires distinct qubits");
     }
+
     detail::InverseMap Map() noexcept
     {
         return {inverseX, inverseZ};
@@ -422,11 +441,13 @@ class StabilizerState
     std::mt19937_64 gen;
     std::bernoulli_distribution rnd{0.5};
     bool enableMultithreading = true;
+
     enum : uint8_t
     {
         FullDistribution = 1,
         MarginalDistribution = 2
     };
+
     uint8_t validDistributions = 0;
     detail::BasisDistribution distribution;
     detail::BasisDistribution marginalDistribution;
@@ -436,6 +457,7 @@ class StabilizerState
     struct SamplingCopy
     {
     };
+
     // Copy only the live tableau. Preserve the parent's RNG stream without
     // invoking random_device or copying its saved state and probability caches.
     StabilizerState(const StabilizerState &other, SamplingCopy)

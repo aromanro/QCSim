@@ -27,24 +27,29 @@ struct FastVectorBool
 {
     static constexpr size_t MaxWords = 16;
     FastVectorBool() = default;
+
     explicit FastVectorBool(size_t bits) : nBits(CheckedSize(bits))
     {
     }
+
     explicit FastVectorBool(const std::vector<bool> &bits) : FastVectorBool(bits.size())
     {
         for (size_t i = 0; i < nBits; ++i)
             if (bits[i])
                 set(i, true);
     }
+
     FastVectorBool(const uint64_t *data, size_t bits) : FastVectorBool(bits)
     {
         std::copy_n(data, nWords(), words.begin());
     }
+
     bool get(size_t i) const
     {
         assert(i < nBits);
         return ((words[i / 64] >> (i % 64)) & 1) != 0;
     }
+
     void set(size_t i, bool value)
     {
         assert(i < nBits);
@@ -54,18 +59,22 @@ struct FastVectorBool
         else
             words[i / 64] &= ~mask;
     }
+
     size_t size() const
     {
         return nBits;
     }
+
     size_t nWords() const
     {
         return (nBits + 63) / 64;
     }
+
     const std::array<uint64_t, MaxWords> &getWords() const
     {
         return words;
     }
+
     std::vector<bool> toVector() const
     {
         std::vector<bool> result(nBits);
@@ -73,10 +82,12 @@ struct FastVectorBool
             result[i] = get(i);
         return result;
     }
+
     bool operator==(const FastVectorBool &other) const
     {
         return nBits == other.nBits && std::equal(words.begin(), words.begin() + nWords(), other.words.begin());
     }
+
     bool operator!=(const FastVectorBool &other) const
     {
         return !(*this == other);
@@ -89,6 +100,7 @@ struct FastVectorBool
             throw std::length_error("Path integral states support at most 1024 qubits");
         return bits;
     }
+
     std::array<uint64_t, MaxWords> words{};
     size_t nBits = 0;
 };
@@ -112,27 +124,33 @@ class StateView
     StateView(const uint64_t *data, size_t bits) : words(data), nBits(bits)
     {
     }
+
     bool get(size_t i) const
     {
         assert(i < nBits);
         return ((words[i / 64] >> (i % 64)) & 1) != 0;
     }
+
     size_t size() const
     {
         return nBits;
     }
+
     size_t nWords() const
     {
         return (nBits + 63) / 64;
     }
+
     const uint64_t *getWords() const
     {
         return words;
     }
+
     operator FastVectorBool() const
     {
         return FastVectorBool(words, nBits);
     }
+
     std::vector<bool> toVector() const
     {
         std::vector<bool> result(nBits);
@@ -154,6 +172,7 @@ class MutableStateView : public StateView
     MutableStateView(uint64_t *data, size_t bits) : StateView(data, bits), words(data)
     {
     }
+
     void set(size_t i, bool value)
     {
         assert(i < size());
@@ -183,6 +202,7 @@ class AmplitudeMap
 
   public:
     AmplitudeMap() = default;
+
     AmplitudeMap(const AmplitudeMap &other)
         : values(other.values), keys(other.keys), nBits(other.nBits), wordCount(other.wordCount),
           occupied(other.occupied)
@@ -197,8 +217,10 @@ class AmplitudeMap
         else
             buckets = other.buckets;
     }
+
     AmplitudeMap(AmplitudeMap &&) noexcept = default;
     AmplitudeMap &operator=(AmplitudeMap &&) noexcept = default;
+
     AmplitudeMap &operator=(const AmplitudeMap &other)
     {
         if (this != &other)
@@ -208,12 +230,14 @@ class AmplitudeMap
         }
         return *this;
     }
+
     template <bool Const> class Iterator
     {
         friend class AmplitudeMap;
         using Owner = std::conditional_t<Const, const AmplitudeMap, AmplitudeMap>;
         Owner *owner = nullptr;
         size_t index = 0;
+
         Iterator(Owner *map, size_t i) : owner(map), index(i)
         {
         }
@@ -223,44 +247,54 @@ class AmplitudeMap
         using difference_type = std::ptrdiff_t;
         using value_type = std::pair<FastVectorBool, Complex>;
         using reference = std::pair<StateView, std::conditional_t<Const, const Complex &, Complex &>>;
+
         struct Arrow
         {
             reference value;
+
             const reference *operator->() const
             {
                 return &value;
             }
         };
+
         using pointer = Arrow;
         Iterator() = default;
+
         reference operator*() const
         {
             return {owner->State(index), owner->values[index]};
         }
+
         Arrow operator->() const
         {
             return {**this};
         }
+
         Iterator &operator++()
         {
             ++index;
             return *this;
         }
+
         Iterator operator++(int)
         {
             auto old = *this;
             ++*this;
             return old;
         }
+
         bool operator==(const Iterator &other) const
         {
             return owner == other.owner && index == other.index;
         }
+
         bool operator!=(const Iterator &other) const
         {
             return !(*this == other);
         }
     };
+
     using iterator = Iterator<false>;
     using const_iterator = Iterator<true>;
 
@@ -268,38 +302,47 @@ class AmplitudeMap
     {
         return values.size();
     }
+
     bool empty() const
     {
         return values.empty();
     }
+
     size_t QubitCount() const
     {
         return nBits;
     }
+
     size_t max_size() const
     {
         return std::min({values.max_size(), keys.max_size() / (wordCount ? wordCount : 16), buckets.max_size() / 2});
     }
+
     iterator begin()
     {
         return iterator(this, 0);
     }
+
     iterator end()
     {
         return iterator(this, size());
     }
+
     const_iterator begin() const
     {
         return const_iterator(this, 0);
     }
+
     const_iterator end() const
     {
         return const_iterator(this, size());
     }
+
     const_iterator cbegin() const
     {
         return begin();
     }
+
     const_iterator cend() const
     {
         return end();
@@ -321,10 +364,12 @@ class AmplitudeMap
             std::vector<size_t>().swap(buckets);
         nBits = wordCount = occupied = 0;
     }
+
     void Release()
     {
         AmplitudeMap{}.swap(*this);
     }
+
     void swap(AmplitudeMap &other) noexcept
     {
         values.swap(other.values);
@@ -334,6 +379,7 @@ class AmplitudeMap
         std::swap(wordCount, other.wordCount);
         std::swap(occupied, other.occupied);
     }
+
     void reserve(size_t count)
     {
         if (count > max_size())
@@ -345,6 +391,7 @@ class AmplitudeMap
         if (tableSize > buckets.size())
             Rehash(tableSize);
     }
+
     template <class Key> Complex &operator[](const Key &key)
     {
         EnsureWidth(key.size());
@@ -378,14 +425,17 @@ class AmplitudeMap
         buckets[slot] = index + 1;
         return values.back();
     }
+
     template <class Key> iterator find(const Key &key)
     {
         return iterator(this, FindIndex(key));
     }
+
     template <class Key> const_iterator find(const Key &key) const
     {
         return const_iterator(this, FindIndex(key));
     }
+
     template <class Key> Complex &at(const Key &key)
     {
         const size_t i = FindIndex(key);
@@ -393,6 +443,7 @@ class AmplitudeMap
             throw std::out_of_range("Missing path integral amplitude");
         return values[i];
     }
+
     template <class Key> const Complex &at(const Key &key) const
     {
         const size_t i = FindIndex(key);
@@ -400,6 +451,7 @@ class AmplitudeMap
             throw std::out_of_range("Missing path integral amplitude");
         return values[i];
     }
+
     iterator erase(iterator position)
     {
         assert(position.owner == this && position.index < size());
@@ -422,6 +474,7 @@ class AmplitudeMap
     {
         return capacity / 8 >= std::max<size_t>(8, needed);
     }
+
     void CompactIfSparse()
     {
         if (Excess(values.capacity(), size()) || Excess(keys.capacity() / (wordCount ? wordCount : 1), size()) ||
@@ -440,6 +493,7 @@ class AmplitudeMap
             }
         }
     }
+
     void ReleaseIfOversized(size_t count, size_t width)
     {
         const size_t words = std::max<size_t>(1, (width + 63) / 64);
@@ -447,6 +501,7 @@ class AmplitudeMap
             Excess(buckets.capacity(), TableSize(count)))
             Release();
     }
+
     void PrepareOutput(size_t width, size_t count)
     {
         if (width > FastVectorBool::MaxWords * 64)
@@ -475,6 +530,7 @@ class AmplitudeMap
         buckets.resize(tableSize);
         keys.reserve(count * words);
     }
+
     template <class Key> void InsertUnique(const Key &key, const Complex &amplitude)
     {
         // Only used for distinct output groups, in a freshly prepared map.
@@ -499,10 +555,12 @@ class AmplitudeMap
         buckets[slot] = index + 1;
         ++occupied;
     }
+
     StateView State(size_t index) const
     {
         return StateView(keys.data() + index * wordCount, nBits);
     }
+
     static uint64_t Mix(uint64_t x)
     {
         x ^= x >> 30;
@@ -511,6 +569,7 @@ class AmplitudeMap
         x *= 0x94d049bb133111ebULL;
         return x ^ (x >> 31);
     }
+
     template <class Key> size_t Hash(const Key &key) const
     {
         uint64_t hash = 0;
@@ -518,6 +577,7 @@ class AmplitudeMap
             hash = Mix(hash ^ key.getWords()[w]);
         return static_cast<size_t>(hash);
     }
+
     template <class Key> size_t Slot(const Key &key) const
     {
         size_t slot = Hash(key) & (buckets.size() - 1), firstDeleted = Deleted;
@@ -546,6 +606,7 @@ class AmplitudeMap
             slot = (slot + 1) & (buckets.size() - 1);
         }
     }
+
     template <class Key> size_t FindIndex(const Key &key) const
     {
         if (empty() || key.size() != nBits)
@@ -553,6 +614,7 @@ class AmplitudeMap
         const size_t entry = buckets[Slot(key)];
         return entry && entry != Deleted ? entry - 1 : size();
     }
+
     void EnsureWidth(size_t width)
     {
         if (width > FastVectorBool::MaxWords * 64)
@@ -572,6 +634,7 @@ class AmplitudeMap
             keys.reserve(values.capacity() * wordCount);
         }
     }
+
     static size_t TableSize(size_t count)
     {
         if (count > std::numeric_limits<size_t>::max() / 4)
@@ -581,11 +644,13 @@ class AmplitudeMap
             result *= 2;
         return result;
     }
+
     void Rehash(size_t tableSize)
     {
         buckets.resize(tableSize);
         Reindex();
     }
+
     void Reindex()
     {
         std::fill(buckets.begin(), buckets.end(), 0);
@@ -598,6 +663,7 @@ class AmplitudeMap
         }
         occupied = size();
     }
+
     // Gate kernels only use nonthrowing callbacks. Injective transforms allow
     // key changes in place: rebuild the index after all entries have moved.
     template <class Function> void Transform(bool keysChange, Function &&function, bool shrinkIndex = false)

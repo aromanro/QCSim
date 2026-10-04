@@ -152,6 +152,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
     virtual void OperatorChanged()
     {
     }
+
     MatrixClass operatorMat;
 };
 
@@ -532,10 +533,12 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
     {
         return q1;
     }
+
     size_t getQubit2() const
     {
         return q2;
     }
+
     size_t getQubit3() const
     {
         return q3;
@@ -545,10 +548,12 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
     {
         q1 = q;
     }
+
     void setQubit2(size_t q)
     {
         q2 = q;
     }
+
     void setQubit3(size_t q)
     {
         q3 = q;

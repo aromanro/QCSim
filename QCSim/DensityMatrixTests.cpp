@@ -1500,6 +1500,7 @@ static double DM_SmallestEigenvalue(const Eigen::MatrixXcd &rho)
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(rho);
     return solver.eigenvalues().minCoeff();
 }
+
 // unitary + noise evolution: unit trace, hermiticity, positive semidefiniteness, purity bounds,
 // plus a few analytic limiting cases (full depolarizing, full amplitude damping, reset idempotence)
 static bool DensityMatrixInvariantsTest()

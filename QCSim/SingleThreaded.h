@@ -48,6 +48,7 @@ template <class Func> void RunSingleThreaded(Func &&func)
     struct ThreadsRestorer
     {
         const int previousThreads = omp_get_max_threads();
+
         ~ThreadsRestorer()
         {
             omp_set_num_threads(previousThreads);

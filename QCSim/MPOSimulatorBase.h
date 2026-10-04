@@ -933,6 +933,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
   protected:
     using SiteSliceMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
+
     static SiteSliceMap MapSiteSlice(const TensorType &gamma, IndexType ket, IndexType bra)
     {
         const IndexType L = gamma.dimension(0);
@@ -942,6 +943,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
     static constexpr size_t sparseStatevectorLimit = 32;
     using SparseStatevector = std::vector<std::pair<IndexType, std::complex<double>>>;
+
     static SparseStatevector CollectSparseStatevector(const VectorClass &psi)
     {
         SparseStatevector nonzero;
@@ -955,6 +957,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
             }
         return nonzero;
     }
+
     double FidelityWithSparseStatevector(const SparseStatevector &psi, const std::complex<double> &trace) const
     {
         std::complex<double> overlap = 0.;
@@ -970,6 +973,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
     {
         return {canonicalFormValid, centerFirst, centerLast};
     }
+
     void RestoreCanonicalMetadata(const CanonicalMetadata &metadata)
     {
         canonicalFormValid = metadata.valid;
@@ -977,10 +981,12 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         centerLast = metadata.last;
         InvalidateSamplingCache();
     }
+
     void InvalidateSamplingCache()
     {
         samplingRight.clear();
     }
+
     void InvalidateCanonicalForm(IndexType first, IndexType last)
     {
         if (canonicalFormValid)
@@ -990,6 +996,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         centerLast = std::max(centerLast, last);
         InvalidateSamplingCache();
     }
+
     void InvalidateCanonicalForm()
     {
         InvalidateCanonicalForm(0, static_cast<IndexType>(gammas.size()) - 1);
@@ -1099,6 +1106,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         return std::isfinite(trace.real()) && std::isfinite(trace.imag()) &&
                trace.real() > std::numeric_limits<double>::epsilon();
     }
+
     static void RequireNormalizableTrace(const std::complex<double> &trace)
     {
         if (!HasSafelyPositiveTrace(trace))

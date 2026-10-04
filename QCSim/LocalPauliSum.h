@@ -64,18 +64,22 @@ class LocalGate
     {
         return Append({CliffordOp::Kind::H, uint8_t(qubit)});
     }
+
     LocalGate &S(size_t qubit)
     {
         return Append({CliffordOp::Kind::S, uint8_t(qubit)});
     }
+
     LocalGate &Sdg(size_t qubit)
     {
         return Append({CliffordOp::Kind::Sdg, uint8_t(qubit)});
     }
+
     LocalGate &CX(size_t target, size_t control)
     {
         return Append({CliffordOp::Kind::CX, uint8_t(target), uint8_t(control)});
     }
+
     LocalGate &CZ(size_t target, size_t control)
     {
         return Append({CliffordOp::Kind::CZ, uint8_t(target), uint8_t(control)});
@@ -120,10 +124,12 @@ class LocalGate
     {
         return nrQubits;
     }
+
     const LocalPauliSum &Sum() const noexcept
     {
         return sum;
     }
+
     const std::vector<CliffordOp> &Cliffords() const noexcept
     {
         return cliffords;
@@ -143,38 +149,47 @@ class LocalGate
     {
         Clifford::detail::InverseMap map;
         Clifford::detail::TableauRow<false> scratch;
+
         void ApplyH(size_t q) noexcept
         {
             map.ApplyH(q);
         }
+
         void ApplyS(size_t q) noexcept
         {
             map.ApplyS(q);
         }
+
         void ApplySdg(size_t q) noexcept
         {
             map.ApplySdg(q);
         }
+
         void ApplyX(size_t q) noexcept
         {
             map.ApplyX(q);
         }
+
         void ApplyY(size_t q) noexcept
         {
             map.ApplyY(q);
         }
+
         void ApplyZ(size_t q) noexcept
         {
             map.ApplyZ(q);
         }
+
         void ApplyCX(size_t t, size_t c) noexcept
         {
             map.ApplyCX(t, c);
         }
+
         void ApplyCZ(size_t t, size_t c) noexcept
         {
             map.ApplyCZ(t, c);
         }
+
         void ApplyQuarterTurn(size_t q, char axis, bool inverse) noexcept
         {
             map.ApplyQuarterTurn(q, axis, inverse, scratch);

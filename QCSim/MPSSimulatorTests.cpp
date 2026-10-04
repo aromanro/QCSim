@@ -1507,6 +1507,7 @@ bool ReCanonicalizeRegressionTestMPS()
             double threshold;
             int expectedRank;
         };
+
         const Case cases[] = {{Mode::RelativeToMax, 0, -1., 4},    {Mode::RelativeToMax, 2, -1., 2},
                               {Mode::RelativeToMax, 0, .5, 2},     {Mode::RelativeToMax, 3, .5, 2},
                               {Mode::RelativeToMax, 2, .2, 2},     {Mode::DiscardedWeight, 0, .12, 2},

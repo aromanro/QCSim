@@ -70,14 +70,17 @@ class OperatorLocal : public Operator
         if (!IsPauliLocalGate(type) || !this->table || this->table->qubits != PauliOperationArity(type))
             throw std::invalid_argument("Invalid local Pauli operation");
     }
+
     const std::shared_ptr<const PauliDetail::LocalTransfer> &GetTransfer() const
     {
         return table;
     }
+
     std::unique_ptr<Operator> Clone() const override
     {
         return std::make_unique<OperatorLocal>(*this);
     }
+
     void Apply(PauliStringXZWithCoefficient &term, PauliStringStorage &extra) const override
     {
         if (term.Coefficient == 0.)
@@ -211,6 +214,7 @@ class OperatorZ : public Operator
     OperatorZ(int q1 = 0) : Operator(OperationType::Z, q1)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit = GetQubit(0);
@@ -229,6 +233,7 @@ class OperatorH : public Operator
     OperatorH(int q1 = 0) : Operator(OperationType::H, q1)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit = GetQubit(0);
@@ -247,6 +252,7 @@ class OperatorK : public Operator
     OperatorK(int q1 = 0) : Operator(OperationType::K, q1)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit = GetQubit(0);
@@ -265,6 +271,7 @@ class OperatorS : public Operator
     OperatorS(int q1 = 0) : Operator(OperationType::S, q1)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit = GetQubit(0);
@@ -283,6 +290,7 @@ class OperatorSDG : public Operator
     OperatorSDG(int q1 = 0) : Operator(OperationType::SDG, q1)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit = GetQubit(0);
@@ -301,6 +309,7 @@ class OperatorSX : public Operator
     OperatorSX(int q1 = 0) : Operator(OperationType::SX, q1)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit = GetQubit(0);
@@ -319,6 +328,7 @@ class OperatorSXDG : public Operator
     OperatorSXDG(int q1 = 0) : Operator(OperationType::SXDG, q1)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit = GetQubit(0);
@@ -337,6 +347,7 @@ class OperatorCX : public Operator
     OperatorCX(int target = 0, int control = 0) : Operator(OperationType::CX, target, control)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int target = GetQubit(0);
@@ -356,6 +367,7 @@ class OperatorCY : public Operator
     OperatorCY(int target = 0, int control = 0) : Operator(OperationType::CY, target, control)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int target = GetQubit(0);
@@ -375,6 +387,7 @@ class OperatorCZ : public Operator
     OperatorCZ(int target = 0, int control = 0) : Operator(OperationType::CZ, target, control)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int target = GetQubit(0);
@@ -394,6 +407,7 @@ class OperatorSWAP : public Operator
     OperatorSWAP(int q1 = 0, int q2 = 0) : Operator(OperationType::SWAP, q1, q2)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit1 = GetQubit(0);
@@ -413,6 +427,7 @@ class OperatorISWAP : public Operator
     OperatorISWAP(int q1 = 0, int q2 = 0) : Operator(OperationType::ISWAP, q1, q2)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit1 = GetQubit(0);
@@ -432,6 +447,7 @@ class OperatorISWAPDG : public Operator
     OperatorISWAPDG(int q1 = 0, int q2 = 0) : Operator(OperationType::ISWAPDG, q1, q2)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &pauliString, PauliStringStorage & /*pauliStrings*/) const override
     {
         const int qubit1 = GetQubit(0);
@@ -462,6 +478,7 @@ class OperatorRotation : public Operator
     {
         return sine;
     }
+
     double GetCos() const
     {
         return cosine;

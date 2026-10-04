@@ -17,6 +17,7 @@ struct PauliStringHash
         return std::hash<std::vector<bool>>{}(p.X) ^ (std::hash<std::vector<bool>>{}(p.Z) << 1);
     }
 };
+
 struct PauliStringEqual
 {
     bool operator()(const PauliStringXZWithCoefficient &a, const PauliStringXZWithCoefficient &b) const
@@ -50,15 +51,18 @@ class PauliPropagator
         std::random_device rd;
         rng.seed(rd());
     }
+
     void SetSeed(uint64_t seed)
     {
         std::seed_seq seq{uint32_t(seed), uint32_t(seed >> 32)};
         rng.seed(seq);
     }
+
     int GetNrQubits() const
     {
         return nrQubits;
     }
+
     void SetNrQubits(int n)
     {
         if (n < 0)
@@ -71,116 +75,141 @@ class PauliPropagator
         }
         nrQubits = n;
     }
+
     double GetCoefficientThreshold() const
     {
         return coefThreshold;
     }
+
     void SetCoefficientThreshold(double value)
     {
         if (!std::isfinite(value) || value < 0.)
             throw std::invalid_argument("Invalid coefficient threshold");
         coefThreshold = value;
     }
+
     size_t GetPauliWeightThreshold() const
     {
         return pauliWeightThreshold;
     }
+
     void SetPauliWeightThreshold(size_t value)
     {
         pauliWeightThreshold = value;
     }
+
     int StepsBetweenTrims() const
     {
         return stepsBetweenTrims;
     }
+
     void SetStepsBetweenTrims(int value)
     {
         Positive(value);
         stepsBetweenTrims = value;
     }
+
     int StepsBetweenDeduplication() const
     {
         return stepsBetweenDeduplication;
     }
+
     void SetStepsBetweenDeduplication(int value)
     {
         Positive(value);
         stepsBetweenDeduplication = value;
     }
+
     size_t GetParallelThreshold() const
     {
         return parallelThreshold;
     }
+
     void SetParallelThreshold(size_t value)
     {
         Positive(value);
         parallelThreshold = value;
     }
+
     template <class Integer, std::enable_if_t<std::is_integral_v<Integer> && std::is_signed_v<Integer>, int> = 0>
     void SetParallelThreshold(Integer value)
     {
         SetParallelThreshold(PositiveSize(value));
     }
+
     size_t GetBatchSize() const
     {
         return batchSize;
     }
+
     void SetBatchSize(size_t value)
     {
         Positive(value);
         batchSize = value;
     }
+
     template <class Integer, std::enable_if_t<std::is_integral_v<Integer> && std::is_signed_v<Integer>, int> = 0>
     void SetBatchSize(Integer value)
     {
         SetBatchSize(PositiveSize(value));
     }
+
     size_t GetParallelThresholdForSum() const
     {
         return parallelThresholdSum;
     }
+
     void SetParallelThresholdForSum(size_t value)
     {
         Positive(value);
         parallelThresholdSum = value;
     }
+
     template <class Integer, std::enable_if_t<std::is_integral_v<Integer> && std::is_signed_v<Integer>, int> = 0>
     void SetParallelThresholdForSum(Integer value)
     {
         SetParallelThresholdForSum(PositiveSize(value));
     }
+
     size_t GetBatchSizeForSum() const
     {
         return batchSizeSum;
     }
+
     void SetBatchSizeForSum(size_t value)
     {
         Positive(value);
         batchSizeSum = value;
     }
+
     template <class Integer, std::enable_if_t<std::is_integral_v<Integer> && std::is_signed_v<Integer>, int> = 0>
     void SetBatchSizeForSum(Integer value)
     {
         SetBatchSizeForSum(PositiveSize(value));
     }
+
     size_t GetSamplingCacheMaxNodes() const
     {
         return samplingCacheMaxNodes;
     }
+
     void SetSamplingCacheMaxNodes(size_t value)
     {
         samplingCacheMaxNodes = value;
     }
+
     size_t GetSavePosition() const
     {
         return pos;
     }
+
     void SetSavePosition(size_t value)
     {
         if (value > operations->size())
             throw std::invalid_argument("Invalid Pauli save position");
         pos = value;
     }
+
     void EnableParallel(size_t workers = 0)
     {
         // The caller participates. Unknown/single-thread hardware stays serial.
@@ -194,28 +223,34 @@ class PauliPropagator
         if (!threadPool || threadPool->GetThreadCount() != workers)
             threadPool = std::make_unique<ThreadPool<>>(workers);
     }
+
     void DisableParallel()
     {
         threadPool.reset();
     }
+
     bool IsParallelEnabled() const
     {
         return bool(threadPool);
     }
+
     size_t GetThreadCount() const
     {
         return threadPool ? threadPool->GetThreadCount() : 0;
     }
+
     void SaveState()
     {
         pos = operations->size();
     }
+
     void RestoreState()
     {
         pos = std::min(pos, operations->size());
         if (pos < operations->size())
             MutableOperations().resize(pos);
     }
+
     void ClearOperations()
     {
         operations = std::make_shared<Program>();
@@ -226,70 +261,87 @@ class PauliPropagator
     {
         Add(OperationType::X, q);
     }
+
     void ApplyY(int q)
     {
         Add(OperationType::Y, q);
     }
+
     void ApplyZ(int q)
     {
         Add(OperationType::Z, q);
     }
+
     void ApplyH(int q)
     {
         Add(OperationType::H, q);
     }
+
     void ApplyK(int q)
     {
         Add(OperationType::K, q);
     }
+
     void ApplyS(int q)
     {
         Add(OperationType::S, q);
     }
+
     void ApplySDG(int q)
     {
         Add(OperationType::SDG, q);
     }
+
     void ApplySX(int q)
     {
         Add(OperationType::SX, q);
     }
+
     void ApplySXDG(int q)
     {
         Add(OperationType::SXDG, q);
     }
+
     void ApplyCX(int control, int target)
     {
         AddTwo(OperationType::CX, target, control);
     }
+
     void ApplyCY(int control, int target)
     {
         AddTwo(OperationType::CY, target, control);
     }
+
     void ApplyCZ(int control, int target)
     {
         AddTwo(OperationType::CZ, target, control);
     }
+
     void ApplySWAP(int a, int b)
     {
         AddTwo(OperationType::SWAP, a, b);
     }
+
     void ApplyISWAP(int a, int b)
     {
         AddTwo(OperationType::ISWAP, a, b);
     }
+
     void ApplyISWAPDG(int a, int b)
     {
         AddTwo(OperationType::ISWAPDG, a, b);
     }
+
     void ApplyRX(int q, double angle)
     {
         AddRotation(OperationType::RX, q, angle);
     }
+
     void ApplyRY(int q, double angle)
     {
         AddRotation(OperationType::RY, q, angle);
     }
+
     void ApplyRZ(int q, double angle)
     {
         AddRotation(OperationType::RZ, q, angle);
@@ -304,51 +356,63 @@ class PauliPropagator
             throw std::invalid_argument("Gate angle must be finite");
         AddLocal(OperationType::U, q, 0, 0, PauliDetail::ParameterizedTransfer(OperationType::U, theta, phi, lambda));
     }
+
     void ApplyCU(int control, int target, double theta, double phi, double lambda, double gamma = 0.)
     {
         AddLocal(OperationType::CU, target, control, 0,
                  PauliDetail::ParameterizedTransfer(OperationType::CU, theta, phi, lambda, gamma));
     }
+
     void ApplyCRX(int control, int target, double angle)
     {
         AddLocal(OperationType::CRX, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CRX, angle));
     }
+
     void ApplyCRY(int control, int target, double angle)
     {
         AddLocal(OperationType::CRY, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CRY, angle));
     }
+
     void ApplyCRZ(int control, int target, double angle)
     {
         AddLocal(OperationType::CRZ, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CRZ, angle));
     }
+
     void ApplyCP(int control, int target, double angle)
     {
         AddLocal(OperationType::CP, target, control, 0, PauliDetail::ParameterizedTransfer(OperationType::CP, angle));
     }
+
     void ApplyCS(int control, int target)
     {
         AddFixed(OperationType::CS, target, control);
     }
+
     void ApplyCSDAG(int control, int target)
     {
         AddFixed(OperationType::CSDAG, target, control);
     }
+
     void ApplyCSX(int control, int target)
     {
         AddFixed(OperationType::CSX, target, control);
     }
+
     void ApplyCSXDAG(int control, int target)
     {
         AddFixed(OperationType::CSXDAG, target, control);
     }
+
     void ApplyCH(int control, int target)
     {
         AddFixed(OperationType::CH, target, control);
     }
+
     void ApplyCCX(int control1, int control2, int target)
     {
         AddFixed(OperationType::CCX, target, control1, control2);
     }
+
     void ApplyCSwap(int control, int target1, int target2)
     {
         AddFixed(OperationType::CSWAP, target1, target2, control);
@@ -362,6 +426,7 @@ class PauliPropagator
             result.push_back(op.Legacy());
         return result;
     }
+
     void SetOperations(std::vector<std::unique_ptr<Operator>> &&input)
     {
         auto program = std::make_shared<Program>();
@@ -381,6 +446,7 @@ class PauliPropagator
         operations = std::move(program);
         pos = std::min(pos, operations->size());
     }
+
     // Share the circuit and its checkpoint, including when the source is *this.
     // Subsequent appends/projectors/restore are isolated by copy-on-write.
     void ShareOperationsFrom(const PauliPropagator &source)
@@ -417,6 +483,7 @@ class PauliPropagator
             return PauliDetail::Execute(ws, *operations, Settings());
         });
     }
+
     double ExpectationValue(const PauliStringXZWithCoefficient &pauli) const
     {
         return WithTerm([&](auto tag) {
@@ -426,10 +493,12 @@ class PauliPropagator
             return PauliDetail::Execute(ws, *operations, Settings());
         });
     }
+
     double ExpectationValue(PauliStringXZWithCoefficient &&pauli) const
     {
         return ExpectationValue(static_cast<const PauliStringXZWithCoefficient &>(pauli));
     }
+
     double ExpectationValue(const PauliStringStorage &input) const
     {
         return WithTerm([&](auto tag) {
@@ -441,6 +510,7 @@ class PauliPropagator
             return PauliDetail::Execute(ws, *operations, Settings());
         });
     }
+
     // The storage overloads continue to return the propagated expansion in the
     // supplied public buffer. Ordinary scalar queries avoid materializing it.
     double ExpectationValue(const std::string &pauli, PauliStringStorage &output) const
@@ -456,11 +526,13 @@ class PauliPropagator
         }
         return ExpectationValue(std::move(p), output);
     }
+
     double ExpectationValue(const PauliStringXZWithCoefficient &p, PauliStringStorage &output) const
     {
         auto copy = p;
         return ExpectationValue(std::move(copy), output);
     }
+
     double ExpectationValue(PauliStringXZWithCoefficient &&p, PauliStringStorage &output) const
     {
         p.Resize(nrQubits);
@@ -479,14 +551,17 @@ class PauliPropagator
             return result;
         });
     }
+
     double Probability0(int q) const
     {
         return 0.5 * (1. + BoundedZ(ZExpectation(q)));
     }
+
     double Probability1(int q) const
     {
         return 0.5 * (1. - BoundedZ(ZExpectation(q)));
     }
+
     double Probability0(int q, PauliStringStorage &output) const
     {
         CheckQubit(q);
@@ -494,6 +569,7 @@ class PauliPropagator
         p.Z[q] = true;
         return 0.5 * (1. + BoundedZ(ExpectationValue(std::move(p), output)));
     }
+
     double Probability1(int q, PauliStringStorage &output) const
     {
         CheckQubit(q);
@@ -501,6 +577,7 @@ class PauliPropagator
         p.Z[q] = true;
         return 0.5 * (1. - BoundedZ(ExpectationValue(std::move(p), output)));
     }
+
     std::vector<bool> Measure(const std::vector<int> &qubits)
     {
         for (int q : qubits)
@@ -516,6 +593,7 @@ class PauliPropagator
         }
         return result;
     }
+
     double Probability(size_t outcome)
     {
         if (!nrQubits || (nrQubits < int(8 * sizeof(size_t)) && outcome >= (size_t(1) << nrQubits)))
@@ -547,6 +625,7 @@ class PauliPropagator
         MutableOperations().resize(savedSize);
         return result;
     }
+
     std::vector<bool> Sample(const std::vector<int> &qubits)
     {
         CheckSampleQubits(qubits);
@@ -556,6 +635,7 @@ class PauliPropagator
             return SampleOne(qubits, sampler, 0);
         });
     }
+
     std::unordered_map<std::vector<bool>, size_t> SampleCounts(const std::vector<int> &qubits, size_t shots)
     {
         CheckSampleQubits(qubits);
@@ -574,11 +654,13 @@ class PauliPropagator
 
   private:
     using Program = std::vector<PauliDetail::Operation>;
+
     template <class T> static void Positive(T value)
     {
         if (value <= 0)
             throw std::invalid_argument("Pauli interval/batch must be positive");
     }
+
     template <class T> static size_t PositiveSize(T value)
     {
         Positive(value);
@@ -586,6 +668,7 @@ class PauliPropagator
             throw std::invalid_argument("Pauli interval/batch exceeds size_t");
         return static_cast<size_t>(value);
     }
+
     // Truncation need not leave a physical distribution. Clamp finite estimates
     // to valid conditional probabilities; reject undefined normalization rather
     // than silently sampling from NaN. This does not bound approximation error.
@@ -595,11 +678,13 @@ class PauliPropagator
             throw std::domain_error("Invalid Pauli probability normalization");
         return std::clamp(numerator, -denominator, denominator);
     }
+
     void CheckQubit(int q) const
     {
         if (q < 0 || q >= nrQubits)
             throw std::out_of_range("Pauli qubit outside register");
     }
+
     void CheckSampleQubits(const std::vector<int> &qubits) const
     {
         std::unordered_set<int> seen;
@@ -610,17 +695,20 @@ class PauliPropagator
                 throw std::invalid_argument("Repeated sampled qubit");
         }
     }
+
     Program &MutableOperations()
     {
         if (operations.use_count() != 1)
             operations = std::make_shared<Program>(*operations);
         return *operations;
     }
+
     void Add(OperationType type, int q)
     {
         CheckQubit(q);
         MutableOperations().emplace_back(type, q);
     }
+
     void AddTwo(OperationType type, int a, int b)
     {
         CheckQubit(a);
@@ -629,11 +717,13 @@ class PauliPropagator
             throw std::invalid_argument("Repeated gate qubit");
         MutableOperations().emplace_back(type, a, b);
     }
+
     void AddRotation(OperationType type, int q, double angle)
     {
         CheckQubit(q);
         MutableOperations().push_back(PauliDetail::Operation::Rotation(type, q, angle));
     }
+
     void AddProjector(int q, bool one, double coefficient)
     {
         PauliDetail::Operation op(OperationType::PROJ, q);
@@ -641,6 +731,7 @@ class PauliPropagator
         op.coefficient = coefficient;
         MutableOperations().push_back(std::move(op));
     }
+
     void AddLocal(OperationType type, int a, int b, int c, std::shared_ptr<const PauliDetail::LocalTransfer> table)
     {
         const int qubits[] = {a, b, c};
@@ -653,10 +744,12 @@ class PauliPropagator
         }
         MutableOperations().push_back(PauliDetail::Operation::Local(type, a, b, c, std::move(table)));
     }
+
     void AddFixed(OperationType type, int a, int b, int c = 0)
     {
         AddLocal(type, a, b, c, PauliDetail::FixedTransfer(type));
     }
+
     PauliDetail::Settings Settings() const
     {
         PauliDetail::Settings s;
@@ -672,6 +765,7 @@ class PauliPropagator
         s.pool = threadPool.get();
         return s;
     }
+
     double ZExpectation(int q) const
     {
         CheckQubit(q);
@@ -683,19 +777,23 @@ class PauliPropagator
             return PauliDetail::Execute(ws, *operations, Settings());
         });
     }
+
     static constexpr size_t noNode = std::numeric_limits<size_t>::max();
+
     struct SampleNode
     {
         double numerator = 0.;
         size_t child[2] = {noNode, noNode};
         bool ready = false;
     };
+
     template <class T> struct Sampler
     {
         PauliDetail::Workspace<T> workspace;
         std::vector<T> prefix, branch;
         std::vector<SampleNode> nodes;
     };
+
     template <class T> std::vector<bool> SampleOne(const std::vector<int> &qubits, Sampler<T> &sampler, size_t limit)
     {
         auto &start = sampler.prefix;

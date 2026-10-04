@@ -333,10 +333,12 @@ class CliffordRegressionSimulator : public QC::Clifford::StabilizerSimulator
 {
   public:
     using StabilizerSimulator::StabilizerSimulator;
+
     std::mt19937_64 RandomEngine() const
     {
         return gen;
     }
+
     bool DistributionIsPrepared() const
     {
         return (validDistributions & FullDistribution) != 0;

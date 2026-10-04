@@ -14,6 +14,7 @@ namespace detail
 {
 
 using Word = uint64_t;
+
 inline unsigned Popcount(Word value) noexcept
 {
 #if defined(_MSC_VER) && defined(_M_X64) && defined(__AVX2__)

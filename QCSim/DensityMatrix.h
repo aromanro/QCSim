@@ -37,6 +37,7 @@ namespace QC
 {
 
 inline constexpr size_t DefaultDensityParallelMinElements = 65536;
+
 inline std::atomic<size_t> &DensityParallelMinElementsSetting()
 {
     static std::atomic<size_t> value{DefaultDensityParallelMinElements};
@@ -63,16 +64,19 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         // leaves its source empty, independently of vector move semantics; self-move is a no-op.
         PreparedSampler() noexcept = default;
         PreparedSampler(const PreparedSampler &) = default;
+
         PreparedSampler(PreparedSampler &&other) noexcept
         {
             Swap(other);
         }
+
         PreparedSampler &operator=(const PreparedSampler &other)
         {
             PreparedSampler copy(other);
             Swap(copy);
             return *this;
         }
+
         PreparedSampler &operator=(PreparedSampler &&other) noexcept
         {
             if (this != &other)
@@ -87,19 +91,23 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         {
             return sourceBasisStates != 0;
         }
+
         bool isFullRegister() const noexcept
         {
             return isValid() && getNrOutcomes() == sourceBasisStates;
         }
+
         size_t getNrOutcomes() const noexcept
         {
             return cumulativeProbabilities.size();
         }
+
         // Returned outcome bit k corresponds to register qubit getFirstQubit() + k.
         size_t getFirstQubit() const noexcept
         {
             return firstQubit;
         }
+
         size_t getNrQubits() const noexcept
         {
             return nrQubits;
@@ -111,6 +119,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
               cumulativeProbabilities(std::move(cumulative)), total(mass)
         {
         }
+
         void Swap(PreparedSampler &other) noexcept
         {
             std::swap(sourceBasisStates, other.sourceBasisStates);
@@ -119,6 +128,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             cumulativeProbabilities.swap(other.cumulativeProbabilities);
             std::swap(total, other.total);
         }
+
         size_t sourceBasisStates = 0;
         size_t firstQubit = 0;
         size_t nrQubits = 0;
@@ -160,6 +170,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     {
         return NrQubits;
     }
+
     size_t getNrBasisStates() const
     {
         return NrBasisStates;

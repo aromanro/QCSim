@@ -264,10 +264,12 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         {
             flag = true;
         }
+
         ~ScopedFlag()
         {
             flag = previous;
         }
+
         ScopedFlag(const ScopedFlag &) = delete;
         ScopedFlag &operator=(const ScopedFlag &) = delete;
     };

@@ -13,6 +13,7 @@ class StabilizerSimulator : public StabilizerState
 {
   public:
     StabilizerSimulator() = default;
+
     explicit StabilizerSimulator(size_t n) : StabilizerState(n)
     {
     }
@@ -25,63 +26,75 @@ class StabilizerSimulator : public StabilizerState
         BeginGate(q);
         Map().ApplyH(q);
     }
+
     void ApplyS(size_t q)
     {
         ValidateQubit(q);
         Map().ApplyS(q);
     }
+
     void ApplySdg(size_t q)
     {
         ValidateQubit(q);
         Map().ApplySdg(q);
     }
+
     void ApplyX(size_t q)
     {
         ValidateQubit(q);
         Map().ApplyX(q);
         FlipDistributionBit(q);
     }
+
     void ApplyY(size_t q)
     {
         ValidateQubit(q);
         Map().ApplyY(q);
         FlipDistributionBit(q);
     }
+
     void ApplyZ(size_t q)
     {
         ValidateQubit(q);
         Map().ApplyZ(q);
     }
+
     void ApplySx(size_t q)
     {
         BeginGate(q);
         Map().ApplySx(q);
     }
+
     void ApplySxDag(size_t q)
     {
         BeginGate(q);
         Map().ApplySxDag(q);
     }
+
     void ApplyK(size_t q)
     {
         BeginGate(q);
         Map().ApplyK(q);
     }
+
     void ApplyCX(size_t target, size_t control)
     {
         BeginPair(target, control);
         Map().ApplyCX(target, control);
     }
+
     void ApplyCY(size_t target, size_t control)
     {
         BeginPair(target, control);
         Map().ApplyCY(target, control);
     }
+
     void ApplyCZ(size_t target, size_t control)
     {
         ValidatePair(target, control);
         Map().ApplyCZ(target, control);
     }
+
     void ApplySwap(size_t a, size_t b)
     {
         ValidatePair(a, b, true);
@@ -90,11 +103,13 @@ class StabilizerSimulator : public StabilizerState
         InvalidateDistribution();
         Map().ApplySwap(a, b);
     }
+
     void ApplyISwap(size_t a, size_t b)
     {
         BeginPair(a, b);
         Map().ApplyISwap(a, b);
     }
+
     void ApplyISwapDag(size_t a, size_t b)
     {
         BeginPair(a, b);
@@ -205,6 +220,7 @@ class StabilizerSimulator : public StabilizerState
         ValidateQubit(q);
         InvalidateDistribution();
     }
+
     void BeginPair(size_t a, size_t b)
     {
         ValidatePair(a, b);

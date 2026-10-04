@@ -13,11 +13,13 @@ namespace PauliNativeRegression
 {
 using Matrix = Eigen::MatrixXcd;
 constexpr double pi = 3.141592653589793238462643383279502884;
+
 inline void Require(bool ok, const char *message)
 {
     if (!ok)
         throw std::runtime_error(message);
 }
+
 inline Matrix Pauli(unsigned code, unsigned qubits)
 {
     Matrix p = Matrix::Zero(Eigen::Index(1) << qubits, Eigen::Index(1) << qubits);
@@ -39,6 +41,7 @@ inline Matrix Pauli(unsigned code, unsigned qubits)
     }
     return p;
 }
+
 inline Matrix U(double theta, double phi, double lambda, double gamma = 0.)
 {
     Matrix u(2, 2);
@@ -46,17 +49,20 @@ inline Matrix U(double theta, double phi, double lambda, double gamma = 0.)
         std::cos(theta / 2) * std::polar(1., phi + lambda);
     return std::polar(1., gamma) * u;
 }
+
 inline Matrix Controlled(const Matrix &u)
 {
     Matrix m = Matrix::Identity(4, 4);
     m.bottomRightCorner(2, 2) = u;
     return m;
 }
+
 inline Matrix Rotation(unsigned axis, double angle)
 {
     return std::cos(angle / 2) * Matrix::Identity(2, 2) -
            std::complex<double>(0., std::sin(angle / 2)) * Pauli(axis, 1);
 }
+
 inline Matrix Fixed(QC::OperationType type)
 {
     using T = QC::OperationType;
@@ -90,7 +96,9 @@ inline Matrix Fixed(QC::OperationType type)
     }
     return u;
 }
+
 inline size_t comparisons = 0;
+
 inline void Check(const std::shared_ptr<const QC::PauliDetail::LocalTransfer> &map, const Matrix &u, unsigned bound)
 {
     Require(map->maxOutputs <= bound, "nonminimal gate expansion");
@@ -108,6 +116,7 @@ inline void Check(const std::shared_ptr<const QC::PauliDetail::LocalTransfer> &m
         ++comparisons;
     }
 }
+
 inline void Algebra()
 {
     using namespace QC::PauliDetail;
@@ -164,6 +173,7 @@ struct Case
     OperationType gate;
     double theta = .713, phi = .417, lambda = -.923, gamma = .319;
 };
+
 template <class Sim> inline void Record(Sim &sim, const Case &c, const std::array<int, 3> &q)
 {
     using T = OperationType;
@@ -212,6 +222,7 @@ template <class Sim> inline void Record(Sim &sim, const Case &c, const std::arra
         throw std::logic_error("Not a native gate");
     }
 }
+
 inline Matrix CaseMatrix(const Case &c)
 {
     using T = OperationType;
@@ -236,6 +247,7 @@ inline Matrix CaseMatrix(const Case &c)
         return Fixed(c.gate);
     }
 }
+
 inline std::vector<Case> Cases()
 {
     using T = OperationType;
@@ -247,6 +259,7 @@ inline std::vector<Case> Cases()
     result.push_back({T::U, pi / 2, 0., pi, 0.});
     return result;
 }
+
 inline void Packed()
 {
     size_t count = 0;
@@ -314,6 +327,7 @@ inline void Packed()
     }
     std::cout << "PASS " << count << " packed expansions, legacy round trips and spectator bits through 513 qubits\n";
 }
+
 inline Matrix Embed(const Matrix &u, const std::array<int, 3> &q, int arity, int width)
 {
     Matrix m = Matrix::Zero(Eigen::Index(1) << width, Eigen::Index(1) << width);
@@ -332,6 +346,7 @@ inline Matrix Embed(const Matrix &u, const std::array<int, 3> &q, int arity, int
     }
     return m;
 }
+
 inline void CircuitsAndSampling()
 {
     auto cases = Cases();
@@ -400,6 +415,7 @@ inline void CircuitsAndSampling()
     std::cout << "PASS mixed dense circuits, threaded execution, probabilities, sampling, snapshots and gate-boundary "
                  "cutoffs\n";
 }
+
 inline void ValidationAndCancellation()
 {
     PauliPropagator p;
@@ -463,6 +479,7 @@ inline void ValidationAndCancellation()
     }
     std::cout << "PASS transactional native validation, third-qubit bounds and exact involution cancellation\n";
 }
+
 template <class T> inline void ParallelBatches(int width, const std::array<int, 3> &q)
 {
     using namespace PauliDetail;
@@ -510,21 +527,25 @@ template <class T> inline void ParallelBatches(int width, const std::array<int, 
             }
         }
 }
+
 class CustomNative : public OperatorLocal
 {
   public:
     CustomNative() : OperatorLocal(OperationType::CCX, 0, 1, 2, PauliDetail::FixedTransfer(OperationType::CCX))
     {
     }
+
     std::unique_ptr<Operator> Clone() const override
     {
         return std::make_unique<CustomNative>(*this);
     }
+
     void Apply(PauliStringXZWithCoefficient &p, PauliStringStorage &) const override
     {
         p.Coefficient *= 2.;
     }
 };
+
 inline void ParallelAndCustom()
 {
     ParallelBatches<PauliDetail::Term<1>>(64, {63, 0, 32});
@@ -557,6 +578,7 @@ inline void ParallelAndCustom()
         Require(reader.get() == expected, "concurrent native queries changed result");
     std::cout << "PASS deterministic native batches across packed widths, custom subclasses and concurrent queries\n";
 }
+
 // The thread-local recording cache must return the table a fresh compile
 // gives, share it on a repeat, and never confuse gates, angles or evicted slots.
 inline void Recording()
@@ -635,6 +657,7 @@ inline void Recording()
     Require(!detail::TryGetQuarterTurns(std::nextafter(pi / 2, 2.), turns), "near quarter turn was snapped");
     std::cout << "PASS " << checks << " cached gate tables, eviction, sharing and the quarter-turn rule\n";
 }
+
 inline void Run()
 {
     Algebra();

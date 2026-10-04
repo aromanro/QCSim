@@ -535,7 +535,9 @@ inline void PatchExceptionRecovery()
         ThrowingRepair() : Implementation(2)
         {
         }
+
         bool fail = true;
+
         void ReCanonicalize() override
         {
             if (fail)
@@ -546,6 +548,7 @@ inline void PatchExceptionRecovery()
             Implementation::ReCanonicalize();
         }
     };
+
     ThrowingRepair sim;
     Throws<std::runtime_error>([&] { sim.Hermitize(); }, "Exception injection failed");
     sim.Clear();

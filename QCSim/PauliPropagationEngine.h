@@ -22,18 +22,22 @@ template <size_t N> struct Term
 {
     std::array<uint64_t, N> X{}, Z{};
     double Coefficient = 1.;
+
     explicit Term(size_t = 0)
     {
     }
 };
+
 template <> struct Term<0>
 {
     std::vector<uint64_t> X, Z;
     double Coefficient = 1.;
+
     explicit Term(size_t qubits = 0) : X((qubits + 63) / 64), Z(X.size())
     {
     }
 };
+
 inline size_t Popcount(uint64_t x)
 {
 #if defined(_MSC_VER) && defined(_M_X64)
@@ -47,6 +51,7 @@ inline size_t Popcount(uint64_t x)
     return n;
 #endif
 }
+
 template <class T> size_t Weight(const T &t)
 {
     size_t result = 0;
@@ -54,6 +59,7 @@ template <class T> size_t Weight(const T &t)
         result += Popcount(t.X[w] | t.Z[w]);
     return result;
 }
+
 template <class T> double Expectation(const T &t)
 {
     for (auto x : t.X)
@@ -61,6 +67,7 @@ template <class T> double Expectation(const T &t)
             return 0.;
     return t.Coefficient;
 }
+
 template <class T> T Pack(const PauliStringXZWithCoefficient &p, size_t qubits)
 {
     T t(qubits);
@@ -74,6 +81,7 @@ template <class T> T Pack(const PauliStringXZWithCoefficient &p, size_t qubits)
     }
     return t;
 }
+
 template <class T> PauliStringXZWithCoefficient Unpack(const T &t, size_t qubits)
 {
     PauliStringXZWithCoefficient p(qubits);
@@ -97,22 +105,27 @@ struct Operation
     bool projectOne = false;
     bool userDefined = false, clifford = false;
     std::shared_ptr<const void> payload;
+
     Operation(OperationType t = OperationType::X, int a = 0, int b = 0)
         : type(t), q0(a), q1(b), clifford(IsPauliClifford(t))
     {
     }
+
     const Operator *Custom() const
     {
         return userDefined ? static_cast<const Operator *>(payload.get()) : nullptr;
     }
+
     const LocalTransfer &Transfer() const
     {
         return *static_cast<const LocalTransfer *>(payload.get());
     }
+
     int Qubit(int index) const
     {
         return index == 0 ? q0 : index == 1 ? q1 : q2;
     }
+
     static Operation Local(OperationType type, int a, int b, int c, std::shared_ptr<const LocalTransfer> table)
     {
         Operation op(type, a, b);
@@ -121,10 +134,12 @@ struct Operation
         op.payload = std::move(table);
         return op;
     }
+
     bool Clifford() const
     {
         return !userDefined && clifford;
     }
+
     static Operation Rotation(OperationType t, int q, double angle)
     {
         Operation op(t, q);
@@ -134,6 +149,7 @@ struct Operation
             op.clifford = true;
         return op;
     }
+
     std::unique_ptr<Operator> Legacy() const
     {
         if (Custom())
@@ -179,6 +195,7 @@ struct Operation
 #undef QC_PP_OP2
         throw std::invalid_argument("Unknown Pauli operation");
     }
+
     static Operation Import(std::unique_ptr<Operator> p)
     {
         if (!p)
@@ -324,6 +341,7 @@ void LocalPositions(const Operation &op, std::array<size_t, K> &words, std::arra
         shifts[q] = unsigned(op.Qubit(q)) % 64;
     }
 }
+
 template <unsigned K, class T>
 unsigned LocalLabel(const T &t, const std::array<size_t, K> &words, const std::array<unsigned, K> &shifts)
 {
@@ -433,6 +451,7 @@ void ApplyLocalKernel(const Operation &op, std::vector<T> &terms, size_t begin, 
             set(t, table.entries[first]);
     }
 }
+
 template <class T>
 void ApplyLocal(const Operation &op, std::vector<T> &terms, size_t begin, size_t end, std::vector<T> &extra,
                 bool preallocated = false, size_t write = 0, bool append = false)
@@ -603,6 +622,7 @@ inline uint64_t Mix(uint64_t x)
     x *= UINT64_C(0x94d049bb133111eb);
     return x ^ (x >> 31);
 }
+
 template <class T> size_t Hash(const T &t)
 {
     uint64_t h = UINT64_C(0x9e3779b97f4a7c15);
@@ -610,12 +630,14 @@ template <class T> size_t Hash(const T &t)
         h = Mix(h ^ Mix(t.X[w]) ^ (Mix(t.Z[w]) + UINT64_C(0x9e3779b97f4a7c15)));
     return static_cast<size_t>(h);
 }
+
 template <class T> struct Workspace
 {
     std::vector<T> terms;
     std::vector<std::vector<T>> extra;
     std::vector<size_t> hashSlots;
 };
+
 struct Settings
 {
     size_t qubits = 0, weight = std::numeric_limits<size_t>::max();
@@ -623,15 +645,18 @@ struct Settings
     int trims = std::numeric_limits<int>::max(), dedup = std::numeric_limits<int>::max();
     size_t parallelThreshold = 16384, batch = 4096, sumThreshold = 65536, sumBatch = 16384;
     ThreadPool<> *pool = nullptr;
+
     bool Dedup(size_t index) const
     {
         return dedup != std::numeric_limits<int>::max() && index % dedup == 0;
     }
+
     bool Trim(size_t index) const
     {
         return trims != std::numeric_limits<int>::max() && index % trims == 0;
     }
 };
+
 template <class T> void Trim(std::vector<T> &terms, const Settings &s)
 {
     size_t write = 0;
@@ -647,6 +672,7 @@ template <class T> void Trim(std::vector<T> &terms, const Settings &s)
     }
     terms.resize(write);
 }
+
 template <class T> void Deduplicate(Workspace<T> &ws, const Settings &s)
 {
     auto &terms = ws.terms;
@@ -695,20 +721,24 @@ inline size_t Parts(size_t size, size_t threshold, size_t grain, ThreadPool<> *p
         return 1;
     return std::max<size_t>(1, std::min(pool->GetThreadCount() + 1, size / grain));
 }
+
 inline size_t DefaultWorkerCount(size_t hardwareThreads)
 {
     return hardwareThreads > 1 ? hardwareThreads - 1 : 0;
 }
+
 // Up to four work items per participant balance variable core speeds without
 // allocating a branch buffer/future for every term when batch is very small.
 inline size_t Grain(size_t size, size_t parts, size_t batch)
 {
     return parts == 1 ? std::max<size_t>(1, size) : std::max(batch, 1 + (size - 1) / (parts * 4));
 }
+
 inline size_t ChunkCount(size_t size, size_t grain)
 {
     return size ? 1 + (size - 1) / grain : 1;
 }
+
 // Every submitted job is drained before references to the query's scratch die,
 // including allocation/enqueue errors and exceptions thrown by a custom gate.
 // Only participants are enqueued; they pick up indexed work items dynamically.
@@ -800,6 +830,7 @@ size_t LocalBranchCount(const std::vector<T> &terms, const Operation &op, size_t
     }
     return count;
 }
+
 template <class T> void ExecuteLocal(std::vector<T> &terms, const Operation &op, const Settings &s)
 {
     const auto &table = op.Transfer();

@@ -36,10 +36,12 @@ class PackedComponentLabels
     {
         return nrLabels;
     }
+
     size_t GetNrBits() const noexcept
     {
         return nrBits;
     }
+
     size_t GetNrWords() const noexcept
     {
         return wordsPerLabel;
@@ -321,58 +323,72 @@ class CliffordBasisMap
     {
         Map().ApplyH(qubit);
     }
+
     void ApplyS(size_t qubit) noexcept
     {
         Map().ApplyS(qubit);
     }
+
     void ApplySdg(size_t qubit) noexcept
     {
         Map().ApplySdg(qubit);
     }
+
     void ApplyX(size_t qubit) noexcept
     {
         Map().ApplyX(qubit);
     }
+
     void ApplyY(size_t qubit) noexcept
     {
         Map().ApplyY(qubit);
     }
+
     void ApplyZ(size_t qubit) noexcept
     {
         Map().ApplyZ(qubit);
     }
+
     void ApplySx(size_t qubit) noexcept
     {
         Map().ApplySx(qubit);
     }
+
     void ApplySxDag(size_t qubit) noexcept
     {
         Map().ApplySxDag(qubit);
     }
+
     void ApplyK(size_t qubit) noexcept
     {
         Map().ApplyK(qubit);
     }
+
     void ApplyCX(size_t target, size_t control) noexcept
     {
         Map().ApplyCX(target, control);
     }
+
     void ApplyCY(size_t target, size_t control) noexcept
     {
         Map().ApplyCY(target, control);
     }
+
     void ApplyCZ(size_t target, size_t control) noexcept
     {
         Map().ApplyCZ(target, control);
     }
+
     void ApplySwap(size_t qubit1, size_t qubit2) noexcept
     {
         Map().ApplySwap(qubit1, qubit2);
     }
+
     void ApplyISwap(size_t qubit1, size_t qubit2) noexcept
     {
         Map().ApplyISwap(qubit1, qubit2);
     }
+
     void ApplyISwapDag(size_t qubit1, size_t qubit2) noexcept
     {
         Map().ApplyISwapDag(qubit1, qubit2);
@@ -493,6 +509,7 @@ class CliffordBasisMap
 
   private:
     static constexpr size_t BitsPerWord = 64;
+
     enum : size_t
     {
         MeasuredRow = 0,

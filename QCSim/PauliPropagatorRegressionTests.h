@@ -9,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+
 namespace QC
 {
 namespace PauliRegression
@@ -18,11 +19,14 @@ inline void Require(bool ok, const char *message)
     if (!ok)
         throw std::runtime_error(message);
 }
+
 inline void Close(double a, double b, const char *message, double eps = 2e-10)
 {
     Require(std::isfinite(a) && std::isfinite(b) && std::abs(a - b) < eps, message);
 }
+
 using Expansion = std::map<std::string, double>;
+
 inline Expansion Canonical(const PauliStringStorage &terms)
 {
     Expansion m;
@@ -68,6 +72,7 @@ inline std::unique_ptr<Operator> Gate(int code, int a, int b, double angle = .37
         return std::make_unique<OperatorRZ>(a, angle);
     }
 }
+
 inline void Compare(const Expansion &a, const Expansion &b)
 {
     for (const auto &kv : a)
@@ -81,6 +86,7 @@ inline void Compare(const Expansion &a, const Expansion &b)
         Close(kv.second, i == a.end() ? 0. : i->second, "expanded coefficient mismatch");
     }
 }
+
 inline void LegacyTrim(PauliStringStorage &terms, int width, double cutoff, size_t weight, bool dedup)
 {
     if (dedup)
@@ -112,6 +118,7 @@ inline void LegacyTrim(PauliStringStorage &terms, int width, double cutoff, size
                     terms.end());
     }
 }
+
 inline void LegacyRun(PauliStringStorage &terms, const std::vector<std::unique_ptr<Operator>> &ops, int width,
                       int dedup, int trims, double cutoff, size_t weight)
 {
@@ -127,6 +134,7 @@ inline void LegacyRun(PauliStringStorage &terms, const std::vector<std::unique_p
             LegacyTrim(terms, width, cutoff, weight, false);
     }
 }
+
 inline void Kernels()
 {
     for (int width : {2, 32, 63, 64, 65, 127, 128, 129, 255, 256, 257})
@@ -155,6 +163,7 @@ inline void Kernels()
                 }
     std::cout << "PASS all local gate expansions across 32/64/128-bit boundaries and 257 qubits\n";
 }
+
 inline void RandomPropagation()
 {
     std::mt19937 gen(42);
@@ -205,6 +214,7 @@ inline void RandomPropagation()
     }
     std::cout << "PASS random reference propagation, projectors and cutoffs with serial/1/4 workers\n";
 }
+
 inline void StatevectorChecks()
 {
     using C = std::complex<double>;
@@ -294,6 +304,7 @@ inline void StatevectorChecks()
     }
     std::cout << "PASS independent statevector expectations and all outcome probabilities\n";
 }
+
 inline void Sampling()
 {
     for (int width : {6, 65, 129, 257})
@@ -347,6 +358,7 @@ inline void Sampling()
     std::cout
         << "PASS seeded batch sampling, bounded/disabled caches, cutoffs, large widths and measurement correlations\n";
 }
+
 inline void RegressionAndLifetime()
 {
     for (int workers : {0, 1, 4})
@@ -406,16 +418,19 @@ inline void RegressionAndLifetime()
     Close(nested.get(), 1., "pool reuse");
     std::cout << "PASS checkpoint/deadlock regressions, copy-on-write, exception draining and pool reuse\n";
 }
+
 class CustomScale : public OperatorX
 {
   public:
     explicit CustomScale(std::shared_ptr<int> clones) : OperatorX(0), clones(std::move(clones))
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &p, PauliStringStorage &) const override
     {
         p.Coefficient *= .25;
     }
+
     std::unique_ptr<Operator> Clone() const override
     {
         ++*clones;
@@ -425,6 +440,7 @@ class CustomScale : public OperatorX
   private:
     std::shared_ptr<int> clones;
 };
+
 inline void CustomAndConcurrent()
 {
     PauliPropagator p;
@@ -475,6 +491,7 @@ class ReviveZero : public OperatorX
     ReviveZero() : OperatorX(0)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &p, PauliStringStorage &) const override
     {
         if (p.Coefficient == 0.)
@@ -483,22 +500,26 @@ class ReviveZero : public OperatorX
             p.X[0] = false;
         }
     }
+
     std::unique_ptr<Operator> Clone() const override
     {
         return std::make_unique<ReviveZero>(*this);
     }
 };
+
 class ProbabilityEstimate : public OperatorX
 {
   public:
     explicit ProbabilityEstimate(double scale, int failQubit = -1) : OperatorX(0), scale(scale), failQubit(failQubit)
     {
     }
+
     void Apply(PauliStringXZWithCoefficient &p, PauliStringStorage &) const override
     {
         if (failQubit < 0 || p.Z[failQubit])
             p.Coefficient *= scale;
     }
+
     std::unique_ptr<Operator> Clone() const override
     {
         return std::make_unique<ProbabilityEstimate>(*this);
@@ -694,6 +715,7 @@ inline void ReviewRegressions()
     }
     std::cout << "PASS bounded probabilities, nonfinite rejection and probability exception cleanup\n";
 }
+
 inline void Run()
 {
     Kernels();
