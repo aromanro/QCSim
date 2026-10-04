@@ -23,6 +23,7 @@
 #include "MPOSimulator.h"
 #include "MPOSimulatorRegressionTests.h"
 #include "QubitRegister.h"
+#include "TensorNetworkRegressionTests.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -589,26 +590,13 @@ static bool InitialQubitsMapTestMPO()
 
     const Eigen::MatrixXcd beforeInvalidMap = mpo.getDensityMatrix();
     const auto stateBeforeInvalidMap = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
-    if (!MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.SetInitialQubitsMap({0, 1, 2});
-            },
-            "Wrong-size initial MPO qubit map") ||
-        !MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.SetInitialQubitsMap({0, 1, 1, 3});
-            },
-            "Duplicate entry in initial MPO qubit map") ||
-        !MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.SetInitialQubitsMap({0, 1, 2, -1});
-            },
-            "Negative entry in initial MPO qubit map") ||
-        !MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.SetInitialQubitsMap({0, 1, 2, 4});
-            },
-            "Out-of-range entry in initial MPO qubit map"))
+    if (!MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 2}); }, "Wrong-size initial MPO qubit map") ||
+        !MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 1, 3}); },
+                                   "Duplicate entry in initial MPO qubit map") ||
+        !MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 2, -1}); },
+                                   "Negative entry in initial MPO qubit map") ||
+        !MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 2, 4}); },
+                                   "Out-of-range entry in initial MPO qubit map"))
         return false;
 
     const auto stateAfterInvalidMap = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
@@ -2730,33 +2718,19 @@ static bool ValidationAndStateCompatibilityTestMPO()
                                    "Operator with mismatched declared arity") ||
         !MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::TwoQubitsGate<>(i4), 0, 0); },
                                    "Duplicate operator qubits") ||
-        !MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.ApplyKrausOperators({i2, i4}, 0);
-            },
-            "Mismatched Kraus dimensions") ||
-        !MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.ApplyKrausOperators({i2, nonFinite}, 0);
-            },
-            "Non-finite Kraus operator") ||
+        !MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({i2, i4}, 0); }, "Mismatched Kraus dimensions") ||
+        !MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({i2, nonFinite}, 0); }, "Non-finite Kraus operator") ||
         !MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({i4}, 0, 0); }, "Duplicate Kraus qubits"))
         return false;
 
     using MPOIndex = QC::TensorNetworks::MPOSimulatorInterface::IndexType;
     if (!MPO_ExpectInvalidArgument([&] { mpo.MeasureQubits(std::set<MPOIndex>{-1}); }, "Negative measured qubit") ||
-        !MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.MeasureQubits(std::set<MPOIndex>{0, 4});
-            },
-            "Out-of-range measured qubit") ||
+        !MPO_ExpectInvalidArgument([&] { mpo.MeasureQubits(std::set<MPOIndex>{0, 4}); },
+                                   "Out-of-range measured qubit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.MeasureNoCollapse(std::set<MPOIndex>{4}); },
                                    "Out-of-range sampled qubit") ||
-        !MPO_ExpectInvalidArgument(
-            [&] {
-                mpo.MoveAtBeginningOfChain(std::set<MPOIndex>{-1, 0});
-            },
-            "Invalid moved qubit") ||
+        !MPO_ExpectInvalidArgument([&] { mpo.MoveAtBeginningOfChain(std::set<MPOIndex>{-1, 0}); },
+                                   "Invalid moved qubit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.setLimitBondDimension(0); }, "Zero bond dimension limit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.setLimitBondDimension(-2); }, "Negative bond dimension limit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.setLimitEntanglement(-1E-6); }, "Negative singular-value threshold") ||
@@ -2786,11 +2760,8 @@ static bool ValidationAndStateCompatibilityTestMPO()
     MPOSeedNext(adjacent);
     adjacent.ApplyGate(h, 0);
     const Eigen::MatrixXcd adjacentBeforeInvalidMeasurement = adjacent.getDensityMatrix();
-    if (!MPO_ExpectInvalidArgument(
-            [&] {
-                adjacent.MeasureQubits(std::set<MPOIndex>{0, 4});
-            },
-            "Implementation subset with an invalid measured qubit") ||
+    if (!MPO_ExpectInvalidArgument([&] { adjacent.MeasureQubits(std::set<MPOIndex>{0, 4}); },
+                                   "Implementation subset with an invalid measured qubit") ||
         !MPO_ExpectInvalidArgument([&] { adjacent.MeasureNoCollapse(std::set<MPOIndex>{4}); },
                                    "Implementation subset with an invalid sampled qubit") ||
         !MPO_ExpectInvalidArgument([&] { adjacent.MoveAtBeginningOfChain(std::set<MPOIndex>{-1}); },
@@ -3856,6 +3827,187 @@ static bool LongMixedChainScaleTestMPO()
     return true;
 }
 
+static void BatchScalingAndCacheRegressionMPO()
+{
+    using namespace QC::TensorNetworkRegression;
+    using Simulator = QC::TensorNetworks::MPOSimulator;
+    Simulator simulator(6, 1);
+    Prepare(simulator);
+    simulator.ApplyOperator(Gate(.37 * Unitary(2, 512)), 2);
+    const std::vector<std::string> paulis = {"IIIIII", "YIIIZI", "XXYYYY", "IIIZII", "xxYyYy", "IIIIII"};
+    const Matrix density = simulator.getUnnormalizedDensityMatrix();
+    const auto raw = simulator.ExpectationValues(paulis, false);
+    const auto normalized = simulator.ExpectationValues(paulis);
+    Require(raw.size() == paulis.size() && normalized.size() == paulis.size(), "MPO batch result size changed");
+    for (size_t i = 0; i < paulis.size(); ++i)
+    {
+        const auto expected = DensePauliExpectation(density, paulis[i]);
+        Close(raw[i], expected, "Raw MPO batch differs from dense reference");
+        Close(normalized[i], expected / density.trace(), "Normalized MPO batch differs from dense reference");
+    }
+    Simulator longChain(1030, 1);
+    longChain.SetMultithreading(false);
+    const std::vector<Matrix> mixing = {Pauli('I') / std::sqrt(2.), Pauli('X') / std::sqrt(2.)};
+    for (int q = 0; q < 1030; ++q)
+        longChain.ApplyKrausOperators(mixing, q);
+    longChain.ReCanonicalize();
+    std::string identity(1030, 'I'), z = identity, y = identity;
+    z[500] = 'Z';
+    y[1029] = 'Y';
+    for (const bool normalize : {false, true})
+    {
+        const auto values = longChain.ExpectationValues({identity, z, y}, normalize);
+        Close(values[0], 1., "Long-chain batch lost its scale exponent");
+        Close(values[1], 0., "Long-chain Z observable changed");
+        Close(values[2], 0., "Long-chain Y observable changed");
+    }
+    // Prefix/suffix environments and their metadata exceed 4 MiB on this product-state chain.
+    Simulator many(50000, 1);
+    many.SetMultithreading(false);
+    identity.assign(50000, 'I');
+    z = identity;
+    y = identity;
+    z[21000] = 'Z';
+    y[42000] = 'Y';
+    for (const bool normalize : {false, true})
+    {
+        const auto values = many.ExpectationValues({identity, z, y, z}, normalize);
+        Close(values[0], 1., "MPO cache fallback changed identity");
+        Close(values[1], 1., "MPO cache fallback changed Z");
+        Close(values[2], 0., "MPO cache fallback changed Y");
+        Close(values[3], 1., "MPO cache fallback changed a duplicate result");
+    }
+    simulator.ApplyOperator(Gate(Matrix::Zero(2, 2)), 0);
+    for (const auto value : simulator.ExpectationValues(paulis, false))
+        Close(value, 0., "Zero-trace raw batch returned a nonzero observable");
+    Throws<std::runtime_error>([&] { simulator.ExpectationValues(paulis); },
+                               "Zero-trace normalized batch was accepted");
+}
+
+static void BondSummaryRollbackRegressionMPO()
+{
+    using namespace QC::TensorNetworkRegression;
+    QC::TensorNetworks::MPOSimulator simulator(6, 1);
+    Prepare(simulator);
+    int calls = 0;
+    simulator.SetBondDimensionSummaryCallback([&](auto) { ++calls; });
+    const auto dimensions = simulator.getBondDimensions();
+    const auto mapping = simulator.getQubitsMap();
+    const Matrix density = simulator.getUnnormalizedDensityMatrix();
+    Throws<std::runtime_error>([&] { simulator.ApplyOperatorAndNormalize(Gate(Matrix::Zero(4, 4)), 0, 5); },
+                               "Zero-trace routed operation was accepted");
+    Require(calls == 0 && simulator.getBondDimensions() == dimensions && simulator.getQubitsMap() == mapping,
+            "Failed routed operation committed dimensions, mapping or a summary notification");
+    Require(simulator.getMaxBondDimension() == MaximumBond(simulator), "Rollback retained tentative maximum bond");
+    Close(simulator.getUnnormalizedDensityMatrix(), density, "Failed routed operation changed the state");
+    simulator.Hermitize();
+    Require(simulator.getMaxBondDimension() == MaximumBond(simulator), "Hermitization left a stale maximum bond");
+}
+
+static void FastAndConservativeArithmeticRegressionMPO()
+{
+    using namespace QC::TensorNetworkRegression;
+    using Simulator = QC::TensorNetworks::MPOSimulator;
+    Simulator prepared(6, 1);
+    // Six sites can have at most 64 Schmidt coefficients. This cap selects
+    // conservative arithmetic without changing the mathematical state.
+    prepared.setLimitBondDimension(1 << 20);
+    Prepare(prepared);
+    const Matrix initial = prepared.getUnnormalizedDensityMatrix();
+    const auto dimensions = prepared.getBondDimensions();
+    Require(dimensions[1] * dimensions[2] >= 16 && dimensions[1] * dimensions[3] >= 16,
+            "Channel fixture is too small to exercise aggregation");
+    const std::vector<std::string> paulis = {"IIIIII", "YIIIZI", "XXYYYY", "IIIZII"};
+    const auto embed = [](const Matrix &op, int target, int control) {
+        Matrix full = Matrix::Zero(64, 64);
+        for (int input = 0; input < 64; ++input)
+        {
+            const int column = ((input >> target) & 1) | (control < 0 ? 0 : (((input >> control) & 1) << 1));
+            for (int row = 0; row < op.rows(); ++row)
+            {
+                int output = (input & ~(1 << target)) | ((row & 1) << target);
+                if (control >= 0)
+                    output = (output & ~(1 << control)) | (((row >> 1) & 1) << control);
+                full(output, input) = op(row, column);
+            }
+        }
+        return full;
+    };
+    const auto compare = [&](const std::vector<Matrix> &operators, int target, int control, bool channel) {
+        auto fast = prepared.Clone();
+        auto conservative = prepared.Clone();
+        fast->dontLimitBondDimension();
+        Matrix expected = Matrix::Zero(64, 64);
+        for (const auto &op : operators)
+        {
+            const Matrix full = embed(op, target, control);
+            expected.noalias() += full * initial * full.adjoint();
+        }
+        for (auto *simulator : {fast.get(), conservative.get()})
+        {
+            if (channel)
+                simulator->ApplyKrausOperators(operators, target, control < 0 ? 0 : control);
+            else
+                simulator->ApplyOperator(Gate(operators.front()), target, control < 0 ? 0 : control);
+            Close(simulator->getUnnormalizedDensityMatrix(), expected, "MPO arithmetic differs from dense evolution");
+            Close(simulator->Trace(), expected.trace(), "MPO arithmetic changed raw trace");
+            const auto raw = simulator->ExpectationValues(paulis, false);
+            const auto normalized = simulator->ExpectationValues(paulis);
+            for (size_t i = 0; i < paulis.size(); ++i)
+            {
+                const auto value = DensePauliExpectation(expected, paulis[i]);
+                Close(raw[i], value, "MPO arithmetic changed a raw observable");
+                Close(normalized[i], value / expected.trace(), "MPO arithmetic changed a normalized observable");
+            }
+        }
+        Close(fast->getUnnormalizedDensityMatrix(), conservative->getUnnormalizedDensityMatrix(),
+              "Fast and conservative MPO paths disagree");
+    };
+    compare({Unitary(2, 91)}, 2, -1, false);
+    compare({.37 * Pauli('Z')}, 2, -1, false);
+    compare({Unitary(4, 101)}, 3, 2, false);
+    compare({Unitary(4, 101)}, 2, 3, false);
+    // Four-operator depolarizing and dense two-operator channels aggregate;
+    // the sparse two-operator amplitude-damping channel retains its fallback.
+    const double probability = .24;
+    compare({std::sqrt(1. - probability) * Pauli('I'), std::sqrt(probability / 3.) * Pauli('X'),
+             std::sqrt(probability / 3.) * Pauli('Y'), std::sqrt(probability / 3.) * Pauli('Z')},
+            2, -1, true);
+    compare({Unitary(2, 91) / std::sqrt(2.), Unitary(2, 92) / std::sqrt(2.)}, 2, -1, true);
+    Matrix k0 = Matrix::Zero(2, 2), k1 = k0;
+    k0(0, 0) = 1.;
+    k0(1, 1) = std::sqrt(1. - probability);
+    k1(0, 1) = std::sqrt(probability);
+    compare({k0, k1}, 2, -1, true);
+    const std::vector<Matrix> twoQubit = {Unitary(4, 101) / std::sqrt(3.), Unitary(4, 102) / std::sqrt(3.),
+                                          Unitary(4, 103) / std::sqrt(3.)};
+    compare(twoQubit, 3, 2, true);
+    compare(twoQubit, 2, 3, true);
+}
+
+static bool ObservableAndSummaryRegressionTestMPO()
+{
+    using namespace QC::TensorNetworkRegression;
+    using Simulator = QC::TensorNetworks::MPOSimulator;
+    std::cout << "\nMPO batch observables, cache budget, bond summaries and arithmetic paths" << std::endl;
+    try
+    {
+        CheckObservableBatch<Simulator>(
+            [](Simulator &simulator, const std::string &pauli) { return simulator.ExpectationValue(pauli); });
+        CheckBondSummary<Simulator>();
+        BatchScalingAndCacheRegressionMPO();
+        BondSummaryRollbackRegressionMPO();
+        FastAndConservativeArithmeticRegressionMPO();
+        std::cout << "Success" << std::endl;
+        return true;
+    }
+    catch (const std::exception &error)
+    {
+        std::cout << "MPO observable/summary regression: " << error.what() << std::endl;
+        return false;
+    }
+}
+
 bool MPOSimulatorTests()
 {
     std::cout << "\nMPO Simulator Tests" << std::endl;
@@ -3883,8 +4035,9 @@ bool MPOSimulatorTests()
     mpoNextSamplingSeed = seed;
     std::cout << "Circuit seed (32 bits): " << circuitSeed << "; starting sampling seed (64 bits): " << seed
               << " (override with QCSIM_MPO_TEST_SEED)" << std::endl;
-    return MPOTestSeedParsing() && QC::MPORegression::Run() && ValidationAndStateCompatibilityTestMPO() &&
-           InitialQubitsMapTestMPO() && MixtureValidationAndScalingTestMPO() && WideBasisInitializationTestMPO() &&
+    return MPOTestSeedParsing() && ObservableAndSummaryRegressionTestMPO() && QC::MPORegression::Run() &&
+           ValidationAndStateCompatibilityTestMPO() && InitialQubitsMapTestMPO() &&
+           MixtureValidationAndScalingTestMPO() && WideBasisInitializationTestMPO() &&
            KrausBondLimitAndLocalityTestMPO() && CollapseNormalizationAndAtomicFailureTestMPO() &&
            OneAndTwoQubitGatesTestMPO() && NonAdjacentGatesTestMPO() && NumericalRankStabilityTestMPO() &&
            MeetingPositionCallbackTestMPO() && OptimalMeetingPositionTestMPO() && BondDimensionCallbackTestMPO() &&

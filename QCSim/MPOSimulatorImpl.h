@@ -116,6 +116,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
             adjointGammas.emplace_back(AdjointSite(gamma));
 
         AddState(lambdas, gammas, adjointGammas);
+        bondDimensions.Refresh(lambdas);
         ScaleSite(0, 0.5);
 
         ReCanonicalize();
@@ -316,6 +317,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         gammas[site] = std::move(newLeft);
         gammas[site + 1] = std::move(newRight);
         lambdas[site] = std::move(placeholder);
+        bondDimensions.Update(site, lambdas[site].size());
         scaleExponent += removed;
     }
 
@@ -369,6 +371,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         gammas[site - 1] = std::move(newLeft);
         gammas[site] = std::move(newRight);
         lambdas[site - 1] = std::move(placeholder);
+        bondDimensions.Update(site - 1, lambdas[site - 1].size());
         scaleExponent += removed;
     }
 
@@ -461,7 +464,12 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     {
         InvalidateSamplingCache();
         if (operatorQubits == 1)
-            ApplySingleQubitGate(gammas[qubit], op);
+        {
+            if (limitSize || limitEntanglement)
+                ApplySingleQubitGateConservative(gammas[qubit], op);
+            else
+                ApplySingleQubitGate(gammas[qubit], op);
+        }
         else
             ApplyTwoQubitGate(op, qubit, controllingQubit1);
         if (!(op.adjoint() * op).isIdentity(1E-12))
@@ -540,6 +548,83 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         throw std::invalid_argument("Kraus operators do not satisfy the completeness relation");
     }
 
+    template <class OperatorsContainer>
+    bool ShouldAggregateChannel(const OperatorsContainer &ops, IndexType L, IndexType R) const
+    {
+        if (limitSize || limitEntanglement || L * R < 16 || ops.size() < 2)
+            return false;
+        if (ops.size() > 2)
+            return true;
+        // Two dense operators also save a full tensor pass. Sparse pairs
+        // (for example amplitude damping) keep the zero-skipping loops.
+        for (const auto &op : ops)
+        {
+            const auto &matrix = GetOperatorMatrix(op);
+            for (IndexType i = 0; i < matrix.size(); ++i)
+                if (matrix.data()[i] == std::complex<double>{})
+                    return false;
+        }
+        return true;
+    }
+
+    // Keep superoperator setup and its stack storage out of the fallback
+    // channel loops. Inlining this work can penalize even two-Kraus channels.
+    template <class OperatorsContainer>
+    static EIGEN_DONT_INLINE void AccumulateSingleQubitChannel(const OperatorsContainer &ops,
+                                                               const TensorType &original, TensorType &result)
+    {
+        const IndexType L = original.dimension(0), R = original.dimension(3);
+        Eigen::Matrix<std::complex<double>, 4, 4> channel;
+        channel.setZero();
+        for (const auto &op : ops)
+        {
+            const auto &E = GetOperatorMatrix(op);
+            for (int out = 0; out < 4; ++out)
+                for (int in = 0; in < 4; ++in)
+                    channel(out, in) += E(out % 2, in % 2) * std::conj(E(out / 2, in / 2));
+        }
+        for (int out = 0; out < 4; ++out)
+            for (int in = 0; in < 4; ++in)
+            {
+                const auto factor = channel(out, in);
+                if (factor == std::complex<double>{})
+                    continue;
+                for (IndexType r = 0; r < R; ++r)
+                    for (IndexType l = 0; l < L; ++l)
+                        result(l, out % 2, out / 2, r) += factor * original(l, in % 2, in / 2, r);
+            }
+    }
+
+    template <class OperatorsContainer>
+    static EIGEN_DONT_INLINE void AccumulateTwoQubitChannel(const OperatorsContainer &ops, bool reversed,
+                                                            const Eigen::Tensor<std::complex<double>, 6> &theta,
+                                                            Eigen::Tensor<std::complex<double>, 6> &result)
+    {
+        const IndexType L = theta.dimension(0), R = theta.dimension(5);
+        Eigen::Matrix<std::complex<double>, 16, 16> channel;
+        channel.setZero();
+        // out/in = (two-site ket)*4 + (two-site bra).
+        for (const auto &op : ops)
+        {
+            const auto E = GetTwoQubitsGateTensor(GetOperatorMatrix(op), reversed);
+            for (int out = 0; out < 16; ++out)
+                for (int in = 0; in < 16; ++in)
+                    channel(out, in) += E(out / 8, (out / 4) % 2, in / 8, (in / 4) % 2) *
+                                        std::conj(E((out / 2) % 2, out % 2, (in / 2) % 2, in % 2));
+        }
+        for (int out = 0; out < 16; ++out)
+            for (int in = 0; in < 16; ++in)
+            {
+                const auto factor = channel(out, in);
+                if (factor == std::complex<double>{})
+                    continue;
+                for (IndexType r = 0; r < R; ++r)
+                    for (IndexType l = 0; l < L; ++l)
+                        result(l, r, out / 8, (out / 4) % 2, (out / 2) % 2, out % 2) +=
+                            factor * theta(l, in / 8, (in / 2) % 2, (in / 4) % 2, in % 2, r);
+            }
+    }
+
     template <class OperatorsContainer> void ApplySingleQubitChannel(const OperatorsContainer &ops, IndexType qubit)
     {
         InvalidateSamplingCache();
@@ -548,6 +633,16 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         const IndexType R = original.dimension(3);
         TensorType result(L, 2, 2, R);
         result.setZero();
+
+        // Small tensors, sparse pairs and user-compressed evolution retain
+        // the original arithmetic. Dense pairs can also amortize the setup.
+        if (ShouldAggregateChannel(ops, L, R))
+        {
+            AccumulateSingleQubitChannel(ops, original, result);
+            gammas[qubit] = std::move(result);
+            InvalidateCanonicalForm(qubit, qubit);
+            return;
+        }
 
         for (const auto &op : ops)
         {
@@ -591,6 +686,15 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         const IndexType R = theta.dimension(5);
         Eigen::Tensor<std::complex<double>, 6> result(L, R, 2, 2, 2, 2);
         result.setZero();
+
+        if (ShouldAggregateChannel(ops, L, R))
+        {
+            AccumulateTwoQubitChannel(ops, reversed, theta, result);
+            const MatrixClass thetaMatrix = ReshapeThetaBar(result);
+            ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
+            InvalidateCanonicalForm(qubit1, qubit2);
+            return;
+        }
 
         for (const auto &op : ops)
         {
@@ -644,10 +748,10 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         }
 
         const TwoQubitsGateTensor U = GetTwoQubitsGateTensor(gate, reversed);
-        const Eigen::Tensor<std::complex<double>, 6> thetaBar = ConstructThetaBar(qubit1, U);
-
         // (4 * leftBond) x (4 * rightBond) matrix, the physical dimension per site is 4 = 2 (ket) x 2 (bra)
-        const MatrixClass thetaMatrix = ReshapeThetaBar(thetaBar);
+        const MatrixClass thetaMatrix = limitSize || limitEntanglement
+                                            ? ReshapeThetaBar(ConstructThetaBarConservative(qubit1, U))
+                                            : ConstructThetaMatrix(qubit1, U);
 
         ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
     }
@@ -778,8 +882,10 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         // Everything is built first and committed with noexcept moves.
         LambdaType newLambda = Svalues.head(sz);
         TensorType newLeft, newRight;
-        const int64_t removed = SetNewGammas(thetaMatrix, VmatrixFull, L, sz, R, newLeft, newRight);
+        const int64_t removed =
+            SetNewGammas(thetaMatrix, VmatrixFull, L, sz, R, newLeft, newRight, limitSize || limitEntanglement);
         lambdas[qubit1] = std::move(newLambda);
+        bondDimensions.Update(qubit1, lambdas[qubit1].size());
         gammas[qubit1] = std::move(newLeft);
         gammas[qubit2] = std::move(newRight);
         scaleExponent += removed;
@@ -892,9 +998,8 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         return gammas[qubit1].contract(gammas[qubit2], contractMid);
     }
 
-    // applies the two qubit gate U on the kets and its conjugate on the bras
-    // returns a rank-6 tensor with leg order (leftBond, rightBond, ket1', ket2', bra1', bra2')
-    Eigen::Tensor<std::complex<double>, 6> ConstructThetaBar(IndexType qubit1, const TwoQubitsGateTensor &U)
+    // Preserve the original summation order when user compression is enabled.
+    Eigen::Tensor<std::complex<double>, 6> ConstructThetaBarConservative(IndexType qubit1, const TwoQubitsGateTensor &U)
     {
         const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
 
@@ -909,6 +1014,37 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         // (leftBond, bra1, bra2, rightBond, ket1', ket2') -> (leftBond, rightBond, ket1', ket2', bra1', bra2')
         static const Indexes2 braDims{IntIndexPair(1, 2), IntIndexPair(2, 3)};
         return theta2.contract(Uconj, braDims);
+    }
+
+    // Apply the gate to each 4x4 physical block, writing the SVD layout
+    // directly. This avoids two rank-six contraction results and a reshape.
+    MatrixClass ConstructThetaMatrix(IndexType qubit1, const TwoQubitsGateTensor &U)
+    {
+        const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+        const IndexType L = theta.dimension(0), R = theta.dimension(5);
+        MatrixClass result(4 * L, 4 * R);
+        const TwoQubitsGateTensor Uconj = U.conjugate();
+        for (IndexType r = 0; r < R; ++r)
+            for (IndexType l = 0; l < L; ++l)
+            {
+                std::complex<double> ketApplied[4][4];
+                for (int a = 0; a < 4; ++a)
+                    for (int b = 0; b < 4; ++b)
+                    {
+                        ketApplied[a][b] = 0.;
+                        for (int c = 0; c < 4; ++c)
+                            ketApplied[a][b] += U(a / 2, a % 2, c / 2, c % 2) * theta(l, c / 2, b / 2, c % 2, b % 2, r);
+                    }
+                for (int a = 0; a < 4; ++a)
+                    for (int b = 0; b < 4; ++b)
+                    {
+                        std::complex<double> value = 0.;
+                        for (int c = 0; c < 4; ++c)
+                            value += ketApplied[a][c] * Uconj(b / 2, b % 2, c / 2, c % 2);
+                        result((2 * (a / 2) + b / 2) * L + l, (2 * (a % 2) + b % 2) * R + r) = value;
+                    }
+            }
+        return result;
     }
 
     // reshapes the rank-6 theta into a (4 * leftBond) x (4 * rightBond) matrix for the SVD
@@ -977,22 +1113,38 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     // V is the full V from the SVD (4R x rank), only the first sz columns are used
     // Returns the power of two removed from the left B when it is out of range (see scaleExponent).
     static int64_t SetNewGammas(const MatrixClass &thetaMatrix, const MatrixClass &Vmatrix, IndexType L, IndexType sz,
-                                IndexType R, TensorType &Btensor1, TensorType &Btensor2)
+                                IndexType R, TensorType &Btensor1, TensorType &Btensor2, bool conservative)
     {
         // (4L x sz), the rows are (physical index, left bond index) = p * L + l, with p = ket * 2 + bra
-        MatrixClass leftB = thetaMatrix * Vmatrix.leftCols(sz);
         int64_t removed = 0;
-        RescaleIfOutOfRange(leftB, removed);
+        if (conservative)
+        {
+            MatrixClass leftB = thetaMatrix * Vmatrix.leftCols(sz);
+            RescaleIfOutOfRange(leftB, removed);
 
-        Btensor1.resize(L, 2, 2, sz);
-        for (IndexType m = 0; m < sz; ++m)
-            for (IndexType bra = 0; bra < 2; ++bra)
-                for (IndexType ket = 0; ket < 2; ++ket)
-                {
-                    const IndexType pL = (ket * 2 + bra) * L;
-                    for (IndexType l = 0; l < L; ++l)
-                        Btensor1(l, ket, bra, m) = leftB(pL + l, m);
-                }
+            Btensor1.resize(L, 2, 2, sz);
+            for (IndexType m = 0; m < sz; ++m)
+                for (IndexType bra = 0; bra < 2; ++bra)
+                    for (IndexType ket = 0; ket < 2; ++ket)
+                    {
+                        const IndexType pL = (ket * 2 + bra) * L;
+                        for (IndexType l = 0; l < L; ++l)
+                            Btensor1(l, ket, bra, m) = leftB(pL + l, m);
+                    }
+        }
+        else
+        {
+            Btensor1.resize(L, 2, 2, sz);
+            Eigen::Map<MatrixClass> leftB(Btensor1.data(), 4 * L, sz);
+            leftB.noalias() = thetaMatrix * Vmatrix.leftCols(sz);
+            RescaleIfOutOfRange(leftB, removed);
+
+            // SVD rows use 2*ket+bra; tensor memory uses ket+2*bra. Only the
+            // two off-diagonal physical blocks need exchanging after the product.
+            for (IndexType m = 0; m < sz; ++m)
+                for (IndexType l = 0; l < L; ++l)
+                    std::swap(leftB(L + l, m), leftB(2 * L + l, m));
+        }
 
         // the columns of V^dagger are (physical index, right bond index) = p * R + r
         Btensor2.resize(sz, 2, 2, R);

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "BondDimensionSummary.h"
+#include "TensorPauli.h"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -145,6 +148,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
             lambdas[i].resize(1);
             lambdas[i](0) = 1.;
+            bondDimensions.Update(i, 1);
         }
 
         gammas[szm1].resize(1, 2, 2, 1);
@@ -165,6 +169,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
             lambdas[i].resize(1);
             lambdas[i](0) = 1.;
+            bondDimensions.Update(i, 1);
         }
 
         gammas[szm1].resize(1, 2, 2, 1);
@@ -335,6 +340,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         }
 
         lambdas.swap(newLambdas);
+        bondDimensions.Refresh(lambdas);
         gammas.swap(newGammas);
         scaleExponent = 0;
         InvalidateCanonicalForm();
@@ -446,7 +452,12 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
     std::complex<double> Trace() const override
     {
-        return ContractChain([this](IndexType q) { return SiteTraceMatrix(q); });
+        // Compression can split degenerate operator-Schmidt subspaces. Keep
+        // the original normalization arithmetic in that mode: tiny rounding
+        // changes fed back into evolution can select a different truncation.
+        if (limitSize || limitEntanglement)
+            return ContractChain([this](IndexType q) { return SiteTraceMatrix(q); });
+        return ContractPauliChain(nullptr);
     }
 
     std::complex<double> TraceOfSquare() const override
@@ -705,25 +716,94 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
     std::complex<double> UnnormalizedExpectationValue(const std::string &pauliString) const override
     {
-        const size_t nrQubits = getNrQubits();
-        if (pauliString.size() != nrQubits)
-            throw std::invalid_argument("Pauli string length must match the number of qubits");
-
-        std::vector<MatrixClass> siteOps(nrQubits);
-        for (size_t i = 0; i < nrQubits; ++i)
-            siteOps[i] = PauliMatrixFromChar(pauliString[i]);
-
-        return ContractChain(
-            [this, &siteOps](IndexType q) { return SitePauliMatrix(q, siteOps[static_cast<size_t>(q)]); });
+        ValidatePauliString(pauliString, gammas.size());
+        return ContractPauliChain(&pauliString);
     }
 
     std::complex<double> ExpectationValue(const std::string &pauliString) const override
     {
-        const std::complex<double> num = UnnormalizedExpectationValue(pauliString);
-        const std::complex<double> tr = Trace();
-        RequireNormalizableTrace(tr);
+        const auto num = UnnormalizedExpectationValue(pauliString);
+        const auto trace = Trace();
+        RequireNormalizableTrace(trace);
+        return num / trace;
+    }
 
-        return num / tr;
+    std::vector<std::complex<double>> ExpectationValues(const std::vector<std::string> &paulis,
+                                                        bool normalized = true) const
+    {
+        std::vector<std::complex<double>> result;
+        result.reserve(paulis.size());
+        if (paulis.empty())
+            return result;
+        const size_t n = gammas.size();
+        for (const auto &pauli : paulis)
+            ValidatePauliString(pauli, n);
+
+        size_t bytes = 2 * (n + 1) * sizeof(ScaledObservableEnvironment);
+        for (const auto &gamma : gammas)
+        {
+            if (bytes > ObservableCacheBytes)
+                break;
+            bytes += sizeof(std::complex<double>) * (gamma.dimension(0) + gamma.dimension(3));
+        }
+        if (paulis.size() == 1 || bytes > ObservableCacheBytes)
+        {
+            const auto trace = normalized ? Trace() : std::complex<double>(1.);
+            if (normalized)
+                RequireNormalizableTrace(trace);
+            for (const auto &pauli : paulis)
+                result.push_back(ContractPauliChain(&pauli) / trace);
+            return result;
+        }
+
+        // These environments belong to this call. Mapping changes, restores,
+        // non-unitary evolution and rescaling cannot leave a stale cache.
+        std::vector<ScaledObservableEnvironment> prefix(n + 1), suffix(n + 1);
+        prefix[0].value = MatrixClass::Ones(1, 1);
+        prefix[0].exponent = scaleExponent;
+        for (size_t q = 0; q < n; ++q)
+        {
+            ContractPauliSite(q, 'I', prefix[q].value, prefix[q + 1].value);
+            prefix[q + 1].exponent = prefix[q].exponent;
+            RescaleIfOutOfRange(prefix[q + 1].value, prefix[q + 1].exponent);
+        }
+        const auto trace = ScaleByPowerOfTwo(prefix[n].value(0, 0), prefix[n].exponent);
+        if (normalized)
+            RequireNormalizableTrace(trace);
+        suffix[n].value = MatrixClass::Ones(1, 1);
+        for (size_t q = n; q-- > 0;)
+        {
+            suffix[q].value.noalias() = MapSiteSlice(gammas[q], 0, 0) * suffix[q + 1].value;
+            suffix[q].value.noalias() += MapSiteSlice(gammas[q], 1, 1) * suffix[q + 1].value;
+            suffix[q].exponent = suffix[q + 1].exponent;
+            RescaleIfOutOfRange(suffix[q].value, suffix[q].exponent);
+        }
+        MatrixClass left, next;
+        for (const auto &pauli : paulis)
+        {
+            size_t first = 0, last = n;
+            while (first < n && CanonicalPauli(pauli[first]) == 'I')
+                ++first;
+            if (first == n)
+            {
+                result.push_back(normalized ? std::complex<double>(1.) : trace);
+                continue;
+            }
+            while (CanonicalPauli(pauli[last - 1]) == 'I')
+                --last;
+            left = prefix[first].value;
+            int64_t exponent = prefix[first].exponent;
+            for (size_t q = first; q < last; ++q)
+            {
+                ContractPauliSite(q, CanonicalPauli(pauli[q]), left, next);
+                RescaleIfOutOfRange(next, exponent);
+                left.swap(next);
+            }
+            const auto value = (left.array() * suffix[last].value.transpose().array()).sum();
+            const auto raw = ScaleByPowerOfTwo(value, exponent + suffix[last].exponent);
+            result.push_back(normalized ? raw / trace : raw);
+        }
+        return result;
     }
 
     double GetProbability(IndexType qubit, bool zeroVal = true) const override
@@ -887,6 +967,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         std::vector<LambdaType> newLambdas = stateRef->lambdas;
         std::vector<TensorType> newGammas = stateRef->gammas;
         lambdas.swap(newLambdas);
+        bondDimensions.Refresh(lambdas);
         gammas.swap(newGammas);
         scaleExponent = stateRef->scaleExponent;
         InvalidateCanonicalForm();
@@ -899,6 +980,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
         auto stateRef = CheckedBaseState(state);
         lambdas.swap(stateRef->lambdas);
+        bondDimensions.Refresh(lambdas);
         gammas.swap(stateRef->gammas);
         std::swap(scaleExponent, stateRef->scaleExponent);
         InvalidateCanonicalForm();
@@ -913,6 +995,16 @@ class MPOSimulatorBase : public MPOSimulatorInterface
             if (i < lambdas.size())
                 std::cout << "Lambda " << i << ":\n" << lambdas[i] << std::endl;
         }
+    }
+
+    void EnableBondDimensionSummary(bool enabled)
+    {
+        bondDimensions.Enable(enabled, lambdas);
+    }
+
+    IndexType getMaxBondDimension() const
+    {
+        return bondDimensions.Maximum(lambdas);
     }
 
     std::vector<IndexType> getBondDimensions() const
@@ -976,6 +1068,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
     void RestoreCanonicalMetadata(const CanonicalMetadata &metadata)
     {
+        bondDimensions.Refresh(lambdas);
         canonicalFormValid = metadata.valid;
         centerFirst = metadata.first;
         centerLast = metadata.last;
@@ -1265,58 +1358,45 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         return m;
     }
 
-    // single qubit Pauli matrix from a character in a Pauli string ('I', 'X', 'Y', 'Z')
-    static MatrixClass PauliMatrixFromChar(char c)
+    struct ScaledObservableEnvironment
     {
-        MatrixClass m = MatrixClass::Zero(2, 2);
-        switch (toupper(static_cast<unsigned char>(c)))
-        {
-        case 'I':
-            m(0, 0) = 1.;
-            m(1, 1) = 1.;
-            break;
-        case 'X':
-            m(0, 1) = 1.;
-            m(1, 0) = 1.;
-            break;
-        case 'Y':
-            m(0, 1) = std::complex<double>(0., -1.);
-            m(1, 0) = std::complex<double>(0., 1.);
-            break;
-        case 'Z':
-            m(0, 0) = 1.;
-            m(1, 1) = -1.;
-            break;
-        default:
-            throw std::invalid_argument("Invalid operator in the Pauli string");
-        }
+        MatrixClass value;
+        int64_t exponent = 0;
+    };
 
-        return m;
+    // Tr(rho P) uses P(bra, ket); in particular Y selects i*(B01-B10).
+    void ContractPauliSite(IndexType q, char p, const MatrixClass &left, MatrixClass &next) const
+    {
+        const auto &gamma = gammas[q];
+        const IndexType L = gamma.dimension(0), R = gamma.dimension(3);
+        const int first = p == 'I' || p == 'Z' ? 0 : p == 'Y' ? 2 : 1;
+        const int second = p == 'I' || p == 'Z' ? 3 : p == 'Y' ? 1 : 2;
+        const bool subtract = p == 'Y' || p == 'Z';
+        next.resize(1, R);
+        for (IndexType r = 0; r < R; ++r)
+        {
+            const auto *column = gamma.data() + 4 * L * r;
+            const Eigen::Map<const VectorClass> a(column + first * L, L), b(column + second * L, L);
+            if (subtract)
+                next(0, r) = (left.row(0).array() * (a - b).transpose().array()).sum();
+            else
+                next(0, r) = (left.row(0).array() * (a + b).transpose().array()).sum();
+        }
+        if (p == 'Y')
+            next *= std::complex<double>(0., 1.);
     }
 
-    // matrix (leftBond x rightBond) obtained by contracting a single qubit operator P into
-    // the physical legs of a site: m(l, r) = sum_{ket,bra} g(l, ket, bra, r) P(bra, ket).
-    // With P = Identity this reduces to SiteTraceMatrix.
-    MatrixClass SitePauliMatrix(IndexType q, const MatrixClass &P) const
+    std::complex<double> ContractPauliChain(const std::string *pauli) const
     {
-        const auto &g = gammas[q];
-        const IndexType L = g.dimension(0);
-        const IndexType R = g.dimension(3);
-
-        MatrixClass m = MatrixClass::Zero(L, R);
-        for (IndexType ket = 0; ket < 2; ++ket)
-            for (IndexType bra = 0; bra < 2; ++bra)
-            {
-                const std::complex<double> p = P(bra, ket);
-                if (p == std::complex<double>(0., 0.))
-                    continue;
-
-                for (IndexType r = 0; r < R; ++r)
-                    for (IndexType l = 0; l < L; ++l)
-                        m(l, r) += g(l, ket, bra, r) * p;
-            }
-
-        return m;
+        MatrixClass left = MatrixClass::Ones(1, 1), next;
+        int64_t exponent = scaleExponent;
+        for (size_t q = 0; q < gammas.size(); ++q)
+        {
+            ContractPauliSite(q, pauli ? CanonicalPauli((*pauli)[q]) : 'I', left, next);
+            RescaleIfOutOfRange(next, exponent);
+            left.swap(next);
+        }
+        return ScaleByPowerOfTwo(left(0, 0), exponent);
     }
 
     // contracts the whole chain, picking at each site a (leftBond x rightBond) matrix
@@ -1443,7 +1523,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         ApplySingleQubitGate(gamma, gate.getRawOperatorMatrix());
     }
 
-    static void ApplySingleQubitGate(TensorType &gamma, const MatrixClass &opMat)
+    static void ApplySingleQubitGateConservative(TensorType &gamma, const MatrixClass &opMat)
     {
         static const Indexes contractKet{IntIndexPair(1, 1)}; // gamma ket (dim 1) with U column (dim 1)
         static const Indexes contractBra{IntIndexPair(1, 1)}; // intermediate bra (dim 1) with U* column (dim 1)
@@ -1458,6 +1538,44 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         const TensorType res = tmp.contract(Uconj, contractBra);
         // shuffle to (leftBond, ket', bra', rightBond)
         gamma = res.shuffle(permute);
+    }
+
+    static void ApplySingleQubitGate(TensorType &gamma, const MatrixClass &opMat)
+    {
+        const auto a = opMat(0, 0), b = opMat(0, 1), c = opMat(1, 0), d = opMat(1, 1);
+        const auto ac = std::conj(a), bc = std::conj(b), cc = std::conj(c), dc = std::conj(d);
+        const IndexType L = gamma.dimension(0), R = gamma.dimension(3);
+        if (b == std::complex<double>{} && c == std::complex<double>{})
+        {
+            if (a == 1. && d == 1.)
+                return;
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType l = 0; l < L; ++l)
+                {
+                    // Retain the two stages for non-unitary diagonal gates:
+                    // squaring a huge/tiny coefficient first can overflow or
+                    // underflow even when the final tensor entry is finite.
+                    gamma(l, 0, 0, r) = (a * gamma(l, 0, 0, r)) * ac;
+                    gamma(l, 1, 0, r) = (d * gamma(l, 1, 0, r)) * ac;
+                    gamma(l, 0, 1, r) = (a * gamma(l, 0, 1, r)) * dc;
+                    gamma(l, 1, 1, r) = (d * gamma(l, 1, 1, r)) * dc;
+                }
+            return;
+        }
+        // For each bond pair apply A * rho * A^dagger in registers. The site
+        // need not be Hermitian, so all four input components are independent.
+        for (IndexType r = 0; r < R; ++r)
+            for (IndexType l = 0; l < L; ++l)
+            {
+                const auto x00 = gamma(l, 0, 0, r), x10 = gamma(l, 1, 0, r);
+                const auto x01 = gamma(l, 0, 1, r), x11 = gamma(l, 1, 1, r);
+                const auto t00 = a * x00 + b * x10, t10 = c * x00 + d * x10;
+                const auto t01 = a * x01 + b * x11, t11 = c * x01 + d * x11;
+                gamma(l, 0, 0, r) = t00 * ac + t01 * bc;
+                gamma(l, 1, 0, r) = t10 * ac + t11 * bc;
+                gamma(l, 0, 1, r) = t00 * cc + t01 * dc;
+                gamma(l, 1, 1, r) = t10 * cc + t11 * dc;
+            }
     }
 
   protected:
@@ -1483,6 +1601,7 @@ class MPOSimulatorBase : public MPOSimulatorInterface
     IndexType centerFirst = 0, centerLast = 0;
     std::vector<MatrixClass> samplingRight;
 
+    BondDimensionSummary<IndexType> bondDimensions;
     std::vector<LambdaType> lambdas;
     std::vector<TensorType> gammas;
     // rho = 2^scaleExponent * B[0] ... B[N-1], see the class comment

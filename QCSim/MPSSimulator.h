@@ -39,6 +39,7 @@ class MPSSimulator : public MPSSimulatorInterface
         const std::vector<IndexType> &)>;
 
     using BondDimensionCallback = std::function<void(const std::vector<IndexType> &)>;
+    using BondDimensionSummaryCallback = std::function<void(IndexType)>;
 
     static double ClampProbability(double probability)
     {
@@ -257,8 +258,8 @@ class MPSSimulator : public MPSSimulatorInterface
 
         impl.ApplyGate(gate, qubit1, qubit2);
 
-        if (bondDimensionCallback && gate.getQubitsNumber() > 1)
-            bondDimensionCallback(impl.getBondDimensions());
+        if ((bondDimensionCallback || bondDimensionSummaryCallback) && gate.getQubitsNumber() > 1)
+            NotifyBondDimensions();
     }
 
     void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
@@ -273,8 +274,8 @@ class MPSSimulator : public MPSSimulatorInterface
             throw std::invalid_argument("Qubit index out of bounds");
 
         const auto result = impl.MeasureQubit(qubitsMap[qubit]);
-        if (bondDimensionCallback)
-            bondDimensionCallback(impl.getBondDimensions());
+        if (bondDimensionCallback || bondDimensionSummaryCallback)
+            NotifyBondDimensions();
         return result;
     }
 
@@ -292,8 +293,8 @@ class MPSSimulator : public MPSSimulatorInterface
         for (const auto &[qubit, val] : measuredQubits)
             res[qubitsMapInv[qubit]] = val;
 
-        if (bondDimensionCallback)
-            bondDimensionCallback(impl.getBondDimensions());
+        if (bondDimensionCallback || bondDimensionSummaryCallback)
+            NotifyBondDimensions();
 
         return res;
     }
@@ -431,6 +432,8 @@ class MPSSimulator : public MPSSimulatorInterface
         sim->useOptimalMeetingPosition = useOptimalMeetingPosition;
         sim->meetingPositionCallback = meetingPositionCallback;
         sim->bondDimensionCallback = bondDimensionCallback;
+        sim->bondDimensionSummaryCallback = bondDimensionSummaryCallback;
+        sim->impl.bondDimensions = impl.bondDimensions;
 
         if (savedState)
         {
@@ -469,6 +472,19 @@ class MPSSimulator : public MPSSimulatorInterface
     void SetBondDimensionCallback(BondDimensionCallback callback)
     {
         bondDimensionCallback = std::move(callback);
+    }
+
+    // Same notification boundaries as the full snapshot callback. Reports the
+    // current maximum (not a historical maximum); callers may accumulate it.
+    void SetBondDimensionSummaryCallback(BondDimensionSummaryCallback callback)
+    {
+        impl.EnableBondDimensionSummary(static_cast<bool>(callback));
+        bondDimensionSummaryCallback = std::move(callback);
+    }
+
+    IndexType getMaxBondDimension() const
+    {
+        return impl.getMaxBondDimension();
     }
 
     // Get actual bond dimensions from the underlying simulator
@@ -520,8 +536,8 @@ class MPSSimulator : public MPSSimulatorInterface
             qubitsMapInv[toQubitReal] = logicalQubit;
             qubitsMapInv[movingQubitReal] = currentLogicalPosQubit;
 
-            if (bondDimensionCallback)
-                bondDimensionCallback(impl.getBondDimensions());
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
+                NotifyBondDimensions();
 
             handledQubits.insert(logicalQubit);
             if (handledQubits.size() == qubits.size())
@@ -531,14 +547,23 @@ class MPSSimulator : public MPSSimulatorInterface
         }
     }
 
-    // does not check for hermicity, that's why it returns a complex number
-    // the caller should ensure the hermicity and extract the real part
-    // also (for now, at least) it supports only one qubit ops
-    // the problem with two qubit gates is that they will swap qubits around
-    // so instead of only saving the state to compute <psi|U|psi>, and then use it to restore the state,
-    // it would need to save the state twice, once for restoring and one for computing the expectation value - the last
-    // one having the qubits swapped as the one on which the gates are applied anyway, this would be probably used
-    // mostly on Pauli strings, so...
+    // One-site operator products may be non-Hermitian, so the result is complex.
+    // Only the affected physical interval is contracted.
+    std::vector<std::complex<double>> ExpectationValues(const std::vector<std::string> &paulis) const
+    {
+        std::vector<std::string> mapped;
+        mapped.reserve(paulis.size());
+        for (const auto &pauli : paulis)
+        {
+            ValidatePauliString(pauli, getNrQubits());
+            std::string physical(pauli.size(), 'I');
+            for (size_t q = 0; q < pauli.size(); ++q)
+                physical[qubitsMap[q]] = CanonicalPauli(pauli[q]);
+            mapped.push_back(std::move(physical));
+        }
+        return impl.ExpectationValues(mapped);
+    }
+
     std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
     {
         if (gates.empty())
@@ -659,8 +684,8 @@ class MPSSimulator : public MPSSimulatorInterface
             qubitsMap[movingQubitInv] = toQubitReal;
             qubitsMapInv[toQubitReal] = movingQubitInv;
 
-            if (bondDimensionCallback)
-                bondDimensionCallback(impl.getBondDimensions());
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
+                NotifyBondDimensions();
 
             movingQubitReal = toQubitReal;
         } while (movingQubitReal != targetQubitReal);
@@ -731,8 +756,8 @@ class MPSSimulator : public MPSSimulatorInterface
                 qubitsMap[qubit1] = toReal;
                 qubitsMapInv[toReal] = qubit1;
 
-                if (bondDimensionCallback)
-                    bondDimensionCallback(impl.getBondDimensions());
+                if (bondDimensionCallback || bondDimensionSummaryCallback)
+                    NotifyBondDimensions();
 
                 movingReal = toReal;
             }
@@ -754,8 +779,8 @@ class MPSSimulator : public MPSSimulatorInterface
                 qubitsMap[qubit2] = toReal;
                 qubitsMapInv[toReal] = qubit2;
 
-                if (bondDimensionCallback)
-                    bondDimensionCallback(impl.getBondDimensions());
+                if (bondDimensionCallback || bondDimensionSummaryCallback)
+                    NotifyBondDimensions();
 
                 movingReal = toReal;
             }
@@ -808,7 +833,17 @@ class MPSSimulator : public MPSSimulatorInterface
     bool useOptimalMeetingPosition = true;
 
     MeetingPositionCallback meetingPositionCallback;
+
+    void NotifyBondDimensions() const
+    {
+        if (bondDimensionCallback)
+            bondDimensionCallback(impl.getBondDimensions());
+        if (bondDimensionSummaryCallback)
+            bondDimensionSummaryCallback(impl.getMaxBondDimension());
+    }
+
     BondDimensionCallback bondDimensionCallback;
+    BondDimensionSummaryCallback bondDimensionSummaryCallback;
 
     std::shared_ptr<MPSSimulatorStateInterface> savedState;
 };

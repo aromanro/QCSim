@@ -278,9 +278,6 @@
     <ClInclude Include="QCSim\MPOSimulatorInterface.h">
       <Filter>Header Files\Simulators</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\MPOSimulatorRegressionTests.h">
-      <Filter>Header Files\Simulators</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\MPSSimulator.h">
       <Filter>Header Files\Simulators</Filter>
     </ClInclude>
@@ -346,6 +343,18 @@
     </ClInclude>
     <ClInclude Include="QCSim\ThreadPool.h">
       <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\BondDimensionSummary.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\TensorNetworkRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\TensorPauli.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\MPOSimulatorRegressionTests.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

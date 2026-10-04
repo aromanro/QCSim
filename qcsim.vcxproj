@@ -307,6 +307,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QCSim\BernsteinVazirani.h" />
+    <ClInclude Include="QCSim\BondDimensionSummary.h" />
     <ClInclude Include="QCSim\CatDisentangler.h" />
     <ClInclude Include="QCSim\CatEntangler.h" />
     <ClInclude Include="QCSim\CheckCHSHInequality.h" />
@@ -389,6 +390,8 @@
     <ClInclude Include="QCSim\SuperdenseCoding.h" />
     <ClInclude Include="QCSim\Teleportation.h" />
     <ClInclude Include="QCSim\TeleportedCNOT.h" />
+    <ClInclude Include="QCSim\TensorNetworkRegressionTests.h" />
+    <ClInclude Include="QCSim\TensorPauli.h" />
     <ClInclude Include="QCSim\Tests.h" />
     <ClInclude Include="QCSim\ThreadPool.h" />
     <ClInclude Include="QCSim\Utils.h" />

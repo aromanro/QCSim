@@ -42,6 +42,7 @@ class MPOSimulator : public MPOSimulatorInterface
     using MeetingPositionCallback = std::function<IndexType(const std::vector<IndexType> &)>;
 
     using BondDimensionCallback = std::function<void(const std::vector<IndexType> &)>;
+    using BondDimensionSummaryCallback = std::function<void(IndexType)>;
 
     MPOSimulator() = delete;
 
@@ -249,6 +250,16 @@ class MPOSimulator : public MPOSimulatorInterface
         return impl.ExpectationValue(MapPauliString(pauliString));
     }
 
+    std::vector<std::complex<double>> ExpectationValues(const std::vector<std::string> &paulis,
+                                                        bool normalized = true) const
+    {
+        std::vector<std::string> mapped;
+        mapped.reserve(paulis.size());
+        for (const auto &pauli : paulis)
+            mapped.push_back(MapPauliString(pauli));
+        return impl.ExpectationValues(mapped, normalized);
+    }
+
     std::complex<double> UnnormalizedExpectationValue(const std::string &pauliString) const override
     {
         return impl.UnnormalizedExpectationValue(MapPauliString(pauliString));
@@ -339,7 +350,7 @@ class MPOSimulator : public MPOSimulatorInterface
             throw std::invalid_argument("Qubit index out of bounds");
 
         const bool result = impl.MeasureQubit(qubitsMap[qubit]);
-        if (bondDimensionCallback)
+        if (bondDimensionCallback || bondDimensionSummaryCallback)
             NotifyBondDimensions();
         return result;
     }
@@ -358,7 +369,7 @@ class MPOSimulator : public MPOSimulatorInterface
         for (const auto &[qubit, val] : measuredQubits)
             res[qubitsMapInv[qubit]] = val;
 
-        if (bondDimensionCallback)
+        if (bondDimensionCallback || bondDimensionSummaryCallback)
             NotifyBondDimensions();
 
         return res;
@@ -439,7 +450,7 @@ class MPOSimulator : public MPOSimulatorInterface
             qubitsMapInv[toQubitReal] = logicalQubit;
             qubitsMapInv[movingQubitReal] = currentLogicalPosQubit;
 
-            if (bondDimensionCallback)
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
                 NotifyBondDimensions();
 
             handledQubits.insert(logicalQubit);
@@ -762,6 +773,8 @@ class MPOSimulator : public MPOSimulatorInterface
         sim->useOptimalMeetingPosition = useOptimalMeetingPosition;
         sim->meetingPositionCallback = meetingPositionCallback;
         sim->bondDimensionCallback = bondDimensionCallback;
+        sim->bondDimensionSummaryCallback = bondDimensionSummaryCallback;
+        sim->impl.bondDimensions = impl.bondDimensions;
 
         if (savedState)
         {
@@ -780,6 +793,19 @@ class MPOSimulator : public MPOSimulatorInterface
         }
 
         return sim;
+    }
+
+    // Same notification boundaries as the full snapshot callback. Reports the
+    // current maximum (not a historical maximum); callers may accumulate it.
+    void SetBondDimensionSummaryCallback(BondDimensionSummaryCallback callback)
+    {
+        impl.EnableBondDimensionSummary(static_cast<bool>(callback));
+        bondDimensionSummaryCallback = std::move(callback);
+    }
+
+    IndexType getMaxBondDimension() const
+    {
+        return impl.getMaxBondDimension();
     }
 
     std::vector<IndexType> getBondDimensions() const
@@ -967,7 +993,7 @@ class MPOSimulator : public MPOSimulatorInterface
     {
         const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
         impl.ApplyOperator(op, qubit1, qubit2);
-        if (bondDimensionCallback && qubitsNumber > 1)
+        if ((bondDimensionCallback || bondDimensionSummaryCallback) && qubitsNumber > 1)
             NotifyBondDimensions();
     }
 
@@ -985,7 +1011,7 @@ class MPOSimulator : public MPOSimulatorInterface
             const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
             impl.ApplyOperatorAndNormalize(op, qubit1, qubit2);
         }
-        if (bondDimensionCallback && qubitsNumber > 1)
+        if ((bondDimensionCallback || bondDimensionSummaryCallback) && qubitsNumber > 1)
             NotifyBondDimensions();
     }
 
@@ -1023,7 +1049,7 @@ class MPOSimulator : public MPOSimulatorInterface
         }
 
         impl.ApplyKrausOperators(mappedOps, qubit1, qubit2);
-        if (bondDimensionCallback && qubitsNumber > 1)
+        if ((bondDimensionCallback || bondDimensionSummaryCallback) && qubitsNumber > 1)
             NotifyBondDimensions();
     }
 
@@ -1227,7 +1253,7 @@ class MPOSimulator : public MPOSimulatorInterface
             qubitsMap[movingQubitInv] = toQubitReal;
             qubitsMapInv[toQubitReal] = movingQubitInv;
 
-            if (bondDimensionCallback)
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
                 NotifyBondDimensions();
 
             movingQubitReal = toQubitReal;
@@ -1277,7 +1303,7 @@ class MPOSimulator : public MPOSimulatorInterface
             qubitsMap[logical1] = to;
             qubitsMapInv[to] = logical1;
 
-            if (bondDimensionCallback)
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
                 NotifyBondDimensions();
             r1 = to;
         }
@@ -1294,7 +1320,7 @@ class MPOSimulator : public MPOSimulatorInterface
             qubitsMap[logical2] = to;
             qubitsMapInv[to] = logical2;
 
-            if (bondDimensionCallback)
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
                 NotifyBondDimensions();
             r2 = to;
         }
@@ -1340,6 +1366,7 @@ class MPOSimulator : public MPOSimulatorInterface
 
     MeetingPositionCallback meetingPositionCallback;
     BondDimensionCallback bondDimensionCallback;
+    BondDimensionSummaryCallback bondDimensionSummaryCallback;
 
     std::shared_ptr<MPOSimulatorStateInterface> savedState;
     MPOSimulatorBase::CanonicalMetadata savedCanonicalMetadata;
@@ -1347,8 +1374,12 @@ class MPOSimulator : public MPOSimulatorInterface
 
     void NotifyBondDimensions() const
     {
-        if (bondDimensionCallback && !suppressBondNotifications)
+        if (suppressBondNotifications)
+            return;
+        if (bondDimensionCallback)
             bondDimensionCallback(impl.getBondDimensions());
+        if (bondDimensionSummaryCallback)
+            bondDimensionSummaryCallback(impl.getMaxBondDimension());
     }
 };
 

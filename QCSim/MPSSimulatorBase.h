@@ -1,5 +1,7 @@
 #pragma once
 
+#include "BondDimensionSummary.h"
+
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -102,6 +104,7 @@ class MPSSimulatorBase : public MPSSimulatorInterface
 
             lambdas[i].resize(1);
             lambdas[i](0) = 1.;
+            bondDimensions.Update(i, 1);
         }
 
         gammas[szm1].resize(1, 2, 1);
@@ -120,6 +123,7 @@ class MPSSimulatorBase : public MPSSimulatorInterface
 
             lambdas[i].resize(1);
             lambdas[i](0) = 1.;
+            bondDimensions.Update(i, 1);
         }
 
         gammas[szm1].resize(1, 2, 1);
@@ -324,6 +328,7 @@ class MPSSimulatorBase : public MPSSimulatorInterface
 
         auto stateRef = std::static_pointer_cast<MPSSimulatorBaseState>(state);
         lambdas = stateRef->lambdas;
+        bondDimensions.Refresh(lambdas);
         gammas = stateRef->gammas;
     }
 
@@ -334,6 +339,7 @@ class MPSSimulatorBase : public MPSSimulatorInterface
 
         auto stateRef = std::static_pointer_cast<MPSSimulatorBaseState>(state);
         lambdas.swap(stateRef->lambdas);
+        bondDimensions.Refresh(lambdas);
         gammas.swap(stateRef->gammas);
     }
 
@@ -353,6 +359,16 @@ class MPSSimulatorBase : public MPSSimulatorInterface
     void MoveAtBeginningOfChain(const std::set<IndexType> &qubits) override
     {
         // do nothing, it's here just to provide an implementation
+    }
+
+    void EnableBondDimensionSummary(bool enabled)
+    {
+        bondDimensions.Enable(enabled, lambdas);
+    }
+
+    IndexType getMaxBondDimension() const
+    {
+        return bondDimensions.Maximum(lambdas);
     }
 
     std::vector<IndexType> getBondDimensions() const
@@ -443,13 +459,28 @@ class MPSSimulatorBase : public MPSSimulatorInterface
 
     static void ApplySingleQubitGate(GammaType &gamma, const MatrixClass &opMat)
     {
-        // contract the gate tensor with the qubit tensor
-        static const Indexes product_dims1{IntIndexPair(1, 1)};
-        static const std::array<int, 3> permute{0, 2, 1};
-        gamma = gamma
-                    .contract(Eigen::TensorMap<const OneQubitGateTensor>(opMat.data(), opMat.rows(), opMat.cols()),
-                              product_dims1)
-                    .shuffle(permute);
+        const auto a = opMat(0, 0), b = opMat(0, 1), c = opMat(1, 0), d = opMat(1, 1);
+        const IndexType L = gamma.dimension(0), R = gamma.dimension(2);
+        // Only exact zeros select the diagonal path; no new numerical cutoff.
+        if (b == std::complex<double>{} && c == std::complex<double>{})
+        {
+            if (a == 1. && d == 1.)
+                return;
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType l = 0; l < L; ++l)
+                {
+                    gamma(l, 0, r) *= a;
+                    gamma(l, 1, r) *= d;
+                }
+            return;
+        }
+        for (IndexType r = 0; r < R; ++r)
+            for (IndexType l = 0; l < L; ++l)
+            {
+                const auto zero = gamma(l, 0, r), one = gamma(l, 1, r);
+                gamma(l, 0, r) = a * zero + b * one;
+                gamma(l, 1, r) = c * zero + d * one;
+            }
     }
 
   private:
@@ -622,6 +653,7 @@ class MPSSimulatorBase : public MPSSimulatorInterface
     // if false, the SVDs (and the matrix products) are done single threaded, see SetMultithreading
     bool enableMultithreading = true;
 
+    BondDimensionSummary<IndexType> bondDimensions;
     std::vector<LambdaType> lambdas;
     std::vector<GammaType> gammas;
 

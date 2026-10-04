@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MPSSimulatorBase.h"
+#include "TensorPauli.h"
 
 #define USE_FAST_SVD 1
 
@@ -210,87 +211,24 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         return res;
     }
 
-    // does not check for hermicity, that's why it returns a complex number
-    // the caller should ensure the hermicity and extract the real part
-    // also (for now, at least) it supports only one qubit ops
-    // the problem with two qubit gates is that they will swap qubits around
-    // so instead of only saving the state to compute <psi|U|psi>, and then use it to restore the state,
-    // it would need to save the state twice, once for restoring and one for computing the expectation value - the last
-    // one having the qubits swapped as the one on which the gates are applied anyway, this would be probably used
-    // mostly on Pauli strings, so...
+    // One-site operator products may be non-Hermitian, so the result is complex.
+    // Only the affected physical interval is contracted.
     std::complex<double> ExpectationValue(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
     {
         if (gates.empty())
             return 1.;
+        std::complex<double> result;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() { result = ExpectationValueImpl(gates); });
+        return result;
+    }
 
-        // at this point it doesn't check if the gates are one qubit, that's done at the higher level
-        //
-        const IndexType lastQubit = static_cast<IndexType>(lambdas.size());
-
-        // no need to zip up the whole chain, contracting the ends of the chain that are not touched by the operators
-        // should give 1.
-        IndexType minQubit = lastQubit;
-        IndexType maxQubit = 0;
-
-        for (const auto &gate : gates)
-        {
-            const IndexType qubit = gate.getQubit1();
-            if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
-                throw std::invalid_argument("Qubit index out of bounds");
-            minQubit = std::min(minQubit, qubit);
-            maxQubit = std::max(maxQubit, qubit);
-        }
-
-        const IndexType nrSites = maxQubit - minQubit + 1;
-
-        // lambdas are not modified by the single qubit gates
-
-        std::vector<GammaType> modGammas(nrSites);
-        for (IndexType s = 0; s < nrSites; ++s)
-            modGammas[s] = gammas[minQubit + s];
-
-        // the right lambdas are already in the B tensors, only the left one needs to be multiplied in
-        // the lambdas multiplication goes for both dagger and non-dagger gammas,
-        // so the dagger are computed after the lambdas are applied
-        MultiplyFirstModGammaWithLeftLambda(modGammas[0], minQubit);
-
-        std::vector<GammaType> daggerGammas(nrSites);
-        for (IndexType s = 0; s < nrSites; ++s)
-            daggerGammas[s] = modGammas[s].conjugate();
-
-        // apply the gates
-        for (const auto &gate : gates)
-            ApplySingleQubitGate(modGammas[gate.getQubit1() - minQubit], gate);
-
-        // contract the saved dagger chain with the one with the gates applied
-        // we need to do that only for the qubits in the range [minQubit, maxQubit]
-
-        static const Eigen::array<IntIndexPair, 2> contract_dim{IntIndexPair(0, 0), IntIndexPair(1, 1)};
-        static const Indexes contract_dim1{IntIndexPair(0, 0)};
-
-        // start by contracting the first gamma with the first dagger gamma
-        //  -O-         |
-        // | |     ==>  O
-        //  -O-         |
-        Eigen::Tensor<std::complex<double>, 2> resTensor = modGammas[0].contract(daggerGammas[0], contract_dim);
-
-        // now contract the rest of the gammas with the dagger gammas
-        for (IndexType s = 1; s < nrSites; ++s)
-        {
-            //  /-O-       -O-        |
-            // O  |   ==> | |    ==>  O
-            //  \-O-       -O-        |
-
-            // bug in eigen, does not work as expected without using an intermediate result?
-            // fails even with eval() after the first contract, so I use a separate variable for the first contract
-            const Eigen::Tensor<std::complex<double>, 3> intermediateResult =
-                resTensor.contract(modGammas[s], contract_dim1);
-            resTensor = intermediateResult.contract(daggerGammas[s], contract_dim);
-        }
-
-        const Eigen::Tensor<std::complex<double>, 0> t = resTensor.trace();
-
-        return t(0);
+    std::vector<std::complex<double>> ExpectationValues(const std::vector<std::string> &paulis) const
+    {
+        if (paulis.empty())
+            return {};
+        std::vector<std::complex<double>> result;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() { result = ExpectationValuesImpl(paulis); });
+        return result;
     }
 
     std::unordered_map<IndexType, bool> MeasureNoCollapse() override
@@ -332,6 +270,182 @@ class MPSSimulatorImpl : public MPSSimulatorBase
     }
 
   private:
+    std::complex<double> ExpectationValueImpl(const std::vector<Gates::AppliedGate<MatrixClass>> &gates)
+    {
+        if (gates.empty())
+            return 1.;
+        IndexType first = static_cast<IndexType>(gammas.size()), last = 0;
+        for (const auto &gate : gates)
+        {
+            const IndexType q = gate.getQubit1();
+            if (q < 0 || q >= static_cast<IndexType>(gammas.size()))
+                throw std::invalid_argument("Qubit index out of bounds");
+            first = std::min(first, q);
+            last = std::max(last, q);
+        }
+        std::vector<Eigen::Matrix2cd> operators(last - first + 1, Eigen::Matrix2cd::Identity());
+        // Repeated operators at a site retain the caller's application order.
+        for (const auto &gate : gates)
+        {
+            auto &op = operators[gate.getQubit1() - first];
+            op = gate.getRawOperatorMatrix() * op;
+        }
+        ExpectationWorkspace workspace;
+        for (IndexType q = first; q < last; ++q)
+            ContractExpectationSite(q, operators[q - first], q == first, false, workspace);
+        return ContractExpectationSite(last, operators[last - first], last == first, true, workspace);
+    }
+
+    std::vector<std::complex<double>> ExpectationValuesImpl(const std::vector<std::string> &paulis) const
+    {
+        struct Query
+        {
+            size_t index;
+            IndexType first, last;
+            std::string pauli;
+        };
+
+        std::vector<Query> queries;
+        std::vector<std::complex<double>> result(paulis.size(), 1.);
+        for (size_t i = 0; i < paulis.size(); ++i)
+        {
+            ValidatePauliString(paulis[i], gammas.size());
+            std::string pauli = paulis[i];
+            for (char &p : pauli)
+                p = CanonicalPauli(p);
+            const auto first = pauli.find_first_not_of('I');
+            if (first == std::string::npos)
+                continue;
+            const auto last = pauli.find_last_not_of('I');
+            queries.push_back({i, static_cast<IndexType>(first), static_cast<IndexType>(last), std::move(pauli)});
+        }
+        std::sort(queries.begin(), queries.end(), [](const Query &a, const Query &b) {
+            return a.first != b.first ? a.first < b.first : a.pauli < b.pauli;
+        });
+        ExpectationWorkspace workspace;
+        std::vector<MatrixClass> prefixes;
+        IndexType groupFirst = -1, validUntil = 0;
+        for (size_t i = 0; i < queries.size(); ++i)
+        {
+            const auto &query = queries[i];
+            if (i != 0 && query.pauli == queries[i - 1].pauli)
+            {
+                result[query.index] = result[queries[i - 1].index];
+                continue;
+            }
+            if (query.first != groupFirst)
+            {
+                prefixes.clear();
+                groupFirst = query.first;
+                validUntil = groupFirst;
+            }
+            IndexType start = query.first;
+            if (i != 0 && queries[i - 1].first == query.first)
+                while (start < std::min(validUntil, query.last) && query.pauli[start] == queries[i - 1].pauli[start])
+                    ++start;
+            if (start != query.first)
+                workspace.left = prefixes[start - query.first - 1];
+
+            // Cache only prefixes that the next query will actually reuse.
+            IndexType keepUntil = query.first;
+            if (i + 1 < queries.size() && queries[i + 1].first == query.first)
+                while (keepUntil < std::min(query.last, queries[i + 1].last) &&
+                       query.pauli[keepUntil] == queries[i + 1].pauli[keepUntil])
+                    ++keepUntil;
+            size_t bytes = 0;
+            IndexType boundedUntil = query.first;
+            while (boundedUntil < keepUntil)
+            {
+                const size_t R = static_cast<size_t>(gammas[boundedUntil].dimension(2));
+                const size_t available = ObservableCacheBytes - bytes;
+                if (available < sizeof(MatrixClass) ||
+                    R > (available - sizeof(MatrixClass)) / sizeof(std::complex<double>) / R)
+                    break;
+                bytes += sizeof(MatrixClass) + R * R * sizeof(std::complex<double>);
+                ++boundedUntil;
+            }
+            // Drop deeper old environments before growing a different prefix.
+            prefixes.resize(static_cast<size_t>(boundedUntil - query.first));
+            for (IndexType q = start; q < query.last; ++q)
+            {
+                ContractExpectationSite(q, PauliOperator(query.pauli[q]), q == query.first, false, workspace);
+                if (q < boundedUntil)
+                    prefixes[q - query.first] = workspace.left;
+            }
+            result[query.index] = ContractExpectationSite(query.last, PauliOperator(query.pauli[query.last]),
+                                                          query.last == query.first, true, workspace);
+            validUntil = boundedUntil;
+        }
+        return result;
+    }
+
+    struct ExpectationWorkspace
+    {
+        MatrixClass left, next, ket0, ket1, work0, work1;
+    };
+
+    std::complex<double> ContractExpectationSite(IndexType q, const Eigen::Matrix2cd &op, bool first, bool last,
+                                                 ExpectationWorkspace &w) const
+    {
+        const auto &g = gammas[q];
+        const IndexType L = g.dimension(0), R = g.dimension(2);
+        using Slice = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
+        const Slice zero(g.data(), L, R, Eigen::OuterStride<>(2 * L));
+        const Slice one(g.data() + L, L, R, Eigen::OuterStride<>(2 * L));
+        const auto a = op(0, 0), b = op(0, 1), c = op(1, 0), d = op(1, 1);
+        if (first && last)
+        {
+            std::complex<double> value = 0.;
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType l = 0; l < L; ++l)
+                {
+                    const double weight = q == 0 ? 1. : lambdas[q - 1][l] * lambdas[q - 1][l];
+                    const auto z = zero(l, r), o = one(l, r);
+                    value += weight * (std::conj(z) * (a * z + b * o) + std::conj(o) * (c * z + d * o));
+                }
+            return value;
+        }
+        if (b == std::complex<double>{} && c == std::complex<double>{})
+        {
+            w.ket0 = a * zero;
+            w.ket1 = d * one;
+        }
+        else if (a == std::complex<double>{} && d == std::complex<double>{})
+        {
+            w.ket0 = b * one;
+            w.ket1 = c * zero;
+        }
+        else
+        {
+            w.ket0 = a * zero + b * one;
+            w.ket1 = c * zero + d * one;
+        }
+        if (first)
+        {
+            if (q != 0)
+                for (IndexType r = 0; r < R; ++r)
+                    for (IndexType l = 0; l < L; ++l)
+                    {
+                        const double weight = lambdas[q - 1][l] * lambdas[q - 1][l];
+                        w.ket0(l, r) *= weight;
+                        w.ket1(l, r) *= weight;
+                    }
+        }
+        else
+        {
+            w.work0.noalias() = w.left * w.ket0;
+            w.work1.noalias() = w.left * w.ket1;
+            w.ket0.swap(w.work0);
+            w.ket1.swap(w.work1);
+        }
+        if (last)
+            return (zero.conjugate().cwiseProduct(w.ket0)).sum() + (one.conjugate().cwiseProduct(w.ket1)).sum();
+        w.next.noalias() = zero.adjoint() * w.ket0;
+        w.next.noalias() += one.adjoint() * w.ket1;
+        w.left.swap(w.next);
+        return 0.;
+    }
+
     // M = B_i reshaped as (L, 2R). QR of M^dagger gives M = R^dagger Q^dagger:
     // keep Q^dagger at this site and move R^dagger left. No lambda or rank cutoff.
     void RightCanonicalizeSite(IndexType site)
@@ -363,6 +477,7 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         gammas[site - 1] = std::move(newLeft);
         gammas[site] = std::move(newRight);
         lambdas[site - 1] = LambdaType::Ones(rank); // dimensions only until the forward sweep
+        bondDimensions.Update(site - 1, lambdas[site - 1].size());
     }
 
     static double ValidMeasurementProbability(double probability)
@@ -383,21 +498,6 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             return true;
 
         return rndVal < prob0;
-    }
-
-    void MultiplyFirstModGammaWithLeftLambda(GammaType &firstModGamma, IndexType minQubit) const
-    {
-        if (minQubit == 0)
-            return; // no left lambda for the first qubit
-
-        const IndexType prev = minQubit - 1;
-        const IndexType szl = firstModGamma.dimension(0);
-        const IndexType szr = firstModGamma.dimension(2);
-
-        for (IndexType r = 0; r < szr; ++r)
-            for (IndexType p = 0; p < 2; ++p)
-                for (IndexType l = 0; l < szl; ++l)
-                    firstModGamma(l, p, r) *= lambdas[prev][l];
     }
 
     static void SwapTheta(Eigen::Tensor<std::complex<double>, 4> &theta)
@@ -585,6 +685,7 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         GammaType newLeft, newRight;
         SetNewGammas(thetaMatrix, VmatrixFull, norm > 0 ? 1. / norm : 1., szl, sz, szr, newLeft, newRight);
         lambdas[qubit1] = std::move(newLambda);
+        bondDimensions.Update(qubit1, lambdas[qubit1].size());
         gammas[qubit1] = std::move(newLeft);
         gammas[qubit2] = std::move(newRight);
     }

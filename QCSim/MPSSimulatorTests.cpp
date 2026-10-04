@@ -7,6 +7,7 @@
 
 #include "MPSSimulator.h"
 #include "QubitRegister.h"
+#include "TensorNetworkRegressionTests.h"
 
 #include <vector>
 
@@ -1807,11 +1808,7 @@ static bool LongChainSamplingAndValidationTestMPS()
     Eigen::MatrixXcd nonFinite = Eigen::MatrixXcd::Identity(4, 4);
     nonFinite(0, 0) = std::numeric_limits<double>::quiet_NaN();
     const QC::Gates::TwoQubitsGate<> nonFiniteGate(nonFinite);
-    if (!expectInvalid(
-            [&] {
-                smalls.MeasureQubits({0, 99});
-            },
-            "MeasureQubits with an invalid qubit") ||
+    if (!expectInvalid([&] { smalls.MeasureQubits({0, 99}); }, "MeasureQubits with an invalid qubit") ||
         !expectInvalid([&] { smalls.MeasureNoCollapse(std::set<IndexType>{99}); },
                        "MeasureNoCollapse with an invalid qubit") ||
         !expectInvalid([&] { smalls.MoveAtBeginningOfChain({99}); }, "MoveAtBeginningOfChain with an invalid qubit") ||
@@ -1827,6 +1824,96 @@ static bool LongChainSamplingAndValidationTestMPS()
 
     std::cout << "Success" << std::endl;
     return true;
+}
+
+static void ObservableCacheBudgetTestMPS()
+{
+    using namespace QC::TensorNetworkRegression;
+    using Simulator = QC::TensorNetworks::MPSSimulatorImpl;
+    // Five nested Bell pairs carry a bond of 32 through a run of |0> sites.
+    // Construct their exact right-canonical tensors directly, avoiding large
+    // SVDs and exponentially large dense references in this cache regression.
+    constexpr Eigen::Index pairs = 5, bond = 1 << pairs;
+    const size_t environmentBytes = sizeof(Matrix) + bond * bond * sizeof(Complex);
+    const auto capacity = QC::TensorNetworks::ObservableCacheBytes / environmentBytes;
+    for (const bool exceedBudget : {false, true})
+    {
+        const Eigen::Index middle = static_cast<Eigen::Index>(capacity) + (exceedBudget ? 8 : -8);
+        const Eigen::Index count = 2 * pairs + middle;
+        auto state = std::make_shared<QC::TensorNetworks::MPSSimulatorBaseState>();
+        size_t prefixBytes = 0;
+        Eigen::Index left = 1;
+        for (Eigen::Index q = 0; q < count; ++q)
+        {
+            const Eigen::Index right = q < pairs ? 2 * left : q < pairs + middle ? left : left / 2;
+            Simulator::GammaType gamma(left, 2, right);
+            gamma.setZero();
+            if (q < pairs)
+                for (Eigen::Index l = 0; l < left; ++l)
+                    for (Eigen::Index p = 0; p < 2; ++p)
+                        gamma(l, p, 2 * l + p) = 1. / std::sqrt(2.);
+            else if (q < pairs + middle)
+                for (Eigen::Index l = 0; l < left; ++l)
+                    gamma(l, 0, l) = 1.;
+            else
+                for (Eigen::Index r = 0; r < right; ++r)
+                    for (Eigen::Index p = 0; p < 2; ++p)
+                        gamma(2 * r + p, p, r) = 1.;
+            state->gammas.push_back(std::move(gamma));
+            if (q + 1 < count)
+                state->lambdas.push_back(Simulator::LambdaType::Constant(right, 1. / std::sqrt(double(right))));
+            if (q + 2 < count)
+                prefixBytes += sizeof(Matrix) + right * right * sizeof(Complex);
+            left = right;
+        }
+        Require((prefixBytes > QC::TensorNetworks::ObservableCacheBytes) == exceedBudget,
+                "MPS fixture did not straddle the observable cache budget");
+        Simulator simulator(count, 1);
+        simulator.SetMultithreading(false);
+        simulator.setState(state);
+        const std::string parity(count, 'Z');
+        std::string crossed = parity, unmatched = parity;
+        crossed.back() = 'X';
+        unmatched[count - 2] = 'I';
+        const auto values = simulator.ExpectationValues({parity, crossed, unmatched, parity});
+        Require(values.size() == 4, "Cache-boundary batch changed the number of results");
+        // Each Bell pair has <ZZ>=1, <ZX>=0, <ZI>=0; the middle sites have <Z>=1.
+        Close(values[0], 1., "MPS cache boundary changed Bell-pair parity");
+        Close(values[1], 0., "MPS cache boundary changed crossed Bell-pair correlation");
+        Close(values[2], 0., "MPS cache boundary changed an unmatched Bell-pair observable");
+        Close(values[3], 1., "MPS cache boundary changed a duplicate result");
+    }
+}
+
+static bool ObservableAndSummaryRegressionTestMPS()
+{
+    using namespace QC::TensorNetworkRegression;
+    using Simulator = QC::TensorNetworks::MPSSimulator;
+    std::cout << "\nMPS batch observables, cache budget and bond summaries" << std::endl;
+    try
+    {
+        CheckObservableBatch<Simulator>([](Simulator &simulator, const std::string &pauli) {
+            return simulator.ExpectationValue(PauliGates(pauli));
+        });
+        CheckBondSummary<Simulator>();
+        ObservableCacheBudgetTestMPS();
+        Simulator simulator(6, 1);
+        Prepare(simulator, 4);
+        QC::QubitRegister<> dense(6);
+        Eigen::VectorXcd storage = simulator.getRegisterStorage();
+        dense.setRegisterStorageFastNoNormalize(storage);
+        const std::vector<Gate> operators = {Gate(Pauli('X'), 2), Gate(Pauli('Y'), 2), Gate(Unitary(2, 711), 4),
+                                             Gate(Pauli('Z'), 0)};
+        Close(simulator.ExpectationValue(operators), dense.ExpectationValue(operators),
+              "General MPS observable changed repeated operator order");
+        std::cout << "Success" << std::endl;
+        return true;
+    }
+    catch (const std::exception &error)
+    {
+        std::cout << "MPS observable/summary regression: " << error.what() << std::endl;
+        return false;
+    }
 }
 
 bool MPSSimulatorTests()
@@ -1858,8 +1945,9 @@ bool MPSSimulatorTests()
     }
     */
 
-    return MeetingPositionFallbackTestMPS() && WideBasisInitializationTestMPS() && StateSimulationTest() &&
-           NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() &&
-           CloneTestMPS() && ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() &&
-           MultithreadingSettingTestMPS() && LongChainSamplingAndValidationTestMPS();
+    return ObservableAndSummaryRegressionTestMPS() && MeetingPositionFallbackTestMPS() &&
+           WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() &&
+           checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() &&
+           ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS() &&
+           LongChainSamplingAndValidationTestMPS();
 }
