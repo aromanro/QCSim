@@ -174,8 +174,11 @@ template <class Sim, class SingleExpectation> void CheckObservableBatch(SingleEx
         Close(cloned[i], original[i], "Clone changed batch observables");
     Require(simulator.ExpectationValues({}).empty(), "Empty batch returned results");
     for (const std::string invalid : {"I", "IIIIIIIII", "IIIIIII?"})
-        Throws<std::invalid_argument>([&] { simulator.ExpectationValues({"IIIIIIII", invalid}); },
-                                      "Invalid batch Pauli was accepted");
+        Throws<std::invalid_argument>(
+            [&] {
+                simulator.ExpectationValues({"IIIIIIII", invalid});
+            },
+            "Invalid batch Pauli was accepted");
     check();
 }
 

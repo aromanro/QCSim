@@ -768,7 +768,7 @@ static bool TestExtStabilizerApproximationPolicy()
         if (policy.mode != QC::ExtendedStabilizerApproximationMode::Exact || policy.amplitudeTolerance != 0.0 ||
             policy.maxComponents != 0 || simulator.GetFrames().front().GetFrameSize() != 2 ||
             (simulator.GetFrames().front().amplitudes[1].real() == 0.0 &&
-                simulator.GetFrames().front().amplitudes[1].imag() == 0.0) ||
+             simulator.GetFrames().front().amplitudes[1].imag() == 0.0) ||
             statistics.discardedComponents != 0 || statistics.cumulativeDiscardedWeight != 0.0 ||
             statistics.traceDistanceErrorBound != 0.0 ||
             !CheckExtStabilizerInvariants(simulator, "Exact squared-underflow amplitude policy test"))

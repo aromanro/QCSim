@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <numeric>
+#include <type_traits>
 
 namespace QC
 {
@@ -319,6 +320,95 @@ inline Matrix DensePartial(const Matrix &rho, const std::vector<Index> &keep)
             result(r, c) += rho(row, col);
         }
     return result / rho.trace();
+}
+
+template <class Sim> void CheckSingleQubitNormalization()
+{
+    for (int compression = 0; compression < 3; ++compression)
+        for (bool scaled : {false, true})
+        {
+            Sim sim(4);
+            sim.SetMultithreading(false);
+            sim.ApplyGate(Gates::HadamardGate<>(), 1);
+            sim.ApplyGate(Gates::CNOTGate<>(), 2, 1);
+            sim.ApplyOperator(Gates::SingleQubitGate<>(0.5 * Matrix::Identity(2, 2)), 0);
+            sim.ReCanonicalize();
+            if constexpr (std::is_same_v<Sim, Simulator>)
+                sim.MoveAtBeginningOfChain({3, 1});
+            if (scaled)
+            {
+                auto state = sim.getState();
+                auto base = std::dynamic_pointer_cast<TensorNetworks::MPOSimulatorBaseState>(state);
+                base->scaleExponent += 80;
+                for (Index i = 0; i < base->gammas[0].size(); ++i)
+                    base->gammas[0].data()[i] *= std::ldexp(1., -80);
+                sim.setState(state);
+            }
+            if (compression == 1)
+                sim.setLimitBondDimension(16);
+            else if (compression == 2)
+                sim.setLimitEntanglement(0.);
+
+            Matrix expected = sim.getUnnormalizedDensityMatrix();
+            const auto bonds = sim.getBondDimensions();
+            // Zero, below-epsilon, and overflowing post-operation traces must
+            // leave both the represented state and tensor storage unchanged.
+            const auto before = std::dynamic_pointer_cast<TensorNetworks::MPOSimulatorBaseState>(sim.getState());
+            for (double factor : {0., 1E-9, 1E200})
+            {
+                const Matrix bad = factor * Matrix::Identity(2, 2);
+                Throws<std::runtime_error>([&] { sim.ApplyOperatorAndNormalize(Gates::SingleQubitGate<>(bad), 2); },
+                                           "Invalid single-site normalization was accepted");
+                Throws<std::runtime_error>([&] { sim.ApplyOperatorAndNormalize(Gates::AppliedGate<>(bad, 2)); },
+                                           "Invalid applied single-site normalization was accepted");
+                const auto after = std::dynamic_pointer_cast<TensorNetworks::MPOSimulatorBaseState>(sim.getState());
+                Require(after->scaleExponent == before->scaleExponent && sim.getBondDimensions() == bonds,
+                        "Failed single-site normalization changed scale or bonds");
+                for (size_t q = 0; q < before->gammas.size(); ++q)
+                    Require(std::equal(before->gammas[q].data(), before->gammas[q].data() + before->gammas[q].size(),
+                                       after->gammas[q].data()),
+                            "Failed single-site normalization changed a tensor");
+                for (size_t q = 0; q < before->lambdas.size(); ++q)
+                    Require((before->lambdas[q].array() == after->lambdas[q].array()).all(),
+                            "Failed single-site normalization changed Schmidt weights");
+                Close(sim.getUnnormalizedDensityMatrix(), expected, "Failed single-site normalization changed rho");
+            }
+
+            Matrix filter(2, 2);
+            filter << .7, std::complex<double>(.1, .2), std::complex<double>(-.2, .1), .4;
+            Matrix projectOne = Matrix::Zero(2, 2);
+            projectOne(1, 1) = 1.;
+            const std::vector<Matrix> ops{Gates::HadamardGate<>().getRawOperatorMatrix(), filter, filter, projectOne};
+            const std::vector<Index> targets{3, 2, 0, 2};
+            for (size_t i = 0; i < ops.size(); ++i)
+            {
+                const auto previousBonds = sim.getBondDimensions();
+                sim.MeasureNoCollapse(); // populate the sampling cache before changing a site
+                expected = DenseApply(expected, ops[i], targets[i]);
+                expected /= expected.trace();
+                if (i % 2 == 0)
+                    sim.ApplyOperatorAndNormalize(Gates::SingleQubitGate<>(ops[i]), targets[i]);
+                else
+                    sim.ApplyOperatorAndNormalize(Gates::AppliedGate<>(ops[i], targets[i]));
+                Close(sim.Trace(), 1., "Single-site normalization lost the trace scale");
+                Close(sim.getUnnormalizedDensityMatrix(), expected, "Single-site normalization differs from dense rho");
+                Require(sim.getBondDimensions() == previousBonds, "Single-site normalization changed bond dimensions");
+                if (i + 1 == ops.size())
+                    Require(sim.MeasureNoCollapse().at(2), "Single-site normalization retained stale sampling data");
+
+                // Exercise canonical weights after the unitary case, and QR
+                // transport after filters, before testing another local update.
+                sim.ApplyGate(Gates::CNOTGate<>(), 2, 1);
+                expected = DenseApply(expected, Gates::CNOTGate<>().getRawOperatorMatrix(), 2, 1);
+                Close(sim.getUnnormalizedDensityMatrix(), expected, "Single-site normalization damaged later gates");
+            }
+        }
+}
+
+inline void SingleQubitNormalization()
+{
+    CheckSingleQubitNormalization<Implementation>();
+    CheckSingleQubitNormalization<Simulator>();
 }
 
 inline void LocalEnvironmentsAndQueries()
@@ -729,6 +819,7 @@ inline bool Run()
         {"invalid basis initialization", InvalidBasisState},
         {"dense-query bounds", DenseBounds},
         {"threshold-only trimming", ThresholdTrim},
+        {"single-qubit normalization transactions", SingleQubitNormalization},
         {"local environments and tensor queries", LocalEnvironmentsAndQueries},
         {"stable raw Hermiticity", StableHermiticity},
         {"sampling cache and saved-state cloning", SamplingCacheAndSavedStates},

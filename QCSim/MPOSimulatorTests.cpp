@@ -590,13 +590,26 @@ static bool InitialQubitsMapTestMPO()
 
     const Eigen::MatrixXcd beforeInvalidMap = mpo.getDensityMatrix();
     const auto stateBeforeInvalidMap = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
-    if (!MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 2}); }, "Wrong-size initial MPO qubit map") ||
-        !MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 1, 3}); },
-                                   "Duplicate entry in initial MPO qubit map") ||
-        !MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 2, -1}); },
-                                   "Negative entry in initial MPO qubit map") ||
-        !MPO_ExpectInvalidArgument([&] { mpo.SetInitialQubitsMap({0, 1, 2, 4}); },
-                                   "Out-of-range entry in initial MPO qubit map"))
+    if (!MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.SetInitialQubitsMap({0, 1, 2});
+            },
+            "Wrong-size initial MPO qubit map") ||
+        !MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.SetInitialQubitsMap({0, 1, 1, 3});
+            },
+            "Duplicate entry in initial MPO qubit map") ||
+        !MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.SetInitialQubitsMap({0, 1, 2, -1});
+            },
+            "Negative entry in initial MPO qubit map") ||
+        !MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.SetInitialQubitsMap({0, 1, 2, 4});
+            },
+            "Out-of-range entry in initial MPO qubit map"))
         return false;
 
     const auto stateAfterInvalidMap = std::dynamic_pointer_cast<QC::TensorNetworks::MPOSimulatorState>(mpo.getState());
@@ -2718,19 +2731,33 @@ static bool ValidationAndStateCompatibilityTestMPO()
                                    "Operator with mismatched declared arity") ||
         !MPO_ExpectInvalidArgument([&] { mpo.ApplyOperator(QC::Gates::TwoQubitsGate<>(i4), 0, 0); },
                                    "Duplicate operator qubits") ||
-        !MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({i2, i4}, 0); }, "Mismatched Kraus dimensions") ||
-        !MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({i2, nonFinite}, 0); }, "Non-finite Kraus operator") ||
+        !MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.ApplyKrausOperators({i2, i4}, 0);
+            },
+            "Mismatched Kraus dimensions") ||
+        !MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.ApplyKrausOperators({i2, nonFinite}, 0);
+            },
+            "Non-finite Kraus operator") ||
         !MPO_ExpectInvalidArgument([&] { mpo.ApplyKrausOperators({i4}, 0, 0); }, "Duplicate Kraus qubits"))
         return false;
 
     using MPOIndex = QC::TensorNetworks::MPOSimulatorInterface::IndexType;
     if (!MPO_ExpectInvalidArgument([&] { mpo.MeasureQubits(std::set<MPOIndex>{-1}); }, "Negative measured qubit") ||
-        !MPO_ExpectInvalidArgument([&] { mpo.MeasureQubits(std::set<MPOIndex>{0, 4}); },
-                                   "Out-of-range measured qubit") ||
+        !MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.MeasureQubits(std::set<MPOIndex>{0, 4});
+            },
+            "Out-of-range measured qubit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.MeasureNoCollapse(std::set<MPOIndex>{4}); },
                                    "Out-of-range sampled qubit") ||
-        !MPO_ExpectInvalidArgument([&] { mpo.MoveAtBeginningOfChain(std::set<MPOIndex>{-1, 0}); },
-                                   "Invalid moved qubit") ||
+        !MPO_ExpectInvalidArgument(
+            [&] {
+                mpo.MoveAtBeginningOfChain(std::set<MPOIndex>{-1, 0});
+            },
+            "Invalid moved qubit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.setLimitBondDimension(0); }, "Zero bond dimension limit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.setLimitBondDimension(-2); }, "Negative bond dimension limit") ||
         !MPO_ExpectInvalidArgument([&] { mpo.setLimitEntanglement(-1E-6); }, "Negative singular-value threshold") ||
@@ -2760,8 +2787,11 @@ static bool ValidationAndStateCompatibilityTestMPO()
     MPOSeedNext(adjacent);
     adjacent.ApplyGate(h, 0);
     const Eigen::MatrixXcd adjacentBeforeInvalidMeasurement = adjacent.getDensityMatrix();
-    if (!MPO_ExpectInvalidArgument([&] { adjacent.MeasureQubits(std::set<MPOIndex>{0, 4}); },
-                                   "Implementation subset with an invalid measured qubit") ||
+    if (!MPO_ExpectInvalidArgument(
+            [&] {
+                adjacent.MeasureQubits(std::set<MPOIndex>{0, 4});
+            },
+            "Implementation subset with an invalid measured qubit") ||
         !MPO_ExpectInvalidArgument([&] { adjacent.MeasureNoCollapse(std::set<MPOIndex>{4}); },
                                    "Implementation subset with an invalid sampled qubit") ||
         !MPO_ExpectInvalidArgument([&] { adjacent.MoveAtBeginningOfChain(std::set<MPOIndex>{-1}); },

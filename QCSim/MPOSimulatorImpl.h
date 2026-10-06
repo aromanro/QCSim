@@ -480,6 +480,12 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     void ApplyValidatedOperatorAndNormalize(const MatrixClass &op, size_t operatorQubits, IndexType qubit,
                                             IndexType controllingQubit1)
     {
+        if (operatorQubits == 1)
+        {
+            ApplySingleQubitOperatorAndNormalize(op, qubit);
+            return;
+        }
+
         auto originalLambdas = lambdas;
         auto originalGammas = gammas;
         const auto originalMetadata = GetCanonicalMetadata();
@@ -497,6 +503,47 @@ class MPOSimulatorImpl : public MPOSimulatorBase
             RestoreCanonicalMetadata(originalMetadata);
             throw;
         }
+    }
+
+    void ApplySingleQubitOperatorAndNormalize(const MatrixClass &op, IndexType qubit)
+    {
+        // Only the target tensor needs staging. Keep the chain and its metadata
+        // untouched until the prospective trace has passed normalization checks.
+        TensorType updatedGamma = gammas[qubit];
+        if (limitSize || limitEntanglement)
+            ApplySingleQubitGateConservative(updatedGamma, op);
+        else
+            ApplySingleQubitGate(updatedGamma, op);
+
+        std::complex<double> trace;
+        if (limitSize || limitEntanglement)
+            trace = ContractChain([this, qubit, &updatedGamma](IndexType q) {
+                return q == qubit ? TraceSiteTensor(updatedGamma) : SiteTraceMatrix(q);
+            });
+        else
+        {
+            // Match Trace's fast contraction, including its summation order and
+            // power-of-two scaling, without installing the tentative tensor.
+            MatrixClass left = MatrixClass::Ones(1, 1), next;
+            int64_t exponent = scaleExponent;
+            for (IndexType q = 0; q < static_cast<IndexType>(gammas.size()); ++q)
+            {
+                ContractPauliSite(q == qubit ? updatedGamma : gammas[q], 'I', left, next);
+                RescaleIfOutOfRange(next, exponent);
+                left.swap(next);
+            }
+            trace = ScaleByPowerOfTwo(left(0, 0), exponent);
+        }
+        if (!IsFinite(trace) || std::abs(trace) <= std::numeric_limits<double>::epsilon())
+            throw std::runtime_error("Cannot normalize an MPO state with zero or non-finite trace");
+        const bool unitary = (op.adjoint() * op).isIdentity(1E-12);
+
+        // All allocating work is complete. Preserve the existing normalization
+        // site and Schmidt-weight updates so canonical environments stay valid.
+        gammas[qubit] = std::move(updatedGamma);
+        if (!unitary)
+            InvalidateCanonicalForm(qubit, qubit);
+        ScaleSite(canonicalFormValid ? 0 : centerFirst, 1. / trace);
     }
 
     void ApplyAndNormalizeWithoutBackup(const MatrixClass &op, size_t operatorQubits, IndexType qubit,

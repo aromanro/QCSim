@@ -1367,7 +1367,11 @@ class MPOSimulatorBase : public MPOSimulatorInterface
     // Tr(rho P) uses P(bra, ket); in particular Y selects i*(B01-B10).
     void ContractPauliSite(IndexType q, char p, const MatrixClass &left, MatrixClass &next) const
     {
-        const auto &gamma = gammas[q];
+        ContractPauliSite(gammas[q], p, left, next);
+    }
+
+    static void ContractPauliSite(const TensorType &gamma, char p, const MatrixClass &left, MatrixClass &next)
+    {
         const IndexType L = gamma.dimension(0), R = gamma.dimension(3);
         const int first = p == 'I' || p == 'Z' ? 0 : p == 'Y' ? 2 : 1;
         const int second = p == 'I' || p == 'Z' ? 3 : p == 'Y' ? 1 : 2;
