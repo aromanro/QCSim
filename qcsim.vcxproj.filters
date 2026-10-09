@@ -134,7 +134,7 @@
     <ClInclude Include="QCSim\QuantumAlgorithm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\QuantumCryptograpy.h">
+    <ClInclude Include="QCSim\QuantumCryptography.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QCSim\QuantumEraser.h">

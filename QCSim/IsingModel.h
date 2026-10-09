@@ -261,8 +261,8 @@ class QAOAIsingSubalgorithm : public QC::QuantumSubAlgorithm<VectorClass, Matrix
                 optGammaBeta = gammaBeta;
             }
 
-            // if (i % 10 == 0)
-            std::cout << "E: " << E << std::endl;
+            if (i % 10 == 0)
+                std::cout << "E: " << E << std::endl;
         }
 
         Exec(reg, optGammaBeta.first, optGammaBeta.second);
