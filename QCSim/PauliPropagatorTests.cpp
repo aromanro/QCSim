@@ -143,9 +143,9 @@ bool CheckResults(int shots, int nrQubits, std::unordered_map<size_t, size_t> &s
     return true;
 }
 
-bool CheckProbability(int nrQubits, QC::PauliPropagator &pauliSimulator, QC::QubitRegister<> &qubitRegister)
+bool CheckProbability(size_t nrQubits, QC::PauliPropagator &pauliSimulator, QC::QubitRegister<> &qubitRegister)
 {
-    for (size_t q = 0; q < static_cast<size_t>(nrQubits); ++q)
+    for (size_t q = 0; q < nrQubits; ++q)
     {
         const auto p0 = qubitRegister.GetQubitProbability(q);
         const auto p1 = 1. - pauliSimulator.Probability0(static_cast<int>(q));
@@ -190,12 +190,12 @@ void ExecuteCircuit(QC::QubitRegister<> &qubitRegister, QC::PauliPropagator &pau
 
 std::unordered_map<size_t, size_t> CollectSampledResults(QC::PauliPropagator &pauliSimulator,
                                                          std::vector<int> &measQubits, int shots, int nrQubits,
-                                                         std::mt19937 &gen)
+                                                         std::mt19937 &g)
 {
     std::unordered_map<size_t, size_t> sampledResultsPauli;
     for (int j = 0; j < shots; ++j)
     {
-        std::shuffle(measQubits.begin(), measQubits.end(), gen);
+        std::shuffle(measQubits.begin(), measQubits.end(), g);
         auto res = pauliSimulator.Sample(measQubits);
 
         size_t result = 0;
@@ -215,13 +215,13 @@ std::unordered_map<size_t, size_t> CollectSampledResults(QC::PauliPropagator &pa
 
 std::unordered_map<size_t, size_t> CollectMeasuredResults(QC::PauliPropagator &pauliSimulator,
                                                           std::vector<int> &measQubits, int shots, int nrQubits,
-                                                          std::mt19937 &gen)
+                                                          std::mt19937 &g)
 {
     std::unordered_map<size_t, size_t> sampledResultsPauli;
     pauliSimulator.SaveState();
     for (int j = 0; j < shots; ++j)
     {
-        std::shuffle(measQubits.begin(), measQubits.end(), gen);
+        std::shuffle(measQubits.begin(), measQubits.end(), g);
         auto res = pauliSimulator.Measure(measQubits);
 
         size_t result = 0;

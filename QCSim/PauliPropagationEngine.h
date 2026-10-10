@@ -677,7 +677,7 @@ template <class T> void Deduplicate(Workspace<T> &ws, const Settings &s)
 {
     auto &terms = ws.terms;
     auto &slots = ws.hashSlots;
-    const size_t empty = std::numeric_limits<size_t>::max();
+    constexpr size_t empty = std::numeric_limits<size_t>::max();
     if (slots.empty())
         slots.resize(64);
     std::fill(slots.begin(), slots.end(), empty);

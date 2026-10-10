@@ -9,7 +9,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-namespace QuantumCryptograpy
+namespace QuantumCryptography
 {
 
 // about half of the tranmitted bits will have a matched measurement basis, out of those 50% will be used to check for
@@ -231,4 +231,4 @@ class BB84Protocol : public QC::QuantumAlgorithm<VectorClass, MatrixClass>
     std::mt19937_64 rng;
     std::bernoulli_distribution dist_bool;
 };
-} // namespace QuantumCryptograpy
+} // namespace QuantumCryptography

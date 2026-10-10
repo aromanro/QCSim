@@ -134,9 +134,6 @@
     <ClInclude Include="QCSim\QuantumAlgorithm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\QuantumCryptograpy.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\QuantumEraser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -344,9 +341,6 @@
     <ClInclude Include="QCSim\ThreadPool.h">
       <Filter>Header Files\Simulators</Filter>
     </ClInclude>
-    <ClInclude Include="QCSim\BondDimensionSummary.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QCSim\TensorNetworkRegressionTests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -355,6 +349,12 @@
     </ClInclude>
     <ClInclude Include="QCSim\MPOSimulatorRegressionTests.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\QuantumCryptography.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\BondDimensionSummary.h">
+      <Filter>Header Files\Simulators</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

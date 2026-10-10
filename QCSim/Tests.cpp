@@ -13,7 +13,7 @@
 #include "DeutschJozsa.h"
 #include "GroverAlgorithm.h"
 #include "QuantumCountingAlgorithm.h"
-#include "QuantumCryptograpy.h"
+#include "QuantumCryptography.h"
 #include "ShorAlgorithm.h"
 #include "SimonAlgorithm.h"
 #include "SuperdenseCoding.h"
@@ -498,11 +498,11 @@ bool BernsteinVaziraniTests()
     return BernsteinVaziraniWithGatesTests();
 }
 
-bool QuantumCryptograpyTests()
+bool QuantumCryptographyTests()
 {
     std::cout << "\nTesting BB84 protocol..." << std::endl;
 
-    QuantumCryptograpy::BB84Protocol<> bb84;
+    QuantumCryptography::BB84Protocol<> bb84;
 
     for (int i = 0; i < 30; ++i)
     {
@@ -825,7 +825,7 @@ bool tests(int option)
         if (res)
             res = PhaseEstimationTests() && ShorTests() && TeleportationTests();
         if (res)
-            res = SuperdenseCodingTests() && QuantumCryptograpyTests() && SimulationTests();
+            res = SuperdenseCodingTests() && QuantumCryptographyTests() && SimulationTests();
         if (res)
             res = ParadoxesTests() && GamesTests() && distributedTests();
         if (res)

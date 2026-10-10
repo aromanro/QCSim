@@ -88,7 +88,8 @@ class OperatorLocal : public Operator
         unsigned input = 0;
         for (unsigned q = 0; q < table->qubits; ++q)
             input |= unsigned(term.X[GetQubit(q)]) << (2 * q) | unsigned(term.Z[GetQubit(q)]) << (2 * q + 1);
-        const auto first = table->offsets[input], last = table->offsets[input + 1];
+        const auto first = table->offsets[input]; 
+        const auto last = table->offsets[input + 1];
         const auto set = [&](PauliStringXZWithCoefficient &out, const PauliDetail::LocalTransfer::Entry &e) {
             out.Coefficient *= e.coefficient;
             for (unsigned q = 0; q < table->qubits; ++q)

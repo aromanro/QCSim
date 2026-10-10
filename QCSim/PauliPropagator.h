@@ -38,9 +38,9 @@ class PauliPropagator
     {
         if (nrQubits <= 64)
             return f(PauliDetail::Term<1>(nrQubits));
-        if (nrQubits <= 128)
+        else if (nrQubits <= 128)
             return f(PauliDetail::Term<2>(nrQubits));
-        if (nrQubits <= 256)
+        else if (nrQubits <= 256)
             return f(PauliDetail::Term<4>(nrQubits));
         return f(PauliDetail::Term<0>(nrQubits));
     }
@@ -48,8 +48,8 @@ class PauliPropagator
   public:
     PauliPropagator() : operations(std::make_shared<Program>())
     {
-        std::random_device rd;
-        rng.seed(rd());
+        std::random_device rdv;
+        rng.seed(rdv());
     }
 
     void SetSeed(uint64_t seed)

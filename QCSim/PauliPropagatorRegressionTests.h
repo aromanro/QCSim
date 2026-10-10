@@ -166,7 +166,7 @@ inline void Kernels()
 
 inline void RandomPropagation()
 {
-    std::mt19937 gen(42);
+    std::mt19937 g(42);
     for (int trial = 0; trial < 80; ++trial)
     {
         int width = trial % 5 == 0 ? 129 : 6;
@@ -181,19 +181,19 @@ inline void RandomPropagation()
         std::vector<std::unique_ptr<Operator>> ops;
         for (int j = 0; j < 28; ++j)
         {
-            int a = int(gen() % width), b = int(gen() % width);
+            int a = int(g() % width), b = int(g() % width);
             if (a == b)
                 b = (b + 1) % width;
-            ops.push_back(Gate(int(gen() % 19), a, b, .1 + (gen() % 1000) * .001));
+            ops.push_back(Gate(int(g() % 19), a, b, .1 + (g() % 1000) * .001));
         }
         p.SetOperations(std::move(ops));
         auto legacyOps = p.GetOperations();
         PauliStringXZWithCoefficient initial(width);
         for (int j = 0; j < 6; ++j)
         {
-            int q = gen() % width;
-            initial.X[q] = gen() % 2;
-            initial.Z[q] = gen() % 2;
+            int q = g() % width;
+            initial.X[q] = g() % 2;
+            initial.Z[q] = g() % 2;
         }
         PauliStringStorage expected{initial};
         LegacyRun(expected, legacyOps, width, 3, 2, cutoff, weight);
@@ -219,7 +219,7 @@ inline void StatevectorChecks()
 {
     using C = std::complex<double>;
     const C I(0, 1);
-    std::mt19937 gen(99);
+    std::mt19937 g(99);
     for (int trial = 0; trial < 60; ++trial)
     {
         constexpr int n = 4;
@@ -230,8 +230,8 @@ inline void StatevectorChecks()
         p.SetStepsBetweenDeduplication(5);
         for (int j = 0; j < 24; ++j)
         {
-            int kind = gen() % 5, q = gen() % n, b = (q + 1 + gen() % (n - 1)) % n;
-            double a = (int(gen() % 200) - 100) * .013;
+            int kind = g() % 5, q = g() % n, b = (q + 1 + g() % (n - 1)) % n;
+            double a = (int(g() % 200) - 100) * .013;
             if (kind == 4)
             {
                 p.ApplyCX(b, q);
