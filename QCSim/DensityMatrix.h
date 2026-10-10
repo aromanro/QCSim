@@ -1210,18 +1210,27 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
 
     void CollapseQubit(size_t qubit, size_t result, double pm)
     {
-        const double invpm = (pm > 1E-20) ? 1. / pm : 0.;
+        if (!std::isfinite(pm) || pm <= 0.)
+            throw std::domain_error("Cannot collapse onto an outcome with no probability mass");
+
+        Scalar *const data = rho.data();
         ForEachLocalBlock<1>({qubit, 0}, [&](Scalar *base, const auto &o) {
             base[o[1]] = base[o[2]] = 0.;
-            if (result == 0)
+            base[o[result == 0 ? 3 : 0]] = 0.;
+            const size_t index = static_cast<size_t>(base - data) + o[result == 0 ? 0 : 3];
+            const size_t transposed = (index % NrBasisStates) * NrBasisStates + index / NrBasisStates;
+
+            // Ket/bra gate passes can accumulate an anti-Hermitian roundoff
+            // component. Project it out BEFORE a rare outcome amplifies it by
+            // 1 / pm. Each conjugate pair has one writer, including in OpenMP.
+            // MeasureQubit has already validated every diagonal population.
+            if (index == transposed)
+                data[index] = Scalar(std::max(0., data[index].real()) / pm, 0.);
+            else if (index < transposed)
             {
-                base[o[0]] *= invpm;
-                base[o[3]] = 0.;
-            }
-            else
-            {
-                base[o[3]] *= invpm;
-                base[o[0]] = 0.;
+                const Scalar value = (0.5 * data[index] + 0.5 * std::conj(data[transposed])) / pm;
+                data[index] = value;
+                data[transposed] = std::conj(value);
             }
         });
     }

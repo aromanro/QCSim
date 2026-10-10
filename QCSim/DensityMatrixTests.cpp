@@ -1749,6 +1749,129 @@ static bool DensityMatrixNewFeaturesTest()
     return true;
 }
 
+template <class Matrix> class DM_ForcedMeasurement : public QC::DensityMatrix<Eigen::VectorXcd, Matrix>
+{
+  public:
+    using QC::DensityMatrix<Eigen::VectorXcd, Matrix>::DensityMatrix;
+
+    // Exercise a rare branch deterministically without searching billions of seeds.
+    void SelectOutcome(size_t outcome, double probability)
+    {
+        this->uniformZeroOne = outcome == 0 ? std::uniform_real_distribution<double>(0., probability * 0.5)
+                                            : std::uniform_real_distribution<double>(1. - probability * 0.5, 1.);
+    }
+};
+
+template <class Matrix> static bool DM_RareCollapseChecks(bool parallel)
+{
+    using Complex = std::complex<double>;
+    for (size_t qubit = 0; qubit < 3; ++qubit)
+        for (size_t outcome = 0; outcome < 2; ++outcome)
+        {
+            const double probability = 1E-8;
+            const size_t first = outcome << qubit;
+            const size_t otherQubit = (qubit + 1) % 3;
+            const size_t second = first | (size_t{1} << otherQubit);
+            Eigen::VectorXcd branch = Eigen::VectorXcd::Zero(8);
+            branch[first] = std::sqrt(0.3);
+            branch[second] = Complex(0., std::sqrt(0.7));
+            const Matrix expected = branch * branch.adjoint();
+            Matrix rho = probability * expected;
+            rho(first ^ (size_t{1} << qubit), first ^ (size_t{1} << qubit)) = 1. - probability;
+
+            // Model the anti-Hermitian residual from separate ket/bra gate
+            // passes. It is below validation tolerance before collapse.
+            rho(first, first) += Complex(0., 1E-17);
+            rho(second, second) -= Complex(0., 1E-17);
+            const Complex error(2E-17, 3E-17);
+            rho(first, second) += error;
+            rho(second, first) -= std::conj(error);
+
+            DM_ForcedMeasurement<Matrix> dm(3, 1);
+            dm.SetMultithreading(parallel);
+            dm.SetRandomSeed(99);
+            dm.setDensityMatrix(rho);
+            dm.SelectOutcome(outcome, probability);
+            if (dm.MeasureQubit(qubit) != outcome || !dm.getDensityMatrix().allFinite() ||
+                (dm.getDensityMatrix() - expected).norm() > 1E-12 || !dm.IsHermitian(1E-14))
+            {
+                std::cout << "Rare collapse amplified non-Hermitian roundoff" << std::endl;
+                return false;
+            }
+            // An off-diagonal residual also becomes a population after a gate.
+            dm.ApplyGate(QC::Gates::HadamardGate<Matrix>(), otherQubit);
+            dm.MeasureNoCollapse();
+            dm.MeasureQubit(otherQubit);
+        }
+
+    // Positive probabilities smaller than the old 1E-20 cutoff must still
+    // normalize, including when computing a reciprocal would overflow.
+    for (const double probability : {1E-30, 1E-310})
+    {
+        Matrix rho = Matrix::Zero(2, 2);
+        rho(0, 0) = probability;
+        rho(1, 1) = 1.;
+        DM_ForcedMeasurement<Matrix> dm(1, 1);
+        dm.SetMultithreading(parallel);
+        dm.SetRandomSeed(99);
+        dm.setDensityMatrix(rho);
+        dm.SelectOutcome(0, probability);
+        if (dm.MeasureQubit(0) != 0 || !dm.getDensityMatrix().allFinite() || dm.getBasisStateProbability(0) != 1.)
+        {
+            std::cout << "Tiny-probability collapse lost normalization" << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool DensityMatrixRareCollapseTest()
+{
+    std::cout << "\nDensity matrix simulator - rare measurement collapse" << std::endl;
+
+    struct RestoreThreshold
+    {
+        size_t value = QC::DensityMatrix<>::GetParallelMinElements();
+
+        ~RestoreThreshold()
+        {
+            QC::DensityMatrix<>::SetParallelMinElements(value);
+        }
+    } restoreThreshold;
+
+    QC::DensityMatrix<>::SetParallelMinElements(1);
+    using RowMatrix = Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    for (bool parallel : {false, true})
+        if (!DM_RareCollapseChecks<Eigen::MatrixXcd>(parallel) || !DM_RareCollapseChecks<RowMatrix>(parallel))
+            return false;
+
+    // Reproduce actual gate roundoff as well as the constructed residual above.
+    DM_ForcedMeasurement<Eigen::MatrixXcd> dm(2, 1);
+    dm.SetMultithreading(false);
+    dm.SetRandomSeed(99);
+    dm.setToBasisState(1);
+    dm.ApplyGate(QC::Gates::HadamardGate<>(), 1);
+    std::mt19937_64 random(99);
+    std::uniform_real_distribution<double> angle(-3., 3.);
+    std::vector<Eigen::MatrixXcd> gates;
+    for (size_t i = 0; i < 100; ++i)
+    {
+        const double theta = angle(random), phi = angle(random), lambda = angle(random), gamma = angle(random);
+        QC::Gates::UGate<> gate(theta, phi, lambda, gamma);
+        gates.push_back(gate.getRawOperatorMatrix());
+        dm.ApplyGate(gate, 0);
+    }
+    for (auto it = gates.rbegin(); it != gates.rend(); ++it)
+        dm.ApplyGate(QC::Gates::AppliedGate<>(it->adjoint().eval(), 0));
+    dm.ApplyGate(QC::Gates::RxGate<>(2E-4), 0);
+    dm.SelectOutcome(0, 1E-8);
+    if (dm.MeasureQubit(0) != 0 || !dm.IsHermitian(1E-14))
+        return false;
+    dm.MeasureQubit(1);
+    std::cout << "Success" << std::endl;
+    return true;
+}
+
 bool DensityMatrixTests()
 {
     std::cout << "\nDensity matrix simulator tests" << std::endl;
@@ -1760,9 +1883,9 @@ bool DensityMatrixTests()
                         DensityMatrixGenericChannelTest() && DensityMatrixInitializationAndValidationTest() &&
                         DensityMatrixMeasurementTest() && DensityMatrixPauliExpectationTest() &&
                         DensityMatrixInvariantsTest() && DensityMatrixMeasurementStatisticsTest() &&
-                        DensityMatrixCollapseTest() && DensityMatrixExpectationExtrasTest() &&
-                        DensityMatrixSamplingTest() && DensityMatrixStateSaveRestoreCloneTest() &&
-                        DensityMatrixNewFeaturesTest();
+                        DensityMatrixCollapseTest() && DensityMatrixRareCollapseTest() &&
+                        DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
+                        DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest();
     gen = savedGenerator;
     return result;
 }
