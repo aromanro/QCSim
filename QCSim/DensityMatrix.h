@@ -1213,24 +1213,68 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         if (!std::isfinite(pm) || pm <= 0.)
             throw std::domain_error("Cannot collapse onto an outcome with no probability mass");
 
+        const size_t bit = size_t{1} << qubit;
+        const size_t lowMask = bit - 1;
+        const size_t selected = result == 0 ? 0 : bit;
+        const size_t dimension = NrBasisStates / 2;
+        size_t tileSize = 16;
+#ifdef _OPENMP
+        if (UseParallel(static_cast<size_t>(rho.size())) && !omp_in_parallel())
+        {
+            // Give each worker at least a short/long pair of tile rows, even
+            // for small matrices at the parallel threshold.
+            const size_t targetTiles = 2 * static_cast<size_t>(omp_get_max_threads());
+            while (tileSize > 1 && dimension / tileSize < targetTiles)
+                tileSize >>= 1;
+        }
+#endif
+        const size_t tiles = (dimension + tileSize - 1) / tileSize;
         Scalar *const data = rho.data();
-        ForEachLocalBlock<1>({qubit, 0}, [&](Scalar *base, const auto &o) {
-            base[o[1]] = base[o[2]] = 0.;
-            base[o[result == 0 ? 3 : 0]] = 0.;
-            const size_t index = static_cast<size_t>(base - data) + o[result == 0 ? 0 : 3];
-            const size_t transposed = (index % NrBasisStates) * NrBasisStates + index / NrBasisStates;
-
-            // Ket/bra gate passes can accumulate an anti-Hermitian roundoff
-            // component. Project it out BEFORE a rare outcome amplifies it by
-            // 1 / pm. Each conjugate pair has one writer, including in OpenMP.
-            // MeasureQubit has already validated every diagonal population.
-            if (index == transposed)
-                data[index] = Scalar(std::max(0., data[index].real()) / pm, 0.);
-            else if (index < transposed)
+        // These are physical inner/outer indices. Swapping their roles for
+        // row-major storage leaves the symmetric projection unchanged.
+        const auto expand = [=](size_t index) { return (index & lowMask) | ((index & ~lowMask) << 1) | selected; };
+        // Pair nearby tiles of the surviving sector so both sides of each
+        // Hermitian pair stay in cache. Alternate short and long tile rows
+        // to balance the triangular work across contiguous OpenMP ranges.
+        ForEachRange(tiles, static_cast<size_t>(rho.size()), [&](size_t begin, size_t end) {
+            for (size_t tile = begin; tile < end; ++tile)
             {
-                const Scalar value = (0.5 * data[index] + 0.5 * std::conj(data[transposed])) / pm;
-                data[index] = value;
-                data[transposed] = std::conj(value);
+                const size_t outerTile = (tile & 1) ? tiles - 1 - tile / 2 : tile / 2;
+                const size_t outerBegin = outerTile * tileSize;
+                const size_t outerEnd = std::min(outerBegin + tileSize, dimension);
+                // Clear discarded columns and row runs contiguously. They are
+                // disjoint from every surviving tile, so no barrier is needed.
+                for (size_t outer = outerBegin; outer < outerEnd; ++outer)
+                {
+                    const size_t column = expand(outer);
+                    std::fill_n(data + (column ^ bit) * NrBasisStates, NrBasisStates, Scalar(0.));
+                    Scalar *const kept = data + column * NrBasisStates;
+                    for (size_t row = 0; row < NrBasisStates; row += 2 * bit)
+                        std::fill_n(kept + row + (selected ^ bit), bit, Scalar(0.));
+                }
+                for (size_t innerBegin = 0; innerBegin <= outerBegin; innerBegin += tileSize)
+                    for (size_t outer = outerBegin; outer < outerEnd; ++outer)
+                    {
+                        const size_t column = expand(outer);
+                        const size_t innerEnd = std::min(innerBegin + tileSize, outer + 1);
+                        for (size_t inner = innerBegin; inner < innerEnd; ++inner)
+                        {
+                            const size_t row = expand(inner);
+                            const size_t index = row * NrBasisStates + column;
+                            const size_t transposed = column * NrBasisStates + row;
+                            // Project out anti-Hermitian roundoff BEFORE a rare
+                            // outcome amplifies it. Each pair has one writer.
+                            // Keep division: 1 / pm can overflow for tiny pm.
+                            if (inner == outer)
+                                data[index] = Scalar(std::max(0., data[index].real()) / pm, 0.);
+                            else
+                            {
+                                const Scalar value = (0.5 * data[index] + 0.5 * std::conj(data[transposed])) / pm;
+                                data[index] = value;
+                                data[transposed] = std::conj(value);
+                            }
+                        }
+                    }
             }
         });
     }

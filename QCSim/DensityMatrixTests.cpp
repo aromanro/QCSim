@@ -1825,6 +1825,62 @@ template <class Matrix> static bool DM_RareCollapseChecks(bool parallel)
     return true;
 }
 
+template <class Matrix> static bool DM_TiledCollapseChecks(bool parallel)
+{
+    using Complex = std::complex<double>;
+    // Cover partial tiles, a full tile, multiple tiles, and every placement of
+    // the measured bit relative to the contiguous storage dimension.
+    for (size_t qubits : {1, 4, 5, 6, 8})
+    {
+        const size_t dimension = size_t{1} << qubits;
+        Eigen::VectorXcd psi(dimension);
+        for (size_t i = 0; i < dimension; ++i)
+            psi(i) = Complex(std::sin(double(i) + 0.3), std::cos(0.7 * double(i)));
+        psi.normalize();
+        Matrix initial = 0.8 * (psi * psi.adjoint());
+        initial.diagonal().array() += 0.2 / double(dimension);
+        // Exercise projection of both diagonal and off-diagonal roundoff.
+        for (size_t row = 0; row < dimension; ++row)
+        {
+            initial(row, row) += Complex(0., 1E-17);
+            for (size_t column = row + 1; column < dimension; ++column)
+            {
+                const Complex error(2E-17, -3E-17);
+                initial(row, column) += error;
+                initial(column, row) -= std::conj(error);
+            }
+        }
+        DM_ForcedMeasurement<Matrix> dm(qubits, 1);
+        dm.SetMultithreading(parallel);
+        for (size_t qubit = 0; qubit < qubits; ++qubit)
+            for (size_t outcome = 0; outcome < 2; ++outcome)
+            {
+                const size_t mask = size_t{1} << qubit;
+                double probability = 0.;
+                for (size_t i = 0; i < dimension; ++i)
+                    if (((i & mask) != 0) == (outcome != 0))
+                        probability += initial(i, i).real();
+                Matrix expected = Matrix::Zero(dimension, dimension);
+                for (size_t row = 0; row < dimension; ++row)
+                    for (size_t column = 0; column < dimension; ++column)
+                        if (((row & mask) != 0) == (outcome != 0) && ((column & mask) != 0) == (outcome != 0))
+                            expected(row, column) =
+                                (0.5 * initial(row, column) + 0.5 * std::conj(initial(column, row))) / probability;
+                dm.setDensityMatrix(initial);
+                dm.SetRandomSeed(99);
+                dm.SelectOutcome(outcome, probability);
+                if (dm.MeasureQubit(qubit) != outcome || !dm.getDensityMatrix().allFinite() ||
+                    (dm.getDensityMatrix() - expected).norm() > 1E-14 || !dm.IsHermitian(1E-14))
+                {
+                    std::cout << "Tiled collapse differs from the projected reference: " << qubits << " qubits, q"
+                              << qubit << ", outcome " << outcome << std::endl;
+                    return false;
+                }
+            }
+    }
+    return true;
+}
+
 static bool DensityMatrixRareCollapseTest()
 {
     std::cout << "\nDensity matrix simulator - rare measurement collapse" << std::endl;
@@ -1832,18 +1888,44 @@ static bool DensityMatrixRareCollapseTest()
     struct RestoreThreshold
     {
         size_t value = QC::DensityMatrix<>::GetParallelMinElements();
+#ifdef _OPENMP
+        int threads = omp_get_max_threads();
+#endif
 
         ~RestoreThreshold()
         {
             QC::DensityMatrix<>::SetParallelMinElements(value);
+#ifdef _OPENMP
+            omp_set_num_threads(threads);
+#endif
         }
     } restoreThreshold;
 
     QC::DensityMatrix<>::SetParallelMinElements(1);
     using RowMatrix = Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
     for (bool parallel : {false, true})
-        if (!DM_RareCollapseChecks<Eigen::MatrixXcd>(parallel) || !DM_RareCollapseChecks<RowMatrix>(parallel))
+        if (!DM_RareCollapseChecks<Eigen::MatrixXcd>(parallel) || !DM_RareCollapseChecks<RowMatrix>(parallel) ||
+            !DM_TiledCollapseChecks<Eigen::MatrixXcd>(parallel) || !DM_TiledCollapseChecks<RowMatrix>(parallel))
             return false;
+
+#ifdef _OPENMP
+    // Tile sizing must also work with odd team sizes and with fewer physical
+    // tile rows than requested workers; no particular machine is assumed.
+    for (int threads : {1, 2, 3, 7})
+    {
+        omp_set_num_threads(threads);
+        if (!DM_TiledCollapseChecks<Eigen::MatrixXcd>(true) || !DM_TiledCollapseChecks<RowMatrix>(true))
+            return false;
+    }
+    omp_set_num_threads(restoreThreshold.threads);
+    bool nestedResults[2]{};
+#pragma omp parallel for num_threads(2)
+    for (int worker = 0; worker < 2; ++worker)
+        nestedResults[worker] =
+            DM_TiledCollapseChecks<Eigen::MatrixXcd>(true) && DM_TiledCollapseChecks<RowMatrix>(true);
+    if (!nestedResults[0] || !nestedResults[1])
+        return false;
+#endif
 
     // Reproduce actual gate roundoff as well as the constructed residual above.
     DM_ForcedMeasurement<Eigen::MatrixXcd> dm(2, 1);
