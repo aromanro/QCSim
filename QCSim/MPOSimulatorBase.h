@@ -1007,6 +1007,12 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         return bondDimensions.Maximum(lambdas);
     }
 
+    // Dimension of the bond between sites bond and bond + 1.
+    IndexType getBondDimension(IndexType bond) const
+    {
+        return lambdas[bond].size();
+    }
+
     std::vector<IndexType> getBondDimensions() const
     {
         std::vector<IndexType> dims(lambdas.size());

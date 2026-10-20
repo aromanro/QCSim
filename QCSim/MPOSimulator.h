@@ -991,6 +991,15 @@ class MPOSimulator : public MPOSimulatorInterface
 
     void ApplyValidatedOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1, size_t qubitsNumber)
     {
+        // SWAP rho SWAP^dagger only exchanges where the two logical qubits live, so it is applied to the map:
+        // no routing, no tensor update, no truncation and no bond dimension change to report
+        if (qubitsNumber == 2 && op.isSwapGate())
+        {
+            ValidateOperatorQubits(qubitsNumber, qubit, controllingQubit1);
+            ExchangeQubitPositions(qubit, controllingQubit1);
+            return;
+        }
+
         const auto [qubit1, qubit2] = RouteOperatorQubits(qubit, controllingQubit1, qubitsNumber);
         impl.ApplyOperator(op, qubit1, qubit2);
         if ((bondDimensionCallback || bondDimensionSummaryCallback) && qubitsNumber > 1)
@@ -1188,6 +1197,17 @@ class MPOSimulator : public MPOSimulatorInterface
         return rho;
     }
 
+    void ExchangeQubitPositions(IndexType logical1, IndexType logical2)
+    {
+        const IndexType real1 = qubitsMap[logical1];
+        const IndexType real2 = qubitsMap[logical2];
+
+        qubitsMap[logical1] = real2;
+        qubitsMap[logical2] = real1;
+        qubitsMapInv[real1] = logical2;
+        qubitsMapInv[real2] = logical1;
+    }
+
     void BringQubitsTogether(IndexType logical1, IndexType logical2)
     {
         if (meetingPositionCallback)
@@ -1340,16 +1360,16 @@ class MPOSimulator : public MPOSimulatorInterface
         if (realq2 - realq1 <= 1)
             return realq1;
 
-        const auto bondDims = impl.getBondDimensions();
-
+        // only the bonds between the two qubits are candidates, read them in place
         IndexType bestPos = realq1;
-        IndexType bestBond = bondDims[realq1];
+        IndexType bestBond = impl.getBondDimension(realq1);
 
         for (IndexType m = realq1 + 1; m < realq2; ++m)
         {
-            if (bondDims[m] < bestBond)
+            const IndexType bond = impl.getBondDimension(m);
+            if (bond < bestBond)
             {
-                bestBond = bondDims[m];
+                bestBond = bond;
                 bestPos = m;
             }
         }

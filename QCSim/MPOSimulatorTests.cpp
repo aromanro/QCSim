@@ -350,6 +350,79 @@ static bool NumericalRankStabilityTestMPO()
     return true;
 }
 
+// A SWAP gate is applied by exchanging the two logical qubits in the map: no routing, no tensor
+// update and no bond notification, while the density matrix still matches the reference.
+static bool SwapRelabelTestMPO()
+{
+    std::cout << "\nMPO simulator SWAP relabelling test" << std::endl;
+
+    constexpr int nrQubits = 5;
+    QC::TensorNetworks::MPOSimulator mpo(nrQubits);
+    MPOSeedNext(mpo);
+    QC::QubitRegister<> reg(nrQubits);
+
+    QC::Gates::HadamardGate<> hGate;
+    QC::Gates::CNOTGate<> cnotGate;
+    QC::Gates::RyGate<> ryGate(M_PI / 5);
+    QC::Gates::SwapGate<> swapGate;
+
+    const auto applyBoth = [&](const auto &gate, int qubit, int controllingQubit = 0) {
+        mpo.ApplyGate(gate, qubit, controllingQubit);
+        reg.ApplyGate(gate, qubit, controllingQubit);
+    };
+
+    applyBoth(hGate, 0);
+    applyBoth(cnotGate, 1, 0);
+    applyBoth(ryGate, 3);
+    applyBoth(cnotGate, 4, 3);
+
+    int meetingCallbacks = 0, bondCallbacks = 0;
+    mpo.SetMeetingPositionCallback([&](const std::vector<Eigen::Index> &) {
+        ++meetingCallbacks;
+        return Eigen::Index{-1};
+    });
+    mpo.SetBondDimensionCallback([&](const std::vector<Eigen::Index> &) { ++bondCallbacks; });
+
+    const auto bondsBefore = mpo.getBondDimensions();
+    auto expectedMap = mpo.getQubitsMap();
+    std::swap(expectedMap[0], expectedMap[4]);
+    std::swap(expectedMap[1], expectedMap[3]);
+
+    applyBoth(swapGate, 0, 4); // chain ends
+    applyBoth(swapGate, 3, 1); // non-adjacent, both entangled
+
+    if (meetingCallbacks != 0 || bondCallbacks != 0 || mpo.getBondDimensions() != bondsBefore ||
+        mpo.getQubitsMap() != expectedMap)
+    {
+        std::cout << "A SWAP gate routed qubits or changed the tensors instead of relabelling them" << std::endl;
+        return false;
+    }
+
+    if (!CompareDensityMatrices(ReferenceDensityMatrix(reg), mpo.getDensityMatrix(), nrQubits))
+        return false;
+
+    // the same holds through the explicit operator API, which applies rho -> A rho A^dagger
+    mpo.ApplyOperator(swapGate, 2, 4);
+    reg.ApplyGate(swapGate, 2, 4);
+    if (meetingCallbacks != 0 || bondCallbacks != 0 || mpo.getBondDimensions() != bondsBefore)
+    {
+        std::cout << "A SWAP operator routed qubits or changed the tensors instead of relabelling them" << std::endl;
+        return false;
+    }
+
+    // later gates, including routed ones, act on the relabelled qubits
+    applyBoth(cnotGate, 4, 1);
+    applyBoth(ryGate, 0);
+    applyBoth(cnotGate, 2, 0);
+
+    if (!CompareDensityMatrices(ReferenceDensityMatrix(reg), mpo.getDensityMatrix(), nrQubits))
+        return false;
+
+    std::cout << "Success" << std::endl;
+
+    return true;
+}
+
 static bool MeetingPositionCallbackTestMPO()
 {
     std::cout << "\nMPO simulator meeting position callback test" << std::endl;
@@ -4070,7 +4143,8 @@ bool MPOSimulatorTests()
            MixtureValidationAndScalingTestMPO() && WideBasisInitializationTestMPO() &&
            KrausBondLimitAndLocalityTestMPO() && CollapseNormalizationAndAtomicFailureTestMPO() &&
            OneAndTwoQubitGatesTestMPO() && NonAdjacentGatesTestMPO() && NumericalRankStabilityTestMPO() &&
-           MeetingPositionCallbackTestMPO() && OptimalMeetingPositionTestMPO() && BondDimensionCallbackTestMPO() &&
+           MeetingPositionCallbackTestMPO() && SwapRelabelTestMPO() && OptimalMeetingPositionTestMPO() &&
+           BondDimensionCallbackTestMPO() &&
            TraceAndProbabilitiesTestMPO() && MixtureOfBasisStatesTestMPO() && MixtureEvolutionTestMPO() &&
            KrausOperatorsTestMPO() && TwoQubitKrausOperatorsTestMPO() && ApplyOperatorAndNormalizeTestMPO() &&
            CompressionLosslessTestMPO() && CompressionTruncationTestMPO() && TruncationModeTestMPO() &&

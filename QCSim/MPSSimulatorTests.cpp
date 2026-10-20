@@ -1754,6 +1754,78 @@ bool MeetingPositionFallbackTestMPS()
     return true;
 }
 
+// A SWAP gate is applied by exchanging the two logical qubits in the map: no routing, no tensor
+// update and no bond notification, while the simulated state still matches the statevector.
+static bool SwapRelabelTestMPS()
+{
+    std::cout << "\nMPS simulator SWAP relabelling test" << std::endl;
+
+    constexpr int nrQubits = 6;
+    QC::TensorNetworks::MPSSimulator mps(nrQubits);
+    QC::QubitRegister<> reference(nrQubits);
+
+    QC::Gates::HadamardGate<> h;
+    QC::Gates::CNOTGate<> cx;
+    QC::Gates::RyGate<> ry(M_PI / 5);
+    QC::Gates::SwapGate<> swap;
+
+    const auto applyBoth = [&](const auto &gate, int qubit, int controllingQubit = 0) {
+        mps.ApplyGate(gate, qubit, controllingQubit);
+        reference.ApplyGate(gate, qubit, controllingQubit);
+    };
+
+    applyBoth(h, 0);
+    applyBoth(cx, 1, 0);
+    applyBoth(ry, 3);
+    applyBoth(cx, 4, 3);
+    applyBoth(h, 5);
+
+    int meetingCallbacks = 0, bondCallbacks = 0;
+    mps.SetMeetingPositionCallback([&](const auto &) {
+        ++meetingCallbacks;
+        return -1;
+    });
+    mps.SetBondDimensionCallback([&](const auto &) { ++bondCallbacks; });
+
+    const auto bondsBefore = mps.getBondDimensions();
+    auto expectedMap = mps.getQubitsMap();
+    std::swap(expectedMap[0], expectedMap[5]);
+    std::swap(expectedMap[1], expectedMap[3]);
+
+    applyBoth(swap, 0, 5); // chain ends
+    applyBoth(swap, 3, 1); // non-adjacent, both entangled
+
+    if (meetingCallbacks != 0 || bondCallbacks != 0 || mps.getBondDimensions() != bondsBefore ||
+        mps.getQubitsMap() != expectedMap)
+    {
+        std::cout << "A SWAP gate routed qubits or changed the tensors instead of relabelling them" << std::endl;
+        return false;
+    }
+
+    if ((mps.getRegisterStorage() - reference.getRegisterStorage()).norm() > 1E-10)
+    {
+        std::cout << "State mismatch after relabelling SWAP gates" << std::endl;
+        return false;
+    }
+
+    // later gates, including routed ones, act on the relabelled qubits
+    applyBoth(cx, 5, 1);
+    applyBoth(ry, 0);
+    applyBoth(cx, 2, 4);
+    applyBoth(swap, 2, 3);
+    applyBoth(cx, 0, 3);
+
+    if ((mps.getRegisterStorage() - reference.getRegisterStorage()).norm() > 1E-10)
+    {
+        std::cout << "State mismatch after gates following relabelling SWAP gates" << std::endl;
+        return false;
+    }
+
+    std::cout << "Success" << std::endl;
+
+    return true;
+}
+
 // Long chains and invalid input. Sampling keeps its prefix row normalized: the joint probability
 // of the prefix used to underflow past ~1074 unbiased qubits, after which every outcome was 1.
 // Out-of-range qubits throw instead of indexing the qubit map, and non-finite gates are rejected
@@ -1949,7 +2021,7 @@ bool MPSSimulatorTests()
     }
     */
 
-    return ObservableAndSummaryRegressionTestMPS() && MeetingPositionFallbackTestMPS() &&
+    return ObservableAndSummaryRegressionTestMPS() && MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() &&
            WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() &&
            checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() &&
            ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS() &&
