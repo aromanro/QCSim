@@ -198,6 +198,18 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         return DensityParallelMinElementsSetting().load(std::memory_order_relaxed);
     }
 
+    // The team size of parallel kernels, shared with statevector registers (see
+    // QubitRegisterCalculator::SetParallelThreads). 0, the default, scales it with the number of matrix elements.
+    static void SetParallelThreads(int threads)
+    {
+        ParallelThreadsSetting().store(std::max(threads, 0), std::memory_order_relaxed);
+    }
+
+    static int GetParallelThreads()
+    {
+        return ParallelThreadsSetting().load(std::memory_order_relaxed);
+    }
+
     // Allows simulations and statistical tests to be reproduced exactly.
     void SetRandomSeed(uint64_t seed)
     {
@@ -1007,13 +1019,14 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         return GetMultithreading() && elements >= GetParallelMinElements();
     }
 
-    // Disjoint tiles share one team. Calls from an existing OpenMP team remain serial.
+    // Disjoint tiles share one team, sized by the whole matrix as for gates (see ParallelTeamSize).
+    // Calls from an existing OpenMP team remain serial.
     template <class Function> void ForEachRange(size_t count, size_t work, const Function &function) const
     {
 #ifdef _OPENMP
         if (UseParallel(work) && !omp_in_parallel())
         {
-            const int threads = omp_get_max_threads();
+            const int threads = ParallelTeamSize(static_cast<size_t>(rho.size()));
             if (threads > 1 && count > 1)
             {
                 size_t tileSize = std::min<size_t>(1024, count);
@@ -1223,7 +1236,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         {
             // Give each worker at least a short/long pair of tile rows, even
             // for small matrices at the parallel threshold.
-            const size_t targetTiles = 2 * static_cast<size_t>(omp_get_max_threads());
+            const size_t targetTiles = 2 * static_cast<size_t>(ParallelTeamSize(static_cast<size_t>(rho.size())));
             while (tileSize > 1 && dimension / tileSize < targetTiles)
                 tileSize >>= 1;
         }

@@ -22,7 +22,9 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
+#include <string>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -55,6 +57,112 @@ inline std::atomic<size_t> &ParallelMinBasisStatesSetting()
 {
     static std::atomic<size_t> value{DefaultParallelMinBasisStates};
     return value;
+}
+
+// The automatic team has one thread per this many basis states (density matrix elements).
+inline constexpr size_t ParallelBasisStatesPerThread = 4096;
+
+// 0 selects the automatic team size (see ParallelTeamSize), a positive value a fixed one.
+inline std::atomic<int> &ParallelThreadsSetting()
+{
+    static std::atomic<int> value{0};
+    return value;
+}
+
+#ifdef __linux__
+// The CPUs allowed by the cgroup v2 CPU quotas (cpu.max) of this process and its ancestors, 0 if there is none.
+// Containers limited with --cpus, or by Kubernetes CPU limits, otherwise see (and would use) every host CPU.
+inline int CgroupCpuLimit()
+{
+    try
+    {
+        std::ifstream self("/proc/self/cgroup");
+        std::string line, path;
+        bool found = false;
+        while (std::getline(self, line))
+            if (line.rfind("0::", 0) == 0)
+            {
+                path = line.substr(3);
+                found = true;
+                break;
+            }
+        if (!found || path.empty() || path[0] != '/' || path.find("..") != std::string::npos)
+            return 0;
+        if (path == "/")
+            path.clear();
+
+        double limit = 0;
+        for (;;)
+        {
+            std::ifstream max("/sys/fs/cgroup" + path + "/cpu.max");
+            std::string quota;
+            double period = 0;
+            if (max >> quota >> period && quota != "max" && period > 0)
+            {
+                const double cpus = std::stod(quota) / period;
+                if (cpus > 0 && (limit == 0 || cpus < limit))
+                    limit = cpus;
+            }
+            if (path.empty())
+                break;
+            path.erase(path.find_last_of('/'));
+        }
+        return limit > 0 ? std::max(1, static_cast<int>(std::ceil(limit))) : 0;
+    }
+    catch (...)
+    {
+        return 0;
+    }
+}
+#endif
+
+// Logical processors available to this process, read once: the OpenMP processor count (which respects the
+// affinity mask), reduced to the cgroup CPU quota on Linux.
+inline int AvailableProcessors()
+{
+    static const int processors = [] {
+#ifdef _OPENMP
+        int count = omp_get_num_procs();
+#else
+        int count = static_cast<int>(std::thread::hardware_concurrency());
+#endif
+#ifdef __linux__
+        const int quota = CgroupCpuLimit();
+        if (quota > 0 && (count <= 0 || quota < count))
+            count = quota;
+#endif
+        return std::max(count, 1);
+    }();
+    return processors;
+}
+
+// The OpenMP team for the parallel kernels of a register with this many basis states (density matrix elements),
+// if it goes parallel at all (see SetParallelMinBasisStates). It depends only on the register size, so every kernel
+// of a circuit uses the same team: changing the team size between regions was measured to be very costly with
+// GCC's runtime. The automatic team has one thread per ParallelBasisStatesPerThread states (at least two), and at
+// most half of the available processors. That leaves headroom: a team that, together with other busy threads,
+// needs more CPUs than there are waits at every barrier for a descheduled thread, and was measured to become about
+// a thousand times slower. Leaving out the second hardware thread of each core costs little, since large registers
+// are limited by memory bandwidth. A fixed team (SetParallelThreads) replaces the automatic one. Either is bounded
+// by omp_get_max_threads(), so OMP_NUM_THREADS and omp_set_num_threads still limit it. Calls from inside a parallel
+// region run serially, to avoid oversubscription.
+inline int ParallelTeamSize(size_t nrBasisStates)
+{
+#ifdef _OPENMP
+    if (omp_in_parallel())
+        return 1;
+    int threads = ParallelThreadsSetting().load(std::memory_order_relaxed);
+    if (threads <= 0)
+    {
+        const size_t wanted = std::max<size_t>(2, nrBasisStates / ParallelBasisStatesPerThread);
+        const size_t limit = static_cast<size_t>(std::max(1, AvailableProcessors() / 2));
+        threads = static_cast<int>(std::min(wanted, limit));
+    }
+    return std::max(1, std::min(threads, omp_get_max_threads()));
+#else
+    (void)nrBasisStates;
+    return 1;
+#endif
 }
 
 template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class QubitRegisterCalculator
@@ -204,26 +312,22 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         Eigen::Index stride;
     };
 
-    // The same rule for every compiler and OpenMP runtime: a parallel kernel always uses the whole team.
-    // Whether to go parallel at all is decided per register, by its size (see GetParallelMinBasisStates), so
-    // a circuit never alternates between serial and parallel kernels, nor changes the team size. Both were
-    // measured to be very costly: changing the team size between regions made mixed circuits up to hundreds
-    // of times slower with GCC's runtime, and serial kernels run while the team spin-waits are slowed down.
-    // Nested callers (already in a parallel region) run serially, to avoid oversubscription.
-    static int TeamThreads()
+    // The same rule for every compiler and OpenMP runtime. Whether to go parallel at all, and the team size, are
+    // decided per register, by its size (see GetParallelMinBasisStates and ParallelTeamSize), so a circuit never
+    // alternates between serial and parallel kernels, nor changes the team size. Both were measured to be very
+    // costly: changing the team size between regions made mixed circuits up to hundreds of times slower with
+    // GCC's runtime, and serial kernels run while the team spin-waits are slowed down.
+    // Pass the size of the whole register, not the number of items of a particular loop.
+    static int TeamThreads(size_t nrBasisStates)
     {
-#ifdef _OPENMP
-        return omp_in_parallel() ? 1 : omp_get_max_threads();
-#else
-        return 1;
-#endif
+        return ParallelTeamSize(nrBasisStates);
     }
 
-    template <bool Parallel, class Function> static inline void ForEachTile(size_t tiles, const Function &function)
+    template <bool Parallel, class Function>
+    static inline void ForEachTile(int threads, size_t tiles, const Function &function)
     {
         if constexpr (Parallel)
         {
-            const int threads = TeamThreads();
             if (threads > 1)
             {
 #pragma omp parallel for schedule(static) num_threads(threads)
@@ -241,23 +345,21 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     {
         const size_t active = count >> Bits;
         size_t tileSize = std::min(plan.tileSize, active);
-        if constexpr (Parallel)
-        {
-            const int threads = TeamThreads();
-            if (threads > 1)
-                while (tileSize > 1 && active / tileSize < static_cast<size_t>(threads) * 4)
-                    tileSize >>= 1;
-        }
+        const int threads = Parallel ? TeamThreads(count) : 1;
+        if (threads > 1)
+            while (tileSize > 1 && active / tileSize < static_cast<size_t>(threads) * 4)
+                tileSize >>= 1;
         if (tileSize == 1)
-            ForEachTile<Parallel>(active, [&](size_t i) { function(plan.template Expand<Bits>(i) | oneMask); });
+            ForEachTile<Parallel>(threads, active,
+                                  [&](size_t i) { function(plan.template Expand<Bits>(i) | oneMask); });
         else if (plan.strideShift == 0)
-            ForEachTile<Parallel>(active / tileSize, [&](size_t tile) {
+            ForEachTile<Parallel>(threads, active / tileSize, [&](size_t tile) {
                 const size_t base = plan.template Expand<Bits>(tile * tileSize) | oneMask;
                 for (size_t i = 0; i < tileSize; ++i)
                     function(base + i);
             });
         else
-            ForEachTile<Parallel>(active / tileSize, [&](size_t tile) {
+            ForEachTile<Parallel>(threads, active / tileSize, [&](size_t tile) {
                 const size_t base = plan.template Expand<Bits>(tile * tileSize) | oneMask;
                 const unsigned shift = plan.strideShift;
                 for (size_t i = 0; i < tileSize; ++i)
@@ -908,12 +1010,11 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     // Measurements. The measured qubits firstQubit..secondQubit are contiguous, so the states with a given outcome
     // form runs of 2^firstQubit contiguous amplitudes, one run in each block of 2^(secondQubit + 1) amplitudes.
 
-    template <bool Parallel, class Function> static inline double Sum(size_t count, const Function &term)
+    template <bool Parallel, class Function> static inline double Sum(int threads, size_t count, const Function &term)
     {
         double sum = 0;
         if constexpr (Parallel)
         {
-            const int threads = TeamThreads();
             if (threads > 1)
             {
 #pragma omp parallel for reduction(+ : sum) schedule(static) num_threads(threads)
@@ -939,7 +1040,8 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         if constexpr (Parallel)
         {
             const size_t chunks = count / chunkSize;
-            if (chunks > 1 && count % chunkSize == 0 && TeamThreads() > 1)
+            const int threads = TeamThreads(count);
+            if (chunks > 1 && count % chunkSize == 0 && threads > 1)
             {
                 // Concentrated states (in particular |0>) should not pay for a
                 // complete scan or a team launch. Continue the first chunk after
@@ -952,7 +1054,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         return i;
                 }
                 std::vector<double> chunkSums(chunks);
-                ForEachTile<true>(chunks, [&](size_t chunk) {
+                ForEachTile<true>(threads, chunks, [&](size_t chunk) {
                     double sum = 0;
                     for (size_t i = chunk ? chunk * chunkSize : prefixSize; i < (chunk + 1) * chunkSize; ++i)
                         sum += std::norm(state(i));
@@ -996,7 +1098,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         const size_t selected = outcome << firstQubit;
         const size_t shift = secondQubit + 1 - firstQubit;
 
-        return Sum<Parallel>(count >> shift, [&](size_t k) {
+        return Sum<Parallel>(Parallel ? TeamThreads(count) : 1, count >> shift, [&](size_t k) {
             return std::norm(state(((k & ~lowMask) << shift) | selected | (k & lowMask)));
         });
     }
@@ -1005,7 +1107,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     static inline void Collapse(size_t count, VectorClass &state, size_t measuredMask, size_t selected, double norm)
     {
         const size_t tileSize = std::min<size_t>(count, 1024);
-        ForEachTile<Parallel>(count / tileSize, [&](size_t tile) {
+        ForEachTile<Parallel>(Parallel ? TeamThreads(count) : 1, count / tileSize, [&](size_t tile) {
             for (size_t i = tile * tileSize; i < (tile + 1) * tileSize; ++i)
                 state(i) = (i & measuredMask) == selected ? state(i) * norm : std::complex<double>(0., 0.);
         });
@@ -1101,8 +1203,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     {
         static const std::complex<double> minusIPowers[4] = {{1., 0.}, {0., -1.}, {-1., 0.}, {0., 1.}};
         const auto phase = minusIPowers[nrY & 3];
+        const int threads = parallel ? TeamThreads(NrBasisStates) : 1;
         const auto sum = [&](size_t count, const auto &term) {
-            return parallel ? Sum<true>(count, term) : Sum<false>(count, term);
+            return parallel ? Sum<true>(threads, count, term) : Sum<false>(1, count, term);
         };
         if (xMask == 0)
         {
@@ -1151,10 +1254,10 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     }
 
     // With multithreading enabled, statevector registers with at least this many basis states run their gates
-    // and measurements with the whole OpenMP team; smaller ones run serially. The default is 16,384 states.
-    // This process-wide setting does not affect DensityMatrix. Use DensityMatrix<>::SetParallelMinElements
-    // for density execution; its default is 65,536 total matrix elements (8 qubits).
-    // Simulators running concurrently on several threads should have multithreading disabled instead.
+    // and measurements with an OpenMP team (see SetParallelThreads); smaller ones run serially. The default is
+    // 16,384 states. This process-wide setting does not affect DensityMatrix. Use
+    // DensityMatrix<>::SetParallelMinElements for density execution; its default is 65,536 total matrix elements
+    // (8 qubits). Simulators running concurrently on several threads should have multithreading disabled instead.
     static void SetParallelMinBasisStates(size_t nrBasisStates)
     {
         ParallelMinBasisStatesSetting().store(nrBasisStates, std::memory_order_relaxed);
@@ -1163,6 +1266,29 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     static size_t GetParallelMinBasisStates()
     {
         return ParallelMinBasisStatesSetting().load(std::memory_order_relaxed);
+    }
+
+    // The team size of parallel kernels, process-wide, for statevector and density matrix registers alike.
+    // 0, the default, scales the team with the register size: one thread per 8,192 basis states (density matrix
+    // elements), at least two, at most half of the available processors (the logical CPUs allowed by the affinity
+    // mask and, on Linux, by the cgroup CPU quota). A positive value uses that many threads for every register
+    // that goes parallel. Either is bounded by omp_get_max_threads(). Setting omp_get_num_procs() uses every
+    // logical CPU, but such a team becomes about a thousand times slower whenever another busy thread competes
+    // for a CPU, so it suits only dedicated machines.
+    static void SetParallelThreads(int threads)
+    {
+        ParallelThreadsSetting().store(std::max(threads, 0), std::memory_order_relaxed);
+    }
+
+    static int GetParallelThreads()
+    {
+        return ParallelThreadsSetting().load(std::memory_order_relaxed);
+    }
+
+    // The team that parallel kernels on a register of this size would use, if called from this thread.
+    static int GetParallelTeamSize(size_t nrBasisStates)
+    {
+        return ParallelTeamSize(nrBasisStates);
     }
 
   private:

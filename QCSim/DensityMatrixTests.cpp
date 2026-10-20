@@ -1888,6 +1888,7 @@ static bool DensityMatrixRareCollapseTest()
     struct RestoreThreshold
     {
         size_t value = QC::DensityMatrix<>::GetParallelMinElements();
+        int team = QC::DensityMatrix<>::GetParallelThreads();
 #ifdef _OPENMP
         int threads = omp_get_max_threads();
 #endif
@@ -1895,6 +1896,7 @@ static bool DensityMatrixRareCollapseTest()
         ~RestoreThreshold()
         {
             QC::DensityMatrix<>::SetParallelMinElements(value);
+            QC::DensityMatrix<>::SetParallelThreads(team);
 #ifdef _OPENMP
             omp_set_num_threads(threads);
 #endif
@@ -1911,13 +1913,16 @@ static bool DensityMatrixRareCollapseTest()
 #ifdef _OPENMP
     // Tile sizing must also work with odd team sizes and with fewer physical
     // tile rows than requested workers; no particular machine is assumed.
+    // A fixed team, since the automatic one has two threads for these small matrices.
     for (int threads : {1, 2, 3, 7})
     {
         omp_set_num_threads(threads);
+        QC::DensityMatrix<>::SetParallelThreads(threads);
         if (!DM_TiledCollapseChecks<Eigen::MatrixXcd>(true) || !DM_TiledCollapseChecks<RowMatrix>(true))
             return false;
     }
     omp_set_num_threads(restoreThreshold.threads);
+    QC::DensityMatrix<>::SetParallelThreads(restoreThreshold.team);
     bool nestedResults[2]{};
 #pragma omp parallel for num_threads(2)
     for (int worker = 0; worker < 2; ++worker)
