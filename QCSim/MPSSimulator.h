@@ -815,8 +815,9 @@ class MPSSimulator : public MPSSimulatorInterface
         */
     }
 
-    // Heuristic: swap towards positions in chain with smaller bond dimensions, the cost of a generic gate is bigger
-    // than the cost of a swap
+    // Cut-preserving, outer-bond-aware local meeting position heuristic:
+    // avoids dragging a heavily entangled endpoint cluster across a smaller
+    // cut bond and breaks ties using the immediate outer SVD bond context.
     IndexType FindBestMeetingPositionLocal(IndexType logicalQ1, IndexType logicalQ2) const
     {
         IndexType realq1 = qubitsMap[logicalQ1];
@@ -824,20 +825,84 @@ class MPSSimulator : public MPSSimulatorInterface
         if (realq1 > realq2)
             std::swap(realq1, realq2);
 
-        if (realq2 - realq1 <= 1)
+        const IndexType span = realq2 - realq1;
+        if (span <= 1)
             return realq1;
 
-        // only the bonds between the two qubits are candidates, read them in place
-        IndexType bestPos = realq1;
-        IndexType bestBond = impl.getBondDimension(realq1);
+        const IndexType nrQubits = static_cast<IndexType>(qubitsMap.size());
+        constexpr IndexType kMaxStackSpan = 128;
+        std::array<double, kMaxStackSpan + 2> bondsStack{};
+        std::array<double, kMaxStackSpan> prefixCutStack{};
+        std::array<double, kMaxStackSpan> suffixCutStack{};
+        std::vector<double> heapBuf;
 
-        for (IndexType m = realq1 + 1; m < realq2; ++m)
+        double *bonds = bondsStack.data();
+        double *prefixCut = prefixCutStack.data();
+        double *suffixCut = suffixCutStack.data();
+        if (span > kMaxStackSpan)
         {
-            const IndexType bond = impl.getBondDimension(m);
-            if (bond < bestBond)
+            heapBuf.resize(static_cast<size_t>(span) * 3 + 2, 0.0);
+            bonds = heapBuf.data();
+            prefixCut = bonds + span + 2;
+            suffixCut = prefixCut + span;
+        }
+
+        // bonds[k] stores the bond dimension at bond index (realq1 - 1 + k)
+        bonds[0] = (realq1 > 0) ? static_cast<double>(impl.getBondDimension(realq1 - 1)) : 1.0;
+        for (IndexType i = 0; i < span; ++i)
+            bonds[i + 1] = static_cast<double>(impl.getBondDimension(realq1 + i));
+        bonds[span + 1] = (realq2 < nrQubits - 1) ? static_cast<double>(impl.getBondDimension(realq2)) : 1.0;
+
+        const double E1 = std::max(bonds[0], bonds[1]);
+        const double E2 = std::max(bonds[span], bonds[span + 1]);
+
+        prefixCut[0] = 0.0;
+        for (IndexType i = 0; i < span - 1; ++i)
+        {
+            const double bDim = bonds[i + 1];
+            double dmg = 0.0;
+            if (E1 > bDim)
             {
-                bestBond = bond;
-                bestPos = m;
+                const double inflated = std::min(E1, 2.0 * bDim);
+                dmg = inflated * inflated * inflated - bDim * bDim * bDim;
+            }
+            prefixCut[i + 1] = prefixCut[i] + dmg;
+        }
+
+        suffixCut[span - 1] = 0.0;
+        for (IndexType i = span - 1; i > 0; --i)
+        {
+            const double bDim = bonds[i + 1];
+            double dmg = 0.0;
+            if (E2 > bDim)
+            {
+                const double inflated = std::min(E2, 2.0 * bDim);
+                dmg = inflated * inflated * inflated - bDim * bDim * bDim;
+            }
+            suffixCut[i - 1] = suffixCut[i] + dmg;
+        }
+
+        const double c1 = bonds[0] * bonds[1];
+        const double c2 = bonds[span] * bonds[span + 1];
+
+        IndexType bestPos = realq1;
+        double bestScore = std::numeric_limits<double>::infinity();
+
+        for (IndexType i = 0; i < span; ++i)
+        {
+            const double bLeft = bonds[i];
+            const double bMid = bonds[i + 1];
+            const double bRight = bonds[i + 2];
+            const double localBond3 = bMid * bMid * bMid;
+            const double cutDamage = 0.5 * (prefixCut[i] + suffixCut[i]);
+            const double outerContext = 0.05 * (bLeft * bMid * bRight);
+            const double tieBreak = (c2 > c1) ? (1e-6 * static_cast<double>(span - 1 - i)) : (1e-6 * static_cast<double>(i));
+            const double score = localBond3 + cutDamage + outerContext + tieBreak;
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestPos = realq1 + i;
             }
         }
 
