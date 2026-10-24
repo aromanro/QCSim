@@ -329,9 +329,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
             InvalidateCanonicalForm(0, 0);
         PrepareBond(first);
         const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(first);
-        const Eigen::array<int, 6> permutation{0, 3, 4, 1, 2, 5};
-        const Eigen::Tensor<std::complex<double>, 6> swapped = theta.shuffle(permutation);
-        DecomposeAndSetGammas(ReshapeTheta(swapped), first, first + 1, false, false);
+        DecomposeAndSetGammas(ReshapeSwappedTheta(theta), first, first + 1, false, false);
     }
 
     void RightCanonicalizeSite(IndexType site)
@@ -794,11 +792,20 @@ class MPOSimulatorImpl : public MPOSimulatorBase
             reversed = true;
         }
 
-        const TwoQubitsGateTensor U = GetTwoQubitsGateTensor(gate, reversed);
         // (4 * leftBond) x (4 * rightBond) matrix, the physical dimension per site is 4 = 2 (ket) x 2 (bra)
-        const MatrixClass thetaMatrix = limitSize || limitEntanglement
-                                            ? ReshapeThetaBar(ConstructThetaBarConservative(qubit1, U))
-                                            : ConstructThetaMatrix(qubit1, U);
+        MatrixClass thetaMatrix;
+        if (IsExactSwapMatrix(gate))
+        {
+            // SWAP exchanges both ket and bra legs, independently of argument order.
+            // Keep the usual SVD/compression path, but skip the gate contractions.
+            thetaMatrix = ReshapeSwappedTheta(ContractTwoQubits(qubit1));
+        }
+        else
+        {
+            const TwoQubitsGateTensor U = GetTwoQubitsGateTensor(gate, reversed);
+            thetaMatrix = limitSize || limitEntanglement ? ReshapeThetaBar(ConstructThetaBarConservative(qubit1, U))
+                                                         : ConstructThetaMatrix(qubit1, U);
+        }
 
         ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
     }
@@ -998,6 +1005,18 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         return keep;
     }
 
+    static bool IsExactSwapMatrix(const MatrixClass &gate)
+    {
+        // Check coefficients, not gate metadata: operators may be scaled, phased
+        // or nearly SWAP. Only the exact permutation permits a plain leg exchange.
+        constexpr IndexType swappedIndex[4] = {0, 2, 1, 3};
+        for (IndexType column = 0; column < 4; ++column)
+            for (IndexType row = 0; row < 4; ++row)
+                if (gate(row, column) != (row == swappedIndex[column] ? 1. : 0.))
+                    return false;
+        return true;
+    }
+
     static TwoQubitsGateTensor GetTwoQubitsGateTensor(const MatrixClass &gateMat, bool reversed)
     {
         TwoQubitsGateTensor result;
@@ -1153,6 +1172,34 @@ class MPOSimulatorImpl : public MPOSimulatorBase
                     }
             }
 
+        return thetaMatrix;
+    }
+
+    // Fuse a physical SWAP into the SVD reshape: the old second site's ket/bra
+    // pair becomes the row index, and the old first site's pair becomes the column.
+    // This needs no gate multiplications or intermediate shuffled rank-6 tensor.
+    static MatrixClass ReshapeSwappedTheta(const Eigen::Tensor<std::complex<double>, 6> &theta)
+    {
+        const IndexType L = theta.dimension(0);
+        const IndexType R = theta.dimension(5);
+
+        assert(L > 0);
+        assert(R > 0);
+
+        MatrixClass thetaMatrix(4 * L, 4 * R);
+        for (IndexType ket1 = 0; ket1 < 2; ++ket1)
+            for (IndexType bra1 = 0; bra1 < 2; ++bra1)
+            {
+                const IndexType p1R = (ket1 * 2 + bra1) * R;
+                for (IndexType ket2 = 0; ket2 < 2; ++ket2)
+                    for (IndexType bra2 = 0; bra2 < 2; ++bra2)
+                    {
+                        const IndexType p2L = (ket2 * 2 + bra2) * L;
+                        for (IndexType r = 0; r < R; ++r)
+                            for (IndexType l = 0; l < L; ++l)
+                                thetaMatrix(p2L + l, p1R + r) = theta(l, ket1, bra1, ket2, bra2, r);
+                    }
+            }
         return thetaMatrix;
     }
 

@@ -808,6 +808,118 @@ inline void ComplexSliceContractions()
     }
 }
 
+inline void PhysicalSwaps()
+{
+    Implementation prepared(5);
+    prepared.SetMultithreading(false);
+    for (int layer = 0; layer < 3; ++layer)
+    {
+        for (Index q = 0; q < 5; ++q)
+        {
+            prepared.ApplyGate(Gates::RyGate<>(.31 + .17 * q + .23 * layer), q);
+            prepared.ApplyGate(Gates::RxGate<>(.19 + .11 * q + .29 * layer), q);
+        }
+        for (Index q = 0; q < 4; ++q)
+            prepared.ApplyGate(Gates::CNOTGate<>(), q + 1, q);
+    }
+    const Gates::SwapGate<> swap;
+    const Matrix swapMatrix = swap.getRawOperatorMatrix();
+    for (bool mixed : {false, true})
+    {
+        Implementation input = prepared;
+        if (mixed)
+        {
+            input.ApplyAmplitudeDamping(1, .23);
+            input.ApplyDepolarizingNoise(3, .17);
+        }
+        const Matrix original = input.getUnnormalizedDensityMatrix();
+        // Cover end bonds and rectangular interior SVD matrices, both argument
+        // orders, named gates and raw operators, with and without compression.
+        for (bool conservative : {false, true})
+            for (Index bond = 0; bond < 4; ++bond)
+                for (bool reversed : {false, true})
+                    for (int entry = 0; entry < 3; ++entry)
+                    {
+                        Implementation sim = input;
+                        if (conservative)
+                            sim.setLimitBondDimension(1024);
+                        const Index target = bond + (reversed ? 0 : 1);
+                        const Index control = bond + (reversed ? 1 : 0);
+                        if (entry == 0)
+                            sim.ApplyGate(swap, target, control);
+                        else if (entry == 1)
+                            sim.ApplyOperator(Gates::TwoQubitsGate<>(swapMatrix), target, control);
+                        else
+                            sim.ApplyOperator(Gates::AppliedGate<>(swapMatrix, target, control));
+                        Close(sim.getUnnormalizedDensityMatrix(), DenseApply(original, swapMatrix, target, control),
+                              "Physical SWAP differs from dense evolution");
+                        Close(sim.Trace(), original.trace(), "Physical SWAP changed the trace");
+                        sim.ApplyGate(swap, control, target);
+                        Close(sim.getUnnormalizedDensityMatrix(), original, "Two physical SWAPs changed the state");
+                    }
+
+        // The single-Kraus channel retains the general tensor contraction path.
+        // Compare actual cuts, both threshold modes, and post-truncation patches.
+        for (int compression = 0; compression < 3; ++compression)
+            for (bool patches : {false, true})
+                for (bool reversed : {false, true})
+                {
+                    Implementation sim = input, reference = input;
+                    for (auto *mpo : {&sim, &reference})
+                    {
+                        if (compression == 0)
+                            mpo->setLimitBondDimension(3);
+                        else
+                        {
+                            mpo->setTruncationMode(compression == 1 ? Interface::TruncationMode::RelativeToMax
+                                                                    : Interface::TruncationMode::DiscardedWeight);
+                            mpo->setLimitEntanglement(compression == 1 ? .2 : .03);
+                        }
+                        mpo->setHermitizeAfterTruncation(patches);
+                        mpo->setRestoreTraceAfterTruncation(patches);
+                    }
+                    const Index target = reversed ? 1 : 2, control = reversed ? 2 : 1;
+                    sim.ApplyGate(swap, target, control);
+                    reference.ApplyKrausOperators(std::vector<Matrix>{swapMatrix}, target, control);
+                    Close(sim.getUnnormalizedDensityMatrix(), reference.getUnnormalizedDensityMatrix(),
+                          "Compressed physical SWAP differs from the general channel path");
+                    Require(sim.getBondDimensions() == reference.getBondDimensions(),
+                            "Physical SWAP changed truncation decisions");
+                    Require((sim.getUnnormalizedDensityMatrix() - DenseApply(original, swapMatrix, target, control))
+                                    .norm() > 1E-6,
+                            "Physical SWAP fixture did not exercise truncation");
+                    for (auto *mpo : {&sim, &reference})
+                        mpo->ApplyGate(Gates::CNOTGate<>(), 4, 3);
+                    Close(sim.getUnnormalizedDensityMatrix(), reference.getUnnormalizedDensityMatrix(),
+                          "Physical SWAP damaged subsequent canonical updates");
+                }
+    }
+
+    Matrix perturbed = swapMatrix;
+    perturbed(0, 1) = {1E-5, -2E-5};
+    for (const Matrix &op : {Matrix(.4 * swapMatrix), Matrix(Gates::iSwapGate<>().getRawOperatorMatrix()), perturbed})
+    {
+        Implementation sim = prepared;
+        const Matrix expected = DenseApply(sim.getUnnormalizedDensityMatrix(), op, 2, 1);
+        sim.ApplyOperator(Gates::TwoQubitsGate<>(op), 2, 1);
+        Close(sim.getUnnormalizedDensityMatrix(), expected, "SWAP-like operator lost its coefficients");
+    }
+
+    Implementation normalized = prepared;
+    normalized.ApplyOperator(Gates::SingleQubitGate<>(.4 * Matrix::Identity(2, 2)), 0);
+    Matrix expected = DenseApply(normalized.getUnnormalizedDensityMatrix(), swapMatrix, 1, 2);
+    expected /= expected.trace();
+    normalized.ApplyOperatorAndNormalize(Gates::AppliedGate<>(swapMatrix, 1, 2));
+    Close(normalized.getUnnormalizedDensityMatrix(), expected, "Normalized physical SWAP changed the state");
+
+    Implementation cached(3);
+    cached.setToBasisState(size_t{1});
+    Require(cached.MeasureNoCollapse().at(0), "Physical SWAP sampling fixture is incorrect");
+    cached.ApplyGate(swap, 1, 0);
+    const auto sample = cached.MeasureNoCollapse();
+    Require(!sample.at(0) && sample.at(1) && !sample.at(2), "Physical SWAP retained stale sampling data");
+}
+
 inline bool Run()
 {
     std::cout << "\nMPO regression tests (sampling seeds 0x4D504F01, 0x4D504F02)" << std::endl;
@@ -828,7 +940,8 @@ inline bool Run()
         {"normalization and no-op trimming", NormalizationAndNoOpTrim},
         {"basis probability normalization", BasisProbabilityNormalization},
         {"sparse and dense fidelity mappings", FidelityMappings},
-        {"complex strided slice contractions", ComplexSliceContractions}};
+        {"complex strided slice contractions", ComplexSliceContractions},
+        {"physical SWAP evolution and compression", PhysicalSwaps}};
     bool passed = true;
     for (const auto &test : tests)
     {
