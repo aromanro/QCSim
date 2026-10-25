@@ -22,6 +22,7 @@
 #include "DensityMatrix.h"
 #include "MPOSimulator.h"
 #include "MPOSimulatorRegressionTests.h"
+#include "ProductSwapRegressionTests.h"
 #include "QubitRegister.h"
 #include "TensorNetworkRegressionTests.h"
 
@@ -4138,18 +4139,17 @@ bool MPOSimulatorTests()
     mpoNextSamplingSeed = seed;
     std::cout << "Circuit seed (32 bits): " << circuitSeed << "; starting sampling seed (64 bits): " << seed
               << " (override with QCSIM_MPO_TEST_SEED)" << std::endl;
-    return MPOTestSeedParsing() && ObservableAndSummaryRegressionTestMPO() && QC::MPORegression::Run() &&
-           ValidationAndStateCompatibilityTestMPO() && InitialQubitsMapTestMPO() &&
+    return QC::ProductSwapRegression::Run(true) && MPOTestSeedParsing() && ObservableAndSummaryRegressionTestMPO() &&
+           QC::MPORegression::Run() && ValidationAndStateCompatibilityTestMPO() && InitialQubitsMapTestMPO() &&
            MixtureValidationAndScalingTestMPO() && WideBasisInitializationTestMPO() &&
            KrausBondLimitAndLocalityTestMPO() && CollapseNormalizationAndAtomicFailureTestMPO() &&
            OneAndTwoQubitGatesTestMPO() && NonAdjacentGatesTestMPO() && NumericalRankStabilityTestMPO() &&
            MeetingPositionCallbackTestMPO() && SwapRelabelTestMPO() && OptimalMeetingPositionTestMPO() &&
-           BondDimensionCallbackTestMPO() &&
-           TraceAndProbabilitiesTestMPO() && MixtureOfBasisStatesTestMPO() && MixtureEvolutionTestMPO() &&
-           KrausOperatorsTestMPO() && TwoQubitKrausOperatorsTestMPO() && ApplyOperatorAndNormalizeTestMPO() &&
-           CompressionLosslessTestMPO() && CompressionTruncationTestMPO() && TruncationModeTestMPO() &&
-           CloneTestMPO() && StateSaveRestoreTestMPO() && MeasurementsTestMPO() && TrimTestMPO() &&
-           UnitaryCircuitVsDensityMatrixMPO() && SingleQubitKrausVsDensityMatrixMPO() &&
+           BondDimensionCallbackTestMPO() && TraceAndProbabilitiesTestMPO() && MixtureOfBasisStatesTestMPO() &&
+           MixtureEvolutionTestMPO() && KrausOperatorsTestMPO() && TwoQubitKrausOperatorsTestMPO() &&
+           ApplyOperatorAndNormalizeTestMPO() && CompressionLosslessTestMPO() && CompressionTruncationTestMPO() &&
+           TruncationModeTestMPO() && CloneTestMPO() && StateSaveRestoreTestMPO() && MeasurementsTestMPO() &&
+           TrimTestMPO() && UnitaryCircuitVsDensityMatrixMPO() && SingleQubitKrausVsDensityMatrixMPO() &&
            NoiseChannelsVsDensityMatrixMPO() && TwoQubitKrausVsDensityMatrixMPO() &&
            MixtureEvolutionVsDensityMatrixMPO() && PauliExpectationVsDensityMatrixMPO() && InvariantsTestMPO() &&
            DecoratorVsImplTestMPO() && MeasurementVsDensityMatrixAndThrowsTestMPO() && SamplingNoCollapseTestMPO() &&

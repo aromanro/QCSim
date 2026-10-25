@@ -6,6 +6,7 @@
 #include "Tests.h"
 
 #include "MPSSimulator.h"
+#include "ProductSwapRegressionTests.h"
 #include "QubitRegister.h"
 #include "TensorNetworkRegressionTests.h"
 
@@ -2021,9 +2022,9 @@ bool MPSSimulatorTests()
     }
     */
 
-    return ObservableAndSummaryRegressionTestMPS() && MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() &&
-           WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() &&
-           checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() &&
-           ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS() &&
-           LongChainSamplingAndValidationTestMPS();
+    return QC::ProductSwapRegression::Run(false) && ObservableAndSummaryRegressionTestMPS() &&
+           MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() && WideBasisInitializationTestMPS() &&
+           StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() &&
+           TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() &&
+           MultithreadingSettingTestMPS() && LongChainSamplingAndValidationTestMPS();
 }

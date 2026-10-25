@@ -670,7 +670,8 @@ class MPSSimulatorBase : public MPSSimulatorInterface
     const Operators::OneProjection<MatrixClass> oneProjection;
 };
 
-template <> MPSSimulatorBase::GammaType MPSSimulatorBase::GetContractedTensor<1>() const
+// This explicit specialization is defined in a header shared by multiple translation units.
+template <> inline MPSSimulatorBase::GammaType MPSSimulatorBase::GetContractedTensor<1>() const
 {
     return gammas[0];
 }

@@ -356,5 +356,8 @@
     <ClInclude Include="QCSim\BondDimensionSummary.h">
       <Filter>Header Files\Simulators</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\ProductSwapRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

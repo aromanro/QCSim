@@ -328,6 +328,8 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         if (canonicalFormValid)
             InvalidateCanonicalForm(0, 0);
         PrepareBond(first);
+        if (TrySwapProductSites(first, false))
+            return;
         const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(first);
         DecomposeAndSetGammas(ReshapeSwappedTheta(theta), first, first + 1, false, false);
     }
@@ -796,6 +798,8 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         MatrixClass thetaMatrix;
         if (IsExactSwapMatrix(gate))
         {
+            if (TrySwapProductSites(qubit1, canonicalWeights))
+                return;
             // SWAP exchanges both ket and bra legs, independently of argument order.
             // Keep the usual SVD/compression path, but skip the gate contractions.
             thetaMatrix = ReshapeSwappedTheta(ContractTwoQubits(qubit1));
@@ -808,6 +812,53 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         }
 
         ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
+    }
+
+    // Called with the same prepared environments as DecomposeAndSetGammas.
+    // For L = middle = R = 1, the swapped matrix is b * a^T. Its right factor
+    // is a / ||a|| and its left factor is b * ||a||: preserve the operator's
+    // scale, including mixed/unnormalized states whose only singular value is not one.
+    bool TrySwapProductSites(IndexType first, bool canonicalWeights)
+    {
+        auto &left = gammas[first];
+        auto &right = gammas[first + 1];
+        if (left.dimension(0) != 1 || left.dimension(3) != 1 || right.dimension(0) != 1 || right.dimension(3) != 1 ||
+            lambdas[first].size() != 1)
+            return false;
+
+        const Eigen::Map<const Eigen::Vector4cd> a(left.data()), b(right.data());
+        const double aNorm = a.norm(), bNorm = b.norm();
+        const double leftWeight = canonicalWeights && first != 0 ? std::abs(lambdas[first - 1][0]) : 1.;
+        const double singularValue = leftWeight * aNorm * bNorm;
+        if (!(aNorm > 0.) || !(singularValue > 0.) || !std::isfinite(singularValue))
+            return false;
+
+        Eigen::Vector4cd newLeft = b * aNorm;
+        const Eigen::Vector4cd newRight = a / aNorm;
+        if (!newLeft.allFinite() || !newRight.allFinite())
+            return false;
+        int64_t removed = 0;
+        RescaleIfOutOfRange(newLeft, removed);
+        const int valuesExponent = OutOfRangeExponent(singularValue);
+        const double newLambda = singularValue * std::ldexp(1., -valuesExponent);
+        if (!newLeft.allFinite() || !std::isfinite(newLambda))
+            return false;
+
+        InvalidateSamplingCache();
+        std::swap(left, right);
+        if (aNorm != 1. || removed != 0)
+            Eigen::Map<Eigen::Vector4cd>(left.data()) = newLeft;
+        if (aNorm != 1.)
+            Eigen::Map<Eigen::Vector4cd>(right.data()) = newRight;
+        lambdas[first][0] = newLambda;
+        scaleExponent += removed;
+        // No dimension changes or user truncation: no summary update or patches.
+        if (!canonicalWeights)
+        {
+            canonicalFormValid = false;
+            centerFirst = centerLast = first;
+        }
+        return true;
     }
 
     void ApplyPostTruncationPatches(bool truncated)

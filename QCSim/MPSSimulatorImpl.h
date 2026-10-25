@@ -570,11 +570,49 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         }
 
         const bool isSwapGate = gate.isSwapGate();
+        if (!dontApplyGate && isSwapGate && TrySwapProductSites(qubit1))
+            return;
 
         // the size is (2 * left bond dim) x (2 * right bond dim)
         const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
 
         DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
+    }
+
+    // For L = middle = R = 1, SWAP turns a * b^T into b * a^T. Split that
+    // rank-one matrix directly, including the normalization done by the SVD path.
+    // The middle lambda is already absorbed in a; it need not equal one.
+    bool TrySwapProductSites(IndexType first)
+    {
+        auto &left = gammas[first];
+        auto &right = gammas[first + 1];
+        if (left.dimension(0) != 1 || left.dimension(2) != 1 || right.dimension(0) != 1 || right.dimension(2) != 1 ||
+            lambdas[first].size() != 1)
+            return false;
+
+        const Eigen::Map<const Eigen::Vector2cd> a(left.data()), b(right.data());
+        const double aNorm = a.norm(), bNorm = b.norm();
+        const double leftWeight = first == 0 ? 1. : std::abs(lambdas[first - 1][0]);
+        const double singularValue = leftWeight * aNorm * bNorm;
+        // Retain the usual decomposition/error handling for zero or extreme data.
+        const double squaredValue = singularValue * singularValue;
+        if (!(aNorm > 0.) || !std::isnormal(squaredValue))
+            return false;
+
+        const double leftScale = aNorm / singularValue, rightScale = 1. / aNorm;
+        const Eigen::Vector2cd newLeft = b * leftScale, newRight = a * rightScale;
+        if (!newLeft.allFinite() || !newRight.allFinite())
+            return false;
+
+        // All potentially failing work precedes the commit. Tensor moves exchange
+        // storage, and the existing bond vector and dimension summary stay size one.
+        std::swap(left, right);
+        if (leftScale != 1.)
+            Eigen::Map<Eigen::Vector2cd>(left.data()) = newLeft;
+        if (rightScale != 1.)
+            Eigen::Map<Eigen::Vector2cd>(right.data()) = newRight;
+        lambdas[first][0] = 1.;
+        return true;
     }
 
     // SVD the (already built) theta matrix and write back the two new B tensors and the lambda
