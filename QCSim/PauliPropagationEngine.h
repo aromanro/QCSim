@@ -432,7 +432,7 @@ void ApplyLocalKernel(const Operation &op, std::vector<T> &terms, size_t begin, 
         };
         for (auto j = first + 1; j < last; ++j)
         {
-            if constexpr (std::is_same_v<T, Term<0>> || std::is_same_v<T, Term<4>>)
+            if constexpr (std::is_same_v<T, Term<0>> || std::is_same_v<T, Term<4>> || std::is_same_v<T, Term<8>>)
             {
                 if (append)
                 {
@@ -636,6 +636,9 @@ template <class T> struct Workspace
     std::vector<T> terms;
     std::vector<std::vector<T>> extra;
     std::vector<size_t> hashSlots;
+    // Cumulative scratch diagnostic: lets regressions detect repeated growth
+    // after logical shrinking without timing-dependent assertions.
+    size_t dedupRehashCount = 0;
 };
 
 struct Settings
@@ -673,14 +676,68 @@ template <class T> void Trim(std::vector<T> &terms, const Settings &s)
     terms.resize(write);
 }
 
+template <class T> size_t InitialDedupSlots(const std::vector<T> &terms, bool retainedCapacity = false)
+{
+    if (terms.size() < 512)
+        return 64;
+    // Sampling repeated hashes estimates the number of distinct labels without
+    // reserving for every input (which can be almost entirely duplicates).
+    // This is only a capacity hint; collisions and biased samples cannot affect
+    // correctness because the table still grows at its usual load factor.
+    constexpr size_t sampleCount = 64;
+    std::array<size_t, sampleCount> hashes;
+    size_t collisions = 0;
+    for (size_t i = 0; i < sampleCount; ++i)
+    {
+        const size_t index = static_cast<size_t>(Mix(i + UINT64_C(0x9e3779b97f4a7c15))) % terms.size();
+        hashes[i] = Hash(terms[index]);
+        for (size_t previous = 0; previous < i; ++previous)
+            collisions += hashes[previous] == hashes[i];
+    }
+    const size_t estimate = !collisions || (retainedCapacity && collisions <= 1)
+                                ? terms.size()
+                                : (sampleCount * (sampleCount - 1) / 2) / collisions;
+    const size_t bounded = std::min<size_t>(32768, std::min(terms.size(), std::max<size_t>(32, estimate)));
+    size_t slots = 64;
+    while (slots / 2 < bounded)
+        slots *= 2;
+    return slots;
+}
+
 template <class T> void Deduplicate(Workspace<T> &ws, const Settings &s)
 {
     auto &terms = ws.terms;
     auto &slots = ws.hashSlots;
     constexpr size_t empty = std::numeric_limits<size_t>::max();
     if (slots.empty())
-        slots.resize(64);
-    std::fill(slots.begin(), slots.end(), empty);
+        slots.assign(InitialDedupSlots(terms), empty);
+    else
+    {
+        // Keep physical capacity for a later large query, but avoid clearing
+        // its old peak on every small query. The hot insert loop below stays
+        // unchanged: it needs no per-term hash cache or occupied-slot list.
+        if (terms.size() < slots.size() / 8)
+        {
+            size_t logical = 64;
+            while (logical / 2 < terms.size())
+                logical *= 2;
+            slots.resize(std::min(slots.size(), logical));
+        }
+        else if (slots.size() < 1024 && terms.size() / slots.size() > 8)
+            slots.resize(std::max(slots.size(), InitialDedupSlots(terms, slots.capacity() > slots.size())));
+        else if (slots.capacity() > slots.size() && terms.size() > slots.size() / 2)
+        {
+            // A preceding small frontier may have shrunk only the logical
+            // table. Jump back toward the sampled requirement using retained
+            // storage, rather than rehashing through every intermediate size.
+            // Steady duplicate tables (size == capacity) do not pay this scan.
+            size_t logical = InitialDedupSlots(terms, true);
+            while (logical > slots.capacity())
+                logical /= 2;
+            slots.resize(std::max(slots.size(), logical));
+        }
+        std::fill(slots.begin(), slots.end(), empty);
+    }
     size_t write = 0;
     for (size_t read = 0; read < terms.size(); ++read)
     {
@@ -697,6 +754,7 @@ template <class T> void Deduplicate(Workspace<T> &ws, const Settings &s)
                     h = (h + 1) & (slots.size() - 1);
                 slots[h] = j;
             }
+            ++ws.dedupRehashCount;
         }
         size_t h = Hash(t) & (slots.size() - 1);
         while (slots[h] != empty && !(terms[slots[h]].X == t.X && terms[slots[h]].Z == t.Z))
@@ -842,17 +900,37 @@ template <class T> void ExecuteLocal(std::vector<T> &terms, const Operation &op,
     size_t total = size;
     if (table.maxOutputs > 1 && size > (terms.max_size() - size) / (table.maxOutputs - 1))
         throw std::length_error("Pauli expansion exceeds vector capacity");
-    for (size_t job = 0; job < chunks; ++job)
+    const auto countBranches = [&](size_t begin, size_t end) {
+        return table.qubits == 1   ? LocalBranchCount<1>(terms, op, begin, end)
+               : table.qubits == 2 ? LocalBranchCount<2>(terms, op, begin, end)
+                                   : LocalBranchCount<3>(terms, op, begin, end);
+    };
+    if (parts > 1 && size >= 65536)
     {
-        if (parts > 1)
-            offsets[job] = total;
-        const size_t begin = job * grain;
-        const size_t end = std::min(size, (job + 1) * grain);
-        total += table.qubits == 1   ? LocalBranchCount<1>(terms, op, begin, end)
-                 : table.qubits == 2 ? LocalBranchCount<2>(terms, op, begin, end)
-                                     : LocalBranchCount<3>(terms, op, begin, end);
+        Chunks(
+            size, parts, s.pool,
+            [&](size_t job, size_t begin, size_t end) { offsets[job] = countBranches(begin, end); }, grain);
+        // Counts use worker-independent chunk indices. The prefix sum fixes
+        // exactly the same final branch ranges as the sequential count pass.
+        for (auto &offset : offsets)
+        {
+            const size_t count = offset;
+            offset = total;
+            total += count;
+        }
     }
-    if constexpr (std::is_same_v<T, Term<0>> || std::is_same_v<T, Term<4>>)
+    else
+    {
+        for (size_t job = 0; job < chunks; ++job)
+        {
+            if (parts > 1)
+                offsets[job] = total;
+            const size_t begin = job * grain;
+            const size_t end = std::min(size, (job + 1) * grain);
+            total += countBranches(begin, end);
+        }
+    }
+    if constexpr (std::is_same_v<T, Term<0>> || std::is_same_v<T, Term<4>> || std::is_same_v<T, Term<8>>)
     {
         if (parts == 1)
         {
@@ -873,19 +951,363 @@ template <class T> void ExecuteLocal(std::vector<T> &terms, const Operation &op,
             grain);
 }
 
-template <class T> double Execute(Workspace<T> &ws, const std::vector<Operation> &operations, const Settings &s)
+template <class T> bool RotationBranches(const Operation &op, const T &term)
+{
+    if (term.Coefficient == 0. || op.sine == 0. || op.cosine == 0. || term.Coefficient * op.sine == 0.)
+        return false;
+    const size_t word = static_cast<size_t>(op.q0) / 64;
+    const uint64_t bit = uint64_t(1) << (op.q0 % 64);
+    const bool x = (term.X[word] & bit) != 0, z = (term.Z[word] & bit) != 0;
+    return op.type == OperationType::RX ? z : op.type == OperationType::RZ ? x : x != z;
+}
+
+// Compose the adjoint action on the four local Pauli labels. Intermediate
+// coefficients are merged on this one qubit before the large frontier is
+// traversed. Only exact scalar queries use this: public expansions and cutoff
+// paths retain their original per-gate representation and checkpoint behavior.
+inline std::shared_ptr<const LocalTransfer> CompileScalarBlock(const std::vector<Operation> &operations, size_t low,
+                                                               size_t high)
+{
+    auto table = std::make_shared<LocalTransfer>(1);
+    std::vector<Term<1>> terms, branches;
+    terms.reserve(4);
+    branches.reserve(4);
+    for (unsigned input = 0; input < 4; ++input)
+    {
+        terms.clear();
+        terms.emplace_back();
+        terms.back().X[0] = input & 1;
+        terms.back().Z[0] = (input >> 1) & 1;
+        std::array<double, 4> coefficients{};
+        for (size_t next = high + 1; next > low;)
+        {
+            auto operation = operations[--next];
+            operation.q0 = 0;
+            branches.clear();
+            Apply(operation, terms, 0, terms.size(), branches, 1);
+            coefficients.fill(0.);
+            for (const auto &term : terms)
+                coefficients[unsigned(term.X[0] | (term.Z[0] << 1))] += term.Coefficient;
+            for (const auto &term : branches)
+                coefficients[unsigned(term.X[0] | (term.Z[0] << 1))] += term.Coefficient;
+            terms.clear();
+            for (unsigned output = 0; output < 4; ++output)
+                if (coefficients[output] != 0.)
+                {
+                    terms.emplace_back();
+                    terms.back().X[0] = output & 1;
+                    terms.back().Z[0] = (output >> 1) & 1;
+                    terms.back().Coefficient = coefficients[output];
+                }
+        }
+        // A block is nonempty, so the last gate populated all four values.
+        table->Column(input, coefficients);
+    }
+    return table;
+}
+
+// A conservative cone is computed once per query, rather than rescanning the
+// frontier after each gate. Include zero-coefficient labels: custom operators
+// may inspect or revive them. An empty vector means every gate is needed.
+template <class T>
+std::vector<unsigned char> BackwardCone(const std::vector<T> &terms, const std::vector<Operation> &operations,
+                                        size_t qubits)
+{
+    if (terms.empty() || operations.empty())
+        return {};
+    auto support = terms.front().X;
+    std::fill(support.begin(), support.end(), 0);
+    size_t occupied = 0;
+    for (const auto &term : terms)
+    {
+        for (size_t w = 0; w < support.size(); ++w)
+        {
+            const uint64_t added = (term.X[w] | term.Z[w]) & ~support[w];
+            occupied += Popcount(added);
+            support[w] |= added;
+        }
+        if (occupied == qubits)
+            return {};
+    }
+    std::vector<unsigned char> needed;
+    for (size_t next = operations.size(); next;)
+    {
+        const size_t index = --next;
+        const auto &op = operations[index];
+        // A custom action has no declared support contract. Nothing before it
+        // can be excluded from the cone, even if its nominal qubits are local.
+        if (op.Custom())
+            break;
+        bool intersects = op.type == OperationType::PROJ;
+        // Public local tables can describe nonunital actions. Only skip their
+        // identity input when the table promises the exact identity action.
+        if (IsPauliLocalGate(op.type) && !(op.Transfer().unchanged & 1))
+            intersects = true;
+        const int arity = PauliOperationArity(op.type);
+        for (int q = 0; q < arity; ++q)
+        {
+            const size_t bit = static_cast<size_t>(op.Qubit(q));
+            intersects = intersects || ((support[bit / 64] >> (bit % 64)) & 1);
+        }
+        if (!intersects)
+        {
+            if (needed.empty())
+                needed.assign(operations.size(), 1);
+            needed[index] = 0;
+            continue;
+        }
+        for (int q = 0; q < arity; ++q)
+        {
+            const size_t bit = static_cast<size_t>(op.Qubit(q));
+            const uint64_t mask = uint64_t(1) << (bit % 64);
+            if (!(support[bit / 64] & mask))
+            {
+                support[bit / 64] |= mask;
+                ++occupied;
+            }
+        }
+        if (occupied == qubits)
+            break;
+    }
+    return needed;
+}
+
+enum class CombinationSafety : unsigned char
+{
+    Unchecked,
+    Allowed,
+    Forbidden
+};
+
+inline bool CanCombine(const std::vector<Operation> &operations, CombinationSafety &safety)
+{
+    if (safety == CombinationSafety::Unchecked)
+    {
+        // Contraction and fusion can cancel finite branches before a later
+        // nonfinite rotation. Inspect once, only when combining can pay.
+        const bool finite = std::all_of(operations.begin(), operations.end(), [](const Operation &op) {
+            return !IsPauliRotation(op.type) || (std::isfinite(op.cosine) && std::isfinite(op.sine));
+        });
+        safety = finite ? CombinationSafety::Allowed : CombinationSafety::Forbidden;
+    }
+    return safety == CombinationSafety::Allowed;
+}
+
+// Once no earlier gate touches these qubits, evaluate their factors against
+// |0>. This is for exact scalar queries only: a returned operator expansion or
+// coefficient/weight approximation must retain its original representation.
+template <class T, class Mask>
+void ContractFinished(Workspace<T> &ws, const Mask &mask, const Settings &s, const std::vector<Operation> &operations,
+                      CombinationSafety &safety)
 {
     auto &terms = ws.terms;
+    size_t write = 0;
+    // Bound any merged sum, with headroom for rounding. Large finite
+    // coefficients must stay separate until earlier rotations scale them.
+    const double coefficientLimit =
+        (std::numeric_limits<double>::max() / 2.) / static_cast<double>(std::max<size_t>(1, terms.size()));
+    bool safeCoefficients = true;
+    for (size_t read = 0; read < terms.size(); ++read)
+    {
+        auto &term = terms[read];
+        bool zero = false;
+        for (size_t w = 0; w < mask.size(); ++w)
+            zero = zero || bool(term.X[w] & mask[w]);
+        if (zero)
+            continue;
+        safeCoefficients = safeCoefficients && std::abs(term.Coefficient) <= coefficientLimit;
+        if (read != write)
+            terms[write] = std::move(term);
+        ++write;
+    }
+    terms.resize(write);
+    // Keep finished Z labels too when combining is unsafe: removing them can
+    // make a later scheduled deduplication merge otherwise distinct branches.
+    if (!safeCoefficients || (terms.size() > 1 && !CanCombine(operations, safety)))
+        return;
+    bool changedLabels = false;
+    for (auto &term : terms)
+        for (size_t w = 0; w < mask.size(); ++w)
+        {
+            changedLabels = changedLabels || bool(term.Z[w] & mask[w]);
+            term.Z[w] &= ~mask[w];
+        }
+    if (changedLabels && terms.size() > 1)
+        Deduplicate(ws, s);
+}
+
+template <class T> double SumExpectations(const std::vector<T> &terms, const Settings &s)
+{
+    const size_t parts = Parts(terms.size(), s.sumThreshold, s.sumBatch, s.pool);
+    if (parts == 1)
+    {
+        double result = 0.;
+        for (const auto &t : terms)
+            result += Expectation(t);
+        return result;
+    }
+    std::vector<double> sums(parts);
+    Chunks(terms.size(), parts, s.pool, [&](size_t job, size_t begin, size_t end) {
+        double sum = 0.;
+        for (size_t i = begin; i < end; ++i)
+            sum += Expectation(terms[i]);
+        sums[job] = sum;
+    });
+    double result = 0.;
+    for (double sum : sums)
+        result += sum;
+    return result;
+}
+
+template <class T>
+double Execute(Workspace<T> &ws, const std::vector<Operation> &operations, const Settings &s,
+               bool preserveExpansion = true)
+{
+    auto &terms = ws.terms;
+    if (terms.empty())
+        return 0.;
+    if (operations.empty())
+        return SumExpectations(terms, s);
+    const bool mayContract = !preserveExpansion && s.coefficient == 0. && s.weight >= s.qubits;
+    constexpr size_t contractionFrontierThreshold = 64;
+    bool attemptedContract = false, contract = false;
+    CombinationSafety combinationSafety = CombinationSafety::Unchecked;
+    std::vector<size_t> firstTouch;
+    std::decay_t<decltype(terms.front().X)> finished{};
+    const auto needed = BackwardCone(terms, operations, s.qubits);
+    const auto finish = [&](size_t low, size_t high) {
+        if (!mayContract)
+            return;
+        if (!attemptedContract)
+        {
+            // Planning cannot pay for a tiny nonbranching query. Wait until
+            // the frontier grows, while still bounding independent branching.
+            if (terms.size() < contractionFrontierThreshold)
+                return;
+            attemptedContract = true;
+            if (std::any_of(operations.begin(), operations.end(),
+                            [](const Operation &op) { return bool(op.Custom()); }))
+                return;
+            contract = true;
+            firstTouch.assign(s.qubits, operations.size());
+            for (size_t i = 0; i < operations.size(); ++i)
+                for (int q = 0; q < PauliOperationArity(operations[i].type); ++q)
+                {
+                    const size_t bit = static_cast<size_t>(operations[i].Qubit(q));
+                    if (firstTouch[bit] == operations.size())
+                        firstTouch[bit] = i;
+                }
+            finished = terms.front().X;
+            std::fill(finished.begin(), finished.end(), 0);
+            bool any = false;
+            // Initialization may happen after many groups. Include every bit
+            // already finished, as well as bits the circuit never touches.
+            for (size_t q = 0; q < s.qubits; ++q)
+                if (firstTouch[q] >= low)
+                {
+                    finished[q / 64] |= uint64_t(1) << (q % 64);
+                    any = true;
+                }
+            if (any)
+                ContractFinished(ws, finished, s, operations, combinationSafety);
+            return;
+        }
+        if (!contract)
+            return;
+        std::fill(finished.begin(), finished.end(), 0);
+        bool any = false;
+        for (size_t index = low; index <= high; ++index)
+        {
+            if (!needed.empty() && !needed[index])
+                continue;
+            for (int q = 0; q < PauliOperationArity(operations[index].type); ++q)
+            {
+                const size_t bit = static_cast<size_t>(operations[index].Qubit(q));
+                if (firstTouch[bit] == index)
+                {
+                    finished[bit / 64] |= uint64_t(1) << (bit % 64);
+                    any = true;
+                }
+            }
+        }
+        if (any)
+            ContractFinished(ws, finished, s, operations, combinationSafety);
+    };
+    if (terms.size() >= contractionFrontierThreshold)
+        finish(operations.size(), operations.size());
     size_t firstCustom = operations.size();
     bool checkedCustom = false;
     for (size_t next = operations.size(); next && !terms.empty();)
     {
         const size_t high = next - 1;
+        // Compile same-qubit scalar blocks between the original checkpoints.
+        // Two or more branching rotations justify one table construction and
+        // one frontier traversal; tiny, expansion, approximation and custom
+        // queries keep the original per-gate path.
+        if (!preserveExpansion && contract && terms.size() >= 16384 && !operations[high].Custom() &&
+            !operations[high].Clifford() && IsPauliRotation(operations[high].type) &&
+            CanCombine(operations, combinationSafety))
+        {
+            const int qubit = operations[high].q0;
+            bool branches = false;
+            for (size_t sample = 0; sample < 32 && !branches; ++sample)
+                branches = RotationBranches(operations[high], terms[sample * (terms.size() / 32)]);
+            if (branches)
+            {
+                size_t cursor = next, blockLow = high;
+                unsigned rotations = 0;
+                while (cursor && high - (cursor - 1) < 32)
+                {
+                    const size_t index = cursor - 1;
+                    const auto &candidate = operations[index];
+                    if (candidate.Custom() || candidate.q0 != qubit || PauliOperationArity(candidate.type) != 1 ||
+                        IsPauliLocalGate(candidate.type) || (!candidate.Clifford() && !IsPauliRotation(candidate.type)))
+                        break;
+                    rotations += !candidate.Clifford();
+                    blockLow = index;
+                    cursor = index;
+                    if (s.Dedup(index) || s.Trim(index) || firstTouch[static_cast<size_t>(qubit)] == index)
+                        break;
+                }
+                // Nonfinite coefficients must follow the original arithmetic
+                // and zero/NaN removal order: composing first can hide an
+                // intermediate Inf-Inf that the unfused path would trim.
+                if (rotations >= 2 && std::all_of(terms.begin(), terms.end(),
+                                                  [](const T &term) { return std::isfinite(term.Coefficient); }))
+                {
+                    const auto table = CompileScalarBlock(operations, blockLow, high);
+                    const auto fused = Operation::Local(OperationType::U, qubit, 0, 0, table);
+                    ExecuteLocal(terms, fused, s);
+                    if (s.Dedup(blockLow))
+                        Deduplicate(ws, s);
+                    else if (s.Trim(blockLow))
+                        Trim(terms, s);
+                    finish(blockLow, high);
+                    next = blockLow;
+                    continue;
+                }
+            }
+        }
         size_t low = high;
         if (operations[high].Clifford())
             while (low && !s.Dedup(low) && !s.Trim(low) && operations[low - 1].Clifford())
                 --low;
         const auto &op = operations[high];
+        bool anyNeeded = needed.empty();
+        if (!anyNeeded)
+            for (size_t index = low; index <= high; ++index)
+                anyNeeded = anyNeeded || bool(needed[index]);
+        if (!anyNeeded)
+        {
+            // Keep the original checkpoint indices even when their gates do
+            // nothing to the observable. Approximate runs depend on them.
+            if (s.Dedup(low))
+                Deduplicate(ws, s);
+            else if (s.Trim(low))
+                Trim(terms, s);
+            next = low;
+            continue;
+        }
         if (!op.Clifford() && !op.Custom() && IsPauliLocalGate(op.type))
         {
             ExecuteLocal(terms, op, s);
@@ -893,6 +1315,7 @@ template <class T> double Execute(Workspace<T> &ws, const std::vector<Operation>
                 Deduplicate(ws, s);
             else if (s.Trim(high))
                 Trim(terms, s);
+            finish(high, high);
             next = high;
             continue;
         }
@@ -912,7 +1335,11 @@ template <class T> double Execute(Workspace<T> &ws, const std::vector<Operation>
             if (!op.Clifford() && (op.Custom() || !IsPauliLocalGate(op.type)))
                 extra.reserve(end - begin);
             for (size_t pos = high + 1; pos > low;)
-                Apply(operations[--pos], terms, begin, end, extra, s.qubits);
+            {
+                --pos;
+                if (needed.empty() || needed[pos])
+                    Apply(operations[pos], terms, begin, end, extra, s.qubits);
+            }
         };
         // Keep the serial gate loop independent of parallel dispatch and
         // exception-draining machinery, including in compiler inlining decisions.
@@ -951,27 +1378,10 @@ template <class T> double Execute(Workspace<T> &ws, const std::vector<Operation>
             Deduplicate(ws, s);
         else if (s.Trim(low))
             Trim(terms, s);
+        finish(low, high);
         next = low;
     }
-    const size_t parts = Parts(terms.size(), s.sumThreshold, s.sumBatch, s.pool);
-    if (parts == 1)
-    {
-        double result = 0.;
-        for (const auto &t : terms)
-            result += Expectation(t);
-        return result;
-    }
-    std::vector<double> sums(parts);
-    Chunks(terms.size(), parts, s.pool, [&](size_t job, size_t begin, size_t end) {
-        double sum = 0.;
-        for (size_t i = begin; i < end; ++i)
-            sum += Expectation(terms[i]);
-        sums[job] = sum;
-    });
-    double result = 0.;
-    for (double sum : sums)
-        result += sum;
-    return result;
+    return SumExpectations(terms, s);
 }
 
 } // namespace PauliDetail

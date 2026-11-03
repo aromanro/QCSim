@@ -1,5 +1,8 @@
 #pragma once
+#include "PauliLightconeRegressionTests.h"
 #include "PauliNativeRegressionTests.h"
+#include "PauliRuntimeApiRegressionTests.h"
+#include "PauliRuntimeEngineRegressionTests.h"
 
 #include "PauliPropagator.h"
 #include <atomic>
@@ -279,7 +282,7 @@ inline void StatevectorChecks()
         {
             std::string observable(n, 'I');
             for (char &c : observable)
-                c = "IXYZ"[gen() % 4];
+                c = "IXYZ"[g() % 4];
             C expected = 0.;
             for (int k = 0; k < (1 << n); ++k)
             {
@@ -726,6 +729,9 @@ inline void Run()
     CustomAndConcurrent();
     ReviewRegressions();
     PauliNativeRegression::Run();
+    PauliRuntimeApiRegression::Run();
+    PauliRuntimeEngineRegression::Run();
+    PauliLightconeRegression::Run();
     std::cout << "ALL CHECKS PASSED\n";
 }
 } // namespace PauliRegression

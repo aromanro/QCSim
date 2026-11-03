@@ -1,11 +1,29 @@
 #include "Tests.h"
 
 #include "PathIntegral.h"
+#include "PathIntegralColdRegressionTests.h"
+#include "PathIntegralExpectationRegressionTests.h"
+#include "PathIntegralLightconeRegressionTests.h"
+#include "PathIntegralRngRegressionTests.h"
+#include "PathIntegralRuntimeRegressionTests.h"
 #include "QubitRegister.h"
 
 bool TestPathIntegral()
 {
     std::cout << "\nPath Integral tests" << std::endl;
+    try
+    {
+        QC::PathIntegralLightconeRegression::Run();
+        QC::PathExpectationRegression::Run();
+        QC::PathIntegralRuntimeRegression::Run();
+        QC::PathIntegralColdRegression::Run();
+        QC::PathIntegralRngRegression::Run();
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << error.what() << std::endl;
+        return false;
+    }
 
     const size_t nrQubits = 10;
     const size_t nrBasisStates = 1ULL << nrQubits;
@@ -62,7 +80,8 @@ bool TestPathIntegral()
 
         // the above went with the paths from end state towards the 'middle' and from start state to meet them in the
         // middle, for qubits probabilities must go from start to end with all of them
-        piSim.PropagateAll(circuit);
+        // (with the full register: a random circuit need not touch the last qubit)
+        piSim.PropagateAll(circuit, std::vector<bool>(nrQubits));
 
         for (size_t q = 0; q < nrQubits; ++q)
         {

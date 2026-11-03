@@ -1,11 +1,15 @@
 #pragma once
 
+#include "PathIntegralExpectation.h"
 #include "PathIntegralGate.h"
 #include "PathIntegralStorage.h"
 #include <array>
 #include <cmath>
+#include <memory>
+#include <new>
 #include <random>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifdef _MSC_VER
@@ -13,6 +17,10 @@
 #endif
 
 #include "QuantumGate.h"
+
+#define QC_PATH_INTEGRAL_COMPILED_TRANSITIONS 1
+#define QC_PATH_INTEGRAL_GROWTH_SPLIT 1
+#define QC_PATH_INTEGRAL_QUERY_CACHE 1
 
 namespace QC
 {
@@ -28,6 +36,35 @@ class PathIntegralSimulator
     {
     }
 
+    PathIntegralSimulator(const PathIntegralSimulator &other)
+        : circuit(other.circuit), circuitBack(other.circuitBack), forwardTouches(other.forwardTouches),
+          backwardTouches(other.backwardTouches), intermediateAmplitudes(other.intermediateAmplitudes),
+          savedAmplitudes(other.savedAmplitudes), compiledTables(other.compiledTables),
+          compilationAttempted(other.compilationAttempted), recordedQueryCount(other.recordedQueryCount),
+          compiledGateCacheMaxBytes(other.compiledGateCacheMaxBytes), useGrowthAwareSplit(other.useGrowthAwareSplit),
+          forwardCache(other.forwardCache), forwardCacheMaxBytes(other.forwardCacheMaxBytes),
+          doublingsLimit(other.doublingsLimit), epsilon(other.epsilon), rng(other.rng),
+          uniformZeroOne(other.uniformZeroOne)
+    {
+        // Scratch holds a prior frontier after a swap. It is disposable work
+        // storage; normal copies still preserve logical state and RNG position.
+    }
+
+    PathIntegralSimulator(PathIntegralSimulator &&) noexcept = default;
+    PathIntegralSimulator &operator=(PathIntegralSimulator &&) noexcept = default;
+
+    PathIntegralSimulator &operator=(const PathIntegralSimulator &other)
+    {
+        if (this != &other)
+        {
+            // Circuit, schedules, and caches form one coherent revision. A
+            // failed allocation while copying must not mix two revisions.
+            PathIntegralSimulator next(other);
+            *this = std::move(next);
+        }
+        return *this;
+    }
+
     void SetSeed(uint64_t theSeed)
     {
         std::seed_seq seed{uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32)};
@@ -36,7 +73,10 @@ class PathIntegralSimulator
 
     void SetTrimValue(double val)
     {
+        if (epsilon == val)
+            return;
         epsilon = val;
+        InvalidateCompiled();
     }
 
     double GetTrimValue() const
@@ -44,8 +84,62 @@ class PathIntegralSimulator
         return epsilon;
     }
 
+    // Recorded gates are immutable until SetCircuit. Cap their compiled cache
+    // independently of the state maps, especially for very long circuits.
+    void SetCompiledGateCacheMaxBytes(size_t bytes)
+    {
+        if (compiledGateCacheMaxBytes != bytes)
+        {
+            compiledGateCacheMaxBytes = bytes;
+            InvalidateCompiled();
+        }
+    }
+
+    size_t GetCompiledGateCacheMaxBytes() const
+    {
+        return compiledGateCacheMaxBytes;
+    }
+
+    size_t GetCompiledGateCount() const
+    {
+        return compiledTables ? compiledTables->forward.size() + compiledTables->backward.size() : 0;
+    }
+
+    void SetForwardCacheMaxBytes(size_t bytes)
+    {
+        if (forwardCacheMaxBytes != bytes)
+        {
+            forwardCacheMaxBytes = bytes;
+            forwardCache.reset();
+        }
+    }
+
+    size_t GetForwardCacheMaxBytes() const
+    {
+        return forwardCacheMaxBytes;
+    }
+
+    size_t GetCachedForwardEntries() const
+    {
+        return forwardCache ? forwardCache->amplitudes.size() : 0;
+    }
+
     void SetMaxDoublingsForBackwardPaths(size_t doublings)
     {
+        if (doublings == doublingsLimit)
+            return;
+        // Changing the cut after SetCircuit must retain both recorded halves.
+        // Only reconstruct on a setting change; do not store another copy of
+        // every matrix merely to support this uncommon operation.
+        if (!circuit.empty() || !circuitBack.empty())
+        {
+            auto fullCircuit = circuit;
+            fullCircuit.reserve(circuit.size() + circuitBack.size());
+            for (auto it = circuitBack.rbegin(); it != circuitBack.rend(); ++it)
+                fullCircuit.emplace_back(it->getRawOperatorMatrix().transpose(), it->getQubit1(), it->getQubit2(),
+                                         it->getQubit3());
+            PrepareCircuit(fullCircuit, doublings, false, useGrowthAwareSplit);
+        }
         doublingsLimit = doublings;
     }
 
@@ -54,9 +148,42 @@ class PathIntegralSimulator
         return doublingsLimit;
     }
 
+    // Changing the cut changes threshold checkpoints in approximate runs.
+    // Keep this heuristic explicit so the historical cut remains the default.
+    void SetUseGrowthAwareSplit(bool enabled)
+    {
+        if (enabled == useGrowthAwareSplit)
+            return;
+        if (!circuit.empty() || !circuitBack.empty())
+        {
+            auto fullCircuit = circuit;
+            fullCircuit.reserve(circuit.size() + circuitBack.size());
+            for (auto it = circuitBack.rbegin(); it != circuitBack.rend(); ++it)
+                fullCircuit.emplace_back(it->getRawOperatorMatrix().transpose(), it->getQubit1(), it->getQubit2(),
+                                         it->getQubit3());
+            PrepareCircuit(fullCircuit, doublingsLimit, false, enabled);
+        }
+        useGrowthAwareSplit = enabled;
+    }
+
+    bool GetUseGrowthAwareSplit() const
+    {
+        return useGrowthAwareSplit;
+    }
+
+    size_t GetForwardGateCount() const
+    {
+        return circuit.size();
+    }
+
     AmplitudeMap &GetAmplitudes()
     {
         return intermediateAmplitudes;
+    }
+
+    double ExpectationValue(const std::string &pauli) const
+    {
+        return Detail::PauliExpectation(intermediateAmplitudes, epsilon, pauli);
     }
 
     void SaveAmplitudes()
@@ -86,6 +213,9 @@ class PathIntegralSimulator
         scratchAmplitudes.Release();
         circuit.clear();
         circuitBack.clear();
+        forwardTouches = TouchSchedule{};
+        backwardTouches = TouchSchedule{};
+        InvalidateCompiled();
     }
 
     PathIntegralSimulator Clone() const
@@ -97,57 +227,22 @@ class PathIntegralSimulator
         theClone.savedAmplitudes = savedAmplitudes;
         theClone.circuit = circuit;
         theClone.circuitBack = circuitBack;
+        theClone.forwardTouches = forwardTouches;
+        theClone.backwardTouches = backwardTouches;
+        theClone.compiledGateCacheMaxBytes = compiledGateCacheMaxBytes;
+        theClone.compiledTables = compiledTables;
+        theClone.compilationAttempted = compilationAttempted;
+        theClone.recordedQueryCount = recordedQueryCount;
+        theClone.useGrowthAwareSplit = useGrowthAwareSplit;
+        theClone.forwardCacheMaxBytes = forwardCacheMaxBytes;
+        theClone.forwardCache = forwardCache;
 
         return theClone;
     }
 
     void SetCircuit(const std::vector<QC::Gates::AppliedGate<>> &circuit)
     {
-        intermediateAmplitudes.clear();
-        circuitBack.clear();
-
-        if (doublingsLimit > 0)
-        {
-            size_t doublings = 0;
-            for (const auto &gate : circuit)
-            {
-                if (!gate.isBranching())
-                    continue;
-
-                ++doublings;
-            }
-
-            const size_t halfDoublings = doublings / 2;
-
-            // iterate backwards
-            doublings = 0;
-            size_t gatesAdded = 0;
-            for (auto it = circuit.rbegin(); it != circuit.rend(); ++it)
-            {
-                const auto &gate = *it;
-
-                if (!gate.isBranching())
-                {
-                    circuitBack.emplace_back(gate.getRawOperatorMatrix().transpose(), gate.getQubit1(),
-                                             gate.getQubit2(), gate.getQubit3());
-                    ++gatesAdded;
-                    continue;
-                }
-
-                ++doublings;
-
-                if (doublings > doublingsLimit || doublings > halfDoublings)
-                    break;
-
-                circuitBack.emplace_back(gate.getRawOperatorMatrix().transpose(), gate.getQubit1(), gate.getQubit2(),
-                                         gate.getQubit3());
-                ++gatesAdded;
-            }
-
-            this->circuit = std::vector<QC::Gates::AppliedGate<>>(circuit.begin(), circuit.end() - gatesAdded);
-        }
-        else
-            this->circuit = circuit;
+        PrepareCircuit(circuit, doublingsLimit, true, useGrowthAwareSplit);
     }
 
     // the start state is |0>
@@ -160,23 +255,40 @@ class PathIntegralSimulator
 
     std::complex<double> Propagate(const std::vector<bool> &startState, const std::vector<bool> &endState)
     {
-        assert(startState.size() == endState.size());
+        if (startState.size() != endState.size())
+            throw std::invalid_argument("Path integral endpoints must have the same width");
 
         const FastVectorBool startBits(startState);
         const FastVectorBool endBits(endState);
+        if (std::max(forwardTouches.width, backwardTouches.width) > startState.size())
+            throw std::out_of_range("Path integral gate qubit is outside the register");
+        for (size_t word = 0; word < startBits.nWords(); ++word)
+            if ((startBits.getWords()[word] ^ endBits.getWords()[word]) &
+                ~(forwardTouches.touched[word] | backwardTouches.touched[word]))
+            {
+                // Split queries replace the map with their backward half;
+                // unsplit queries never touch it (e.g. a PropagateAll state).
+                if (!circuitBack.empty())
+                    intermediateAmplitudes.clear();
+                return 0.;
+            }
 
-        if (doublingsLimit > 0 && !circuitBack.empty())
+        // First use keeps the original stack-compiled gate path. Only repeat
+        // queries amortize allocating and retaining a circuit-wide table cache.
+        if (recordedQueryCount < 2)
+            ++recordedQueryCount;
+        if (!circuitBack.empty())
         {
             intermediateAmplitudes.clear();
 
-            PropagateBackward(endBits, std::complex<double>(1., 0.));
+            PropagateBackward(endBits, startBits);
 
-            return PropagateForward(startBits);
+            return PropagateForward(startBits, endBits);
         }
 
-        const size_t possibleQubitsChanges = CountPossibleQubitsChanges(circuit);
-
-        return Propagate(startBits, endBits, 0, possibleQubitsChanges);
+        if (const auto *compiled = Compiled())
+            return PropagateCached(startBits, endBits, 0, compiled->forward);
+        return Propagate(startBits, endBits, 0);
     }
 
     // the following methods are for the case one needs all non-zero amplitudes
@@ -202,26 +314,356 @@ class PathIntegralSimulator
     {
         assert(startState.size() > 0);
         const FastVectorBool startBits(startState);
-        intermediateAmplitudes.clear();
-
-        circuitBack.clear();
-        this->circuit = circuit;
+        PrepareCircuit(circuit, 0);
+        recordedQueryCount = 1;
 
         intermediateAmplitudes = PropagateAll(startBits);
     }
 
     void PropagateStep(const QC::Gates::AppliedGate<> &gate, AmplitudeMap &currentAmplitudes)
     {
+        PropagateStepConstrained(gate, currentAmplitudes, 0, nullptr);
+    }
+
+  private:
+    struct CompiledTables
+    {
+        std::vector<Detail::SparseGate> forward, backward;
+    };
+
+    struct ForwardCache
+    {
+        FastVectorBool start;
+        std::array<uint64_t, FastVectorBool::MaxWords> fixedEnd{};
+        AmplitudeMap amplitudes;
+    };
+
+    void InvalidateCompiled()
+    {
+        compiledTables.reset();
+        compilationAttempted = false;
+        recordedQueryCount = 0;
+        forwardCache.reset();
+    }
+
+    const CompiledTables *Compiled()
+    {
+        if (compilationAttempted)
+            return compiledTables.get();
+        if (recordedQueryCount < 2)
+            return nullptr;
+        return BuildCompiled();
+    }
+
+#if defined(_MSC_VER)
+    __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+    __attribute__((noinline))
+#endif
+    const CompiledTables *
+    BuildCompiled()
+    {
+        const size_t count = circuit.size() + circuitBack.size();
+        if (!count || count > compiledGateCacheMaxBytes / sizeof(Detail::SparseGate))
+        {
+            compilationAttempted = true;
+            return nullptr;
+        }
+        try
+        {
+            auto next = std::make_shared<CompiledTables>();
+            next->forward.reserve(circuit.size());
+            next->backward.reserve(circuitBack.size());
+            for (const auto &gate : circuit)
+                next->forward.emplace_back(gate, epsilon);
+            for (const auto &gate : circuitBack)
+                next->backward.emplace_back(gate, epsilon);
+            compiledTables = std::move(next);
+        }
+        catch (const std::bad_alloc &)
+        {
+            // Optional caching must not make an otherwise affordable query
+            // fail. Validation errors still propagate; only allocation falls
+            // back to the original per-gate path until settings change.
+            compilationAttempted = true;
+            return nullptr;
+        }
+        compilationAttempted = true;
+        return compiledTables.get();
+    }
+
+    // One byte per gate records its final local writes. A qubit repeated in a
+    // gate is represented only by its last overwrite, matching SetRow.
+    struct TouchSchedule
+    {
+        std::vector<unsigned char> finishing;
+        std::array<uint64_t, FastVectorBool::MaxWords> touched{};
+        size_t width = 0;
+    };
+
+    static std::array<size_t, 3> GateQubits(const QC::Gates::AppliedGate<> &gate)
+    {
+        return {gate.getQubit1(), gate.getQubit2(), gate.getQubit3()};
+    }
+
+    static TouchSchedule BuildTouches(const std::vector<QC::Gates::AppliedGate<>> &gates)
+    {
+        TouchSchedule result;
+        result.finishing.resize(gates.size());
+        for (size_t index = gates.size(); index;)
+        {
+            const auto &gate = gates[--index];
+            const size_t arity = gate.getQubitsNumber();
+            if (!arity || arity > 3)
+                throw std::invalid_argument("Path integral gates must act on one to three qubits");
+            const auto qubits = GateQubits(gate);
+            for (size_t local = arity; local;)
+            {
+                const size_t bit = --local, qubit = qubits[bit];
+                if (qubit >= FastVectorBool::MaxWords * 64)
+                    throw std::out_of_range("Path integral gate qubit exceeds the state capacity");
+                const uint64_t mask = uint64_t{1} << (qubit % 64);
+                if (!(result.touched[qubit / 64] & mask))
+                    result.finishing[index] |= static_cast<unsigned char>(1u << bit);
+                result.touched[qubit / 64] |= mask;
+                result.width = std::max(result.width, qubit + 1);
+            }
+        }
+        return result;
+    }
+
+    static void LimitFinishing(TouchSchedule &schedule, const std::vector<QC::Gates::AppliedGate<>> &gates,
+                               const TouchSchedule &opposite)
+    {
+        for (size_t index = 0; index < gates.size(); ++index)
+        {
+            const auto qubits = GateQubits(gates[index]);
+            for (size_t bit = 0; bit < gates[index].getQubitsNumber(); ++bit)
+                if (opposite.touched[qubits[bit] / 64] & (uint64_t{1} << (qubits[bit] % 64)))
+                    schedule.finishing[index] &= static_cast<unsigned char>(~(1u << bit));
+        }
+    }
+
+    static size_t MaskWeight(const std::array<uint64_t, FastVectorBool::MaxWords> &mask)
+    {
+        size_t result = 0;
+        for (uint64_t word : mask)
+#if defined(_MSC_VER) && defined(_M_X64) && defined(__AVX2__)
+            result += static_cast<size_t>(__popcnt64(word));
+#elif defined(__GNUC__) || defined(__clang__)
+            result += static_cast<size_t>(__builtin_popcountll(word));
+#else
+            for (; word; word &= word - 1)
+                ++result;
+#endif
+        return result;
+    }
+
+    // Estimate work rather than merely count branching gates. A varying-bit
+    // mask bounds support by active qubits, while fanout bounds correlations.
+    // Last touches are removed just as endpoint pruning removes their rows.
+    std::vector<double> EstimateWork(const std::vector<QC::Gates::AppliedGate<>> &source, bool backwards) const
+    {
+        std::array<size_t, FastVectorBool::MaxWords * 64> remaining{};
+        for (const auto &gate : source)
+        {
+            const auto qubits = GateQubits(gate);
+            for (size_t local = 0; local < gate.getQubitsNumber(); ++local)
+                ++remaining[qubits[local]];
+        }
+        std::array<uint64_t, FastVectorBool::MaxWords> varying{};
+        std::vector<double> work(source.size() + 1);
+        double fanoutLog = 0., total = 0.;
+        for (size_t step = 0; step < source.size(); ++step)
+        {
+            const size_t index = backwards ? source.size() - 1 - step : step;
+            const auto &gate = source[index];
+            const auto qubits = GateQubits(gate);
+            const Detail::SparseGate transitions =
+                backwards
+                    ? Detail::SparseGate(QC::Gates::AppliedGate<>(gate.getRawOperatorMatrix().transpose(),
+                                                                  gate.getQubit1(), gate.getQubit2(), gate.getQubit3()),
+                                         epsilon)
+                    : Detail::SparseGate(gate, epsilon);
+            bool active = transitions.maxFanout > 1;
+            for (size_t local = 0; local < transitions.arity; ++local)
+                active = active || bool(varying[qubits[local] / 64] & (uint64_t{1} << (qubits[local] % 64)));
+            if (transitions.maxFanout > 1)
+                fanoutLog += std::log2(double(transitions.maxFanout));
+            for (size_t local = 0; local < transitions.arity; ++local)
+            {
+                const size_t qubit = qubits[local];
+                const uint64_t bit = uint64_t{1} << (qubit % 64);
+                if (active)
+                    varying[qubit / 64] |= bit;
+                if (--remaining[qubit] == 0)
+                    varying[qubit / 64] &= ~bit;
+            }
+            const double supportLog = std::min(fanoutLog, double(MaskWeight(varying)));
+            total += std::exp2(std::min(60., supportLog)) * (1. + transitions.arity);
+            work[backwards ? index : index + 1] = total;
+        }
+        return work;
+    }
+
+    size_t GrowthAwareCut(const std::vector<QC::Gates::AppliedGate<>> &source, size_t splitLimit,
+                          size_t legacyCut) const
+    {
+        if (source.empty())
+            return 0;
+        const auto forwardWork = EstimateWork(source, false), backwardWork = EstimateWork(source, true);
+        size_t best = legacyCut;
+        double bestWork = forwardWork[best] + backwardWork[best];
+        size_t backwardBranches = 0;
+        for (size_t cut = source.size(); cut;)
+        {
+            --cut;
+            backwardBranches += source[cut].isBranching() ? 1 : 0;
+            if (backwardBranches > splitLimit)
+                break;
+            const double candidate = forwardWork[cut] + backwardWork[cut];
+            if (candidate < bestWork)
+            {
+                best = cut;
+                bestWork = candidate;
+            }
+        }
+        return best;
+    }
+
+    void PrepareCircuit(const std::vector<QC::Gates::AppliedGate<>> &source, size_t splitLimit,
+                        bool clearAmplitudes = true, bool growthAware = false)
+    {
+        // The transpose of a local matrix is a backwards step only when its
+        // physical targets are distinct. Preserve the supported overwrite
+        // behavior of repeated targets by evaluating such circuits forwards.
+        for (const auto &gate : source)
+        {
+            const auto qubits = GateQubits(gate);
+            const size_t arity = gate.getQubitsNumber();
+            if (!arity || arity > 3)
+                throw std::invalid_argument("Path integral gates must act on one to three qubits");
+            const auto &matrix = gate.getRawOperatorMatrix();
+            const size_t dimension = size_t{1} << arity;
+            if (matrix.rows() != dimension || matrix.cols() != dimension)
+                throw std::invalid_argument("Invalid path integral gate dimensions");
+            for (size_t bit = 0; bit < arity; ++bit)
+            {
+                if (qubits[bit] >= FastVectorBool::MaxWords * 64)
+                    throw std::out_of_range("Path integral gate qubit exceeds the state capacity");
+                for (size_t earlier = 0; earlier < bit; ++earlier)
+                    if (qubits[earlier] == qubits[bit])
+                        splitLimit = 0;
+            }
+        }
+        std::vector<QC::Gates::AppliedGate<>> nextBack;
+        size_t gatesAdded = 0;
+        if (splitLimit)
+        {
+            size_t doublings = 0;
+            for (const auto &gate : source)
+                doublings += gate.isBranching() ? 1 : 0;
+            const size_t halfDoublings = doublings / 2;
+            doublings = 0;
+            for (auto it = source.rbegin(); it != source.rend(); ++it)
+            {
+                if (it->isBranching() && (++doublings > splitLimit || doublings > halfDoublings))
+                    break;
+                ++gatesAdded;
+            }
+            if (growthAware)
+                gatesAdded = source.size() - GrowthAwareCut(source, splitLimit, source.size() - gatesAdded);
+            for (size_t index = source.size(); index > source.size() - gatesAdded;)
+            {
+                const auto &gate = source[--index];
+                nextBack.emplace_back(gate.getRawOperatorMatrix().transpose(), gate.getQubit1(), gate.getQubit2(),
+                                      gate.getQubit3());
+            }
+        }
+        std::vector<QC::Gates::AppliedGate<>> nextCircuit(source.begin(), source.end() - gatesAdded);
+        auto nextForwardTouches = BuildTouches(nextCircuit);
+        auto nextBackwardTouches = BuildTouches(nextBack);
+        LimitFinishing(nextForwardTouches, nextCircuit, nextBackwardTouches);
+        LimitFinishing(nextBackwardTouches, nextBack, nextForwardTouches);
+        // Commit only after all allocation and validation has succeeded.
+        circuit.swap(nextCircuit);
+        circuitBack.swap(nextBack);
+        forwardTouches = std::move(nextForwardTouches);
+        backwardTouches = std::move(nextBackwardTouches);
+        InvalidateCompiled();
+        if (clearAmplitudes)
+            intermediateAmplitudes.clear();
+    }
+
+    static void ConstrainRows(Detail::SparseGate &gate, unsigned mask, const FastVectorBool &endpoint)
+    {
+        unsigned value = 0;
+        for (unsigned bit = 0; bit < gate.arity; ++bit)
+            if ((mask & (1u << bit)) && endpoint.get(gate.qubits[bit]))
+                value |= 1u << bit;
+        gate.maxFanout = 0;
+        for (unsigned column = 0; column < (1u << gate.arity); ++column)
+        {
+            unsigned retained = 0;
+            for (unsigned transition = 0; transition < gate.counts[column]; ++transition)
+                if ((gate.rows[column][transition] & mask) == value)
+                {
+                    gate.rows[column][retained] = gate.rows[column][transition];
+                    gate.values[column][retained++] = gate.values[column][transition];
+                }
+            gate.counts[column] = retained;
+            gate.maxFanout = std::max(gate.maxFanout, retained);
+        }
+    }
+
+    void PropagateStepConstrained(const QC::Gates::AppliedGate<> &gate, AmplitudeMap &currentAmplitudes,
+                                  unsigned fixedRows, const FastVectorBool *endpoint)
+    {
         if (currentAmplitudes.empty())
         {
             scratchAmplitudes.ReleaseIfOversized(0, currentAmplitudes.QubitCount());
             return;
         }
+        Detail::SparseGate transitions(gate, epsilon);
         currentAmplitudes.CompactIfSparse();
-        const Detail::SparseGate transitions(gate, epsilon);
         for (unsigned i = 0; i < transitions.arity; ++i)
             if (transitions.qubits[i] >= currentAmplitudes.QubitCount())
                 throw std::out_of_range("Path integral gate qubit is outside the register");
+        // A freshly compiled table is already query-local: constrain it in
+        // place rather than copying the immutable-cache representation.
+        if (fixedRows)
+            ConstrainRows(transitions, fixedRows, *endpoint);
+        PropagateTransitions(transitions, currentAmplitudes);
+    }
+
+    void PropagateCompiled(const Detail::SparseGate &transitions, AmplitudeMap &currentAmplitudes, unsigned fixedRows,
+                           const FastVectorBool *endpoint)
+    {
+        if (currentAmplitudes.empty())
+            return;
+        currentAmplitudes.CompactIfSparse();
+        for (unsigned i = 0; i < transitions.arity; ++i)
+            if (transitions.qubits[i] >= currentAmplitudes.QubitCount())
+                throw std::out_of_range("Path integral gate qubit is outside the register");
+        if (fixedRows)
+        {
+            auto constrained = transitions;
+            ConstrainRows(constrained, fixedRows, *endpoint);
+            PropagateTransitions(constrained, currentAmplitudes);
+        }
+        else
+            PropagateTransitions(transitions, currentAmplitudes);
+    }
+
+    void PropagateTransitions(const Detail::SparseGate &transitions, AmplitudeMap &currentAmplitudes)
+    {
+        if (!transitions.maxFanout)
+        {
+            currentAmplitudes.Transform(
+                false, [](Detail::MutableStateView &, std::complex<double> &) noexcept { return false; });
+            scratchAmplitudes.ReleaseIfOversized(0, currentAmplitudes.QubitCount());
+            return;
+        }
         switch (transitions.arity)
         {
         case 1:
@@ -378,6 +820,8 @@ class PathIntegralSimulator
   public:
     double QubitProbability(size_t qubit, bool value = true) const
     {
+        if (!intermediateAmplitudes.empty() && qubit >= intermediateAmplitudes.QubitCount())
+            throw std::out_of_range("Path integral probability qubit is outside the register");
         double prob = 0.;
         for (const auto &[state, amp] : intermediateAmplitudes)
         {
@@ -507,8 +951,49 @@ class PathIntegralSimulator
     }
 
     // TODO: this can be parallelized!
-    std::complex<double> Propagate(const FastVectorBool &currentState, const FastVectorBool &endState, size_t gateIndex,
-                                   size_t possibleQubitsChanges)
+    template <unsigned Arity>
+    std::complex<double> PropagateCachedRows(const FastVectorBool &currentState, const FastVectorBool &endState,
+                                             size_t gateIndex, const std::vector<Detail::SparseGate> &gates,
+                                             unsigned fixedRows, unsigned requiredRow)
+    {
+        const auto &gate = gates[gateIndex];
+        const unsigned column = gate.Column<Arity>(currentState);
+        std::complex<double> amplitude(0., 0.);
+        for (unsigned transition = 0; transition < gate.counts[column]; ++transition)
+        {
+            const unsigned row = gate.rows[column][transition];
+            if ((row & fixedRows) != requiredRow)
+                continue;
+            auto nextState = currentState;
+            gate.SetRow<Arity>(nextState, row);
+            amplitude += gate.values[column][transition] * PropagateCached(nextState, endState, gateIndex + 1, gates);
+        }
+        return amplitude;
+    }
+
+    std::complex<double> PropagateCached(const FastVectorBool &currentState, const FastVectorBool &endState,
+                                         size_t gateIndex, const std::vector<Detail::SparseGate> &gates)
+    {
+        if (gateIndex == gates.size())
+            return currentState == endState ? 1. : 0.;
+        const auto &gate = gates[gateIndex];
+        const unsigned fixedRows = forwardTouches.finishing[gateIndex];
+        unsigned requiredRow = 0;
+        for (unsigned bit = 0; bit < gate.arity; ++bit)
+            if ((fixedRows & (1u << bit)) && endState.get(gate.qubits[bit]))
+                requiredRow |= 1u << bit;
+        switch (gate.arity)
+        {
+        case 1:
+            return PropagateCachedRows<1>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
+        case 2:
+            return PropagateCachedRows<2>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
+        default:
+            return PropagateCachedRows<3>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
+        }
+    }
+
+    std::complex<double> Propagate(const FastVectorBool &currentState, const FastVectorBool &endState, size_t gateIndex)
     {
         if (gateIndex >= circuit.size())
             return currentState == endState ? std::complex<double>(1., 0.) : std::complex<double>(0., 0.);
@@ -519,7 +1004,15 @@ class PathIntegralSimulator
 
         assert(gateQubits > 0 && gateQubits <= 3); // only up to three qubits gates are supported
 
-        possibleQubitsChanges -= gateQubits;
+        // Previously this used a global mismatch count against the sum of
+        // remaining gate arities. Only these final writes matter: after this
+        // gate, no remaining gate can repair a mismatching finished bit.
+        const unsigned fixedRows = forwardTouches.finishing[gateIndex];
+        const auto qubits = GateQubits(gate);
+        unsigned requiredRow = 0;
+        for (size_t bit = 0; bit < gateQubits; ++bit)
+            if ((fixedRows & (1u << bit)) && endState.get(qubits[bit]))
+                requiredRow |= 1u << bit;
 
         std::complex<double> amplitude(0., 0.);
 
@@ -532,17 +1025,15 @@ class PathIntegralSimulator
 
             for (Eigen::Index row = 0; row < 2; ++row)
             {
+                if ((static_cast<unsigned>(row) & fixedRows) != requiredRow)
+                    continue;
                 const std::complex<double> val = U(row, col);
                 if (std::norm(val) > epsilon)
                 {
                     auto nextState = currentState;
                     nextState.set(qubit, row == 1);
 
-                    if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
-                        continue;
-
-                    const auto localAmplitude =
-                        val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
+                    const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1);
                     amplitude += localAmplitude;
                 }
             }
@@ -557,6 +1048,8 @@ class PathIntegralSimulator
 
             for (Eigen::Index row = 0; row < 4; ++row)
             {
+                if ((static_cast<unsigned>(row) & fixedRows) != requiredRow)
+                    continue;
                 const std::complex<double> val = U(row, col);
                 if (std::norm(val) > epsilon)
                 {
@@ -564,11 +1057,7 @@ class PathIntegralSimulator
                     nextState.set(qubit1, (row & 1) == 1);
                     nextState.set(qubit2, (row & 2) == 2);
 
-                    if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
-                        continue;
-
-                    const auto localAmplitude =
-                        val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
+                    const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1);
                     amplitude += localAmplitude;
                 }
             }
@@ -585,6 +1074,8 @@ class PathIntegralSimulator
 
             for (Eigen::Index row = 0; row < 8; ++row)
             {
+                if ((static_cast<unsigned>(row) & fixedRows) != requiredRow)
+                    continue;
                 const std::complex<double> val = U(row, col);
                 if (std::norm(val) > epsilon)
                 {
@@ -593,11 +1084,7 @@ class PathIntegralSimulator
                     nextState.set(qubit2, (row & 2) == 2);
                     nextState.set(qubit3, (row & 4) == 4);
 
-                    if (CountDifferentQubits(nextState, endState) > possibleQubitsChanges)
-                        continue;
-
-                    const auto localAmplitude =
-                        val * Propagate(nextState, endState, gateIndex + 1, possibleQubitsChanges);
+                    const auto localAmplitude = val * Propagate(nextState, endState, gateIndex + 1);
                     amplitude += localAmplitude;
                 }
             }
@@ -606,75 +1093,123 @@ class PathIntegralSimulator
         return amplitude;
     }
 
-    void PropagateBackward(const FastVectorBool &endState, std::complex<double> amplitude)
+    void PropagateBackward(const FastVectorBool &endState, const FastVectorBool &startState)
     {
         intermediateAmplitudes.clear();
-        intermediateAmplitudes[endState] = amplitude;
+        intermediateAmplitudes[endState] = 1.;
 
-        for (const auto &gate : circuitBack)
-            PropagateStep(gate, intermediateAmplitudes);
+        const auto *compiled = Compiled();
+        for (size_t index = 0; index < circuitBack.size() && !intermediateAmplitudes.empty(); ++index)
+            if (compiled)
+                PropagateCompiled(compiled->backward[index], intermediateAmplitudes, backwardTouches.finishing[index],
+                                  &startState);
+            else
+                PropagateStepConstrained(circuitBack[index], intermediateAmplitudes, backwardTouches.finishing[index],
+                                         &startState);
     }
 
-    AmplitudeMap PropagateAll(const FastVectorBool &startState)
+    AmplitudeMap PropagateAll(const FastVectorBool &startState, const FastVectorBool *endState = nullptr)
     {
         AmplitudeMap currentAmplitudes;
         currentAmplitudes[startState] = std::complex<double>(1., 0.);
 
-        for (const auto &gate : circuit)
-            PropagateStep(gate, currentAmplitudes);
+        const auto *compiled = Compiled();
+        for (size_t index = 0; index < circuit.size() && !currentAmplitudes.empty(); ++index)
+            if (compiled)
+                PropagateCompiled(compiled->forward[index], currentAmplitudes,
+                                  endState ? forwardTouches.finishing[index] : 0, endState);
+            else
+                PropagateStepConstrained(circuit[index], currentAmplitudes,
+                                         endState ? forwardTouches.finishing[index] : 0, endState);
 
         return currentAmplitudes;
     }
 
-    std::complex<double> PropagateForward(const FastVectorBool &startState)
+    std::complex<double> PropagateForward(const FastVectorBool &startState, const FastVectorBool &endState)
     {
-        const auto currentAmplitudes = PropagateAll(startState);
-
-        std::complex<double> result(0., 0.);
-        for (const auto &[state, amp] : currentAmplitudes)
+        if (intermediateAmplitudes.empty())
+            return 0.;
+        std::array<uint64_t, FastVectorBool::MaxWords> fixedEnd{};
+        if (forwardCacheMaxBytes && !circuit.empty())
         {
-            auto it = intermediateAmplitudes.find(state);
-            if (it != intermediateAmplitudes.end())
+            // Only endpoint bits fixed in this half affect its pruning. The
+            // shared qubits may vary across targets without changing this map.
+            for (size_t word = 0; word < endState.nWords(); ++word)
+                fixedEnd[word] =
+                    endState.getWords()[word] & forwardTouches.touched[word] & ~backwardTouches.touched[word];
+            if (forwardCache && forwardCache->start == startState && forwardCache->fixedEnd == fixedEnd)
+                return JoinForward(forwardCache->amplitudes);
+        }
+        auto currentAmplitudes = PropagateAll(startState, &endState);
+        // Tiny one-shot maps cost less to rebuild than to retain. Bound actual
+        // retained capacities, including the hash index, rather than live size.
+        if (forwardCacheMaxBytes && !circuit.empty() && (currentAmplitudes.size() >= 64 || circuit.size() >= 64) &&
+            FitsForwardCache(currentAmplitudes))
+        {
+            std::shared_ptr<ForwardCache> next;
+            try
+            {
+                next = std::make_shared<ForwardCache>();
+            }
+            catch (const std::bad_alloc &)
+            {
+                return JoinForward(currentAmplitudes);
+            }
+            next->start = startState;
+            next->fixedEnd = fixedEnd;
+            next->amplitudes.swap(currentAmplitudes);
+            forwardCache = std::move(next);
+            return JoinForward(forwardCache->amplitudes);
+        }
+        return JoinForward(currentAmplitudes);
+    }
+
+    bool FitsForwardCache(const AmplitudeMap &map) const
+    {
+        if (forwardCacheMaxBytes < sizeof(ForwardCache))
+            return false;
+        size_t remaining = forwardCacheMaxBytes - sizeof(ForwardCache);
+        const auto consume = [&](size_t count, size_t bytes) {
+            if (count > remaining / bytes)
+                return false;
+            remaining -= count * bytes;
+            return true;
+        };
+        return consume(map.values.capacity(), sizeof(std::complex<double>)) &&
+               consume(map.keys.capacity(), sizeof(uint64_t)) && consume(map.buckets.capacity(), sizeof(size_t));
+    }
+
+    std::complex<double> JoinForward(const AmplitudeMap &currentAmplitudes) const
+    {
+        std::complex<double> result(0., 0.);
+        const auto &smaller =
+            currentAmplitudes.size() <= intermediateAmplitudes.size() ? currentAmplitudes : intermediateAmplitudes;
+        const auto &larger =
+            currentAmplitudes.size() <= intermediateAmplitudes.size() ? intermediateAmplitudes : currentAmplitudes;
+        for (const auto &[state, amp] : smaller)
+        {
+            auto it = larger.find(state);
+            if (it != larger.end())
                 result += amp * it->second;
         }
 
         return result;
     }
 
-    // TODO: this could be improved, this sums the max possible considering only the number of qubits that the gates act
-    // on, not the action of the particular gates
-    static size_t CountPossibleQubitsChanges(const std::vector<QC::Gates::AppliedGate<>> &circuit)
-    {
-        size_t count = 0;
-
-        for (const auto &gate : circuit)
-            count += gate.getQubitsNumber();
-
-        return count;
-    }
-
-    static size_t CountDifferentQubits(const FastVectorBool &curState, const FastVectorBool &endState)
-    {
-        size_t count = 0;
-        const size_t words = curState.nWords();
-        for (size_t i = 0; i < words; ++i)
-        {
-            const uint64_t diff = curState.getWords()[i] ^ endState.getWords()[i];
-#ifdef _MSC_VER
-            count += __popcnt64(diff);
-#else
-            count += __builtin_popcountll(diff);
-#endif
-        }
-        return count;
-    }
-
     std::vector<QC::Gates::AppliedGate<>> circuit;
     std::vector<QC::Gates::AppliedGate<>> circuitBack;
+    TouchSchedule forwardTouches, backwardTouches;
     AmplitudeMap intermediateAmplitudes;
 
     AmplitudeMap savedAmplitudes;
     AmplitudeMap scratchAmplitudes;
+    std::shared_ptr<const CompiledTables> compiledTables;
+    bool compilationAttempted = false;
+    unsigned char recordedQueryCount = 0;
+    size_t compiledGateCacheMaxBytes = 16 * 1024 * 1024;
+    bool useGrowthAwareSplit = false;
+    std::shared_ptr<const ForwardCache> forwardCache;
+    size_t forwardCacheMaxBytes = 16 * 1024 * 1024;
 
     size_t doublingsLimit;
     double epsilon;

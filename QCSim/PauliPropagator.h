@@ -42,6 +42,8 @@ class PauliPropagator
             return f(PauliDetail::Term<2>(nrQubits));
         else if (nrQubits <= 256)
             return f(PauliDetail::Term<4>(nrQubits));
+        else if (nrQubits <= 512)
+            return f(PauliDetail::Term<8>(nrQubits));
         return f(PauliDetail::Term<0>(nrQubits));
     }
 
@@ -73,6 +75,8 @@ class PauliPropagator
                 if (op.Qubit(q) >= n)
                     throw std::invalid_argument("Pauli circuit exceeds register width");
         }
+        if (nrQubits != n)
+            InvalidateSampling();
         nrQubits = n;
     }
 
@@ -85,6 +89,8 @@ class PauliPropagator
     {
         if (!std::isfinite(value) || value < 0.)
             throw std::invalid_argument("Invalid coefficient threshold");
+        if (coefThreshold != value)
+            InvalidateSampling();
         coefThreshold = value;
     }
 
@@ -95,6 +101,8 @@ class PauliPropagator
 
     void SetPauliWeightThreshold(size_t value)
     {
+        if (pauliWeightThreshold != value)
+            InvalidateSampling();
         pauliWeightThreshold = value;
     }
 
@@ -106,6 +114,8 @@ class PauliPropagator
     void SetStepsBetweenTrims(int value)
     {
         Positive(value);
+        if (stepsBetweenTrims != value)
+            InvalidateSampling();
         stepsBetweenTrims = value;
     }
 
@@ -117,6 +127,8 @@ class PauliPropagator
     void SetStepsBetweenDeduplication(int value)
     {
         Positive(value);
+        if (stepsBetweenDeduplication != value)
+            InvalidateSampling();
         stepsBetweenDeduplication = value;
     }
 
@@ -128,6 +140,8 @@ class PauliPropagator
     void SetParallelThreshold(size_t value)
     {
         Positive(value);
+        if (parallelThreshold != value)
+            InvalidateSampling();
         parallelThreshold = value;
     }
 
@@ -145,6 +159,8 @@ class PauliPropagator
     void SetBatchSize(size_t value)
     {
         Positive(value);
+        if (batchSize != value)
+            InvalidateSampling();
         batchSize = value;
     }
 
@@ -162,6 +178,8 @@ class PauliPropagator
     void SetParallelThresholdForSum(size_t value)
     {
         Positive(value);
+        if (parallelThresholdSum != value)
+            InvalidateSampling();
         parallelThresholdSum = value;
     }
 
@@ -179,6 +197,8 @@ class PauliPropagator
     void SetBatchSizeForSum(size_t value)
     {
         Positive(value);
+        if (batchSizeSum != value)
+            InvalidateSampling();
         batchSizeSum = value;
     }
 
@@ -195,6 +215,8 @@ class PauliPropagator
 
     void SetSamplingCacheMaxNodes(size_t value)
     {
+        if (samplingCacheMaxNodes != value)
+            InvalidateSampling();
         samplingCacheMaxNodes = value;
     }
 
@@ -221,11 +243,16 @@ class PauliPropagator
             return;
         }
         if (!threadPool || threadPool->GetThreadCount() != workers)
+        {
+            InvalidateSampling();
             threadPool = std::make_unique<ThreadPool<>>(workers);
+        }
     }
 
     void DisableParallel()
     {
+        if (threadPool)
+            InvalidateSampling();
         threadPool.reset();
     }
 
@@ -254,6 +281,8 @@ class PauliPropagator
     void ClearOperations()
     {
         operations = std::make_shared<Program>();
+        importedSamplingTables = false;
+        InvalidateSampling();
         pos = 0;
     }
 
@@ -430,10 +459,12 @@ class PauliPropagator
     void SetOperations(std::vector<std::unique_ptr<Operator>> &&input)
     {
         auto program = std::make_shared<Program>();
+        bool externalTables = false;
         program->reserve(input.size());
         for (auto &op : input)
         {
             auto compiled = PauliDetail::Operation::Import(std::move(op));
+            externalTables = externalTables || IsPauliLocalGate(compiled.type);
             for (int q = 0; q < PauliOperationArity(compiled.type); ++q)
             {
                 CheckQubit(compiled.Qubit(q));
@@ -444,6 +475,8 @@ class PauliPropagator
             program->push_back(std::move(compiled));
         }
         operations = std::move(program);
+        importedSamplingTables = externalTables;
+        InvalidateSampling();
         pos = std::min(pos, operations->size());
     }
 
@@ -459,7 +492,11 @@ class PauliPropagator
         if (custom)
             SetOperations(source.GetOperations());
         else
+        {
             operations = source.operations;
+            importedSamplingTables = source.importedSamplingTables;
+            InvalidateSampling();
+        }
         pos = source.pos;
     }
 
@@ -478,9 +515,10 @@ class PauliPropagator
                 if (c == 'Z' || c == 'z' || c == 'Y' || c == 'y')
                     term.Z[q / 64] |= bit;
             }
-            PauliDetail::Workspace<T> ws;
+            WorkspaceLease<T> lease;
+            auto &ws = lease.Get();
             ws.terms.push_back(std::move(term));
-            return PauliDetail::Execute(ws, *operations, Settings());
+            return PauliDetail::Execute(ws, *operations, Settings(), false);
         });
     }
 
@@ -488,9 +526,10 @@ class PauliPropagator
     {
         return WithTerm([&](auto tag) {
             using T = decltype(tag);
-            PauliDetail::Workspace<T> ws;
+            WorkspaceLease<T> lease;
+            auto &ws = lease.Get();
             ws.terms.push_back(PauliDetail::Pack<T>(pauli, nrQubits));
-            return PauliDetail::Execute(ws, *operations, Settings());
+            return PauliDetail::Execute(ws, *operations, Settings(), false);
         });
     }
 
@@ -503,11 +542,12 @@ class PauliPropagator
     {
         return WithTerm([&](auto tag) {
             using T = decltype(tag);
-            PauliDetail::Workspace<T> ws;
+            WorkspaceLease<T> lease;
+            auto &ws = lease.Get();
             ws.terms.reserve(input.size());
             for (const auto &t : input)
                 ws.terms.push_back(PauliDetail::Pack<T>(t, nrQubits));
-            return PauliDetail::Execute(ws, *operations, Settings());
+            return PauliDetail::Execute(ws, *operations, Settings(), false);
         });
     }
 
@@ -539,11 +579,12 @@ class PauliPropagator
         output.push_back(std::move(p));
         return WithTerm([&](auto tag) {
             using T = decltype(tag);
-            PauliDetail::Workspace<T> ws;
+            WorkspaceLease<T> lease;
+            auto &ws = lease.Get();
             ws.terms.reserve(output.size());
             for (const auto &t : output)
                 ws.terms.push_back(PauliDetail::Pack<T>(t, nrQubits));
-            const double result = PauliDetail::Execute(ws, *operations, Settings());
+            const double result = PauliDetail::Execute(ws, *operations, Settings(), true);
             output.clear();
             output.reserve(ws.terms.size());
             for (const auto &t : ws.terms)
@@ -598,32 +639,61 @@ class PauliPropagator
     {
         if (!nrQubits || (nrQubits < int(8 * sizeof(size_t)) && outcome >= (size_t(1) << nrQubits)))
             return 0.;
-        const size_t savedSize = operations->size();
-        double result = 1.;
-        try
+        if (nrQubits <= maximumMomentQubits && CanUseMoments(static_cast<size_t>(nrQubits)))
         {
-            for (int q = 0; q < nrQubits; ++q)
-            {
-                const bool one = (outcome & 1) != 0;
-                outcome >>= 1;
-                const double prob = one ? Probability1(q) : Probability0(q);
-                if (prob <= 0.)
+            std::vector<int> qubits(static_cast<size_t>(nrQubits));
+            std::iota(qubits.begin(), qubits.end(), 0);
+            return WithTerm([&](auto tag) {
+                using T = decltype(tag);
+                Sampler<T> local;
+                auto &sampler = SamplingContext(qubits, local, 0);
+                SamplingScratchGuard<T> guard(sampler);
+                if (sampler.moments.empty())
                 {
-                    result = 0.;
-                    break;
+                    for (size_t index = 0; index < sampler.distinctOutcomeCount; ++index)
+                        if (sampler.requestedOutcomes[index] == outcome)
+                            return sampler.requestedProbabilities[index];
+                    // Preserve the efficient normalized-projector algorithm
+                    // for isolated outcomes. Cache its scalar answer, then
+                    // promote a genuine multi-outcome workload to full moments.
+                    if (sampler.distinctOutcomeCount + 1 < sampler.requestedOutcomes.size())
+                    {
+                        const double probability = UncachedProbabilityPreservingContext(outcome);
+                        const size_t index = sampler.distinctOutcomeCount++;
+                        sampler.requestedOutcomes[index] = outcome;
+                        sampler.requestedProbabilities[index] = probability;
+                        return probability;
+                    }
+                    PrepareMoments(sampler, qubits.size());
                 }
-                result *= prob;
-                if (q + 1 < nrQubits)
-                    AddProjector(q, one, 0.5 / prob);
-            }
+                if (sampler.probabilities.empty())
+                {
+                    for (size_t subset = 0; subset < sampler.moments.size(); ++subset)
+                        Moment(qubits, sampler, subset);
+                    auto probabilities = sampler.moments;
+                    // A Walsh-Hadamard transform produces every outcome from
+                    // the same Z-subset moments in O(n * 2^n), once per circuit.
+                    for (size_t stride = 1; stride < probabilities.size(); stride *= 2)
+                        for (size_t block = 0; block < probabilities.size(); block += 2 * stride)
+                            for (size_t index = block; index < block + stride; ++index)
+                            {
+                                const double a = probabilities[index], b = probabilities[index + stride];
+                                probabilities[index] = a + b;
+                                probabilities[index + stride] = a - b;
+                            }
+                    for (auto &probability : probabilities)
+                    {
+                        probability /= probabilities.size();
+                        if (!std::isfinite(probability))
+                            throw std::domain_error("Invalid Pauli probability normalization");
+                        probability = std::clamp(probability, 0., 1.);
+                    }
+                    sampler.probabilities = std::move(probabilities);
+                }
+                return sampler.probabilities[outcome];
+            });
         }
-        catch (...)
-        {
-            MutableOperations().resize(savedSize);
-            throw;
-        }
-        MutableOperations().resize(savedSize);
-        return result;
+        return UncachedProbability(outcome);
     }
 
     std::vector<bool> Sample(const std::vector<int> &qubits)
@@ -631,29 +701,100 @@ class PauliPropagator
         CheckSampleQubits(qubits);
         return WithTerm([&](auto tag) {
             using T = decltype(tag);
-            Sampler<T> sampler;
-            return SampleOne(qubits, sampler, 0);
+            Sampler<T> local;
+            auto &sampler = SamplingContext(qubits, local, 0);
+            SamplingScratchGuard<T> guard(sampler);
+            return SampleOne(qubits, sampler, sampler.limit);
         });
     }
 
     std::unordered_map<std::vector<bool>, size_t> SampleCounts(const std::vector<int> &qubits, size_t shots)
     {
         CheckSampleQubits(qubits);
+        if (!shots)
+            return {};
         return WithTerm([&](auto tag) {
             using T = decltype(tag);
-            Sampler<T> sampler;
-            const size_t limit = shots > 1 ? samplingCacheMaxNodes : 0;
-            if (limit)
-                sampler.nodes.emplace_back();
+            Sampler<T> local;
+            auto &sampler = SamplingContext(qubits, local, shots > 1 ? EffectiveSamplingLimit() : 0, shots >= 16);
+            SamplingScratchGuard<T> guard(sampler);
             std::unordered_map<std::vector<bool>, size_t> counts;
             for (size_t shot = 0; shot < shots; ++shot)
-                ++counts[SampleOne(qubits, sampler, limit)];
+                ++counts[SampleOne(qubits, sampler, sampler.limit)];
             return counts;
         });
     }
 
   private:
     using Program = std::vector<PauliDetail::Operation>;
+
+    // A thread owns one reusable workspace per packed width. A custom operator
+    // can reenter a query on this thread; that nested query gets local scratch.
+    // Completed jobs are drained by Execute before the lease is returned.
+    template <class T> class WorkspaceLease
+    {
+        struct Cached
+        {
+            PauliDetail::Workspace<T> workspace;
+            bool busy = false;
+        };
+
+        static Cached &Cache()
+        {
+            static thread_local Cached value;
+            return value;
+        }
+
+      public:
+        WorkspaceLease()
+        {
+            auto &candidate = Cache();
+            if (!candidate.busy)
+            {
+                candidate.busy = true;
+                cached = &candidate;
+                value = &candidate.workspace;
+            }
+            else
+                value = &local;
+        }
+
+        WorkspaceLease(const WorkspaceLease &) = delete;
+        WorkspaceLease &operator=(const WorkspaceLease &) = delete;
+
+        ~WorkspaceLease()
+        {
+            if (!cached)
+                return;
+            auto &ws = cached->workspace;
+            // Bound per-thread retention after a large one-off query. Clearing
+            // terms destroys heap masks of dynamically packed wide labels.
+            constexpr size_t maximumBytes = 16 * 1024 * 1024;
+            size_t bytes = ws.terms.capacity() * sizeof(T) + ws.extra.capacity() * sizeof(std::vector<T>) +
+                           ws.hashSlots.capacity() * sizeof(size_t);
+            for (const auto &extra : ws.extra)
+                bytes += extra.capacity() * sizeof(T);
+            if (bytes > maximumBytes)
+                ws = PauliDetail::Workspace<T>{};
+            else
+            {
+                ws.terms.clear();
+                for (auto &extra : ws.extra)
+                    extra.clear();
+            }
+            cached->busy = false;
+        }
+
+        PauliDetail::Workspace<T> &Get()
+        {
+            return *value;
+        }
+
+      private:
+        PauliDetail::Workspace<T> local;
+        Cached *cached = nullptr;
+        PauliDetail::Workspace<T> *value = nullptr;
+    };
 
     template <class T> static void Positive(T value)
     {
@@ -687,6 +828,20 @@ class PauliPropagator
 
     void CheckSampleQubits(const std::vector<int> &qubits) const
     {
+        // Up to eight readout sites avoid hash allocations. Larger subsets
+        // keep the original path: measured fresh-instance costs favor it.
+        // Preserve left-to-right range/duplicate exception order in both paths.
+        if (qubits.size() <= 8)
+        {
+            for (size_t index = 0; index < qubits.size(); ++index)
+            {
+                CheckQubit(qubits[index]);
+                for (size_t previous = 0; previous < index; ++previous)
+                    if (qubits[previous] == qubits[index])
+                        throw std::invalid_argument("Repeated sampled qubit");
+            }
+            return;
+        }
         std::unordered_set<int> seen;
         for (int q : qubits)
         {
@@ -698,6 +853,7 @@ class PauliPropagator
 
     Program &MutableOperations()
     {
+        InvalidateSampling();
         if (operations.use_count() != 1)
             operations = std::make_shared<Program>(*operations);
         return *operations;
@@ -772,9 +928,10 @@ class PauliPropagator
         return WithTerm([&](auto term) {
             using T = decltype(term);
             term.Z[q / 64] |= uint64_t(1) << (q % 64);
-            PauliDetail::Workspace<T> ws;
+            WorkspaceLease<T> lease;
+            auto &ws = lease.Get();
             ws.terms.push_back(std::move(term));
-            return PauliDetail::Execute(ws, *operations, Settings());
+            return PauliDetail::Execute(ws, *operations, Settings(), false);
         });
     }
 
@@ -787,12 +944,233 @@ class PauliPropagator
         bool ready = false;
     };
 
-    template <class T> struct Sampler
+    struct SamplingCacheBase
+    {
+        virtual ~SamplingCacheBase() = default;
+        std::weak_ptr<const Program> program;
+        std::vector<int> qubits;
+        uint64_t revision = 0;
+        int width = 0;
+        size_t limit = 0;
+    };
+
+    // Temporary projectors must not destroy the persistent context being
+    // filled by Probability(). Holding the original program also isolates all
+    // temporary mutations through copy-on-write, including exceptional exits.
+    struct ScopedProbabilityState
+    {
+        PauliPropagator &owner;
+        std::shared_ptr<Program> program;
+        std::unique_ptr<SamplingCacheBase> cache;
+        uint64_t revision;
+        int eligibility;
+        bool externalTables;
+        size_t position;
+
+        explicit ScopedProbabilityState(PauliPropagator &p)
+            : owner(p), program(p.operations), cache(std::move(p.samplingCache)), revision(p.samplingRevision),
+              eligibility(p.samplingEligibility), externalTables(p.importedSamplingTables), position(p.pos)
+        {
+        }
+
+        ~ScopedProbabilityState()
+        {
+            owner.operations = std::move(program);
+            owner.samplingCache = std::move(cache);
+            owner.samplingRevision = revision;
+            owner.samplingEligibility = eligibility;
+            owner.importedSamplingTables = externalTables;
+            owner.pos = position;
+        }
+    };
+
+    double UncachedProbability(size_t outcome)
+    {
+        const size_t savedSize = operations->size();
+        double result = 1.;
+        try
+        {
+            for (int q = 0; q < nrQubits; ++q)
+            {
+                const bool one = (outcome & 1) != 0;
+                outcome >>= 1;
+                const double probability = one ? Probability1(q) : Probability0(q);
+                if (probability <= 0.)
+                {
+                    result = 0.;
+                    break;
+                }
+                result *= probability;
+                if (q + 1 < nrQubits)
+                    AddProjector(q, one, 0.5 / probability);
+            }
+        }
+        catch (...)
+        {
+            MutableOperations().resize(savedSize);
+            throw;
+        }
+        MutableOperations().resize(savedSize);
+        return result;
+    }
+
+    double UncachedProbabilityPreservingContext(size_t outcome)
+    {
+        ScopedProbabilityState state(*this);
+        return UncachedProbability(outcome);
+    }
+
+    template <class T> struct Sampler : SamplingCacheBase
     {
         PauliDetail::Workspace<T> workspace;
         std::vector<T> prefix, branch;
         std::vector<SampleNode> nodes;
+        std::vector<double> moments;
+        std::vector<unsigned char> momentReady;
+        std::vector<double> probabilities;
+        std::array<size_t, 16> requestedOutcomes{};
+        std::array<double, 16> requestedProbabilities{};
+        size_t distinctOutcomeCount = 0;
     };
+
+    static constexpr int maximumMomentQubits = 13;
+
+    void InvalidateSampling()
+    {
+        ++samplingRevision;
+        samplingEligibility = -1;
+        samplingCache.reset();
+    }
+
+    size_t EffectiveSamplingLimit() const
+    {
+        // A cache is an acceleration only. Bound retention even when a caller
+        // provides an excessive node count; the uncached path remains valid.
+        return std::min(samplingCacheMaxNodes, size_t{1} << 18);
+    }
+
+    int SamplingEligibility()
+    {
+        if (samplingEligibility >= 0)
+            return samplingEligibility;
+        samplingEligibility = importedSamplingTables ? 0 : 2;
+        for (const auto &op : *operations)
+        {
+            if (op.Custom())
+                return samplingEligibility = 0;
+            if (op.type == OperationType::PROJ && samplingEligibility)
+                samplingEligibility = 1;
+        }
+        return samplingEligibility;
+    }
+
+    bool CanUseMoments(size_t count)
+    {
+        return count <= static_cast<size_t>(maximumMomentQubits) && coefThreshold == 0. &&
+               pauliWeightThreshold >= static_cast<size_t>(nrQubits) &&
+               (size_t{1} << count) <= EffectiveSamplingLimit() && SamplingEligibility() == 2;
+    }
+
+    template <class T>
+    Sampler<T> &SamplingContext(const std::vector<int> &qubits, Sampler<T> &local, size_t fallbackLimit,
+                                bool requestMoments = false)
+    {
+        const size_t limit = EffectiveSamplingLimit();
+        if (!limit || qubits.size() > 4096 || !SamplingEligibility())
+        {
+            local.limit = fallbackLimit;
+            if (fallbackLimit)
+                local.nodes.emplace_back();
+            return local;
+        }
+        if (!samplingCache || samplingCache->revision != samplingRevision || samplingCache->width != nrQubits ||
+            samplingCache->qubits != qubits || samplingCache->limit != limit ||
+            samplingCache->program.lock().get() != operations.get())
+        {
+            auto replacement = std::make_unique<Sampler<T>>();
+            replacement->program = operations;
+            replacement->qubits = qubits;
+            replacement->revision = samplingRevision;
+            replacement->width = nrQubits;
+            replacement->limit = limit;
+            replacement->nodes.emplace_back();
+            samplingCache = std::move(replacement);
+        }
+        // WithTerm selects a unique packed type for each width interval. Width
+        // and circuit/configuration revisions are part of the context key.
+        auto &sampler = static_cast<Sampler<T> &>(*samplingCache);
+        if (requestMoments && CanUseMoments(qubits.size()))
+            PrepareMoments(sampler, qubits.size());
+        return sampler;
+    }
+
+    template <class T> static void PrepareMoments(Sampler<T> &sampler, size_t count)
+    {
+        if (!sampler.moments.empty())
+            return;
+        // Commit both arrays together, keeping a valid prefix cache if either
+        // allocation fails during a late promotion of a persistent context.
+        std::vector<double> values(size_t{1} << count);
+        std::vector<unsigned char> ready(values.size());
+        values[0] = 1.;
+        ready[0] = 1;
+        sampler.moments = std::move(values);
+        sampler.momentReady = std::move(ready);
+    }
+
+    template <class T> static void TrimSamplingScratch(Sampler<T> &sampler)
+    {
+        auto &ws = sampler.workspace;
+        constexpr size_t maximumBytes = 16 * 1024 * 1024;
+        size_t bytes = (ws.terms.capacity() + sampler.prefix.capacity() + sampler.branch.capacity()) * sizeof(T) +
+                       ws.extra.capacity() * sizeof(std::vector<T>) + ws.hashSlots.capacity() * sizeof(size_t);
+        for (const auto &extra : ws.extra)
+            bytes += extra.capacity() * sizeof(T);
+        if (bytes > maximumBytes)
+        {
+            ws = PauliDetail::Workspace<T>{};
+            sampler.prefix = std::vector<T>{};
+            sampler.branch = std::vector<T>{};
+        }
+        else
+        {
+            ws.terms.clear();
+            for (auto &extra : ws.extra)
+                extra.clear();
+            sampler.prefix.clear();
+            sampler.branch.clear();
+        }
+    }
+
+    template <class T> struct SamplingScratchGuard
+    {
+        Sampler<T> &sampler;
+
+        explicit SamplingScratchGuard(Sampler<T> &value) : sampler(value)
+        {
+        }
+
+        ~SamplingScratchGuard()
+        {
+            TrimSamplingScratch(sampler);
+        }
+    };
+
+    template <class T> double Moment(const std::vector<int> &qubits, Sampler<T> &sampler, size_t subset)
+    {
+        if (sampler.momentReady[subset])
+            return sampler.moments[subset];
+        auto &ws = sampler.workspace;
+        ws.terms.clear();
+        ws.terms.emplace_back(nrQubits);
+        for (size_t bit = 0; bit < qubits.size(); ++bit)
+            if (subset & (size_t{1} << bit))
+                ws.terms[0].Z[qubits[bit] / 64] |= uint64_t{1} << (qubits[bit] % 64);
+        const double value = PauliDetail::Execute(ws, *operations, Settings(), false);
+        sampler.moments[subset] = value;
+        sampler.momentReady[subset] = 1;
+        return value;
+    }
 
     template <class T> std::vector<bool> SampleOne(const std::vector<int> &qubits, Sampler<T> &sampler, size_t limit)
     {
@@ -805,6 +1183,7 @@ class PauliPropagator
         result.reserve(qubits.size());
         double denominator = 1.;
         size_t built = 0, node = limit ? 0 : noNode;
+        size_t chosenBits = 0;
         const auto settings = Settings();
         const auto makeBranch = [&](int q) {
             branch.clear();
@@ -821,6 +1200,21 @@ class PauliPropagator
             double numerator;
             if (node != noNode && sampler.nodes[node].ready)
                 numerator = sampler.nodes[node].numerator;
+            else if (!sampler.moments.empty())
+            {
+                numerator = 0.;
+                for (size_t subset = 0; subset < (size_t{1} << depth); ++subset)
+                {
+                    const double value = Moment(qubits, sampler, subset | (size_t{1} << depth));
+                    numerator +=
+                        (PauliDetail::Popcount(static_cast<uint64_t>(subset & chosenBits)) & 1) ? -value : value;
+                }
+                if (node != noNode)
+                {
+                    sampler.nodes[node].numerator = numerator;
+                    sampler.nodes[node].ready = true;
+                }
+            }
             else
             {
                 // Materialize the projector expansion only on a cache miss.
@@ -841,7 +1235,7 @@ class PauliPropagator
                 }
                 makeBranch(qubits[depth]);
                 ws.terms = branch;
-                numerator = PauliDetail::Execute(ws, *operations, settings);
+                numerator = PauliDetail::Execute(ws, *operations, settings, false);
                 if (node != noNode)
                 {
                     sampler.nodes[node].numerator = numerator;
@@ -854,6 +1248,8 @@ class PauliPropagator
             const double p1 = 0.5 * (1. - numerator / denominator);
             const bool one = uniformZeroOne(rng) < p1;
             result.push_back(one);
+            if (one && !sampler.moments.empty())
+                chosenBits |= size_t{1} << depth;
             if (depth + 1 == qubits.size())
                 break;
             denominator += one ? -numerator : numerator;
@@ -863,8 +1259,10 @@ class PauliPropagator
                 if (child == noNode && sampler.nodes.size() < limit)
                 {
                     child = sampler.nodes.size();
-                    sampler.nodes[node].child[one ? 1 : 0] = child;
                     sampler.nodes.emplace_back();
+                    // Persist the edge only after allocation succeeds: this
+                    // sampler may be reused after a failed sampling request.
+                    sampler.nodes[node].child[one ? 1 : 0] = child;
                 }
                 node = child;
             }
@@ -885,5 +1283,11 @@ class PauliPropagator
     size_t parallelThresholdSum = 65536, batchSizeSum = 16384;
     size_t parallelThreshold = 16384, batchSize = 4096;
     size_t samplingCacheMaxNodes = 8192;
+    // Nonconst sampling already mutates rng. Its probability cache is local to
+    // this instance; const expectation queries continue to use thread leases.
+    uint64_t samplingRevision = 0;
+    int samplingEligibility = -1;
+    bool importedSamplingTables = false;
+    std::unique_ptr<SamplingCacheBase> samplingCache;
 };
 } // namespace QC

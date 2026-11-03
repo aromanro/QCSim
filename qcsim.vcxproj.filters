@@ -359,5 +359,32 @@
     <ClInclude Include="QCSim\ProductSwapRegressionTests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralExpectationRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralColdRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralRngRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliRuntimeApiRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliRuntimeEngineRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralLightconeRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralRuntimeRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PauliLightconeRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QCSim\PathIntegralExpectation.h">
+      <Filter>Header Files\Simulators</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
