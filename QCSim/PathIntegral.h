@@ -5,6 +5,7 @@
 #include "PathIntegralStorage.h"
 #include <array>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <new>
 #include <random>
@@ -833,67 +834,9 @@ class PathIntegralSimulator
 
     FastVectorBool MeasureNoCollapse()
     {
-        const auto &values = intermediateAmplitudes.values;
-        if (values.empty())
+        if (intermediateAmplitudes.values.empty())
             throw std::domain_error("Cannot measure an empty path integral state");
-        // Rebuild from current values: callers can retain mutable amplitude
-        // references, so a persistent cached distribution could be stale.
-        // Independent sums scan all amplitudes without a per-entry CDF
-        // dependency. Only the selected block needs a second, short scan.
-        std::array<double, 64> cumulativeBlocks;
-        if (values.size() <= cumulativeBlocks.size())
-        {
-            double total = 0.;
-            for (size_t i = 0; i < values.size(); ++i)
-            {
-                total += std::norm(values[i]);
-                cumulativeBlocks[i] = total;
-            }
-            const double target = MeasurementTarget(total);
-            size_t index = 0;
-            while (index + 1 < values.size() && target >= cumulativeBlocks[index])
-                ++index;
-            return intermediateAmplitudes.State(index);
-        }
-        const size_t blockSize = std::max<size_t>(64, 1 + (values.size() - 1) / cumulativeBlocks.size());
-        const size_t blocks = 1 + (values.size() - 1) / blockSize;
-        double total = 0.;
-        for (size_t block = 0; block < blocks; ++block)
-        {
-            const size_t end = std::min(values.size(), (block + 1) * blockSize);
-            size_t i = block * blockSize;
-            double a = 0., b = 0., c = 0., d = 0.;
-            for (; i + 3 < end; i += 4)
-            {
-                a += std::norm(values[i]);
-                b += std::norm(values[i + 1]);
-                c += std::norm(values[i + 2]);
-                d += std::norm(values[i + 3]);
-            }
-            for (; i < end; ++i)
-                a += std::norm(values[i]);
-            total += (a + b) + (c + d);
-            cumulativeBlocks[block] = total;
-        }
-        double target = MeasurementTarget(total);
-        size_t block = 0;
-        while (block + 1 < blocks && target >= cumulativeBlocks[block])
-            ++block;
-        if (block)
-            target -= cumulativeBlocks[block - 1];
-        double cumulative = 0.;
-        size_t lastPositive = block * blockSize;
-        const size_t end = std::min(values.size(), (block + 1) * blockSize);
-        for (size_t i = block * blockSize; i < end; ++i)
-        {
-            const double weight = std::norm(values[i]);
-            if (weight > 0.)
-                lastPositive = i;
-            cumulative += weight;
-            if (target < cumulative)
-                return intermediateAmplitudes.State(i);
-        }
-        return intermediateAmplitudes.State(lastPositive);
+        return MeasureState<true>(PlainWeight{});
     }
 
     bool MeasureQubit(size_t qubit)
@@ -908,22 +851,40 @@ class PathIntegralSimulator
         unsigned present = 0;
         const size_t word = qubit / 64;
         const uint64_t mask = uint64_t{1} << (qubit % 64);
-        for (size_t i = 0; i < intermediateAmplitudes.size(); ++i)
-        {
-            const bool bit = (intermediateAmplitudes.keys[i * intermediateAmplitudes.wordCount + word] & mask) != 0;
-            const double weight = std::norm(intermediateAmplitudes.values[i]);
-            if (bit)
-                oneMass += weight;
-            else
-                zeroMass += weight;
-            present |= 1u << unsigned(bit);
-        }
+        const auto marginals = [&](const auto &weightOf) {
+            zeroMass = oneMass = 0.;
+            for (size_t i = 0; i < intermediateAmplitudes.size(); ++i)
+            {
+                const bool bit = (intermediateAmplitudes.keys[i * intermediateAmplitudes.wordCount + word] & mask) != 0;
+                const double weight = weightOf(intermediateAmplitudes.values[i]);
+                if (bit)
+                    oneMass += weight;
+                else
+                    zeroMass += weight;
+                present |= 1u << unsigned(bit);
+            }
+        };
+        marginals(PlainWeight{});
+        const int shift = MeasurementShift(zeroMass + oneMass);
+        if (shift)
+            marginals(ScaledWeight{shift});
         const bool result = MeasurementTarget(zeroMass + oneMass) >= zeroMass;
         const double normFactor = 1. / std::sqrt(result ? oneMass : zeroMass);
         // A normalized state with this bit already fixed needs no writes.
         // Track keys as well as mass so opposite-sector zero entries still
-        // get removed when that sector has zero probability.
-        if (present == 3 || normFactor != 1.)
+        // get removed when that sector has zero probability. A rescaled
+        // state is normalized from its scaled amplitudes.
+        if (shift)
+            intermediateAmplitudes.Transform(
+                false,
+                [&](Detail::MutableStateView &state, std::complex<double> &amplitude) noexcept {
+                    if (state.get(qubit) != result)
+                        return false;
+                    amplitude = ScaledWeight::Scale(amplitude, shift) * normFactor;
+                    return true;
+                },
+                true);
+        else if (present == 3 || normFactor != 1.)
             intermediateAmplitudes.Transform(
                 false,
                 [&](Detail::MutableStateView &state, std::complex<double> &amplitude) noexcept {
@@ -940,6 +901,129 @@ class PathIntegralSimulator
     }
 
   private:
+    struct PlainWeight
+    {
+        double operator()(const std::complex<double> &amplitude) const noexcept
+        {
+            return std::norm(amplitude);
+        }
+    };
+
+    // |2^shift a|^2. The scaling is exact unless a scaled component falls
+    // below the smallest normal double.
+    struct ScaledWeight
+    {
+        int shift;
+
+        static std::complex<double> Scale(const std::complex<double> &amplitude, int shift) noexcept
+        {
+            return {std::ldexp(amplitude.real(), shift), std::ldexp(amplitude.imag(), shift)};
+        }
+
+        double operator()(const std::complex<double> &amplitude) const noexcept
+        {
+            return std::norm(Scale(amplitude, shift));
+        }
+    };
+
+    // A total below 2^-900 rounds the target and the cumulative sums toward
+    // the subnormal grid, which biases the first and last populated rows, and
+    // squares below the smallest double vanish; a square or a sum that
+    // overflows cannot be sampled. Such a state is weighed again from
+    // amplitudes scaled by the exact power of two that brings the largest
+    // component into [0.5, 1); weights keep their ratios. Returns 0 when no
+    // shift applies, or when none can help because no component is finite
+    // and nonzero; MeasurementTarget then rejects the total as before.
+    int MeasurementShift(double total) const
+    {
+        if (total >= 0x1p-900 && total <= std::numeric_limits<double>::max())
+            return 0;
+        double largest = 0.;
+        for (const auto &amplitude : intermediateAmplitudes.values)
+        {
+            const double re = std::abs(amplitude.real()), im = std::abs(amplitude.imag());
+            if (re > largest)
+                largest = re;
+            if (im > largest)
+                largest = im;
+        }
+        if (!(largest > 0.) || !std::isfinite(largest))
+            return 0;
+        int exponent = 0;
+        std::frexp(largest, &exponent);
+        return -exponent;
+    }
+
+    // Rebuild from current values: callers can retain mutable amplitude
+    // references, so a persistent cached distribution could be stale.
+    // Independent sums scan all amplitudes without a per-entry CDF
+    // dependency. Only the selected block needs a second, short scan. One
+    // uniform is drawn per call, whether or not the state is rescaled.
+    template <bool Rescalable, class Weight> FastVectorBool MeasureState(const Weight &weightOf)
+    {
+        const auto &values = intermediateAmplitudes.values;
+        std::array<double, 64> cumulativeBlocks;
+        if (values.size() <= cumulativeBlocks.size())
+        {
+            double total = 0.;
+            for (size_t i = 0; i < values.size(); ++i)
+            {
+                total += weightOf(values[i]);
+                cumulativeBlocks[i] = total;
+            }
+            if constexpr (Rescalable)
+                if (const int shift = MeasurementShift(total))
+                    return MeasureState<false>(ScaledWeight{shift});
+            const double target = MeasurementTarget(total);
+            size_t index = 0;
+            while (index + 1 < values.size() && target >= cumulativeBlocks[index])
+                ++index;
+            return intermediateAmplitudes.State(index);
+        }
+        const size_t blockSize = std::max<size_t>(64, 1 + (values.size() - 1) / cumulativeBlocks.size());
+        const size_t blocks = 1 + (values.size() - 1) / blockSize;
+        double total = 0.;
+        for (size_t block = 0; block < blocks; ++block)
+        {
+            const size_t end = std::min(values.size(), (block + 1) * blockSize);
+            size_t i = block * blockSize;
+            double a = 0., b = 0., c = 0., d = 0.;
+            for (; i + 3 < end; i += 4)
+            {
+                a += weightOf(values[i]);
+                b += weightOf(values[i + 1]);
+                c += weightOf(values[i + 2]);
+                d += weightOf(values[i + 3]);
+            }
+            for (; i < end; ++i)
+                a += weightOf(values[i]);
+            total += (a + b) + (c + d);
+            cumulativeBlocks[block] = total;
+        }
+        if constexpr (Rescalable)
+            if (const int shift = MeasurementShift(total))
+                return MeasureState<false>(ScaledWeight{shift});
+        double target = MeasurementTarget(total);
+        size_t block = 0;
+        while (block + 1 < blocks && target >= cumulativeBlocks[block])
+            ++block;
+        if (block)
+            target -= cumulativeBlocks[block - 1];
+        double cumulative = 0.;
+        size_t lastPositive = block * blockSize;
+        const size_t end = std::min(values.size(), (block + 1) * blockSize);
+        for (size_t i = block * blockSize; i < end; ++i)
+        {
+            const double weight = weightOf(values[i]);
+            if (weight > 0.)
+                lastPositive = i;
+            cumulative += weight;
+            if (target < cumulative)
+                return intermediateAmplitudes.State(i);
+        }
+        return intermediateAmplitudes.State(lastPositive);
+    }
+
     // Measurement is conditional on the retained state, including after
     // pruning. Reject undefined distributions before consuming randomness.
     double MeasurementTarget(double total)

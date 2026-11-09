@@ -1,6 +1,9 @@
 #pragma once
 
 #include "PathIntegralLightconeRegressionTests.h"
+#include <cmath>
+#include <complex>
+#include <limits>
 #include <type_traits>
 
 namespace QC
@@ -198,14 +201,82 @@ inline void InvalidMeasurements(size_t &checks)
     }
 }
 
+// States whose total is below 2^-900, or whose squares underflow or overflow,
+// are weighed from amplitudes scaled by an exact power of two. Both
+// measurements must follow the law of the amplitude ratios, draw one uniform
+// per call, and leave a collapsed state normalized.
+inline void ExtremeTotals(size_t &checks)
+{
+    const double tiny = std::sqrt(3. * std::numeric_limits<double>::denorm_min());
+    struct Case
+    {
+        std::complex<double> zero, one;
+        double ones;
+    };
+    const Case cases[] = {
+        // Squares below the smallest double.
+        {{std::sqrt(.7) * 0x1p-540, 0.}, {0., std::sqrt(.3) * 0x1p-540}, .3},
+        // Squares above the largest double.
+        {{std::sqrt(.7) * 0x1p600, 0.}, {0., std::sqrt(.3) * 0x1p600}, .3},
+        // Equal subnormal weights: an unscaled target rounds to the subnormal
+        // grid and picks the first row with probability 5/12.
+        {{tiny, 0.}, {tiny, 0.}, .5},
+    };
+    for (const auto &c : cases)
+    {
+        Map state;
+        state[PathIntegral::FastVectorBool(Bits(0, 1))] = c.zero;
+        state[PathIntegral::FastVectorBool(Bits(1, 1))] = c.one;
+        Simulator simulator, control;
+        simulator.SetSeed(2024);
+        control.SetSeed(2024);
+        simulator.GetAmplitudes() = state;
+        control.GetAmplitudes() = State();
+        constexpr size_t draws = 20000, collapses = 4000;
+        size_t ones = 0;
+        for (size_t draw = 0; draw < draws; ++draw)
+        {
+            ones += simulator.MeasureNoCollapse().get(0);
+            control.MeasureNoCollapse();
+        }
+        Require(std::abs(double(ones) - c.ones * draws) < 6. * std::sqrt(c.ones * (1. - c.ones) * draws),
+                "Path measurement of an extreme total lost its law");
+        ++checks;
+        ones = 0;
+        for (size_t draw = 0; draw < collapses; ++draw)
+        {
+            simulator.GetAmplitudes() = state;
+            control.GetAmplitudes() = State();
+            const bool one = simulator.MeasureQubit(0);
+            control.MeasureQubit(0);
+            ones += one;
+            double mass = 0.;
+            for (const auto &entry : simulator.GetAmplitudes())
+            {
+                Require(entry.first.get(0) == one, "Collapsing path measurement retained the wrong sector");
+                mass += std::norm(entry.second);
+            }
+            Require(std::abs(mass - 1.) < 1e-12, "Collapsing path measurement of an extreme total is not normalized");
+        }
+        Require(std::abs(double(ones) - c.ones * collapses) < 6. * std::sqrt(c.ones * (1. - c.ones) * collapses),
+                "Collapsing path measurement of an extreme total lost its law");
+        ++checks;
+        // One uniform per call: both engines must still agree.
+        simulator.GetAmplitudes() = State();
+        control.GetAmplitudes() = State();
+        SameSamples(simulator, control, checks);
+    }
+}
+
 inline void Run()
 {
     size_t checks = 0;
     SeededReference(checks);
     Lifecycle(checks);
     InvalidMeasurements(checks);
+    ExtremeTotals(checks);
     std::cout << "PASS " << checks
-              << " path RNG reference, copy/move/reset/clone and invalid-measurement comparisons\n";
+              << " path RNG reference, copy/move/reset/clone, invalid-measurement and extreme-total comparisons\n";
 }
 } // namespace PathIntegralRngRegression
 } // namespace QC
