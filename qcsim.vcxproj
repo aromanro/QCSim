@@ -372,6 +372,7 @@
     <ClInclude Include="QCSim\PauliPropTypes.h" />
     <ClInclude Include="QCSim\PauliTransfer.h" />
     <ClInclude Include="QCSim\PauliNativeRegressionTests.h" />
+    <ClInclude Include="QCSim\PauliNoiseRegressionTests.h" />
     <ClInclude Include="QCSim\PauliString.h" />
     <ClInclude Include="QCSim\PauliStringSimulation.h" />
     <ClInclude Include="QCSim\PauliStringXZ.h" />

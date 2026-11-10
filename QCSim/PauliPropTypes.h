@@ -37,7 +37,14 @@ enum class OperationType : unsigned char
     CSXDAG,
     CH,
     CCX,
-    CSWAP
+    CSWAP,
+    // Noise acts on the observable with the adjoint (Heisenberg) channel.
+    // Diagonal channels only scale a term; RESET never branches either.
+    PAULI_CHANNEL_1Q,
+    PAULI_CHANNEL_2Q,
+    RESET,
+    CHANNEL_1Q,
+    CHANNEL_2Q
 };
 
 inline int PauliOperationArity(OperationType type)
@@ -63,6 +70,8 @@ inline int PauliOperationArity(OperationType type)
     case OperationType::CSX:
     case OperationType::CSXDAG:
     case OperationType::CH:
+    case OperationType::PAULI_CHANNEL_2Q:
+    case OperationType::CHANNEL_2Q:
         return 2;
     default:
         return 1;
@@ -116,10 +125,20 @@ inline bool IsPauliLocalGate(OperationType type)
     case OperationType::CH:
     case OperationType::CCX:
     case OperationType::CSWAP:
+    case OperationType::CHANNEL_1Q:
+    case OperationType::CHANNEL_2Q:
         return true;
     default:
         return false;
     }
+}
+
+// Channels with a diagonal Pauli transfer matrix. They are not local-table
+// gates: the engine scales their terms in place, in the same pass as the
+// surrounding Clifford gates.
+inline bool IsPauliDiagonalChannel(OperationType type)
+{
+    return type == OperationType::PAULI_CHANNEL_1Q || type == OperationType::PAULI_CHANNEL_2Q;
 }
 
 } // namespace QC

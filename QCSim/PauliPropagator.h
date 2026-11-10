@@ -447,6 +447,120 @@ class PauliPropagator
         AddFixed(OperationType::CSWAP, target1, target2, control);
     }
 
+    // ---- Noise channels ----
+    //
+    // Each call records one operation. The observable is propagated through
+    // the adjoint (Heisenberg) channel, so the recorded circuit gives the exact
+    // ensemble average of the noisy state: no trajectories are sampled, and
+    // expectation values, probabilities and samples all describe the mixed
+    // state. Pauli channels and phase damping are diagonal in the Pauli basis
+    // and only scale terms. Damping channels send Z to a mix of I and Z and can
+    // add a term. A reset never adds one.
+
+    // (1 - px - py - pz) rho + px X rho X + py Y rho Y + pz Z rho Z
+    void ApplyPauliChannel(int q, double px, double py, double pz)
+    {
+        const double identity = 1. - (px + py + pz);
+        if (!(identity >= -1E-9))
+            throw std::invalid_argument("Pauli error probabilities must sum to at most one");
+        const std::array<double, 4> probabilities{{std::max(0., identity), px, py, pz}};
+        AddChannel(Diagonal(PauliDetail::PauliChannelEigenvalues(probabilities, 1)), q, 0, 1);
+    }
+
+    // probabilities[p0 + 4 * p1] is the probability of the error p0 on q0 and p1
+    // on q1, each indexed I, X, Y, Z = 0..3. The sixteen values sum to one.
+    void ApplyTwoQubitPauliChannel(int q0, int q1, const std::array<double, 16> &probabilities)
+    {
+        AddChannel(Diagonal(PauliDetail::PauliChannelEigenvalues(probabilities, 2)), q0, q1, 2);
+    }
+
+    void ApplyBitFlipNoise(int q, double p)
+    {
+        ApplyPauliChannel(q, p, 0., 0.);
+    }
+
+    void ApplyPhaseFlipNoise(int q, double p)
+    {
+        ApplyPauliChannel(q, 0., 0., p);
+    }
+
+    // (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
+    void ApplyDepolarizingNoise(int q, double p)
+    {
+        ApplyPauliChannel(q, p / 3., p / 3., p / 3.);
+    }
+
+    // (1 - p) rho + p/15 (sum over the fifteen non-identity two-qubit Paulis)
+    void ApplyTwoQubitDepolarizingNoise(int q0, int q1, double p)
+    {
+        CheckProbability(p, "Depolarizing probability");
+        std::array<double, 16> probabilities;
+        probabilities.fill(p / 15.);
+        probabilities[0] = 1. - p;
+        ApplyTwoQubitPauliChannel(q0, q1, probabilities);
+    }
+
+    // Coherences are multiplied by sqrt(1 - gamma); populations are unchanged.
+    void ApplyPhaseDamping(int q, double gamma)
+    {
+        CheckProbability(gamma, "Phase-damping probability");
+        const double coherence = std::sqrt(1. - gamma);
+        AddChannel(PauliDetail::CompileRelaxation(coherence, 1., 0.), q, 0, 1);
+    }
+
+    // Relaxation with probability gamma towards the population
+    // excitedPopulation of |1> (zero: plain |1> -> |0> amplitude damping).
+    void ApplyAmplitudeDamping(int q, double gamma, double excitedPopulation = 0.)
+    {
+        CheckProbability(gamma, "Amplitude-damping probability");
+        CheckProbability(excitedPopulation, "Excited-state population");
+        AddChannel(
+            PauliDetail::CompileRelaxation(std::sqrt(1. - gamma), 1. - gamma, gamma * (1. - 2. * excitedPopulation)), q,
+            0, 1);
+    }
+
+    // Populations relax towards excitedPopulation as exp(-duration / t1) and
+    // coherences decay as exp(-duration / t2). Requires t2 <= 2 * t1; either
+    // time may be infinite. No clamping: t1 < t2 <= 2 * t1 is represented exactly.
+    void ApplyThermalRelaxation(int q, double duration, double t1, double t2, double excitedPopulation = 0.)
+    {
+        if (!std::isfinite(duration) || duration < 0.)
+            throw std::invalid_argument("Thermal-relaxation duration must be finite and nonnegative");
+        if (!(t1 > 0.) || !(t2 > 0.))
+            throw std::invalid_argument("T1 and T2 must be positive");
+        CheckProbability(excitedPopulation, "Excited-state population");
+        if (std::isinf(t2) ? !std::isinf(t1) : (std::isfinite(t1) && t2 > 2. * t1 * (1. + 1E-12)))
+            throw std::invalid_argument("Thermal relaxation requires T2 <= 2*T1");
+        const double coherence = std::isinf(t2) ? 1. : std::exp(-duration / t2);
+        const double gamma = std::isinf(t1) ? 0. : -std::expm1(-duration / t1);
+        AddChannel(PauliDetail::CompileRelaxation(coherence, 1. - gamma, gamma * (1. - 2. * excitedPopulation)), q, 0,
+                   1);
+    }
+
+    // An arbitrary one- or two-qubit channel from its Kraus operators (2x2 or
+    // 4x4 matrices with operator()(row, col), rows() and cols(); for two qubits
+    // q0 is the low bit of the matrix index). The operators must be trace
+    // preserving. A channel whose transfer matrix turns out diagonal is
+    // recorded as a Pauli channel and does not branch.
+    template <class Matrix> void ApplyKrausChannel(const std::vector<Matrix> &kraus, int q0, int q1 = 0)
+    {
+        if (kraus.empty())
+            throw std::invalid_argument("A channel must contain at least one Kraus operator");
+        const auto dimension = static_cast<size_t>(kraus.front().rows());
+        if (dimension != 2 && dimension != 4)
+            throw std::invalid_argument("Kraus operators must act on one or two qubits");
+        const unsigned qubits = dimension == 2 ? 1 : 2;
+        AddChannel(PauliDetail::CompileChannel(PauliDetail::KrausTransfer(kraus, qubits), qubits), q0, q1, qubits);
+    }
+
+    // Reset to |0> (or |1>) without recording an outcome. Unlike Measure, this
+    // is deterministic: it draws no random number and inserts no projector.
+    void ApplyReset(int q, bool toOne = false)
+    {
+        CheckQubit(q);
+        MutableOperations().push_back(PauliDetail::Operation::Reset(q, toOne));
+    }
+
     std::vector<std::unique_ptr<Operator>> GetOperations() const
     {
         std::vector<std::unique_ptr<Operator>> result;
@@ -904,6 +1018,38 @@ class PauliPropagator
     void AddFixed(OperationType type, int a, int b, int c = 0)
     {
         AddLocal(type, a, b, c, PauliDetail::FixedTransfer(type));
+    }
+
+    static void CheckProbability(double value, const char *name)
+    {
+        if (!(value >= 0. && value <= 1.))
+            throw std::invalid_argument(std::string(name) + " must lie in [0, 1]");
+    }
+
+    static PauliDetail::CompiledChannel Diagonal(const PauliDetail::Eigenvalues &eigenvalues)
+    {
+        PauliDetail::CompiledChannel channel;
+        channel.eigenvalues = eigenvalues;
+        return channel;
+    }
+
+    void AddChannel(const PauliDetail::CompiledChannel &channel, int a, int b, unsigned qubits)
+    {
+        CheckQubit(a);
+        if (qubits == 2)
+        {
+            CheckQubit(b);
+            if (a == b)
+                throw std::invalid_argument("Repeated gate qubit");
+        }
+        if (!channel.diagonal)
+            MutableOperations().push_back(
+                PauliDetail::Operation::Local(qubits == 1 ? OperationType::CHANNEL_1Q : OperationType::CHANNEL_2Q, a,
+                                              qubits == 2 ? b : 0, 0, channel.table));
+        else if (qubits == 1)
+            MutableOperations().push_back(PauliDetail::Operation::PauliChannel(a, channel.eigenvalues));
+        else
+            MutableOperations().push_back(PauliDetail::Operation::PauliChannel(a, b, channel.eigenvalues));
     }
 
     PauliDetail::Settings Settings() const

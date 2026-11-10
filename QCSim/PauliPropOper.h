@@ -171,6 +171,82 @@ class Projector : public Operator
     double coefficient;
 };
 
+// A channel that is diagonal in the Pauli basis: every term keeps its label
+// and is scaled by the eigenvalue of its local Pauli. No term is ever added.
+class OperatorPauliChannel : public Operator
+{
+  public:
+    OperatorPauliChannel(int qubit, const PauliDetail::Eigenvalues &eigenvalues)
+        : Operator(OperationType::PAULI_CHANNEL_1Q, qubit), eigenvalues(eigenvalues)
+    {
+    }
+
+    OperatorPauliChannel(int qubit0, int qubit1, const PauliDetail::Eigenvalues &eigenvalues)
+        : Operator(OperationType::PAULI_CHANNEL_2Q, qubit0, qubit1), eigenvalues(eigenvalues)
+    {
+    }
+
+    const PauliDetail::Eigenvalues &GetEigenvalues() const
+    {
+        return eigenvalues;
+    }
+
+    void Apply(PauliStringXZWithCoefficient &term, PauliStringStorage & /*extra*/) const override
+    {
+        unsigned label = 0;
+        for (int q = 0; q < GetNrQubits(); ++q)
+            label |= unsigned(term.X[GetQubit(q)]) << (2 * q) | unsigned(term.Z[GetQubit(q)]) << (2 * q + 1);
+        term.Coefficient *= eigenvalues[label];
+    }
+
+    std::unique_ptr<Operator> Clone() const override
+    {
+        return std::make_unique<OperatorPauliChannel>(*this);
+    }
+
+  private:
+    PauliDetail::Eigenvalues eigenvalues;
+};
+
+// Reset without a recorded outcome, to |0> or |1>. Its adjoint sends I to I,
+// Z to +I or -I, and X, Y to zero, so it removes or shortens terms.
+class OperatorReset : public Operator
+{
+  public:
+    OperatorReset(int qubit, bool toOne) : Operator(OperationType::RESET, qubit), toOne(toOne)
+    {
+    }
+
+    bool IsToOne() const
+    {
+        return toOne;
+    }
+
+    void Apply(PauliStringXZWithCoefficient &term, PauliStringStorage & /*extra*/) const override
+    {
+        const int qubit = GetQubit(0);
+        if (term.X[qubit])
+        {
+            term.Coefficient = 0.;
+            return;
+        }
+        if (term.Z[qubit])
+        {
+            term.Z[qubit] = false;
+            if (toOne)
+                term.Coefficient = -term.Coefficient;
+        }
+    }
+
+    std::unique_ptr<Operator> Clone() const override
+    {
+        return std::make_unique<OperatorReset>(GetQubit(0), toOne);
+    }
+
+  private:
+    bool toOne;
+};
+
 class OperatorX : public Operator
 {
   public:

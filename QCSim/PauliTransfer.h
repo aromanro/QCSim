@@ -353,5 +353,220 @@ inline std::shared_ptr<const LocalTransfer> ParameterizedTransfer(OperationType 
     return table;
 }
 
+// ---- Noise channels ----
+//
+// A channel N(rho) = sum_k E_k rho E_k^dagger acts on an observable with its
+// adjoint, P -> sum_k E_k^dagger P E_k. Trace preservation makes the adjoint
+// unital: column 0 of every table below is exactly the identity, so a channel
+// outside the support of a term leaves it alone and stays out of its cone.
+
+// Eigenvalues of a channel that is diagonal in the Pauli basis, indexed by the
+// local label. Entry 0 belongs to the identity and is exactly 1.
+using Eigenvalues = std::array<double, 16>;
+
+// Transfer columns of a one- or two-qubit channel: [input label][output label].
+using ChannelTransfer = std::array<std::array<double, 16>, 16>;
+
+// Public channel arguments index each qubit as I, X, Y, Z (0..3), with q0 in
+// the low base-4 digit. Local labels interleave x,z bits: I=0, X=1, Z=2, Y=3.
+inline unsigned LabelFromPauliIndex(unsigned index, unsigned qubits)
+{
+    static constexpr unsigned char code[4] = {0, 1, 3, 2};
+    unsigned label = 0;
+    for (unsigned q = 0; q < qubits; ++q)
+        label |= unsigned(code[(index >> (2 * q)) & 3U]) << (2 * q);
+    return label;
+}
+
+inline bool LabelsAnticommute(unsigned a, unsigned b)
+{
+    constexpr unsigned xBits = 0x55U;
+    unsigned parity = (a & (b >> 1) & xBits) ^ ((a >> 1) & b & xBits);
+    parity ^= parity >> 4;
+    parity ^= parity >> 2;
+    return parity & 1U;
+}
+
+// lambda_a = 1 - 2 * (probability of the errors anticommuting with a). This
+// form stays accurate for weak noise and never uses the identity probability.
+// probabilities holds 4^qubits values in the public I, X, Y, Z index order.
+template <size_t N> Eigenvalues PauliChannelEigenvalues(const std::array<double, N> &probabilities, unsigned qubits)
+{
+    const unsigned count = 1U << (2 * qubits);
+    double total = 0.;
+    for (unsigned index = 0; index < count; ++index)
+    {
+        const double p = probabilities[index];
+        if (!(p >= 0. && p <= 1.))
+            throw std::invalid_argument("Pauli channel probabilities must lie in [0, 1]");
+        total += p;
+    }
+    if (!(std::abs(total - 1.) <= 1E-9))
+        throw std::invalid_argument("Pauli channel probabilities must sum to one");
+    Eigenvalues lambda;
+    lambda.fill(1.);
+    for (unsigned label = 1; label < count; ++label)
+    {
+        double flipped = 0.;
+        for (unsigned index = 1; index < count; ++index)
+            if (LabelsAnticommute(label, LabelFromPauliIndex(index, qubits)))
+                flipped += probabilities[index];
+        lambda[label] = std::max(-1., 1. - 2. * flipped);
+    }
+    return lambda;
+}
+
+// Row-major matrix of at most two qubits.
+using LocalMatrix = std::array<std::complex<double>, 16>;
+
+// The matrix of a local label, with qubit 0 in the low bit of the basis index.
+inline LocalMatrix LabelMatrix(unsigned label, unsigned qubits)
+{
+    const unsigned dim = 1U << qubits;
+    LocalMatrix matrix{};
+    for (unsigned col = 0; col < dim; ++col)
+    {
+        unsigned row = col;
+        std::complex<double> phase = 1.;
+        for (unsigned q = 0; q < qubits; ++q)
+        {
+            const bool x = (label >> (2 * q)) & 1U, z = (label >> (2 * q + 1)) & 1U, bit = (col >> q) & 1U;
+            if (x)
+                row ^= 1U << q;
+            if (x && z)
+                phase *= std::complex<double>(0., bit ? -1. : 1.);
+            else if (z && bit)
+                phase = -phase;
+        }
+        matrix[row * dim + col] = phase;
+    }
+    return matrix;
+}
+
+// R[a][b] = Re Tr(P_b sum_k E_k^dagger P_a E_k) / 2^qubits, with the first
+// Kraus index bit on q0. Rejects operators that are not finite, not square of
+// the right size, or not trace preserving. Entries within rounding of 0 or
+// +-1 are snapped: a Pauli or Clifford channel then keeps its exact structure.
+template <class Matrix> ChannelTransfer KrausTransfer(const std::vector<Matrix> &kraus, unsigned qubits)
+{
+    if (kraus.empty())
+        throw std::invalid_argument("A channel must contain at least one Kraus operator");
+    const unsigned dim = 1U << qubits, count = dim * dim;
+    std::vector<LocalMatrix> operators;
+    operators.reserve(kraus.size());
+    LocalMatrix completeness{};
+    for (const auto &E : kraus)
+    {
+        if (static_cast<size_t>(E.rows()) != dim || static_cast<size_t>(E.cols()) != dim)
+            throw std::invalid_argument("All Kraus operators must have the same dimensions");
+        LocalMatrix e{};
+        for (unsigned r = 0; r < dim; ++r)
+            for (unsigned c = 0; c < dim; ++c)
+            {
+                const std::complex<double> value = E(r, c);
+                if (!std::isfinite(value.real()) || !std::isfinite(value.imag()))
+                    throw std::invalid_argument("Kraus operators must contain only finite values");
+                e[r * dim + c] = value;
+            }
+        for (unsigned r = 0; r < dim; ++r)
+            for (unsigned c = 0; c < dim; ++c)
+                for (unsigned k = 0; k < dim; ++k)
+                    completeness[r * dim + c] += std::conj(e[k * dim + r]) * e[k * dim + c];
+        operators.push_back(e);
+    }
+    double errorSquared = 0.;
+    for (unsigned r = 0; r < dim; ++r)
+        for (unsigned c = 0; c < dim; ++c)
+            errorSquared += std::norm(completeness[r * dim + c] - std::complex<double>(r == c ? 1. : 0.));
+    const double tolerance = 1E-10 * dim;
+    if (!std::isfinite(errorSquared) || errorSquared > tolerance * tolerance)
+        throw std::invalid_argument("Kraus operators do not define a trace-preserving channel");
+
+    std::array<LocalMatrix, 16> basis;
+    for (unsigned label = 0; label < count; ++label)
+        basis[label] = LabelMatrix(label, qubits);
+    ChannelTransfer transfer{};
+    transfer[0][0] = 1.;
+    constexpr double snap = 1E-14;
+    for (unsigned input = 1; input < count; ++input)
+    {
+        LocalMatrix evolved{};
+        for (const auto &e : operators)
+        {
+            LocalMatrix product{};
+            for (unsigned r = 0; r < dim; ++r)
+                for (unsigned c = 0; c < dim; ++c)
+                    for (unsigned k = 0; k < dim; ++k)
+                        product[r * dim + c] += basis[input][r * dim + k] * e[k * dim + c];
+            for (unsigned r = 0; r < dim; ++r)
+                for (unsigned c = 0; c < dim; ++c)
+                    for (unsigned k = 0; k < dim; ++k)
+                        evolved[r * dim + c] += std::conj(e[k * dim + r]) * product[k * dim + c];
+        }
+        for (unsigned output = 0; output < count; ++output)
+        {
+            std::complex<double> trace = 0.;
+            for (unsigned r = 0; r < dim; ++r)
+                for (unsigned k = 0; k < dim; ++k)
+                    trace += basis[output][r * dim + k] * evolved[k * dim + r];
+            double value = trace.real() / dim;
+            if (std::abs(value) <= snap)
+                value = 0.;
+            else if (std::abs(value - 1.) <= snap)
+                value = 1.;
+            else if (std::abs(value + 1.) <= snap)
+                value = -1.;
+            transfer[input][output] = value;
+        }
+    }
+    return transfer;
+}
+
+// A channel ready to record: its eigenvalues when the transfer matrix is
+// diagonal (a Pauli channel, however it was specified), a local table otherwise.
+struct CompiledChannel
+{
+    bool diagonal = true;
+    Eigenvalues eigenvalues;
+    std::shared_ptr<const LocalTransfer> table;
+};
+
+inline CompiledChannel CompileChannel(const ChannelTransfer &transfer, unsigned qubits)
+{
+    const unsigned count = 1U << (2 * qubits);
+    CompiledChannel result;
+    result.eigenvalues.fill(1.);
+    for (unsigned input = 0; input < count && result.diagonal; ++input)
+        for (unsigned output = 0; output < count; ++output)
+            if (input != output && transfer[input][output] != 0.)
+            {
+                result.diagonal = false;
+                break;
+            }
+    if (result.diagonal)
+    {
+        for (unsigned input = 1; input < count; ++input)
+            result.eigenvalues[input] = transfer[input][input];
+        return result;
+    }
+    auto table = std::make_shared<LocalTransfer>(static_cast<int>(qubits));
+    for (unsigned input = 0; input < count; ++input)
+        table->Column(input, transfer[input]);
+    result.table = std::move(table);
+    return result;
+}
+
+// X,Y -> coherence X,Y and Z -> shift I + scale Z. This covers amplitude
+// damping, its finite-temperature form and thermal relaxation.
+inline CompiledChannel CompileRelaxation(double coherence, double scale, double shift)
+{
+    ChannelTransfer transfer{};
+    transfer[0][0] = 1.;
+    transfer[1][1] = transfer[3][3] = coherence;
+    transfer[2][2] = scale;
+    transfer[2][0] = shift;
+    return CompileChannel(transfer, 1);
+}
+
 } // namespace PauliDetail
 } // namespace QC

@@ -224,6 +224,9 @@
     <ClInclude Include="QCSim\PauliNativeRegressionTests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QCSim\PauliNoiseRegressionTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="QCSim\NonCliffordTestGates.h">
       <Filter>Header Files</Filter>
     </ClInclude>

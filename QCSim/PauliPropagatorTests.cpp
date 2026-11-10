@@ -1,5 +1,6 @@
 #include "Tests.h"
 
+#include "DensityMatrix.h"
 #include "NonCliffordTestGates.h"
 #include "PauliPropagator.h"
 #include "PauliPropagatorRegressionTests.h"
@@ -345,6 +346,164 @@ bool TestPauliPropagatorCorNC(bool clifford = true)
     return true;
 }
 
+// Noise channels. The propagator applies the adjoint channel to the observable;
+// the density matrix applies the channel to the state. Both simulators must
+// agree on every expectation value and basis probability, including for a
+// two-qubit Kraus channel that is not symmetric in its qubits (which fixes the
+// qubit order of ApplyKrausChannel against DensityMatrix::ApplyChannel).
+bool TestPauliPropagatorNoise()
+{
+    std::cout << "\nPauli Propagator noise channels against the density matrix" << std::endl;
+    using Matrix = Eigen::MatrixXcd;
+    std::uniform_int_distribution gateDistr(0, 17);
+    std::uniform_int_distribution channelDistr(0, 8);
+    std::uniform_int_distribution pauliDistr(0, 3);
+    std::uniform_real_distribution angleDistr(-2. * M_PI, 2. * M_PI);
+    std::uniform_real_distribution probDistr(0., 1.);
+    std::bernoulli_distribution noiseDistr(0.4);
+
+    const auto damping = [](double gamma) {
+        Matrix k0 = Matrix::Zero(2, 2), k1 = Matrix::Zero(2, 2);
+        k0(0, 0) = 1.;
+        k0(1, 1) = std::sqrt(1. - gamma);
+        k1(0, 1) = std::sqrt(gamma);
+        return std::vector<Matrix>{k0, k1};
+    };
+    const auto bitFlip = [](double p) {
+        Matrix x = Matrix::Zero(2, 2);
+        x(0, 1) = x(1, 0) = 1.;
+        return std::vector<Matrix>{std::sqrt(1. - p) * Matrix::Identity(2, 2), std::sqrt(p) * x};
+    };
+    // second (x) first, with the first qubit in the low bit of the index.
+    const auto tensor = [](const Matrix &second, const Matrix &first) {
+        Matrix result = Matrix::Zero(4, 4);
+        for (int r = 0; r < 4; ++r)
+            for (int c = 0; c < 4; ++c)
+                result(r, c) = second(r >> 1, c >> 1) * first(r & 1, c & 1);
+        return result;
+    };
+
+    for (size_t nrQubits = 2; nrQubits <= 6; ++nrQubits)
+    {
+        std::uniform_int_distribution qubitDistr(0, static_cast<int>(nrQubits) - 1);
+        for (size_t t = 0; t < 40; ++t)
+        {
+            QC::PauliPropagator pauliSimulator;
+            pauliSimulator.SetNrQubits(static_cast<int>(nrQubits));
+            if (t % 2)
+                pauliSimulator.SetStepsBetweenDeduplication(3);
+            QC::DensityMatrix<> densityMatrix(nrQubits);
+            for (int step = 0; step < 25; ++step)
+            {
+                const int q1 = qubitDistr(gen);
+                int q2 = qubitDistr(gen);
+                while (q2 == q1)
+                    q2 = qubitDistr(gen);
+                if (!noiseDistr(gen))
+                {
+                    const int code = gateDistr(gen);
+                    const double angle = angleDistr(gen);
+                    const auto gate = GetGate(code, angle);
+                    densityMatrix.ApplyGate(*gate, q1, q2);
+                    ApplyGate(pauliSimulator, code, q1, q2, angle);
+                    continue;
+                }
+                const double p = probDistr(gen);
+                switch (channelDistr(gen))
+                {
+                case 0:
+                    densityMatrix.ApplyBitFlipNoise(q1, p);
+                    pauliSimulator.ApplyBitFlipNoise(q1, p);
+                    break;
+                case 1:
+                    densityMatrix.ApplyPhaseFlipNoise(q1, p);
+                    pauliSimulator.ApplyPhaseFlipNoise(q1, p);
+                    break;
+                case 2:
+                    densityMatrix.ApplyDepolarizingNoise(q1, p);
+                    pauliSimulator.ApplyDepolarizingNoise(q1, p);
+                    break;
+                case 3:
+                    densityMatrix.ApplyAmplitudeDamping(q1, p);
+                    pauliSimulator.ApplyAmplitudeDamping(q1, p);
+                    break;
+                case 4:
+                    densityMatrix.ApplyPhaseDamping(q1, p);
+                    pauliSimulator.ApplyPhaseDamping(q1, p);
+                    break;
+                case 5:
+                    densityMatrix.ApplyReset(q1);
+                    pauliSimulator.ApplyReset(q1);
+                    break;
+                case 6: {
+                    const auto kraus = damping(p);
+                    densityMatrix.ApplyChannel(kraus, q1);
+                    pauliSimulator.ApplyKrausChannel(kraus, q1);
+                    break;
+                }
+                case 7: {
+                    // Damping on the first qubit and a bit flip on the second:
+                    // exchanging the qubits gives a different channel.
+                    std::vector<Matrix> kraus;
+                    for (const auto &second : bitFlip(0.5 * p))
+                        for (const auto &first : damping(p))
+                            kraus.push_back(tensor(second, first));
+                    densityMatrix.ApplyChannel(kraus, q1, q2);
+                    pauliSimulator.ApplyKrausChannel(kraus, q1, q2);
+                    break;
+                }
+                default: {
+                    // Thermal relaxation with T1 < T2 <= 2 T1: damping followed
+                    // by the dephasing that brings the coherence down to exp(-t/T2).
+                    const double t1 = 100., t2 = 100. * (1. + p), duration = 60. * probDistr(gen);
+                    const double gamma = -std::expm1(-duration / t1);
+                    const double extra = std::exp(-duration / t2) / std::sqrt(1. - gamma);
+                    densityMatrix.ApplyAmplitudeDamping(q1, gamma);
+                    densityMatrix.ApplyPhaseFlipNoise(q1, 0.5 * (1. - extra));
+                    pauliSimulator.ApplyThermalRelaxation(q1, duration, t1, t2);
+                    break;
+                }
+                }
+            }
+
+            for (int k = 0; k < 40; ++k)
+            {
+                std::string pauliStr(nrQubits, 'I');
+                for (auto &c : pauliStr)
+                    c = "IXYZ"[pauliDistr(gen)];
+                const double expected = densityMatrix.ExpectationValue(pauliStr).real();
+                const double value = pauliSimulator.ExpectationValue(pauliStr);
+                if (!approxEqual(expected, value, 1E-9))
+                {
+                    std::cout << std::endl
+                              << "Noisy expectation values are not equal for pauli propagator and density matrix for "
+                              << nrQubits << " qubits, values: " << value << ", " << expected << std::endl;
+                    std::cout << "Pauli string: " << pauliStr << std::endl;
+                    return false;
+                }
+            }
+            for (size_t state = 0; state < (size_t(1) << nrQubits); ++state)
+            {
+                const double expected = densityMatrix.getBasisStateProbability(state);
+                const double value = pauliSimulator.Probability(state);
+                if (std::abs(expected - value) > 1E-8)
+                {
+                    std::cout << std::endl
+                              << "Noisy probabilities are not equal for pauli propagator and density matrix for "
+                              << nrQubits << " qubits, state " << state << ", values: " << value << ", " << expected
+                              << std::endl;
+                    return false;
+                }
+            }
+        }
+        std::cout << '.';
+    }
+
+    std::cout << "\nSuccess" << std::endl;
+
+    return true;
+}
+
 bool TestPauliPropagator()
 {
     try
@@ -357,5 +516,5 @@ bool TestPauliPropagator()
         return false;
     }
 
-    return TestPauliPropagatorCorNC(true) && TestPauliPropagatorCorNC(false);
+    return TestPauliPropagatorNoise() && TestPauliPropagatorCorNC(true) && TestPauliPropagatorCorNC(false);
 }

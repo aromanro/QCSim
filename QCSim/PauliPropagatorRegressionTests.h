@@ -1,6 +1,7 @@
 #pragma once
 #include "PauliLightconeRegressionTests.h"
 #include "PauliNativeRegressionTests.h"
+#include "PauliNoiseRegressionTests.h"
 #include "PauliRuntimeApiRegressionTests.h"
 #include "PauliRuntimeEngineRegressionTests.h"
 
@@ -732,6 +733,7 @@ inline void Run()
     PauliRuntimeApiRegression::Run();
     PauliRuntimeEngineRegression::Run();
     PauliLightconeRegression::Run();
+    PauliNoiseRegression::Run();
     std::cout << "ALL CHECKS PASSED\n";
 }
 } // namespace PauliRegression

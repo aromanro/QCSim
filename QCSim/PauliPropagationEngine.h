@@ -94,13 +94,16 @@ template <class T> PauliStringXZWithCoefficient Unpack(const T &t, size_t qubits
     return p;
 }
 
-// Primitive gates have no per-gate heap allocation. The payload owns either
-// an immutable local table or a custom operator, distinguished by userDefined.
-// Sharing this slot keeps the primitive descriptor's original size.
+// Primitive gates have no per-gate heap allocation. The payload owns an
+// immutable local table, the eigenvalues of a two-qubit diagonal channel, or
+// a custom operator (userDefined); the operation type tells the first two
+// apart. Sharing this slot keeps the primitive descriptor's original size.
 struct Operation
 {
     OperationType type;
     int q0, q1, q2 = 0;
+    // A one-qubit diagonal channel keeps its eigenvalues here instead, by
+    // local label: angle for X, sine for Z, cosine for Y.
     double angle = 0., sine = 0., cosine = 1., coefficient = 1.;
     bool projectOne = false;
     bool userDefined = false, clifford = false;
@@ -119,6 +122,84 @@ struct Operation
     const LocalTransfer &Transfer() const
     {
         return *static_cast<const LocalTransfer *>(payload.get());
+    }
+
+    const Eigenvalues &Diagonal() const
+    {
+        return *static_cast<const Eigenvalues *>(payload.get());
+    }
+
+    // Eigenvalues of either diagonal channel, by local label.
+    Eigenvalues ChannelEigenvalues() const
+    {
+        if (type == OperationType::PAULI_CHANNEL_2Q)
+            return Diagonal();
+        Eigenvalues lambda;
+        lambda.fill(1.);
+        lambda[1] = angle;
+        lambda[2] = sine;
+        lambda[3] = cosine;
+        return lambda;
+    }
+
+    static Operation PauliChannel(int q, const Eigenvalues &lambda)
+    {
+        Operation op(OperationType::PAULI_CHANNEL_1Q, q);
+        op.angle = lambda[1];
+        op.sine = lambda[2];
+        op.cosine = lambda[3];
+        return op;
+    }
+
+    static Operation PauliChannel(int a, int b, const Eigenvalues &lambda)
+    {
+        Operation op(OperationType::PAULI_CHANNEL_2Q, a, b);
+        op.payload = std::make_shared<const Eigenvalues>(lambda);
+        return op;
+    }
+
+    static Operation Reset(int q, bool toOne)
+    {
+        Operation op(OperationType::RESET, q);
+        op.projectOne = toOne;
+        return op;
+    }
+
+    // The noise properties below derive from the type and its stored values,
+    // so the descriptor and the cost of recording a gate are what they were
+    // before noise existed. They are meaningful for built-in operations only.
+
+    // A diagonal channel or reset: applied in place, it never adds a term.
+    bool InPlace() const
+    {
+        return IsPauliDiagonalChannel(type) || type == OperationType::RESET;
+    }
+
+    // May set coefficients to zero; the engine then compacts the terms.
+    bool Annihilates() const
+    {
+        switch (type)
+        {
+        case OperationType::PROJ:
+        case OperationType::RESET:
+            return true;
+        case OperationType::PAULI_CHANNEL_1Q:
+            return angle == 0. || sine == 0. || cosine == 0.;
+        case OperationType::PAULI_CHANNEL_2Q: {
+            const auto &lambda = Diagonal();
+            return std::any_of(lambda.begin(), lambda.end(), [](double value) { return value == 0.; });
+        }
+        default:
+            return false;
+        }
+    }
+
+    // Applied in place by Apply, without ever appending to the branch buffer.
+    // Consecutive operations of this kind share one pass over the terms. A
+    // Clifford gate answers from the two flags it always read.
+    bool NonBranching() const
+    {
+        return !userDefined && (clifford || InPlace());
     }
 
     int Qubit(int index) const
@@ -182,6 +263,12 @@ struct Operation
             QC_PP_OP2(ISWAPDG);
         case OperationType::PROJ:
             return std::make_unique<Projector>(q0, projectOne, coefficient);
+        case OperationType::PAULI_CHANNEL_1Q:
+            return std::make_unique<OperatorPauliChannel>(q0, ChannelEigenvalues());
+        case OperationType::PAULI_CHANNEL_2Q:
+            return std::make_unique<OperatorPauliChannel>(q0, q1, ChannelEigenvalues());
+        case OperationType::RESET:
+            return std::make_unique<OperatorReset>(q0, projectOne);
         case OperationType::RX:
             return std::make_unique<OperatorRX>(q0, angle);
         case OperationType::RY:
@@ -204,6 +291,14 @@ struct Operation
         op.q2 = p->GetNrQubits() > 2 ? p->GetQubit(2) : 0;
         if (IsPauliLocalGate(op.type) && typeid(*p) == typeid(OperatorLocal))
             return Local(op.type, op.q0, op.q1, op.q2, static_cast<const OperatorLocal &>(*p).GetTransfer());
+        if (IsPauliDiagonalChannel(op.type) && typeid(*p) == typeid(OperatorPauliChannel))
+        {
+            const auto &lambda = static_cast<const OperatorPauliChannel &>(*p).GetEigenvalues();
+            return op.type == OperationType::PAULI_CHANNEL_1Q ? PauliChannel(op.q0, lambda)
+                                                              : PauliChannel(op.q0, op.q1, lambda);
+        }
+        if (op.type == OperationType::RESET && typeid(*p) == typeid(OperatorReset))
+            return Reset(op.q0, static_cast<const OperatorReset &>(*p).IsToOne());
         bool builtin = false;
 #define QC_PP_MATCH(name)                                                                                              \
     case OperationType::name:                                                                                          \
@@ -507,7 +602,48 @@ void Apply(const Operation &op, std::vector<T> &terms, size_t begin, size_t end,
     case OperationType::CH:
     case OperationType::CCX:
     case OperationType::CSWAP:
+    case OperationType::CHANNEL_1Q:
+    case OperationType::CHANNEL_2Q:
         ApplyLocal(op, terms, begin, end, extra);
+        return;
+    case OperationType::PAULI_CHANNEL_1Q: {
+        // Branch-free: the identity label multiplies by exactly 1.
+        const unsigned shift = unsigned(op.q0) % 64;
+        const double lambda[4] = {1., op.angle, op.sine, op.cosine};
+        for (size_t i = begin; i < end; ++i)
+        {
+            auto &t = terms[i];
+            t.Coefficient *= lambda[unsigned((t.X[w] >> shift) & 1) | unsigned((t.Z[w] >> shift) & 1) << 1];
+        }
+        return;
+    }
+    case OperationType::PAULI_CHANNEL_2Q: {
+        const auto &lambda = op.Diagonal();
+        const size_t w1 = static_cast<size_t>(op.q1) / 64;
+        const unsigned shift = unsigned(op.q0) % 64, shift1 = unsigned(op.q1) % 64;
+        for (size_t i = begin; i < end; ++i)
+        {
+            auto &t = terms[i];
+            const unsigned label = unsigned((t.X[w] >> shift) & 1) | unsigned((t.Z[w] >> shift) & 1) << 1 |
+                                   unsigned((t.X[w1] >> shift1) & 1) << 2 | unsigned((t.Z[w1] >> shift1) & 1) << 3;
+            t.Coefficient *= lambda[label];
+        }
+        return;
+    }
+    case OperationType::RESET:
+        // The adjoint of an unrecorded reset: X and Y vanish, Z becomes +-I.
+        for (size_t i = begin; i < end; ++i)
+        {
+            auto &t = terms[i];
+            if (t.X[w] & bit)
+                t.Coefficient = 0.;
+            else if (t.Z[w] & bit)
+            {
+                t.Z[w] &= ~bit;
+                if (op.projectOne)
+                    t.Coefficient = -t.Coefficient;
+            }
+        }
         return;
     case OperationType::X:
         for (size_t i = begin; i < end; ++i)
@@ -1260,10 +1396,13 @@ double Execute(Workspace<T> &ws, const std::vector<Operation> &operations, const
                 {
                     const size_t index = cursor - 1;
                     const auto &candidate = operations[index];
+                    // Diagonal channels and resets between the rotations of one
+                    // qubit join the block; only branching rotations justify it.
                     if (candidate.Custom() || candidate.q0 != qubit || PauliOperationArity(candidate.type) != 1 ||
-                        IsPauliLocalGate(candidate.type) || (!candidate.Clifford() && !IsPauliRotation(candidate.type)))
+                        IsPauliLocalGate(candidate.type) ||
+                        (!candidate.NonBranching() && !IsPauliRotation(candidate.type)))
                         break;
-                    rotations += !candidate.Clifford();
+                    rotations += !candidate.NonBranching();
                     blockLow = index;
                     cursor = index;
                     if (s.Dedup(index) || s.Trim(index) || firstTouch[static_cast<size_t>(qubit)] == index)
@@ -1289,10 +1428,27 @@ double Execute(Workspace<T> &ws, const std::vector<Operation> &operations, const
             }
         }
         size_t low = high;
-        if (operations[high].Clifford())
-            while (low && !s.Dedup(low) && !s.Trim(low) && operations[low - 1].Clifford())
-                --low;
         const auto &op = operations[high];
+        // Clifford gates, diagonal channels and resets never branch: a run of
+        // them is one pass over the terms. Terms a run sets to zero are
+        // removed after it, as after a projector. The scan reads, for a
+        // Clifford gate, only the two flags it read before noise existed.
+        const bool run = op.NonBranching();
+        bool compact = !op.Custom() && op.Annihilates();
+        if (run)
+            while (low && !s.Dedup(low) && !s.Trim(low))
+            {
+                const auto &previous = operations[low - 1];
+                if (previous.userDefined)
+                    break;
+                if (!previous.clifford)
+                {
+                    if (!previous.InPlace())
+                        break;
+                    compact = compact || previous.Annihilates();
+                }
+                --low;
+            }
         bool anyNeeded = needed.empty();
         if (!anyNeeded)
             for (size_t index = low; index <= high; ++index)
@@ -1321,7 +1477,7 @@ double Execute(Workspace<T> &ws, const std::vector<Operation> &operations, const
         }
         const size_t size = terms.size();
         const size_t threshold =
-            op.Clifford() ? std::max<size_t>(1, s.parallelThreshold / (high - low + 1)) : s.parallelThreshold;
+            run ? std::max<size_t>(1, s.parallelThreshold / (high - low + 1)) : s.parallelThreshold;
         const size_t parts = op.Custom() ? 1 : Parts(size, threshold, s.batch, s.pool);
         // Avoid chunk-count division on the common sequential path.
         const size_t grain = parts == 1 ? size : Grain(size, parts, s.batch);
@@ -1332,7 +1488,7 @@ double Execute(Workspace<T> &ws, const std::vector<Operation> &operations, const
             ws.extra[j].clear();
         const auto applyChunk = [&](size_t job, size_t begin, size_t end) {
             auto &extra = ws.extra[job];
-            if (!op.Clifford() && (op.Custom() || !IsPauliLocalGate(op.type)))
+            if (!run && (op.Custom() || !IsPauliLocalGate(op.type)))
                 extra.reserve(end - begin);
             for (size_t pos = high + 1; pos > low;)
             {
@@ -1347,7 +1503,7 @@ double Execute(Workspace<T> &ws, const std::vector<Operation> &operations, const
             applyChunk(0, 0, size);
         else
             Chunks(size, parts, s.pool, applyChunk, grain);
-        if (!op.Custom() && op.type == OperationType::PROJ)
+        if (compact)
         {
             // Compact only after every worker has released its vector range.
             // Custom Apply implementations may observe or revive zero terms;
