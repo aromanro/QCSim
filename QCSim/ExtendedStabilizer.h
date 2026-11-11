@@ -95,10 +95,11 @@ class ExtendedStabilizer
         frames.emplace_back(nrQubits);
     }
 
+    // Seeds the engine with the value itself. A std::seed_seq costs about ten
+    // microseconds per call, too much for callers that reseed for every shot.
     void SetSeed(uint64_t theSeed)
     {
-        std::seed_seq seed{uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32)};
-        gen.seed(seed);
+        gen.seed(theSeed);
         dist.reset();
     }
 

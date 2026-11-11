@@ -123,10 +123,11 @@ class MPOSimulatorBase : public MPOSimulatorInterface
     MPOSimulatorBase &operator=(const MPOSimulatorBase &) = default;
     MPOSimulatorBase &operator=(MPOSimulatorBase &&) = default;
 
+    // Seeds the engine with the value itself. A std::seed_seq costs about ten
+    // microseconds per call, too much for callers that reseed for every shot.
     void SetSeed(uint64_t theSeed)
     {
-        std::seed_seq seed{uint32_t(theSeed & 0xffffffff), uint32_t(theSeed >> 32)};
-        rng.seed(seed);
+        rng.seed(theSeed);
     }
 
     size_t getNrQubits() const override

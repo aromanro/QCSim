@@ -186,8 +186,7 @@ inline void ValidationBoundaries()
         PauliPropagator p;
         p.SetNrQubits(64);
         p.SetSeed(seed);
-        std::seed_seq sequence{uint32_t(seed), uint32_t(seed >> 32)};
-        std::mt19937_64 reference(sequence);
+        std::mt19937_64 reference(seed);
         std::uniform_real_distribution<double> uniform(0., 1.);
         std::vector<int> qubits(count);
         std::iota(qubits.rbegin(), qubits.rend(), 0);

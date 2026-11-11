@@ -64,10 +64,11 @@ class StabilizerState
         return *this;
     }
 
+    // Seeds the engine with the value itself. A std::seed_seq costs about ten
+    // microseconds per call, too much for callers that reseed for every shot.
     void SetSeed(uint64_t seed)
     {
-        std::seed_seq sequence{uint32_t(seed), uint32_t(seed >> 32)};
-        gen.seed(sequence);
+        gen.seed(seed);
     }
 
     void Reset() noexcept

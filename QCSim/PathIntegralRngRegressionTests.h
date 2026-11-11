@@ -48,8 +48,8 @@ inline PathIntegral::FastVectorBool ExpectedState(const Map &state, double targe
 inline void SeededReference(size_t &checks)
 {
     // Integer amplitudes make both the small and block CDF sums exact. Compare
-    // the public draw sequence with the same standard engine and distribution
-    // used before lazy initialization, including seeds with high bits set.
+    // the public draw sequence with a standard engine seeded with the same
+    // value and the same distribution, including seeds with high bits set.
     for (uint64_t seed : {uint64_t(0), uint64_t(1), uint64_t(1) << 32, ~uint64_t(0)})
         for (size_t count : {size_t(8), size_t(129)})
         {
@@ -57,8 +57,7 @@ inline void SeededReference(size_t &checks)
             Simulator simulator;
             simulator.GetAmplitudes() = state;
             simulator.SetSeed(seed);
-            std::seed_seq sequence{uint32_t(seed & 0xffffffff), uint32_t(seed >> 32)};
-            std::mt19937_64 engine(sequence);
+            std::mt19937_64 engine(seed);
             std::uniform_real_distribution<double> uniform(0., 1.);
             double total = 0.;
             for (const auto &entry : state)
@@ -83,8 +82,7 @@ inline void SeededReference(size_t &checks)
     const auto state = State();
     Simulator simulator;
     simulator.SetSeed(0x123456789abcdef0ULL);
-    std::seed_seq sequence{uint32_t(0x9abcdef0), uint32_t(0x12345678)};
-    std::mt19937_64 engine(sequence);
+    std::mt19937_64 engine(0x123456789abcdef0ULL);
     std::uniform_real_distribution<double> uniform(0., 1.);
     for (size_t sample = 0; sample < 128; ++sample)
     {

@@ -54,10 +54,11 @@ class PauliPropagator
         rng.seed(rdv());
     }
 
+    // Seeds the engine with the value itself. A std::seed_seq costs about ten
+    // microseconds per call, too much for callers that reseed for every shot.
     void SetSeed(uint64_t seed)
     {
-        std::seed_seq seq{uint32_t(seed), uint32_t(seed >> 32)};
-        rng.seed(seq);
+        rng.seed(seed);
     }
 
     int GetNrQubits() const
