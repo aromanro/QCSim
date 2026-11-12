@@ -52,31 +52,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     // Compresses the current state using either or both configured limits, without a gate.
     void Trim() override
     {
-        if (!limitSize && !limitEntanglement)
-            return;
-        if (!limitEntanglement && std::all_of(lambdas.begin(), lambdas.end(),
-                                              [this](const LambdaType &lambda) { return lambda.size() <= chi; }))
-            return;
-
-        bool truncated = false;
-        for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
-        {
-            // After a cut, update each intervening bond's environment even when it
-            // already fits the cap; a later cut must not reuse its old Schmidt weights.
-            if (!limitEntanglement && lambdas[qubit1].size() <= chi && !truncated)
-                continue;
-
-            const bool canonicalWeights = canonicalFormValid;
-            if (!canonicalWeights)
-                PrepareBond(qubit1);
-            // Contract with orthonormal environments, then apply the requested cut.
-            const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
-            const MatrixClass thetaMatrix = ReshapeTheta(theta);
-
-            truncated = DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1, true, canonicalWeights) || truncated;
-        }
-
-        ApplyPostTruncationPatches(truncated);
+        ApplyPostTruncationPatches(Compress());
     }
 
     void ReCanonicalize() override
@@ -120,9 +96,12 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         ScaleSite(0, 0.5);
 
         ReCanonicalize();
-        Trim();
+        // The patches are suspended here, so the limits are applied without them. The trace is the one of
+        // (rho + rho^dagger) / 2 unless this cut something: only then is there a trace to restore, as after
+        // a gate. An operator that is deliberately not normalized keeps its trace otherwise.
+        const bool truncated = Compress();
 
-        if (restoreTraceAfterTruncation && !wasApplying)
+        if (truncated && restoreTraceAfterTruncation && !wasApplying)
             RestoreTraceIfSafe();
     }
 
@@ -209,14 +188,35 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         ApplyKrausOperatorsImpl(ops, operatorQubits, qubit, controllingQubit1);
     }
 
+    // A linear map on the operator space of one site, or of two neighbouring sites, given as a superoperator:
+    // the 4x4 or 16x16 matrix that multiplies the local density blocks indexed ket + d * bra, with `qubit` the
+    // low bit of both and `controllingQubit1` the high one. For Kraus operators E_k it is
+    // sum_k conj(E_k) (x) E_k, and for a unitary U it is conj(U) (x) U. Maps applied one after another multiply
+    // (later ones on the left), so a gate, its noise and the gates around them on the same sites cost one
+    // update and one decomposition, where a gate followed by a two-qubit channel costs two. The matrix is
+    // trusted: only its shape and its entries being finite are checked.
+    void ApplySuperoperator(const MatrixClass &superoperator, IndexType qubit, IndexType controllingQubit1 = 0)
+    {
+        const size_t operatorQubits = superoperator.rows() == 4 ? 1 : superoperator.rows() == 16 ? 2 : 0;
+        if (!operatorQubits || superoperator.cols() != superoperator.rows() || !superoperator.allFinite())
+            throw std::invalid_argument("A superoperator must be a finite 4x4 or 16x16 matrix");
+        ValidateQubits(operatorQubits, qubit, controllingQubit1);
+        if (operatorQubits == 1)
+            ApplySingleSiteSuperoperator(superoperator, qubit);
+        else
+            ApplyTwoSiteSuperoperator(superoperator, qubit, controllingQubit1);
+    }
+
     // false if measured 0, true if measured 1
     bool MeasureQubit(IndexType qubit) override
     {
         if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
             throw std::invalid_argument("Qubit index out of bounds");
 
-        const double prob0 = ValidMeasurementProbability(GetProbability(qubit, true));
-        const bool zeroMeasured = uniformZeroOne(rng) < prob0;
+        const double prob0 = ResolvedProbability(ValidMeasurementProbability(GetProbability(qubit, true)));
+        // the number is drawn whatever the probability, so that the sequence of a seed does not depend on it
+        const double drawn = uniformZeroOne(rng);
+        const bool zeroMeasured = prob0 >= 1. || drawn < prob0;
 
         // for a density matrix, the post measurement state is P rho P (suitably normalized)
         // P acts only on the measured site, so this is a purely local operation - no need to
@@ -227,11 +227,15 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         ApplySingleQubitGate(collapsedGamma, projMat);
 
         // Normalize by the actual post-projection trace, rather than by the probability
-        // normalized against the input trace. This also handles deliberately unnormalized MPOs.
+        // normalized against the input trace. This also handles deliberately unnormalized MPOs:
+        // the outcome taken has a probability above the rounding, so its trace is not compared
+        // with a fixed bound, which would refuse ordinary outcomes of an operator of small trace.
+        // Only its size is checked: a truncated operator that is no longer Hermitian has a
+        // complex trace here, and is divided by it as before.
         const std::complex<double> postTrace = ContractChain([this, qubit, &collapsedGamma](IndexType q) {
             return q == qubit ? TraceSiteTensor(collapsedGamma) : SiteTraceMatrix(q);
         });
-        if (!IsFinite(postTrace) || std::abs(postTrace) <= std::numeric_limits<double>::epsilon())
+        if (!IsFinite(postTrace) || !(std::abs(postTrace) >= std::numeric_limits<double>::min()))
             throw std::runtime_error("Cannot collapse an MPO state onto a zero-probability outcome");
 
         ScaleTensor(collapsedGamma, 1. / postTrace);
@@ -515,27 +519,43 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         else
             ApplySingleQubitGate(updatedGamma, op);
 
-        std::complex<double> trace;
+        // The trace the operator leaves is judged against the trace it was applied to.
+        std::complex<double> trace, traceBefore;
         if (limitSize || limitEntanglement)
+        {
+            traceBefore = Trace();
             trace = ContractChain([this, qubit, &updatedGamma](IndexType q) {
                 return q == qubit ? TraceSiteTensor(updatedGamma) : SiteTraceMatrix(q);
             });
+        }
         else
         {
             // Match Trace's fast contraction, including its summation order and
-            // power-of-two scaling, without installing the tentative tensor.
-            MatrixClass left = MatrixClass::Ones(1, 1), next;
-            int64_t exponent = scaleExponent;
+            // power-of-two scaling, without installing the tentative tensor. The two traces
+            // share the chain up to the site, so the one before is carried along from there.
+            MatrixClass left = MatrixClass::Ones(1, 1), next, leftBefore, nextBefore;
+            int64_t exponent = scaleExponent, exponentBefore = scaleExponent;
             for (IndexType q = 0; q < static_cast<IndexType>(gammas.size()); ++q)
             {
+                if (q == qubit)
+                {
+                    leftBefore = left;
+                    exponentBefore = exponent;
+                }
+                if (q >= qubit)
+                {
+                    ContractPauliSite(gammas[q], 'I', leftBefore, nextBefore);
+                    RescaleIfOutOfRange(nextBefore, exponentBefore);
+                    leftBefore.swap(nextBefore);
+                }
                 ContractPauliSite(q == qubit ? updatedGamma : gammas[q], 'I', left, next);
                 RescaleIfOutOfRange(next, exponent);
                 left.swap(next);
             }
             trace = ScaleByPowerOfTwo(left(0, 0), exponent);
+            traceBefore = ScaleByPowerOfTwo(leftBefore(0, 0), exponentBefore);
         }
-        if (!IsFinite(trace) || std::abs(trace) <= std::numeric_limits<double>::epsilon())
-            throw std::runtime_error("Cannot normalize an MPO state with zero or non-finite trace");
+        RequireResolvedWeight(trace, traceBefore);
         const bool unitary = (op.adjoint() * op).isIdentity(1E-12);
 
         // All allocating work is complete. Preserve the existing normalization
@@ -549,10 +569,28 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     void ApplyAndNormalizeWithoutBackup(const MatrixClass &op, size_t operatorQubits, IndexType qubit,
                                         IndexType controllingQubit1)
     {
-        ApplyValidatedOperator(op, operatorQubits, qubit, controllingQubit1);
-        const auto trace = Trace();
-        if (!IsFinite(trace) || std::abs(trace) <= std::numeric_limits<double>::epsilon())
-            throw std::runtime_error("Cannot normalize an MPO state with zero or non-finite trace");
+        const auto traceBefore = Trace();
+        bool truncated = false;
+        {
+            // The patches wait until the weight is judged: restoring the trace after a truncation would put a
+            // trace of one in the place of what the operator left, and that would be compared with the trace
+            // before it, refusing an ordinary operator on an operator of large trace and passing a weight that
+            // is only rounding.
+            ScopedFlag deferred(deferPostTruncationPatches);
+            truncatedWhileDeferred = false;
+            ApplyValidatedOperator(op, operatorQubits, qubit, controllingQubit1);
+            truncated = truncatedWhileDeferred;
+        }
+        auto trace = Trace();
+        RequireResolvedWeight(trace, traceBefore);
+        if (truncated)
+        {
+            // Then as after a gate, and the state is normalized by the trace the patches leave, as it was before.
+            ApplyPostTruncationPatches(true);
+            trace = Trace();
+            if (!IsFinite(trace) || !(trace.real() >= std::numeric_limits<double>::min()))
+                throw std::runtime_error("Cannot normalize an MPO state: its truncation left no positive trace");
+        }
         ScaleSite(canonicalFormValid ? 0 : centerFirst, 1. / trace);
     }
 
@@ -670,6 +708,81 @@ class MPOSimulatorImpl : public MPOSimulatorBase
                         result(l, r, out / 8, (out / 4) % 2, (out / 2) % 2, out % 2) +=
                             factor * theta(l, in / 8, (in / 2) % 2, (in / 4) % 2, in % 2, r);
             }
+    }
+
+    // The site index ket + 2 * bra is the one the channel accumulation above uses.
+    void ApplySingleSiteSuperoperator(const MatrixClass &channel, IndexType qubit)
+    {
+        InvalidateSamplingCache();
+        const TensorType &original = gammas[qubit];
+        const IndexType L = original.dimension(0), R = original.dimension(3);
+        TensorType result(L, 2, 2, R);
+        result.setZero();
+        for (int out = 0; out < 4; ++out)
+            for (int in = 0; in < 4; ++in)
+            {
+                const std::complex<double> factor = channel(out, in);
+                if (factor == std::complex<double>{})
+                    continue;
+                for (IndexType r = 0; r < R; ++r)
+                    for (IndexType l = 0; l < L; ++l)
+                        result(l, out % 2, out / 2, r) += factor * original(l, in % 2, in / 2, r);
+            }
+        gammas[qubit] = std::move(result);
+        InvalidateCanonicalForm(qubit, qubit);
+    }
+
+    // As a two-qubit channel, with the map given instead of built from Kraus operators.
+    void ApplyTwoSiteSuperoperator(const MatrixClass &superoperator, IndexType qubit, IndexType controllingQubit1)
+    {
+        const bool canonicalWeights = canonicalFormValid;
+        if (!canonicalWeights)
+            PrepareBond(std::min(qubit, controllingQubit1));
+        IndexType qubit1 = controllingQubit1;
+        IndexType qubit2 = qubit;
+        bool reversed = false;
+        if (qubit1 > qubit2)
+        {
+            std::swap(qubit1, qubit2);
+            reversed = true;
+        }
+
+        // The accumulation below packs (two-site ket) * 4 + (two-site bra), the left site being the high bit of
+        // each. Unless reversed the left site is controllingQubit1, the high bit of the caller's index too.
+        const auto callerIndex = [reversed](int packed) {
+            const int ket1 = packed / 8, ket2 = (packed / 4) % 2, bra1 = (packed / 2) % 2, bra2 = packed % 2;
+            const int ketLow = reversed ? ket1 : ket2, ketHigh = reversed ? ket2 : ket1;
+            const int braLow = reversed ? bra1 : bra2, braHigh = reversed ? bra2 : bra1;
+            return ketLow + 2 * ketHigh + 4 * (braLow + 2 * braHigh);
+        };
+        int caller[16];
+        for (int packed = 0; packed < 16; ++packed)
+            caller[packed] = callerIndex(packed);
+
+        const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+        const IndexType L = theta.dimension(0);
+        const IndexType R = theta.dimension(5);
+        // One matrix product: the bond indices are the rows, the sixteen states of the pair the columns.
+        MatrixClass gathered(L * R, 16), packed(16, 16);
+        for (int in = 0; in < 16; ++in)
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType l = 0; l < L; ++l)
+                    gathered(l + L * r, in) = theta(l, in / 8, (in / 2) % 2, (in / 4) % 2, in % 2, r);
+        for (int out = 0; out < 16; ++out)
+            for (int in = 0; in < 16; ++in)
+                packed(in, out) = superoperator(caller[out], caller[in]);
+        // Eigen runs a product of this size on several threads unless told otherwise.
+        MatrixClass mapped;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() { mapped.noalias() = gathered * packed; });
+        Eigen::Tensor<std::complex<double>, 6> result(L, R, 2, 2, 2, 2);
+        for (int out = 0; out < 16; ++out)
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType l = 0; l < L; ++l)
+                    result(l, r, out / 8, (out / 4) % 2, (out / 2) % 2, out % 2) = mapped(l + L * r, out);
+
+        const MatrixClass thetaMatrix = ReshapeThetaBar(result);
+        ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
+        InvalidateCanonicalForm(qubit1, qubit2);
     }
 
     template <class OperatorsContainer> void ApplySingleQubitChannel(const OperatorsContainer &ops, IndexType qubit)
@@ -861,10 +974,45 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         return true;
     }
 
+    // Applies the configured limits to every bond that needs it. Returns whether anything was cut.
+    bool Compress()
+    {
+        if (!limitSize && !limitEntanglement)
+            return false;
+        if (!limitEntanglement && std::all_of(lambdas.begin(), lambdas.end(),
+                                              [this](const LambdaType &lambda) { return lambda.size() <= chi; }))
+            return false;
+
+        bool truncated = false;
+        for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
+        {
+            // After a cut, update each intervening bond's environment even when it
+            // already fits the cap; a later cut must not reuse its old Schmidt weights.
+            if (!limitEntanglement && lambdas[qubit1].size() <= chi && !truncated)
+                continue;
+
+            const bool canonicalWeights = canonicalFormValid;
+            if (!canonicalWeights)
+                PrepareBond(qubit1);
+            // Contract with orthonormal environments, then apply the requested cut.
+            const Eigen::Tensor<std::complex<double>, 6> theta = ContractTwoQubits(qubit1);
+            const MatrixClass thetaMatrix = ReshapeTheta(theta);
+
+            truncated = DecomposeAndSetGammas(thetaMatrix, qubit1, qubit1 + 1, true, canonicalWeights) || truncated;
+        }
+        return truncated;
+    }
+
     void ApplyPostTruncationPatches(bool truncated)
     {
         if (!truncated || applyingPostTruncationPatches)
             return;
+        if (deferPostTruncationPatches)
+        {
+            // a normalized operator applies them itself, once it has judged the weight (ApplyAndNormalizeWithoutBackup)
+            truncatedWhileDeferred = true;
+            return;
+        }
         if (!hermitizeAfterTruncation && !restoreTraceAfterTruncation)
             return;
 
@@ -1312,6 +1460,9 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     constexpr static double krausCompletenessTolerance = 1E-10;
     Eigen::JacobiSVD<MatrixClass, Eigen::DecompositionOptions::ComputeThinV> jacobiSVD;
     bool applyingPostTruncationPatches = false;
+    // Set while a normalized operator is applied: a truncation is then only recorded, see ApplyPostTruncationPatches.
+    bool deferPostTruncationPatches = false;
+    bool truncatedWhileDeferred = false;
 };
 
 } // namespace TensorNetworks

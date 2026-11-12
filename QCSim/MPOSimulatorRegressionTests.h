@@ -5,7 +5,9 @@
 
 #include <iostream>
 #include <numeric>
+#include <tuple>
 #include <type_traits>
+#include <vector>
 
 namespace QC
 {
@@ -920,9 +922,218 @@ inline void PhysicalSwaps()
     Require(!sample.at(0) && sample.at(1) && !sample.at(2), "Physical SWAP retained stale sampling data");
 }
 
+// A circuit followed by its inverse leaves every qubit in |0>, and what the tensors then hold of |1> is the
+// rounding of the contractions. A normalization onto it was accepted whenever that rounding was above epsilon,
+// and left an operator of trace one that was no state.
+template <class Sim> void CheckRoundingWeights()
+{
+    constexpr Index n = 5;
+    Sim sim(n);
+    sim.SetSeed(0x4D504F03ULL);
+    std::vector<std::tuple<Matrix, Index, Index>> applied;
+    const Matrix cnot = Gates::CNOTGate<>().getRawOperatorMatrix();
+    for (int layer = 0; layer < 12; ++layer)
+    {
+        for (Index q = 0; q < n; ++q)
+        {
+            applied.emplace_back(Gates::RyGate<>(.37 + .21 * q + .13 * layer).getRawOperatorMatrix(), q, -1);
+            applied.emplace_back(Gates::RxGate<>(.53 + .17 * q - .11 * layer).getRawOperatorMatrix(), q, -1);
+        }
+        for (Index q = layer % 2; q + 1 < n; q += 2)
+            applied.emplace_back(cnot, q + 1, q);
+    }
+    const auto apply = [&sim](const Matrix &matrix, Index qubit, Index control) {
+        if (control < 0)
+            sim.ApplyGate(Gates::SingleQubitGate<>(matrix), qubit);
+        else
+            sim.ApplyGate(Gates::TwoQubitsGate<>(matrix), qubit, control);
+    };
+    for (const auto &[matrix, qubit, control] : applied)
+        apply(matrix, qubit, control);
+    for (auto it = applied.rbegin(); it != applied.rend(); ++it)
+        apply(Matrix(std::get<0>(*it).adjoint()), std::get<1>(*it), std::get<2>(*it));
+
+    Matrix expected = Matrix::Zero(Index{1} << n, Index{1} << n);
+    expected(0, 0) = 1.;
+    Close(sim.getUnnormalizedDensityMatrix(), expected, "A circuit and its inverse did not return the first state");
+
+    Matrix projectOne = Matrix::Zero(2, 2), projectOnes = Matrix::Zero(4, 4);
+    projectOne(1, 1) = 1.;
+    projectOnes(3, 3) = 1.;
+    for (Index q = 0; q < n; ++q)
+    {
+        Throws<std::runtime_error>([&] { sim.ApplyOperatorAndNormalize(Gates::SingleQubitGate<>(projectOne), q); },
+                                   "The rounding of a qubit in |0> was normalized into a state");
+        if (q + 1 < n)
+            Throws<std::runtime_error>(
+                [&] { sim.ApplyOperatorAndNormalize(Gates::TwoQubitsGate<>(projectOnes), q + 1, q); },
+                "The rounding of two qubits in |00> was normalized into a state");
+    }
+    if constexpr (std::is_same_v<Sim, Simulator>)
+        Throws<std::runtime_error>([&] { sim.ApplyOperatorAndNormalize(Gates::TwoQubitsGate<>(projectOnes), 4, 0); },
+                                   "The rounding of two distant qubits in |00> was normalized into a state");
+    Close(sim.getUnnormalizedDensityMatrix(), expected, "A refused normalization changed the state");
+    for (Index q = 0; q < n; ++q)
+        Require(!sim.MeasureQubit(q), "A measurement took an outcome that has only rounding for a probability");
+    Close(sim.getUnnormalizedDensityMatrix(), expected, "Measuring qubits in |0> changed the state");
+
+    // a weight below zero is no branch either: dividing by it flips the sign of the operator
+    Sim negative(1);
+    auto state = std::static_pointer_cast<TensorNetworks::MPOSimulatorBaseState>(negative.getState());
+    state->gammas[0].setZero();
+    state->gammas[0](0, 0, 0, 0) = 1.;
+    state->gammas[0](0, 1, 1, 0) = -.1;
+    negative.setState(state);
+    const Matrix raw = negative.getUnnormalizedDensityMatrix();
+    Throws<std::runtime_error>([&] { negative.ApplyOperatorAndNormalize(Gates::SingleQubitGate<>(projectOne), 0); },
+                               "A branch of negative weight was normalized into a state");
+    Close(negative.getUnnormalizedDensityMatrix(), raw, "A refused negative branch changed the operator");
+
+    // a small weight that is resolved is a branch: sqrt(1 - w) |00> + sqrt(w) |11> with w = 1e-8
+    Sim weak(2);
+    weak.ApplyGate(Gates::RyGate<>(2. * std::asin(1E-4)), 0);
+    weak.ApplyGate(Gates::CNOTGate<>(), 1, 0);
+    weak.ApplyOperatorAndNormalize(Gates::SingleQubitGate<>(projectOne), 1);
+    Require(std::abs(weak.Trace() - 1.) < 1E-12 && std::abs(weak.getUnnormalizedDensityMatrix()(3, 3) - 1.) < 1E-6,
+            "A branch of weight 1e-8 was not normalized");
+}
+
+inline void RoundingWeights()
+{
+    CheckRoundingWeights<Implementation>();
+    CheckRoundingWeights<Simulator>();
+}
+
+// The thresholds of a normalization are relative to the trace the operator is applied to. On a Bell pair scaled
+// to a trace of 3e-16 each outcome has a probability of one half and a trace of 1.5e-16, below epsilon.
+template <class Sim> void CheckScaledOperatorOutcomes()
+{
+    Matrix projectOne = Matrix::Zero(2, 2), projectOnes = Matrix::Zero(4, 4);
+    projectOne(1, 1) = 1.;
+    projectOnes(3, 3) = 1.;
+    for (int use = 0; use < 3; ++use)
+    {
+        Sim sim(2);
+        sim.SetSeed(0x4D504F04ULL);
+        sim.ApplyGate(Gates::HadamardGate<>(), 0);
+        sim.ApplyGate(Gates::CNOTGate<>(), 1, 0);
+        sim.ApplyOperator(Gates::SingleQubitGate<>(std::sqrt(3E-16) * Matrix::Identity(2, 2)), 0);
+        Require(std::abs(sim.Trace() - 3E-16) < 1E-28, "The scaled Bell pair does not have the trace it was given");
+        Close(sim.GetProbability(1), .5, "The probability of a scaled operator is not normalized by its trace");
+        bool outcome = true;
+        if (use == 0)
+            outcome = sim.MeasureQubit(1);
+        else if (use == 1)
+            sim.ApplyOperatorAndNormalize(Gates::SingleQubitGate<>(projectOne), 1);
+        else
+            sim.ApplyOperatorAndNormalize(Gates::TwoQubitsGate<>(projectOnes), 1, 0);
+        const Index collapsed = outcome ? 3 : 0;
+        Close(sim.Trace(), 1., "An ordinary outcome of a scaled operator was not normalized");
+        Close(sim.getUnnormalizedDensityMatrix()(collapsed, collapsed), 1.,
+              "An ordinary outcome of a scaled operator left the wrong state");
+    }
+}
+
+inline void ScaledOperatorOutcomes()
+{
+    CheckScaledOperatorOutcomes<Implementation>();
+    CheckScaledOperatorOutcomes<Simulator>();
+}
+
+// Restoring the trace is a repair after a truncation. Hermitize() on its own keeps the trace of
+// (rho + rho^dagger) / 2, so an operator that is deliberately not normalized stays as it is.
+template <class Sim> void CheckHermitizeTrace()
+{
+    Sim sim(2);
+    sim.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{{0, .1}, {1, .2}, {2, .3}, {3, .4}});
+    sim.ApplyOperator(Gates::SingleQubitGate<>(.5 * Matrix::Identity(2, 2)), 0);
+    sim.setRestoreTraceAfterTruncation(true);
+    const Matrix before = sim.getUnnormalizedDensityMatrix();
+    Close(sim.Trace(), .25, "The scaled mixture does not have the trace it was given");
+    sim.Hermitize();
+    Close(sim.Trace(), .25, "Hermitize restored the trace although nothing was truncated");
+    Close(sim.getUnnormalizedDensityMatrix(), before, "Hermitize changed a Hermitian operator");
+    sim.setLimitBondDimension(1);
+    sim.Hermitize();
+    Close(sim.Trace(), 1., "Hermitize did not restore the trace after its own truncation");
+}
+
+inline void HermitizeTrace()
+{
+    CheckHermitizeTrace<Implementation>();
+    CheckHermitizeTrace<Simulator>();
+}
+
+// A normalized operator that truncates is judged on the trace it leaves, before the patches of the truncation
+// run: with the trace restored first, the weight compared would be one whatever the operator left.
+template <class Sim> void CheckWeightBeforePatches()
+{
+    const std::vector<std::pair<size_t, double>> mixture{{0, .1}, {1, .2}, {2, .3}, {3, .4}};
+    const Matrix identity = Matrix::Identity(4, 4);
+    // An ordinary operator on an operator of large trace: applied, and equal to the gate followed by its patches.
+    Sim large(2), gate(2);
+    for (Sim *sim : {&large, &gate})
+    {
+        sim->setToMixtureOfBasisStates(mixture);
+        sim->ApplyOperator(Gates::SingleQubitGate<>(1E7 * Matrix::Identity(2, 2)), 0);
+        sim->setRestoreTraceAfterTruncation(true);
+        sim->setLimitBondDimension(1);
+    }
+    Require(std::abs(large.Trace() - 1E14) < 1., "The scaled mixture does not have the trace it was given");
+    large.ApplyOperatorAndNormalize(Gates::TwoQubitsGate<>(identity), 1, 0);
+    gate.ApplyGate(Gates::TwoQubitsGate<>(identity), 1, 0);
+    Close(large.Trace(), 1., "A normalized operator that truncates did not leave a trace of one");
+    Close(large.getUnnormalizedDensityMatrix(), gate.getUnnormalizedDensityMatrix(),
+          "A normalized identity that truncates differs from the gate and its patches");
+    // A weight within rounding is refused with the trace patch as without it.
+    for (const bool restore : {false, true})
+    {
+        Sim weak(2);
+        weak.setToMixtureOfBasisStates(mixture);
+        weak.setRestoreTraceAfterTruncation(restore);
+        weak.setLimitBondDimension(1);
+        const Matrix before = weak.getUnnormalizedDensityMatrix();
+        Throws<std::runtime_error>(
+            [&] { weak.ApplyOperatorAndNormalize(Gates::TwoQubitsGate<>(1E-7 * identity), 1, 0); },
+            "The restored trace hid a weight within rounding");
+        Close(weak.getUnnormalizedDensityMatrix(), before,
+              "A refused normalization that truncates changed the operator");
+    }
+}
+
+inline void WeightBeforePatches()
+{
+    CheckWeightBeforePatches<Implementation>();
+    CheckWeightBeforePatches<Simulator>();
+}
+
+// The partial trace is the same with the single-thread guard as without it (its matrix products run under it).
+inline void GuardedPartialTrace()
+{
+    Implementation sim(6);
+    for (Index q = 0; q < 6; ++q)
+        sim.ApplyGate(Gates::RyGate<>(.41 + .19 * q), q);
+    for (Index q = 0; q + 1 < 6; ++q)
+        sim.ApplyGate(Gates::CNOTGate<>(), q + 1, q);
+    sim.ApplyAmplitudeDamping(3, .2);
+    const Matrix rho = sim.getDensityMatrix();
+    Matrix expected = Matrix::Zero(4, 4);
+    for (Index row = 0; row < 64; ++row)
+        for (Index col = 0; col < 64; ++col)
+            if ((row & ~Index{0b010010}) == (col & ~Index{0b010010}))
+                expected(((row >> 1) & 1) | (((row >> 4) & 1) << 1), ((col >> 1) & 1) | (((col >> 4) & 1) << 1)) +=
+                    rho(row, col);
+    for (const bool multithreading : {true, false})
+    {
+        sim.SetMultithreading(multithreading);
+        Close(sim.PartialTrace({1, 4}), expected, "Partial trace of two separated qubits differs from the dense one");
+        Close(sim.PartialTrace({}), Matrix::Ones(1, 1), "Partial trace over every qubit is not one");
+    }
+}
+
 inline bool Run()
 {
-    std::cout << "\nMPO regression tests (sampling seeds 0x4D504F01, 0x4D504F02)" << std::endl;
+    std::cout << "\nMPO regression tests (sampling seeds 0x4D504F01 to 0x4D504F04)" << std::endl;
     const std::pair<const char *, void (*)()> tests[] = {
         {"stale canonical environments", StaleEnvironments},
         {"wide and scaled sampling", WideSampling},
@@ -941,7 +1152,12 @@ inline bool Run()
         {"basis probability normalization", BasisProbabilityNormalization},
         {"sparse and dense fidelity mappings", FidelityMappings},
         {"complex strided slice contractions", ComplexSliceContractions},
-        {"physical SWAP evolution and compression", PhysicalSwaps}};
+        {"physical SWAP evolution and compression", PhysicalSwaps},
+        {"weights within rounding are not normalized", RoundingWeights},
+        {"ordinary outcomes of a scaled operator", ScaledOperatorOutcomes},
+        {"Hermitize keeps the trace without a truncation", HermitizeTrace},
+        {"weight judged before the truncation patches", WeightBeforePatches},
+        {"partial trace under the single-thread guard", GuardedPartialTrace}};
     bool passed = true;
     for (const auto &test : tests)
     {

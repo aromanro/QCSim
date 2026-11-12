@@ -1993,6 +1993,643 @@ static bool ObservableAndSummaryRegressionTestMPS()
     }
 }
 
+// The Kraus steps and the gauge mode they start: probabilities on a chain whose gates have truncated, reads that
+// must leave the state as it is, small Schmidt values, branches of near-zero weight, and initializations that are
+// refused. Every value is compared with the dense state, the product of the tensors, which uses nothing cached.
+static bool KrausGaugeModeRegressionTestMPS()
+{
+    using namespace QC::TensorNetworkRegression;
+    using Impl = QC::TensorNetworks::MPSSimulatorImpl;
+    std::cout << "\nMPS Kraus steps: truncated chains, reads, small values, refused initializations" << std::endl;
+    try
+    {
+        const auto probabilityOfOne = [](const Eigen::VectorXcd &psi, int qubit) {
+            double p = 0.;
+            for (Eigen::Index i = 0; i < psi.size(); ++i)
+                if ((i >> qubit) & 1)
+                    p += std::norm(psi[i]);
+            return p / psi.squaredNorm();
+        };
+        Matrix hadamard(2, 2), cnot = Matrix::Zero(4, 4), zero = Matrix::Zero(2, 2), one = Matrix::Zero(2, 2);
+        hadamard << 1., 1., 1., -1.;
+        hadamard /= std::sqrt(2.);
+        cnot(0, 0) = cnot(1, 1) = cnot(2, 3) = cnot(3, 2) = 1.; // Gate(cnot, target, control)
+        zero(0, 0) = 1.;
+        one(1, 1) = 1.;
+        const Matrix identity2 = Matrix::Identity(2, 2), identity4 = Matrix::Identity(4, 4);
+        const auto turn = [](double angle) {
+            Matrix rotation(2, 2);
+            rotation << std::cos(angle), -std::sin(angle), std::sin(angle), std::cos(angle);
+            return rotation;
+        };
+
+        // After gates that truncate, the canonical form no longer gives the environments of a site.
+        {
+            const int qubits = 10;
+            Impl truncated(qubits);
+            truncated.setLimitBondDimension(8);
+            unsigned int seed = 100;
+            for (int layer = 0; layer < 12; ++layer)
+            {
+                for (int q = 0; q < qubits; ++q)
+                    truncated.ApplyGate(Gate(Unitary(2, ++seed), q));
+                for (int q = layer % 2; q + 1 < qubits; q += 2)
+                    truncated.ApplyGate(Gate(Unitary(4, ++seed), q, q + 1));
+            }
+            Require(truncated.getMaxBondDimension() == 8, "The MPS test chain did not reach its bond limit");
+            const Eigen::VectorXcd psi = truncated.getRegisterStorage();
+            for (int q = 0; q < qubits; ++q)
+            {
+                Impl read = truncated;
+                Close(read.LocalDensityMatrix(q)(1, 1), probabilityOfOne(psi, q),
+                      "MPS local density matrix is stale after truncating gates");
+                Impl projected = truncated;
+                projected.ApplyKrausOperator({one}, 0.5, q);
+                Close(projected.getRegisterStorage().squaredNorm(), 1.,
+                      "MPS Kraus step on a truncated chain left the norm off");
+            }
+            // The draw follows the state: just below and just above the probability of the first operator.
+            const double p0 = 1. - probabilityOfOne(psi, 3);
+            Impl below = truncated, above = truncated;
+            Require(below.ApplyKrausOperator({zero, one}, p0 - 1E-6, 3) == 0 &&
+                        above.ApplyKrausOperator({zero, one}, p0 + 1E-6, 3) == 1,
+                    "MPS Kraus draw on a truncated chain does not follow the state");
+            // Channels between truncating gates keep it exact.
+            Impl noisy(qubits);
+            noisy.setLimitBondDimension(8);
+            Matrix noJump = Matrix::Zero(2, 2), jump = Matrix::Zero(2, 2);
+            noJump(0, 0) = 1.;
+            noJump(1, 1) = std::sqrt(0.95);
+            jump(0, 1) = std::sqrt(0.05);
+            std::mt19937_64 random(5);
+            std::uniform_real_distribution<double> uniform;
+            for (int layer = 0; layer < 12; ++layer)
+            {
+                for (int q = 0; q < qubits; ++q)
+                    noisy.ApplyGate(Gate(Unitary(2, ++seed), q));
+                for (int q = layer % 2; q + 1 < qubits; q += 2)
+                    noisy.ApplyGate(Gate(Unitary(4, ++seed), q, q + 1));
+                if (layer >= 6) // the first six layers truncate on the canonical path
+                    for (int q = 0; q < qubits; ++q)
+                        noisy.ApplyKrausOperator({noJump, jump}, uniform(random), q);
+            }
+            const Eigen::VectorXcd mixed = noisy.getRegisterStorage();
+            Close(mixed.squaredNorm(), 1., "MPS trajectory through truncating gates left the norm off");
+            for (int q = 0; q < qubits; ++q)
+                Close(noisy.LocalDensityMatrix(q)(1, 1), probabilityOfOne(mixed, q),
+                      "MPS local density matrix in gauge mode");
+        }
+
+        // Restoring the canonical form for a read applies none of the cuts the user asked for.
+        {
+            const double gamma = 0.999, expected = (1. - gamma) / (2. - gamma);
+            Matrix noJump = Matrix::Zero(2, 2), jump = Matrix::Zero(2, 2);
+            noJump(0, 0) = 1.;
+            noJump(1, 1) = std::sqrt(1. - gamma);
+            jump(0, 1) = std::sqrt(gamma);
+            const auto prepare = [&](Impl &mps) {
+                mps.setLimitEntanglement(0.1);
+                mps.setTruncationMode(QC::TensorNetworks::MPSSimulatorInterface::TruncationMode::RelativeToMax);
+                mps.ApplyGate(Gate(hadamard, 0));
+                mps.ApplyGate(Gate(cnot, 1, 0));
+                Require(mps.ApplyKrausOperator({noJump, jump}, 0., 1) == 0 && mps.InGaugeMode(),
+                        "MPS damping step did not take its first operator");
+            };
+            const auto p11 = [](const Impl &mps) {
+                const Eigen::VectorXcd psi = mps.getRegisterStorage();
+                return std::norm(psi[3]) / psi.squaredNorm();
+            };
+            Impl saved(2), probed(2), observed(2), sampled(2), compressed(2);
+            prepare(saved);
+            const auto state = saved.getState();
+            Close(p11(saved), expected, "Saving an MPS state compressed it");
+            Require(saved.getMaxBondDimension() == 2 && !saved.InGaugeMode(),
+                    "Saving an MPS state did not restore the canonical form as it was");
+            prepare(probed);
+            Close(probed.GetProbability(1, false), expected, "MPS probability after a Kraus step");
+            Close(p11(probed), expected, "Reading an MPS probability compressed the state");
+            prepare(observed);
+            Close(observed.ExpectationValues({"ZI"})[0], 1. - 2. * expected,
+                  "MPS expectation value after a Kraus step");
+            Close(p11(observed), expected, "Reading an MPS expectation value compressed the state");
+            prepare(sampled);
+            sampled.MeasureNoCollapse();
+            Close(p11(sampled), expected, "Sampling an MPS without collapse compressed the state");
+            // Asked for by name, the compression is applied.
+            prepare(compressed);
+            compressed.ReCanonicalize();
+            Close(p11(compressed), 0., "ReCanonicalize did not apply the relative cutoff");
+        }
+
+        // A small Schmidt value survives a gate in gauge mode: at the ends of a chain, and between environments that
+        // were accumulated but are well conditioned.
+        {
+            const double angle = 1E-8;
+            Impl pair(2);
+            pair.ApplyGate(Gate(turn(angle), 0));
+            pair.ApplyGate(Gate(cnot, 1, 0));
+            pair.ApplyKrausOperator({identity2}, 0.5, 0);
+            pair.ApplyGate(Gate(identity4, 1, 0));
+            Require(pair.getMaxBondDimension() == 2 &&
+                        std::abs(std::abs(pair.getRegisterStorage()[3]) / std::sin(angle) - 1.) < 1E-6,
+                    "A gate in MPS gauge mode dropped a small amplitude");
+
+            Impl chain(4);
+            chain.ApplyGate(Gate(hadamard, 0));
+            chain.ApplyGate(Gate(cnot, 1, 0));
+            chain.ApplyGate(Gate(hadamard, 3));
+            chain.ApplyGate(Gate(cnot, 2, 3));
+            Matrix weak = Matrix::Identity(4, 4); // qubit 2 turned by a small angle when qubit 1 is set
+            weak.block(2, 2, 2, 2) = turn(angle);
+            chain.ApplyGate(Gate(weak, 2, 1));
+            const Eigen::VectorXcd before = chain.getRegisterStorage();
+            chain.ApplyKrausOperator({identity2}, 0.5, 0);
+            chain.ApplyKrausOperator({identity2}, 0.5, 3);
+            chain.ApplyGate(Gate(identity4, 2, 1));
+            Require(chain.InGaugeMode() && (chain.getRegisterStorage() - before).norm() < 1E-13,
+                    "A gate between accumulated MPS environments dropped a small Schmidt value");
+        }
+
+        // A branch whose weight is what a cancellation in the density matrix left still leaves a state of unit norm.
+        {
+            Matrix minus(2, 2);
+            minus << 0.5, -0.5, -0.5, 0.5; // |-><-|
+            for (const double delta : {1E-3, 1E-5, 1E-6})
+                for (const int site : {0, 1, 2})
+                {
+                    Impl mps(3);
+                    for (int q = 0; q < 3; ++q)
+                        mps.ApplyGate(Gate(Unitary(2, 40 + q), q));
+                    mps.ApplyGate(Gate(Unitary(4, 50), 0, 1));
+                    mps.ApplyGate(Gate(Unitary(4, 51), 1, 2));
+                    // Put the site in |+> turned by delta, whatever the others hold: <-|psi> = -sin(delta).
+                    mps.ApplyKrausOperator({zero}, 0.5, site);
+                    mps.ApplyGate(Gate(turn(std::acos(-1.) / 4. + delta), site));
+                    mps.ApplyKrausOperator({minus}, 0.5, site);
+                    Close(mps.getRegisterStorage().squaredNorm(), 1.,
+                          "MPS Kraus step on a branch of near-zero weight left the norm off");
+                }
+        }
+
+        // An initialization that is refused leaves the chain, and what describes it, as they were.
+        {
+            // A damping step that keeps the chain in gauge mode: the state is (|00> + sqrt(1/2) |11>) / sqrt(3/2),
+            // which the lambdas of the Bell pair no longer describe.
+            Matrix halved = Matrix::Zero(2, 2);
+            halved(0, 0) = 1.;
+            halved(1, 1) = std::sqrt(0.5);
+            const auto prepare = [&](Impl &mps) {
+                mps.ApplyGate(Gate(hadamard, 0));
+                mps.ApplyGate(Gate(cnot, 1, 0));
+                mps.ApplyKrausOperator({halved}, 0.5, 0);
+                Require(mps.InGaugeMode(), "The MPS test chain is not in gauge mode");
+            };
+            Impl refused(2), ignored(2), accepted(2);
+            prepare(refused);
+            Throws<std::invalid_argument>([&] { refused.setToBasisState(std::vector<bool>(3, false)); },
+                                          "An MPS basis state with too many bits was accepted");
+            Close(refused.GetProbability(1, true), 2. / 3., "A refused MPS initialization corrupted the probabilities");
+            prepare(ignored);
+            ignored.setToBasisState(size_t{4});
+            Close(ignored.GetProbability(1, true), 2. / 3.,
+                  "An ignored MPS initialization corrupted the probabilities");
+            prepare(accepted);
+            Require(accepted.InGaugeMode(), "The MPS test chain is not in gauge mode");
+            accepted.setToBasisState(size_t{2});
+            Require(!accepted.InGaugeMode(), "An accepted MPS initialization kept the gauge mode");
+            Close(accepted.GetProbability(1, false), 1., "MPS basis state after a Kraus step");
+            Close(accepted.GetProbability(0, true), 1., "MPS basis state after a Kraus step");
+        }
+
+        // Without truncation nothing is cut: a weak GHZ state keeps its 1e-8 amplitude through an identity Kraus
+        // operator and an identity gate in every order, and the densities agree with the tensors afterwards.
+        {
+            const double angle = 1E-8;
+            for (const int krausQubit : {0, 1, 2})
+                for (const int gateLeft : {0, 1})
+                {
+                    Impl ghz(3);
+                    ghz.ApplyGate(Gate(turn(angle), 0));
+                    ghz.ApplyGate(Gate(cnot, 1, 0));
+                    ghz.ApplyGate(Gate(cnot, 2, 1));
+                    ghz.ApplyKrausOperator({identity2}, 0.5, krausQubit);
+                    ghz.ApplyGate(Gate(identity4, gateLeft + 1, gateLeft));
+                    const Eigen::VectorXcd psi = ghz.getRegisterStorage();
+                    Require(std::abs(std::abs(psi[7]) / std::sin(angle) - 1.) < 1E-6 && ghz.getBondDimension(0) == 2 &&
+                                ghz.getBondDimension(1) == 2,
+                            "A gate in MPS gauge mode dropped the small amplitude of a GHZ state");
+                    for (int q = 0; q < 3; ++q)
+                    {
+                        const double p = probabilityOfOne(psi, q);
+                        Require(std::abs(ghz.LocalDensityMatrix(q)(1, 1).real() - p) < 1E-6 * p,
+                                "An MPS environment is stale after a gate in gauge mode");
+                    }
+                }
+        }
+
+        // A branch of near-zero weight where the environment of the site is not diagonal: qubit 0 of a Bell pair is
+        // projected on a generic state, which leaves qubit 1 in it, and qubit 1 meets the projector on the state at
+        // delta from the orthogonal one. Its weight, sin(delta)^2, is found down to the rounding of the tensors, and
+        // the state leaves with unit norm; the projector on the orthogonal state itself has no weight, is refused,
+        // and leaves the state as it was.
+        {
+            const auto projector = [](double c, double s) {
+                Matrix p(2, 2);
+                p << c * c, c * s, c * s, s * s;
+                return p;
+            };
+            for (const double alpha : {0.3, 1.1})
+            {
+                const auto prepare = [&](Impl &mps) {
+                    mps.ApplyGate(Gate(hadamard, 0));
+                    mps.ApplyGate(Gate(cnot, 1, 0));
+                    mps.ApplyKrausOperator({projector(std::cos(alpha), std::sin(alpha))}, 0.5, 0);
+                };
+                for (const double delta : {1E-3, 1E-6, 1E-8, 1E-9, 1E-11})
+                {
+                    Impl mps(2);
+                    prepare(mps);
+                    mps.ApplyKrausOperator({projector(-std::sin(alpha + delta), std::cos(alpha + delta))}, 0.5, 1);
+                    const Eigen::VectorXcd psi = mps.getRegisterStorage();
+                    Close(psi.squaredNorm(), 1.,
+                          "MPS Kraus step on a near-zero branch between projected sites left the norm off");
+                    // qubit 0 stays in the state it was projected on
+                    Require(std::abs(probabilityOfOne(psi, 0) - std::sin(alpha) * std::sin(alpha)) < 1E-9,
+                            "MPS Kraus step on a near-zero branch changed the other qubit");
+                }
+                Impl orthogonal(2);
+                prepare(orthogonal);
+                const Eigen::VectorXcd before = orthogonal.getRegisterStorage();
+                Throws<std::domain_error>(
+                    [&] { orthogonal.ApplyKrausOperator({projector(-std::sin(alpha), std::cos(alpha))}, 0.5, 1); },
+                    "An MPS Kraus operator with no weight was applied");
+                Require((orthogonal.getRegisterStorage() - before).norm() < 1E-13,
+                        "A refused MPS Kraus operator changed the state");
+            }
+        }
+
+        // Reads on a chain whose gates have truncated, with no Kraus operator anywhere: a probability, an
+        // expectation value and a sample are taken from the environments of the sites, computed from the tensors,
+        // and the chain goes on afterwards as if it had not been read.
+        {
+            const int qubits = 8;
+            Impl chain(qubits);
+            chain.setLimitBondDimension(4);
+            unsigned int seed = 900;
+            for (int layer = 0; layer < 10; ++layer)
+            {
+                for (int q = 0; q < qubits; ++q)
+                    chain.ApplyGate(Gate(Unitary(2, ++seed), q));
+                for (int q = layer % 2; q + 1 < qubits; q += 2)
+                    chain.ApplyGate(Gate(Unitary(4, ++seed), q, q + 1));
+            }
+            Require(chain.getMaxBondDimension() == 4, "The MPS test chain did not reach its bond limit");
+            const Eigen::VectorXcd psi = chain.getRegisterStorage();
+            for (int q = 0; q < qubits; ++q)
+            {
+                const double p = probabilityOfOne(psi, q);
+                Impl probed = chain;
+                Close(probed.GetProbability(q, false), p, "MPS probability read from a truncated chain");
+                Impl observed = chain;
+                std::string pauli(qubits, 'I');
+                pauli[q] = 'Z';
+                Close(observed.ExpectationValues({pauli})[0], 1. - 2. * p,
+                      "MPS expectation value read from a truncated chain");
+            }
+            Impl sampled = chain;
+            sampled.SetSeed(17);
+            const int shots = 20000;
+            std::vector<int> ones(qubits, 0);
+            for (int shot = 0; shot < shots; ++shot)
+                for (const auto &outcome : sampled.MeasureNoCollapse())
+                    ones[outcome.first] += outcome.second ? 1 : 0;
+            for (int q = 0; q < qubits; ++q)
+            {
+                const double p = probabilityOfOne(psi, q);
+                Require(std::abs(double(ones[q]) / shots - p) < 5. * std::sqrt(p * (1. - p) / shots) + 1E-3,
+                        "Samples of a truncated MPS do not follow its state");
+            }
+            // Measurements with collapse: the outcomes follow the probability of the state.
+            {
+                const int trials = 2000;
+                int measuredOnes = 0;
+                for (int trial = 0; trial < trials; ++trial)
+                {
+                    Impl measured = chain;
+                    measured.SetSeed(3000 + trial);
+                    measuredOnes += measured.MeasureQubit(5) ? 1 : 0;
+                }
+                const double p = probabilityOfOne(psi, 5);
+                Require(std::abs(double(measuredOnes) / trials - p) < 5. * std::sqrt(p * (1. - p) / trials) + 1E-3,
+                        "Measurements of a truncated MPS do not follow its state");
+            }
+            // Reads leave the state as it was (up to its norm, which the first read puts right), and the gates
+            // that follow give what they give on a chain that was never read.
+            Impl read = chain, unread = chain, densityFirst = chain;
+            const Eigen::VectorXcd normalized = psi / psi.norm();
+            read.GetProbability(3, false);
+            read.ExpectationValues({std::string(qubits, 'Z')});
+            read.MeasureNoCollapse();
+            read.LocalDensityMatrix(4);
+            // On its own copy, and nothing else read before the gates: the first read of a chain is the one that
+            // computes the environments, and each kind of read has to leave them as kept for reads only.
+            densityFirst.LocalDensityMatrix(4);
+            const auto apart = [](const Eigen::VectorXcd &a, const Eigen::VectorXcd &b) {
+                return (a / a.norm() - b / b.norm()).cwiseAbs().maxCoeff();
+            };
+            Require(apart(read.getRegisterStorage(), normalized) < 1E-12 &&
+                        std::abs(read.getRegisterStorage().squaredNorm() - 1.) < 1E-12,
+                    "Reading a truncated MPS changed its state");
+            for (int layer = 0; layer < 2; ++layer)
+                for (int q = layer % 2; q + 1 < qubits; q += 2)
+                {
+                    const Matrix u = Unitary(4, ++seed);
+                    read.ApplyGate(Gate(u, q, q + 1));
+                    unread.ApplyGate(Gate(u, q, q + 1));
+                    densityFirst.ApplyGate(Gate(u, q, q + 1));
+                }
+            Require(apart(read.getRegisterStorage(), unread.getRegisterStorage()) < 1E-12,
+                    "Gates after a read of a truncated MPS differ from those on a chain that was not read");
+            Require(apart(densityFirst.getRegisterStorage(), unread.getRegisterStorage()) < 1E-12,
+                    "Gates after the local density matrix of a truncated MPS differ from those on a chain that was not "
+                    "read");
+        }
+
+        // A measurement on a chain that holds Kraus operators is the channel of the two projectors, and splits the
+        // site again where the outcome left it: nothing sweeps the chain, the bonds of the measured qubit lose the
+        // rank the collapse took, and the state is the projected one.
+        {
+            Impl ghz(4);
+            ghz.ApplyGate(Gate(hadamard, 0));
+            for (int q = 0; q < 3; ++q)
+                ghz.ApplyGate(Gate(cnot, q + 1, q));
+            Matrix noJump = Matrix::Zero(2, 2), jump = Matrix::Zero(2, 2);
+            noJump(0, 0) = 1.;
+            noJump(1, 1) = std::sqrt(0.9);
+            jump(0, 1) = std::sqrt(0.1);
+            Require(ghz.ApplyKrausOperator({noJump, jump}, 0., 2) == 0 && ghz.InGaugeMode(),
+                    "MPS damping step did not take its first operator");
+            Eigen::VectorXcd expected = ghz.getRegisterStorage();
+            ghz.SetSeed(5);
+            const bool outcome = ghz.MeasureQubit(1);
+            for (Eigen::Index i = 0; i < expected.size(); ++i)
+                if (((i >> 1) & 1) != (outcome ? 1 : 0))
+                    expected[i] = 0.;
+            expected /= expected.norm();
+            const Eigen::VectorXcd collapsed = ghz.getRegisterStorage();
+            Require(ghz.InGaugeMode() && ghz.getBondDimension(0) == 1 && ghz.getBondDimension(1) == 1,
+                    "A measurement in MPS gauge mode did not split the measured site again");
+            Close(collapsed.squaredNorm(), 1., "A measurement in MPS gauge mode left the norm off");
+            Require(std::abs(std::abs(expected.dot(collapsed)) - 1.) < 1E-12,
+                    "A measurement in MPS gauge mode did not project the state");
+            // The other qubits follow: a GHZ state collapses as a whole.
+            for (int q = 0; q < 4; ++q)
+                Close(ghz.GetProbability(q, false), outcome ? 1. : 0.,
+                      "MPS probabilities after a measurement in gauge mode");
+            // A jump is a projection too.
+            Impl jumped(3);
+            for (int q = 0; q < 3; ++q)
+                jumped.ApplyGate(Gate(Unitary(2, 70 + q), q));
+            jumped.ApplyGate(Gate(Unitary(4, 80), 0, 1));
+            jumped.ApplyGate(Gate(Unitary(4, 81), 1, 2));
+            Eigen::VectorXcd reference = jumped.getRegisterStorage();
+            Require(jumped.ApplyKrausOperator({noJump, jump}, std::nextafter(1., 0.), 1) == 1,
+                    "MPS damping step did not take its jump");
+            for (Eigen::Index i = 0; i < reference.size(); ++i)
+                reference[i] = (i >> 1) & 1 ? Complex(0.) : reference[i | 2]; // |0><1| on qubit 1
+            reference /= reference.norm();
+            const Eigen::VectorXcd after = jumped.getRegisterStorage();
+            // The qubit that jumped is in |0>; its neighbours may still be entangled through it.
+            Require(jumped.InGaugeMode(), "A jump in MPS gauge mode restored the canonical form");
+            Require(std::abs(after.squaredNorm() - 1.) < 1E-12 && std::abs(std::abs(reference.dot(after)) - 1.) < 1E-12,
+                    "A jump in MPS gauge mode did not leave the projected state");
+            Close(jumped.GetProbability(1, true), 1., "MPS probability of the qubit that jumped");
+            for (const int q : {0, 2})
+                Close(jumped.GetProbability(q, false), probabilityOfOne(reference, q),
+                      "MPS probabilities after a jump in gauge mode");
+        }
+
+        // The same steps against a dense reference, operation by operation: random circuits of weak entanglers
+        // (amplitudes down to 1e-13), unitaries, identity and damping channels, measurements in a generic basis and
+        // projectors on states nearly orthogonal to the one just projected on. The reference applies the operator
+        // the chain reports having drawn and normalizes; the two states must agree after every step, to the
+        // rounding of the state, or to what a near-null branch leaves of the digits of the amplitudes it subtracts.
+        {
+            const auto apply1 = [](Eigen::VectorXcd &psi, const Matrix &e, int q) {
+                const Eigen::Index bit = Eigen::Index{1} << q;
+                for (Eigen::Index i = 0; i < psi.size(); ++i)
+                    if (!(i & bit))
+                    {
+                        const Complex a0 = psi[i], a1 = psi[i | bit];
+                        psi[i] = e(0, 0) * a0 + e(0, 1) * a1;
+                        psi[i | bit] = e(1, 0) * a0 + e(1, 1) * a1;
+                    }
+            };
+            // `low` is the low bit of the matrix index
+            const auto apply2 = [](Eigen::VectorXcd &psi, const Matrix &e, int low, int high) {
+                const Eigen::Index bl = Eigen::Index{1} << low, bh = Eigen::Index{1} << high;
+                for (Eigen::Index i = 0; i < psi.size(); ++i)
+                    if (!(i & bl) && !(i & bh))
+                    {
+                        const Eigen::Index index[4] = {i, i | bl, i | bh, i | bl | bh};
+                        Complex a[4], out[4];
+                        for (int c = 0; c < 4; ++c)
+                            a[c] = psi[index[c]];
+                        for (int r = 0; r < 4; ++r)
+                        {
+                            out[r] = 0.;
+                            for (int c = 0; c < 4; ++c)
+                                out[r] += e(r, c) * a[c];
+                        }
+                        for (int c = 0; c < 4; ++c)
+                            psi[index[c]] = out[c];
+                    }
+            };
+            const auto distance = [](const Eigen::VectorXcd &a, const Eigen::VectorXcd &b) {
+                const Complex overlap = b.dot(a);
+                const Complex phase = std::abs(overlap) > 0. ? overlap / std::abs(overlap) : Complex(1.);
+                return (a - phase * b).cwiseAbs().maxCoeff();
+            };
+            unsigned int unitarySeed = 5000;
+            for (unsigned int trial = 0; trial < 40; ++trial)
+            {
+                std::mt19937_64 random(100 + trial);
+                std::uniform_real_distribution<double> uniform;
+                const int qubits = 3 + static_cast<int>(trial % 4);
+                Impl mps(qubits);
+                Eigen::VectorXcd reference = Eigen::VectorXcd::Zero(Eigen::Index{1} << qubits);
+                reference[0] = 1.;
+                double tolerance = 1E-13;
+                const auto kraus = [&](const std::vector<Matrix> &operators, int q) {
+                    const size_t drawn = mps.ApplyKrausOperator(operators, uniform(random), q);
+                    apply1(reference, operators[drawn], q);
+                    reference /= reference.norm();
+                };
+                const double angles[] = {1E-3, 1E-6, 1E-8, 1E-11, 1E-13};
+                for (int step = 0; step < 40; ++step)
+                {
+                    const int q = static_cast<int>(random() % qubits), pair = static_cast<int>(random() % (qubits - 1));
+                    switch (random() % 9)
+                    {
+                    case 7: // a measurement: the reference follows the outcome
+                    {
+                        const bool outcome = mps.MeasureQubit(q);
+                        apply1(reference, outcome ? one : zero, q);
+                        reference /= reference.norm();
+                        break;
+                    }
+                    case 0: // a weak entangler
+                    {
+                        const Matrix weak = turn(angles[random() % 5]);
+                        mps.ApplyGate(Gate(weak, pair));
+                        apply1(reference, weak, pair);
+                        mps.ApplyGate(Gate(cnot, pair + 1, pair));
+                        apply2(reference, cnot, pair + 1, pair);
+                        break;
+                    }
+                    case 1: {
+                        const Matrix u = Unitary(2, ++unitarySeed);
+                        mps.ApplyGate(Gate(u, q));
+                        apply1(reference, u, q);
+                        break;
+                    }
+                    case 2: {
+                        const Matrix u = random() % 2 ? Unitary(4, ++unitarySeed) : identity4;
+                        mps.ApplyGate(Gate(u, pair, pair + 1));
+                        apply2(reference, u, pair, pair + 1);
+                        break;
+                    }
+                    case 3:
+                        kraus({identity2}, q);
+                        break;
+                    case 4:
+                    case 5: {
+                        const double gammas[] = {1E-6, 1E-3, 0.05, 0.3};
+                        const double gamma = gammas[random() % 4];
+                        Matrix noJump = Matrix::Zero(2, 2), jump = Matrix::Zero(2, 2);
+                        noJump(0, 0) = 1.;
+                        noJump(1, 1) = std::sqrt(1. - gamma);
+                        jump(0, 1) = std::sqrt(gamma);
+                        kraus({noJump, jump}, q);
+                        break;
+                    }
+                    case 6: // a measurement in a generic basis
+                    {
+                        const Eigen::VectorXcd v = Unitary(2, ++unitarySeed).col(0);
+                        const Matrix p = v * v.adjoint();
+                        kraus({p, Matrix(identity2 - p)}, q);
+                        break;
+                    }
+                    default: // the site is projected, then meets a projector at delta from the orthogonal state
+                    {
+                        const double deltas[] = {1E-2, 1E-5, 1E-8};
+                        const double delta = deltas[random() % 3];
+                        const Matrix basis = Unitary(2, ++unitarySeed);
+                        const Eigen::VectorXcd v = basis.col(0),
+                                               w = std::cos(delta) * basis.col(1) + std::sin(delta) * basis.col(0);
+                        kraus({Matrix(v * v.adjoint())}, q);
+                        kraus({Matrix(w * w.adjoint())}, q);
+                        tolerance = std::max(tolerance, 1E-13 / delta);
+                        break;
+                    }
+                    }
+                    const Eigen::VectorXcd state = mps.getRegisterStorage();
+                    Close(state.squaredNorm(), 1., "An MPS step left the norm off, against a dense reference");
+                    Require(distance(state, reference) < tolerance, "An MPS step differs from the dense reference");
+                    // A read between the steps, taken from the chain itself.
+                    Require(std::abs(mps.GetProbability(q, false) - probabilityOfOne(reference, q)) <
+                                std::max(1E-12, 10. * tolerance),
+                            "An MPS probability differs from the dense reference");
+                }
+            }
+        }
+
+        // An operator that has rank one only to rounding, diag(1, 1e-15), leaves a site in one state only if the site
+        // holds enough of what it keeps. On |1> it leaves |1>, and on 1e-10 |0> + |1> it leaves both amplitudes, now
+        // 1e-5 apart: the site must not be split again around |0> alone. Alone in a chain and between two others.
+        for (const int qubits : {1, 3})
+            for (const double slight : {0., 1E-10})
+            {
+                const int site = qubits == 1 ? 0 : 1;
+                const double rest = std::sqrt(1. - slight * slight);
+                Matrix prepare(2, 2), nearlyRankOne = Matrix::Zero(2, 2);
+                prepare << slight, -rest, rest, slight;
+                nearlyRankOne(0, 0) = 1.;
+                nearlyRankOne(1, 1) = 1E-15;
+                Impl mps(qubits);
+                // the state of each qubit, the site last changed by the operator
+                std::vector<Eigen::Vector2cd> states(qubits, Eigen::Vector2cd(1., 0.));
+                for (int q = 0; q < qubits; ++q)
+                    if (q != site)
+                    {
+                        const double angle = 0.7 + 0.2 * q;
+                        mps.ApplyGate(Gate(turn(angle), q));
+                        states[q] = Eigen::Vector2cd(std::cos(angle), std::sin(angle));
+                    }
+                mps.ApplyGate(Gate(prepare, site));
+                states[site] = Eigen::Vector2cd(slight, 1E-15 * rest).normalized();
+                mps.ApplyKrausOperator({nearlyRankOne}, 0.5, site);
+                const Eigen::VectorXcd state = mps.getRegisterStorage();
+                double worst = std::abs(state.squaredNorm() - 1.);
+                for (Eigen::Index i = 0; i < state.size(); ++i)
+                {
+                    Complex expected = 1.;
+                    for (int q = 0; q < qubits; ++q)
+                        expected *= states[q][(i >> q) & 1];
+                    worst = std::max(worst, std::abs(state[i] - expected));
+                }
+                Require(worst < 1E-12, "An MPS operator of rank one only to rounding erased what it left of the state");
+            }
+
+        // A chain of one qubit has no bond for the sweeps to normalize through: after an operator that leaves almost
+        // nothing of the state, the tensor is normalized by itself. The operator |0><w| leaves |0> whatever the angle
+        // of w from the state orthogonal to the qubit.
+        for (const double delta : {1E-6, 1E-9, 1E-12})
+        {
+            Impl lone(1);
+            lone.ApplyGate(Gate(turn(0.6), 0));
+            Matrix nearlyNull = Matrix::Zero(2, 2);
+            nearlyNull(0, 0) = std::sin(0.6 + delta);
+            nearlyNull(0, 1) = -std::cos(0.6 + delta);
+            lone.ApplyKrausOperator({nearlyNull}, 0.5, 0);
+            const Eigen::VectorXcd state = lone.getRegisterStorage();
+            Require(std::abs(state.squaredNorm() - 1.) < 1E-14 && std::abs(std::abs(state[0]) - 1.) < 1E-14 &&
+                        std::abs(state[1]) < 1E-14,
+                    "A near-null operator on an MPS of one qubit left the norm off");
+        }
+
+        // A weight that is read from the tensors and falls below its cutoff counts as none, and the message says what
+        // was found. Two qubits in |+>, the row (1/2, -1/2 + 2^-49): what it leaves is at eight units of rounding.
+        {
+            Impl plus(2);
+            plus.ApplyGate(Gate(hadamard, 0));
+            plus.ApplyGate(Gate(hadamard, 1));
+            Matrix faint(2, 2);
+            faint << 0.5, -0.5 + std::ldexp(1., -49), 0., 0.;
+            std::string message;
+            try
+            {
+                plus.ApplyKrausOperator({faint}, 0.5, 0);
+            }
+            catch (const std::domain_error &error)
+            {
+                message = error.what();
+            }
+            Require(message.find("largest weight found") != std::string::npos,
+                    "An MPS Kraus weight below its cutoff was not reported as found");
+            Close(plus.getRegisterStorage().squaredNorm(), 1., "A refused MPS Kraus operator left the norm off");
+        }
+
+        std::cout << "Success" << std::endl;
+        return true;
+    }
+    catch (const std::exception &error)
+    {
+        std::cout << "MPS Kraus/gauge regression: " << error.what() << std::endl;
+        return false;
+    }
+}
+
 bool MPSSimulatorTests()
 {
     std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -2023,8 +2660,9 @@ bool MPSSimulatorTests()
     */
 
     return QC::ProductSwapRegression::Run(false) && ObservableAndSummaryRegressionTestMPS() &&
-           MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() && WideBasisInitializationTestMPS() &&
-           StateSimulationTest() && NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() &&
-           TruncationModeTestMPS() && CloneTestMPS() && ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() &&
-           MultithreadingSettingTestMPS() && LongChainSamplingAndValidationTestMPS();
+           KrausGaugeModeRegressionTestMPS() && MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() &&
+           WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() &&
+           checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() &&
+           ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS() &&
+           LongChainSamplingAndValidationTestMPS();
 }

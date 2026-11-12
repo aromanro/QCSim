@@ -344,6 +344,31 @@ class MPOSimulator : public MPOSimulatorInterface
         ApplyKrausOperatorsImpl(ops, qubit, controllingQubit1);
     }
 
+    // A linear map on the operator space of one or two qubits, as a superoperator: see
+    // MPOSimulatorImpl::ApplySuperoperator. Two qubits that are not neighbours are brought together first, as
+    // for a two-qubit gate.
+    void ApplySuperoperator(const MatrixClass &superoperator, IndexType qubit, IndexType controllingQubit1 = 0)
+    {
+        const size_t qubitsNumber = superoperator.rows() == 4 ? 1 : superoperator.rows() == 16 ? 2 : 0;
+        if (!qubitsNumber || superoperator.cols() != superoperator.rows() || !superoperator.allFinite())
+            throw std::invalid_argument("A superoperator must be a finite 4x4 or 16x16 matrix");
+        ValidateOperatorQubits(qubitsNumber, qubit, controllingQubit1);
+
+        IndexType qubit1 = qubitsMap[qubit];
+        IndexType qubit2 = qubitsNumber > 1 ? qubitsMap[controllingQubit1] : qubit1;
+        if (qubitsNumber > 1 && std::abs(qubit1 - qubit2) > 1)
+        {
+            BringQubitsTogether(qubit, controllingQubit1);
+            qubit1 = qubitsMap[qubit];
+            qubit2 = qubitsMap[controllingQubit1];
+            assert(std::abs(qubit1 - qubit2) == 1);
+        }
+
+        impl.ApplySuperoperator(superoperator, qubit1, qubit2);
+        if ((bondDimensionCallback || bondDimensionSummaryCallback) && qubitsNumber > 1)
+            NotifyBondDimensions();
+    }
+
     bool MeasureQubit(IndexType qubit) override
     {
         if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))

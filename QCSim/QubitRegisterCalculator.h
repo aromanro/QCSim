@@ -200,6 +200,46 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         }
     }
 
+    // A linear map on the amplitudes that differ only in up to four index bits, applied in place. Entry (r, c) of
+    // the row-major matrix multiplies the amplitude with local index c into the one with local index r; bit b of a
+    // local index is bits[b]. The matrix is used as given, so it need not be unitary, and only its nonzero entries
+    // are visited: a sparse map costs what it contains. A density matrix applies the superoperator of a noise
+    // channel this way, on two index bits per qubit, and such rows often hold a few real entries.
+    template <unsigned Bits>
+    static inline void ApplyLocalMap(VectorClass &state, const std::complex<double> *matrix,
+                                     const std::array<size_t, Bits> &bits, size_t count, bool parallel)
+    {
+        if (parallel)
+            LocalMap<Bits, true>(state, matrix, bits, count);
+        else
+            LocalMap<Bits, false>(state, matrix, bits, count);
+    }
+
+    // The reduced density matrix of up to three index bits, row-major: entry (r, c) is the sum over all other bits
+    // of amplitude(r) * conj(amplitude(c)), where bit b of a local index is bits[b]. The state is only read.
+    // Every probability a local operation needs follows from this one pass: for a Kraus operator E it is
+    // tr(E rho E^dagger). Partial sums are taken over fixed blocks of indices and added in order, so the result
+    // does not depend on the number of threads, and a branch drawn from it is the same on every run.
+    template <unsigned Bits>
+    static inline std::array<std::complex<double>, (size_t{1} << (2 * Bits))> LocalDensityMatrix(
+        const VectorClass &state, const std::array<size_t, Bits> &bits, size_t count, bool parallel)
+    {
+        return parallel ? LocalDensity<Bits, true>(state, bits, count) : LocalDensity<Bits, false>(state, bits, count);
+    }
+
+    // ApplyLocalMap for a dense map on up to three index bits that also returns the squared norm the state has
+    // afterwards, the sum of |amplitude|^2, from the same pass. A quantum trajectory applies the operators that
+    // the noise channels of a block leave when nothing happens and learns from that norm, without reading the
+    // state again, how probable that was. Partial sums are taken over fixed blocks of indices and added in
+    // order, as for LocalDensityMatrix, so the value does not depend on the number of threads.
+    template <unsigned Bits>
+    static inline double ApplyLocalMapNorm(VectorClass &state, const std::complex<double> *matrix,
+                                           const std::array<size_t, Bits> &bits, size_t count, bool parallel)
+    {
+        return parallel ? LocalMapNorm<Bits, true>(state, matrix, bits, count)
+                        : LocalMapNorm<Bits, false>(state, matrix, bits, count);
+    }
+
     // Compatibility entry points. The state is always updated in place.
 
     static inline void ApplyOneQubitGate(const GateClass &gate, VectorClass &registerStorage,
@@ -640,6 +680,16 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     }
 
 #ifdef QCSIM_AVX2
+    // acc + a * b, lane by lane.
+    static inline __m256d MultiplyAdd(__m256d a, __m256d b, __m256d acc)
+    {
+#ifdef __FMA__
+        return _mm256_fmadd_pd(a, b, acc);
+#else
+        return _mm256_add_pd(acc, _mm256_mul_pd(a, b));
+#endif
+    }
+
     // acc += coefficient * v for two complex amplitudes per vector, with swapped = [im, re] of each.
     static inline __m256d AddProduct(__m256d acc, __m256d re, __m256d im, __m256d v, __m256d swapped)
     {
@@ -811,6 +861,480 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 state(base | offsets[r]) = value;
             }
         });
+    }
+
+    // LocalDensityMatrix. Only the lower triangle is accumulated; the matrix is Hermitian.
+    template <unsigned Bits, bool Parallel>
+    static inline std::array<std::complex<double>, (size_t{1} << (2 * Bits))> LocalDensity(
+        const VectorClass &vector, const std::array<size_t, Bits> &bits, size_t count)
+    {
+        static_assert(Bits >= 1 && Bits <= 3, "A local density matrix covers one to three index bits");
+        constexpr size_t dimension = size_t{1} << Bits;
+        std::array<size_t, dimension> offsets{};
+        size_t targets = 0;
+        for (unsigned b = 0; b < Bits; ++b)
+            targets |= bits[b];
+        for (size_t r = 0; r < dimension; ++r)
+            for (unsigned b = 0; b < Bits; ++b)
+                if (r & (size_t{1} << b))
+                    offsets[r] |= bits[b];
+
+        const IndexPlan plan(targets);
+        const size_t active = count >> Bits;
+        size_t blockSize = std::min<size_t>(active, 4096);
+        while (active / blockSize > 4096)
+            blockSize <<= 1;
+        const size_t blocks = active / blockSize;
+        std::array<double, 2 * dimension * dimension> single{};
+        std::vector<std::array<double, 2 * dimension * dimension>> several(blocks > 1 ? blocks : 0);
+        auto *const partial = blocks > 1 ? several.data() : &single;
+        const auto *const data = vector.data();
+        const Eigen::Index stride = vector.innerStride();
+        // With an amplitude as [re, im] in a vector register, a[r] * a[c] holds the two terms of the real part of
+        // a[r] conj(a[c]) and a[r] * [im, re](a[c]) the two of its imaginary part, one lane to be subtracted from
+        // the other. Each entry of the triangle then costs two products per amplitude, or two per pair of
+        // amplitudes where the same amplitude of two consecutive blocks is adjacent (no target on index bit 0).
+        const size_t run = std::min(plan.tileSize, blockSize);
+        ForEachTile<Parallel>(Parallel ? TeamThreads(count) : 1, blocks, [&](size_t block) {
+            constexpr size_t dim = size_t{1} << Bits;
+            double sums[2 * dim * dim] = {};
+#ifdef QCSIM_SSE2
+            if constexpr (std::is_same_v<typename VectorClass::Scalar, std::complex<double>>)
+            {
+                constexpr size_t entries = dim * (dim + 1) / 2;
+#ifdef QCSIM_AVX2
+                if (Amplitudes::contiguous && plan.strideShift == 0 && run >= 2)
+                {
+                    __m256d accRe[entries], accIm[entries];
+                    for (size_t p = 0; p < entries; ++p)
+                        accRe[p] = accIm[p] = _mm256_setzero_pd();
+                    for (size_t i = block * blockSize; i < (block + 1) * blockSize; i += run)
+                    {
+                        const size_t first = plan.template Expand<Bits>(i);
+                        for (size_t k = 0; k < run; k += 2)
+                        {
+                            __m256d v[dim], swapped[dim];
+                            for (size_t r = 0; r < dim; ++r)
+                            {
+                                v[r] =
+                                    _mm256_loadu_pd(reinterpret_cast<const double *>(&data[(first + k) | offsets[r]]));
+                                swapped[r] = _mm256_permute_pd(v[r], 5);
+                            }
+                            size_t p = 0;
+                            for (size_t r = 0; r < dim; ++r)
+                                for (size_t c = 0; c <= r; ++c, ++p)
+                                {
+                                    accRe[p] = MultiplyAdd(v[r], v[c], accRe[p]);
+                                    if (c != r)
+                                        accIm[p] = MultiplyAdd(v[r], swapped[c], accIm[p]);
+                                }
+                        }
+                    }
+                    size_t p = 0;
+                    for (size_t r = 0; r < dim; ++r)
+                        for (size_t c = 0; c <= r; ++c, ++p)
+                        {
+                            alignas(32) double re[4], im[4];
+                            _mm256_store_pd(re, accRe[p]);
+                            _mm256_store_pd(im, accIm[p]);
+                            sums[2 * (r * dim + c)] = (re[0] + re[1]) + (re[2] + re[3]);
+                            sums[2 * (r * dim + c) + 1] = (im[1] - im[0]) + (im[3] - im[2]);
+                        }
+                }
+                else
+#endif
+                {
+                    __m128d accRe[entries], accIm[entries];
+                    for (size_t p = 0; p < entries; ++p)
+                        accRe[p] = accIm[p] = _mm_setzero_pd();
+                    for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
+                    {
+                        const size_t base = plan.template Expand<Bits>(i);
+                        __m128d v[dim], swapped[dim];
+                        for (size_t r = 0; r < dim; ++r)
+                        {
+                            v[r] = _mm_loadu_pd(reinterpret_cast<const double *>(
+                                &data[static_cast<Eigen::Index>(base | offsets[r]) * stride]));
+                            swapped[r] = _mm_shuffle_pd(v[r], v[r], 1);
+                        }
+                        size_t p = 0;
+                        for (size_t r = 0; r < dim; ++r)
+                            for (size_t c = 0; c <= r; ++c, ++p)
+                            {
+                                accRe[p] = _mm_add_pd(accRe[p], _mm_mul_pd(v[r], v[c]));
+                                if (c != r)
+                                    accIm[p] = _mm_add_pd(accIm[p], _mm_mul_pd(v[r], swapped[c]));
+                            }
+                    }
+                    size_t p = 0;
+                    for (size_t r = 0; r < dim; ++r)
+                        for (size_t c = 0; c <= r; ++c, ++p)
+                        {
+                            double re[2], im[2];
+                            _mm_storeu_pd(re, accRe[p]);
+                            _mm_storeu_pd(im, accIm[p]);
+                            sums[2 * (r * dim + c)] = re[0] + re[1];
+                            sums[2 * (r * dim + c) + 1] = im[1] - im[0];
+                        }
+                }
+                for (size_t k = 0; k < 2 * dim * dim; ++k)
+                    partial[block][k] = sums[k];
+                return;
+            }
+#endif
+            for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
+            {
+                const size_t base = plan.template Expand<Bits>(i);
+                double re[dim], im[dim];
+                for (size_t r = 0; r < dim; ++r)
+                {
+                    const auto &amplitude = data[static_cast<Eigen::Index>(base | offsets[r]) * stride];
+                    re[r] = amplitude.real();
+                    im[r] = amplitude.imag();
+                }
+                for (size_t r = 0; r < dim; ++r)
+                    for (size_t c = 0; c <= r; ++c)
+                    {
+                        sums[2 * (r * dim + c)] += re[r] * re[c] + im[r] * im[c];
+                        sums[2 * (r * dim + c) + 1] += im[r] * re[c] - re[r] * im[c];
+                    }
+            }
+            for (size_t k = 0; k < 2 * dim * dim; ++k)
+                partial[block][k] = sums[k];
+        });
+
+        std::array<double, 2 * dimension * dimension> total{};
+        for (size_t block = 0; block < blocks; ++block)
+            for (size_t k = 0; k < total.size(); ++k)
+                total[k] += partial[block][k];
+        std::array<std::complex<double>, dimension * dimension> rho{};
+        for (size_t r = 0; r < dimension; ++r)
+            for (size_t c = 0; c <= r; ++c)
+            {
+                const std::complex<double> value(total[2 * (r * dimension + c)], total[2 * (r * dimension + c) + 1]);
+                rho[r * dimension + c] = value;
+                rho[c * dimension + r] = std::conj(value);
+            }
+        return rho;
+    }
+
+    // ApplyLocalMap. Every input of a block is read before any output is written. The nonzero entries of each row
+    // are listed once, outside the amplitude loop; a map with only real entries skips the imaginary products.
+    template <unsigned Bits, bool Parallel>
+    static inline void LocalMap(VectorClass &vector, const std::complex<double> *matrix,
+                                const std::array<size_t, Bits> &bits, size_t count)
+    {
+        static_assert(Bits >= 1 && Bits <= 4, "A local map acts on one to four index bits");
+        constexpr size_t dimension = size_t{1} << Bits;
+        using Scalar = typename VectorClass::Scalar;
+
+        std::array<size_t, dimension> offsets{};
+        size_t targets = 0;
+        for (unsigned b = 0; b < Bits; ++b)
+            targets |= bits[b];
+        for (size_t r = 0; r < dimension; ++r)
+            for (unsigned b = 0; b < Bits; ++b)
+                if (r & (size_t{1} << b))
+                    offsets[r] |= bits[b];
+
+        std::array<std::array<unsigned char, dimension>, dimension> sources;
+        std::array<std::array<std::complex<double>, dimension>, dimension> values;
+        std::array<unsigned, dimension> counts{};
+        bool real = true, identity = true;
+        for (size_t r = 0; r < dimension; ++r)
+            for (size_t c = 0; c < dimension; ++c)
+            {
+                const std::complex<double> value = matrix[r * dimension + c];
+                identity = identity && value == std::complex<double>(r == c ? 1. : 0., 0.);
+                if (value == std::complex<double>(0., 0.))
+                    continue;
+                real = real && value.imag() == 0.;
+                sources[r][counts[r]] = static_cast<unsigned char>(c);
+                values[r][counts[r]++] = value;
+            }
+        if (identity)
+            return;
+
+        const Amplitudes state(vector);
+#ifdef QCSIM_SSE2
+        if constexpr (std::is_same_v<Scalar, std::complex<double>>)
+        {
+#ifdef QCSIM_AVX2
+            // Without a target on index bit 0 the same amplitude of two consecutive blocks is adjacent, so one
+            // 256 bit vector holds both and each block pair costs what a single block does.
+            if constexpr (Amplitudes::contiguous)
+            {
+                const IndexPlan plan(targets);
+                const size_t active = count >> Bits;
+                size_t tileSize = std::min(plan.tileSize, active);
+                const int threads = Parallel ? TeamThreads(count) : 1;
+                if (threads > 1)
+                    while (tileSize > 2 && active / tileSize < static_cast<size_t>(threads) * 4)
+                        tileSize >>= 1;
+                if (plan.strideShift == 0 && tileSize >= 2)
+                {
+                    alignas(32) __m256d re[dimension][dimension], im[dimension][dimension];
+                    for (size_t r = 0; r < dimension; ++r)
+                        for (unsigned k = 0; k < counts[r]; ++k)
+                        {
+                            re[r][k] = _mm256_set1_pd(values[r][k].real());
+                            im[r][k] = _mm256_set_pd(values[r][k].imag(), -values[r][k].imag(), values[r][k].imag(),
+                                                     -values[r][k].imag());
+                        }
+                    const auto run = [&](const auto &block) {
+                        ForEachTile<Parallel>(threads, active / tileSize, [&](size_t tile) {
+                            const size_t first = plan.template Expand<Bits>(tile * tileSize);
+                            for (size_t i = 0; i < tileSize; i += 2)
+                                block(first + i);
+                        });
+                    };
+                    if (real)
+                        run([&](size_t base) {
+                            constexpr size_t dim = size_t{1} << Bits;
+                            __m256d v[dim];
+                            for (size_t c = 0; c < dim; ++c)
+                                v[c] = _mm256_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                            for (size_t r = 0; r < dim; ++r)
+                            {
+                                __m256d acc = _mm256_setzero_pd();
+                                for (unsigned k = 0; k < counts[r]; ++k)
+                                    acc = _mm256_add_pd(acc, _mm256_mul_pd(re[r][k], v[sources[r][k]]));
+                                _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                            }
+                        });
+                    else
+                        run([&](size_t base) {
+                            constexpr size_t dim = size_t{1} << Bits;
+                            __m256d v[dim], swapped[dim];
+                            for (size_t c = 0; c < dim; ++c)
+                            {
+                                v[c] = _mm256_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                                swapped[c] = _mm256_permute_pd(v[c], 5);
+                            }
+                            for (size_t r = 0; r < dim; ++r)
+                            {
+                                __m256d acc = _mm256_setzero_pd();
+                                for (unsigned k = 0; k < counts[r]; ++k)
+                                    acc = AddProduct(acc, re[r][k], im[r][k], v[sources[r][k]], swapped[sources[r][k]]);
+                                _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                            }
+                        });
+                    return;
+                }
+            }
+#endif
+            __m128d re[dimension][dimension], im[dimension][dimension];
+            for (size_t r = 0; r < dimension; ++r)
+                for (unsigned k = 0; k < counts[r]; ++k)
+                {
+                    re[r][k] = _mm_set1_pd(values[r][k].real());
+                    im[r][k] = _mm_set_pd(values[r][k].imag(), -values[r][k].imag());
+                }
+            if (real)
+                ForEachSelected<Parallel>(count, targets, 0, [&](size_t base) {
+                    constexpr size_t dim = size_t{1} << Bits;
+                    __m128d v[dim];
+                    for (size_t c = 0; c < dim; ++c)
+                        v[c] = _mm_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                    for (size_t r = 0; r < dim; ++r)
+                    {
+                        __m128d acc = _mm_setzero_pd();
+                        for (unsigned k = 0; k < counts[r]; ++k)
+                            acc = _mm_add_pd(acc, _mm_mul_pd(re[r][k], v[sources[r][k]]));
+                        _mm_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                    }
+                });
+            else
+                ForEachSelected<Parallel>(count, targets, 0, [&](size_t base) {
+                    constexpr size_t dim = size_t{1} << Bits;
+                    __m128d v[dim];
+                    for (size_t c = 0; c < dim; ++c)
+                        v[c] = _mm_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                    for (size_t r = 0; r < dim; ++r)
+                    {
+                        __m128d acc = _mm_setzero_pd();
+                        for (unsigned k = 0; k < counts[r]; ++k)
+                            acc = _mm_add_pd(acc, MultiplyByCoefficient(re[r][k], im[r][k], v[sources[r][k]]));
+                        _mm_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                    }
+                });
+            return;
+        }
+#endif
+        // Portable form: explicit real and imaginary parts, which compilers vectorize and which carries no
+        // library complex-multiplication checks.
+        ForEachSelected<Parallel>(count, targets, 0, [&](size_t base) {
+            constexpr size_t blockSize = size_t{1} << Bits;
+            std::array<Scalar, blockSize> input;
+            for (size_t c = 0; c < blockSize; ++c)
+                input[c] = state(base | offsets[c]);
+            for (size_t r = 0; r < blockSize; ++r)
+            {
+                auto sumRe = input[0].real() * 0, sumIm = sumRe;
+                for (unsigned k = 0; k < counts[r]; ++k)
+                {
+                    const Scalar x = input[sources[r][k]];
+                    const auto cr = static_cast<decltype(sumRe)>(values[r][k].real());
+                    const auto ci = static_cast<decltype(sumRe)>(values[r][k].imag());
+                    sumRe += cr * x.real() - ci * x.imag();
+                    sumIm += cr * x.imag() + ci * x.real();
+                }
+                state(base | offsets[r]) = Scalar(sumRe, sumIm);
+            }
+        });
+    }
+
+    // ApplyLocalMapNorm. Dense: the product of the gates and operators of a block has no structure to use. Every
+    // input of a block of amplitudes is read before any output is written.
+    template <unsigned Bits, bool Parallel>
+    static inline double LocalMapNorm(VectorClass &vector, const std::complex<double> *matrix,
+                                      const std::array<size_t, Bits> &bits, size_t count)
+    {
+        static_assert(Bits >= 1 && Bits <= 3, "A local map with its norm acts on one to three index bits");
+        constexpr size_t dimension = size_t{1} << Bits;
+        using Scalar = typename VectorClass::Scalar;
+
+        std::array<size_t, dimension> offsets{};
+        size_t targets = 0;
+        for (unsigned b = 0; b < Bits; ++b)
+            targets |= bits[b];
+        for (size_t r = 0; r < dimension; ++r)
+            for (unsigned b = 0; b < Bits; ++b)
+                if (r & (size_t{1} << b))
+                    offsets[r] |= bits[b];
+
+        const IndexPlan plan(targets);
+        const size_t active = count >> Bits;
+        // The blocks whose partial sums are added in order: set by the size of the state alone.
+        size_t blockSize = std::min<size_t>(active, 4096);
+        while (active / blockSize > 4096)
+            blockSize <<= 1;
+        const size_t blocks = active / blockSize;
+        double single = 0.;
+        std::vector<double> several(blocks > 1 ? blocks : 0);
+        double *const partial = blocks > 1 ? several.data() : &single;
+        const int threads = Parallel ? TeamThreads(count) : 1;
+        const Amplitudes state(vector);
+        const auto total = [&] {
+            double sum = 0.;
+            for (size_t block = 0; block < blocks; ++block)
+                sum += partial[block];
+            return sum;
+        };
+#ifdef QCSIM_SSE2
+        if constexpr (std::is_same_v<Scalar, std::complex<double>>)
+        {
+#ifdef QCSIM_AVX2
+            if constexpr (Amplitudes::contiguous)
+            {
+                // Without a target on index bit 0 the same amplitude of two consecutive blocks is adjacent, so one
+                // 256 bit vector holds both. A run of such indices is expanded once.
+                const size_t run = std::min(plan.tileSize, blockSize);
+                if (plan.strideShift == 0 && run >= 2)
+                {
+                    alignas(32) __m256d re[dimension][dimension], im[dimension][dimension];
+                    for (size_t r = 0; r < dimension; ++r)
+                        for (size_t c = 0; c < dimension; ++c)
+                        {
+                            const std::complex<double> value = matrix[r * dimension + c];
+                            re[r][c] = _mm256_set1_pd(value.real());
+                            im[r][c] = _mm256_set_pd(value.imag(), -value.imag(), value.imag(), -value.imag());
+                        }
+                    ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
+                        constexpr size_t dim = size_t{1} << Bits;
+                        __m256d norm = _mm256_setzero_pd();
+                        for (size_t i = block * blockSize; i < (block + 1) * blockSize; i += run)
+                        {
+                            const size_t first = plan.template Expand<Bits>(i);
+                            for (size_t k = 0; k < run; k += 2)
+                            {
+                                const size_t base = first + k;
+                                __m256d v[dim], swapped[dim];
+                                for (size_t c = 0; c < dim; ++c)
+                                {
+                                    v[c] = _mm256_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                                    swapped[c] = _mm256_permute_pd(v[c], 5);
+                                }
+                                for (size_t r = 0; r < dim; ++r)
+                                {
+                                    __m256d acc = _mm256_setzero_pd();
+                                    for (size_t c = 0; c < dim; ++c)
+                                        acc = AddProduct(acc, re[r][c], im[r][c], v[c], swapped[c]);
+                                    _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                                    norm = _mm256_add_pd(norm, _mm256_mul_pd(acc, acc));
+                                }
+                            }
+                        }
+                        alignas(32) double lanes[4];
+                        _mm256_store_pd(lanes, norm);
+                        partial[block] = (lanes[0] + lanes[1]) + (lanes[2] + lanes[3]);
+                    });
+                    return total();
+                }
+            }
+#endif
+            __m128d re[dimension][dimension], im[dimension][dimension];
+            for (size_t r = 0; r < dimension; ++r)
+                for (size_t c = 0; c < dimension; ++c)
+                {
+                    const std::complex<double> value = matrix[r * dimension + c];
+                    re[r][c] = _mm_set1_pd(value.real());
+                    im[r][c] = _mm_set_pd(value.imag(), -value.imag());
+                }
+            ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
+                constexpr size_t dim = size_t{1} << Bits;
+                __m128d norm = _mm_setzero_pd();
+                for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
+                {
+                    const size_t base = plan.template Expand<Bits>(i);
+                    __m128d v[dim];
+                    for (size_t c = 0; c < dim; ++c)
+                        v[c] = _mm_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                    for (size_t r = 0; r < dim; ++r)
+                    {
+                        __m128d acc = _mm_setzero_pd();
+                        for (size_t c = 0; c < dim; ++c)
+                            acc = _mm_add_pd(acc, MultiplyByCoefficient(re[r][c], im[r][c], v[c]));
+                        _mm_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                        norm = _mm_add_pd(norm, _mm_mul_pd(acc, acc));
+                    }
+                }
+                double lanes[2];
+                _mm_storeu_pd(lanes, norm);
+                partial[block] = lanes[0] + lanes[1];
+            });
+            return total();
+        }
+#endif
+        // Portable form, with explicit real and imaginary parts.
+        ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
+            constexpr size_t dim = size_t{1} << Bits;
+            double norm = 0.;
+            for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
+            {
+                const size_t base = plan.template Expand<Bits>(i);
+                std::array<Scalar, dim> input;
+                for (size_t c = 0; c < dim; ++c)
+                    input[c] = state(base | offsets[c]);
+                for (size_t r = 0; r < dim; ++r)
+                {
+                    auto sumRe = input[0].real() * 0, sumIm = sumRe;
+                    for (size_t c = 0; c < dim; ++c)
+                    {
+                        const Scalar x = input[c];
+                        const auto cr = static_cast<decltype(sumRe)>(matrix[r * dim + c].real());
+                        const auto ci = static_cast<decltype(sumRe)>(matrix[r * dim + c].imag());
+                        sumRe += cr * x.real() - ci * x.imag();
+                        sumIm += cr * x.imag() + ci * x.real();
+                    }
+                    state(base | offsets[r]) = Scalar(sumRe, sumIm);
+                    norm += static_cast<double>(sumRe) * static_cast<double>(sumRe) +
+                            static_cast<double>(sumIm) * static_cast<double>(sumIm);
+                }
+            }
+            partial[block] = norm;
+        });
+        return total();
     }
 
     // Multiplies each control-selected amplitude by its diagonal entry in a single pass, unless scaling only the

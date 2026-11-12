@@ -435,6 +435,36 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             ApplyLocalChannel<2>(kraus, {qubit, controllingQubit1});
     }
 
+    // A channel in superoperator form, applied in one pass: every local density block, indexed
+    // row + d * column with d = 2 (one qubit) or 4 (two qubits, `qubit` the low bit of row and of
+    // column), is multiplied by the 4x4 or 16x16 matrix. For Kraus operators E_k the matrix is
+    // sum_k conj(E_k) (x) E_k, and channels applied one after another multiply, later ones on the
+    // left.
+    //
+    // The matrix is trusted: only its shape and finiteness are checked. This is the entry point
+    // for a channel that was validated when it was built, or for several operations fused into
+    // one map; ApplyChannel is the one that validates Kraus operators.
+    void ApplySuperoperator(const MatrixClass &superoperator, size_t qubit, size_t controllingQubit1 = 0)
+    {
+        const size_t gateQubits = superoperator.rows() == 4 ? 1 : superoperator.rows() == 16 ? 2 : 0;
+        if (gateQubits == 0 || superoperator.cols() != superoperator.rows())
+            throw std::invalid_argument("A superoperator must be a 4x4 (one qubit) or 16x16 (two qubits) matrix");
+        if (!superoperator.allFinite())
+            throw std::invalid_argument("A superoperator must contain only finite values");
+        ValidateQubits(gateQubits, qubit, controllingQubit1, 0);
+
+        const size_t blockSize = static_cast<size_t>(superoperator.rows());
+        std::array<std::complex<double>, 256> coefficients{};
+        for (size_t output = 0; output < blockSize; ++output)
+            for (size_t input = 0; input < blockSize; ++input)
+                coefficients[output * blockSize + input] =
+                    superoperator(static_cast<Eigen::Index>(output), static_cast<Eigen::Index>(input));
+        if (gateQubits == 1)
+            ApplyLocalSuperoperator<1>(coefficients.data(), {qubit, 0});
+        else
+            ApplyLocalSuperoperator<2>(coefficients.data(), {qubit, controllingQubit1});
+    }
+
     // ---- predefined single qubit noise channels ----
 
     // bit flip: rho' = (1 - p) rho + p X rho X
@@ -1087,11 +1117,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     {
         constexpr size_t dimension = size_t{1} << Qubits;
         constexpr size_t blockSize = dimension * dimension;
-        std::array<std::array<Scalar, blockSize>, blockSize> coefficients{};
-        std::array<std::array<unsigned, blockSize>, blockSize> sources{};
-        std::array<unsigned, blockSize> counts{};
-        // Compile only the local 4x4 or 16x16 map. Exact zeros are omitted; small
-        // nonzero terms are retained. Scratch never scales with the register size.
+        // Compile only the local 4x4 or 16x16 map; the kernel skips its exact zeros
+        // and keeps small nonzero terms. Scratch never scales with the register size.
+        std::array<std::complex<double>, blockSize * blockSize> coefficients{};
         for (size_t output = 0; output < blockSize; ++output)
             for (size_t input = 0; input < blockSize; ++input)
             {
@@ -1099,25 +1127,28 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 for (const auto &e : kraus)
                     value +=
                         e(output % dimension, input % dimension) * std::conj(e(output / dimension, input / dimension));
-                if (value != Scalar(0.))
-                {
-                    const unsigned pos = counts[output]++;
-                    coefficients[output][pos] = value;
-                    sources[output][pos] = static_cast<unsigned>(input);
-                }
+                coefficients[output * blockSize + input] = value;
             }
-        ForEachLocalBlock<Qubits>({qubits[0], qubits[1], 0}, [&](Scalar *base, const auto &offsets) {
-            std::array<Scalar, size_t{1} << (2 * Qubits)> input;
-            for (size_t i = 0; i < blockSize; ++i)
-                input[i] = base[offsets[i]];
-            for (size_t output = 0; output < blockSize; ++output)
-            {
-                Scalar value = 0.;
-                for (unsigned k = 0; k < counts[output]; ++k)
-                    value += coefficients[output][k] * input[sources[output][k]];
-                base[offsets[output]] = value;
-            }
-        });
+        ApplyLocalSuperoperator<Qubits>(coefficients.data(), qubits);
+    }
+
+    // One pass of the statevector kernels over the flat matrix: a local map on the ket and bra
+    // bits of the targets. A local density block is indexed row + d * column, so its low index
+    // bits are the ket bits (targets[0] lowest) and its high ones the bra bits.
+    template <unsigned Qubits>
+    void ApplyLocalSuperoperator(const std::complex<double> *matrix, const std::array<size_t, 2> &qubits)
+    {
+        const size_t ketShift = MatrixClass::IsRowMajor ? NrQubits : 0;
+        const size_t braShift = MatrixClass::IsRowMajor ? 0 : NrQubits;
+        std::array<size_t, 2 * Qubits> bits{};
+        for (unsigned k = 0; k < Qubits; ++k)
+        {
+            bits[k] = size_t{1} << (qubits[k] + ketShift);
+            bits[k + Qubits] = size_t{1} << (qubits[k] + braShift);
+        }
+        FlatView state(rho.data(), rho.size());
+        FlatCalculator::template ApplyLocalMap<2 * Qubits>(state, matrix, bits, static_cast<size_t>(rho.size()),
+                                                           UseParallel(static_cast<size_t>(rho.size())));
     }
 
     void ScaleCoherences(size_t qubit, double scale)

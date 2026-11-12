@@ -6,10 +6,12 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <typeinfo>
 #include <utility>
@@ -570,52 +572,57 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         const size_t dimA = CheckedDensityMatrixDimension(numKeep);
         const std::complex<double> tr = Trace();
         RequireNormalizableTrace(tr);
-        // Absorb traced segments once, including gaps between retained sites.
-        // Reuse prefix vectors along the output tree: temporary storage stays
-        // polynomial in bond dimension, even for the largest dense result.
-        MatrixClass gap = MatrixClass::Ones(1, 1);
-        // each rescale of the gap scales exactly one factor of every output element
-        int64_t exponent = scaleExponent;
-        std::vector<std::array<MatrixClass, 4>> reduced;
-        std::vector<size_t> orderedPositions;
-        for (size_t q = 0; q < nrQubits; ++q)
-        {
-            if (!isKept[q])
-            {
-                gap = (gap * SiteTraceMatrix(q)).eval();
-                RescaleIfOutOfRange(gap, exponent);
-                continue;
-            }
-            reduced.emplace_back();
-            for (IndexType bra = 0; bra < 2; ++bra)
-                for (IndexType ket = 0; ket < 2; ++ket)
-                    reduced.back()[ket + 2 * bra].noalias() = gap * SiteSelectMatrix(q, ket, bra);
-            const IndexType R = gammas[q].dimension(3);
-            gap = MatrixClass::Identity(R, R);
-            orderedPositions.push_back(
-                static_cast<size_t>(std::find(keepQubits.begin(), keepQubits.end(), q) - keepQubits.begin()));
-        }
-        if (reduced.empty())
+        if (numKeep == 0)
             return MatrixClass::Ones(1, 1);
-        for (auto &last : reduced.back())
-            last = (last * gap).eval();
-        std::vector<MatrixClass> prefix(reduced.size() + 1);
-        prefix[0] = MatrixClass::Ones(1, 1);
+
+        // After the first retained site the gap is a square matrix, so the products with it are matrix
+        // products, which Eigen parallelizes: they run under the guard, unlike the vector contractions.
         MatrixClass rhoA(dimA, dimA);
-        auto expand = [&](auto &&self, size_t depth, size_t row, size_t col) -> void {
-            if (depth == reduced.size())
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            // Absorb traced segments once, including gaps between retained sites.
+            // Reuse prefix vectors along the output tree: temporary storage stays
+            // polynomial in bond dimension, even for the largest dense result.
+            MatrixClass gap = MatrixClass::Ones(1, 1);
+            // each rescale of the gap scales exactly one factor of every output element
+            int64_t exponent = scaleExponent;
+            std::vector<std::array<MatrixClass, 4>> reduced;
+            std::vector<size_t> orderedPositions;
+            for (size_t q = 0; q < nrQubits; ++q)
             {
-                rhoA(row, col) = ScaleByPowerOfTwo(prefix[depth](0, 0), exponent) / tr;
-                return;
+                if (!isKept[q])
+                {
+                    gap = (gap * SiteTraceMatrix(q)).eval();
+                    RescaleIfOutOfRange(gap, exponent);
+                    continue;
+                }
+                reduced.emplace_back();
+                for (IndexType bra = 0; bra < 2; ++bra)
+                    for (IndexType ket = 0; ket < 2; ++ket)
+                        reduced.back()[ket + 2 * bra].noalias() = gap * SiteSelectMatrix(q, ket, bra);
+                const IndexType R = gammas[q].dimension(3);
+                gap = MatrixClass::Identity(R, R);
+                orderedPositions.push_back(
+                    static_cast<size_t>(std::find(keepQubits.begin(), keepQubits.end(), q) - keepQubits.begin()));
             }
-            for (size_t physical = 0; physical < 4; ++physical)
-            {
-                prefix[depth + 1].noalias() = prefix[depth] * reduced[depth][physical];
-                self(self, depth + 1, row | ((physical & 1) << orderedPositions[depth]),
-                     col | ((physical >> 1) << orderedPositions[depth]));
-            }
-        };
-        expand(expand, 0, 0, 0);
+            for (auto &last : reduced.back())
+                last = (last * gap).eval();
+            std::vector<MatrixClass> prefix(reduced.size() + 1);
+            prefix[0] = MatrixClass::Ones(1, 1);
+            auto expand = [&](auto &&self, size_t depth, size_t row, size_t col) -> void {
+                if (depth == reduced.size())
+                {
+                    rhoA(row, col) = ScaleByPowerOfTwo(prefix[depth](0, 0), exponent) / tr;
+                    return;
+                }
+                for (size_t physical = 0; physical < 4; ++physical)
+                {
+                    prefix[depth + 1].noalias() = prefix[depth] * reduced[depth][physical];
+                    self(self, depth + 1, row | ((physical & 1) << orderedPositions[depth]),
+                         col | ((physical >> 1) << orderedPositions[depth]));
+                }
+            };
+            expand(expand, 0, 0, 0);
+        });
         return rhoA;
     }
 
@@ -1213,6 +1220,35 @@ class MPOSimulatorBase : public MPOSimulatorInterface
             throw std::runtime_error("Cannot normalize an MPO operator whose trace is not safely positive");
     }
 
+    // Whether the trace an operator leaves can be normalized by, given the trace it was applied to. A weight
+    // within the rounding of the contractions is no branch: dividing by it scales that rounding up into an
+    // operator that is no state, and a negative one flips the sign of the operator. The test is relative, so
+    // that an operator that is not normalized keeps its outcomes of ordinary probability.
+    static bool HasResolvedWeight(const std::complex<double> &weight, const std::complex<double> &traceBefore)
+    {
+        return std::isfinite(weight.real()) && std::isfinite(weight.imag()) &&
+               weight.real() >= std::numeric_limits<double>::min() &&
+               weight.real() > DensityRounding * std::abs(traceBefore);
+    }
+
+    static void RequireResolvedWeight(const std::complex<double> &weight, const std::complex<double> &traceBefore)
+    {
+        if (HasResolvedWeight(weight, traceBefore))
+            return;
+        std::ostringstream message;
+        message << "Cannot normalize an MPO state: the trace after the operator is " << std::setprecision(6)
+                << weight.real() << " (it was " << traceBefore.real()
+                << " before), which is zero, negative, not finite or within rounding of zero";
+        throw std::runtime_error(message.str());
+    }
+
+    // The probability a measurement draws with. An outcome whose probability is within the rounding of the
+    // contractions is never taken: the collapse onto it would normalize that rounding into the state.
+    static double ResolvedProbability(double probability)
+    {
+        return probability < DensityRounding ? 0. : probability > 1. - DensityRounding ? 1. : probability;
+    }
+
     MatrixClass ReconstructOperatorMatrix() const
     {
         const size_t sz = gammas.size();
@@ -1228,14 +1264,51 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         return rho;
     }
 
-    static double ValidMeasurementProbability(double probability)
+    // Brings a measurement probability into [0, 1]. One that is outside by more than rounding is reported on cerr,
+    // with its value and what the settings say of the cause, and the simulation goes on with the clamped value.
+    double ValidMeasurementProbability(double probability) const
     {
         constexpr double toleranceLow = 1E-9;
         constexpr double toleranceHigh = 1E-5;
         if (probability < -toleranceLow || probability > 1. + toleranceHigh)
-            std::cerr << "Invalid measurement probability produced by the MPO state" << std::endl;
+            ReportInvalidProbability(probability);
 
         return ClampProbability(std::clamp(probability, 0., 1.));
+    }
+
+    // Only what is already known goes into the message: the probability, the truncation settings and the bond
+    // dimensions. A truncated operator need not be positive, which is what a probability out of range shows.
+    void ReportInvalidProbability(double probability) const
+    {
+        std::ostringstream message;
+        message << "Invalid measurement probability produced by the MPO state: " << std::setprecision(12) << probability
+                << std::setprecision(3);
+        if (probability > 1.)
+            message << " (above 1 by " << probability - 1. << "). ";
+        else
+            message << " (below 0 by " << -probability << "). ";
+        const IndexType largest = getMaxBondDimension();
+        if (limitSize && largest >= chi)
+            message << "The largest bond is at its limit of " << chi
+                    << ": the operator is being truncated and is no longer positive; the truncation may be too "
+                       "aggressive for it.";
+        else if (limitEntanglement)
+            message << "Singular values are cut at a threshold of " << singularValueThreshold << " ("
+                    << (truncationMode == TruncationMode::RelativeToMax ? "relative to the largest"
+                                                                        : "discarded weight")
+                    << ", largest bond " << largest
+                    << "): the truncated operator is no longer positive; the truncation may be too aggressive for it.";
+        else if (limitSize)
+            message
+                << "The bond limit of " << chi << " is not reached (largest bond " << largest
+                << "), so truncation is not the cause: the operator is not a normalized positive one, as after a map "
+                   "that is not trace preserving.";
+        else
+            message
+                << "No truncation is set (largest bond " << largest
+                << "): the operator is not a normalized positive one, as after a map that is not trace preserving or "
+                   "through accumulated rounding.";
+        std::cerr << message.str() << std::endl;
     }
 
     // samples qubits [0, limit] one after the other, each conditioned on the previous outcomes,
@@ -1623,6 +1696,11 @@ class MPOSimulatorBase : public MPOSimulatorInterface
 
     const Operators::ZeroProjection<MatrixClass> zeroProjection;
     const Operators::OneProjection<MatrixClass> oneProjection;
+
+    // What the contractions of a normalized chain carry of rounding, relative to its trace, with a margin:
+    // populations that should be zero were measured up to 2e-15 and the trace itself off by up to 3e-14. A
+    // branch of this weight would come out of its normalization with five digits at most.
+    static constexpr double DensityRounding = 1E-12;
 };
 
 } // namespace TensorNetworks

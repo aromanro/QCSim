@@ -34,6 +34,9 @@ class MPSSimulatorBaseState : public MPSSimulatorStateInterface
 
     std::vector<MPSSimulatorInterface::LambdaType> lambdas;
     std::vector<MPSSimulatorInterface::GammaType> gammas;
+    // see MPSSimulatorBase::canonicalFormExact and schmidtValuesDiscarded
+    bool canonicalFormExact = true;
+    bool schmidtValuesDiscarded = false;
 };
 
 // this is separated from the actual simulator to reduce the class complexity
@@ -111,6 +114,8 @@ class MPSSimulatorBase : public MPSSimulatorInterface
         gammas[szm1].resize(1, 2, 1);
         gammas[szm1](0, 0, 0) = 1.;
         gammas[szm1](0, 1, 0) = 0.;
+        canonicalFormExact = true;
+        schmidtValuesDiscarded = false;
     }
 
     void InitOnesState() override
@@ -130,6 +135,8 @@ class MPSSimulatorBase : public MPSSimulatorInterface
         gammas[szm1].resize(1, 2, 1);
         gammas[szm1](0, 0, 0) = 0.;
         gammas[szm1](0, 1, 0) = 1.;
+        canonicalFormExact = true;
+        schmidtValuesDiscarded = false;
     }
 
     void setToQubitState(IndexType q) override
@@ -318,6 +325,8 @@ class MPSSimulatorBase : public MPSSimulatorInterface
         auto state = std::make_shared<MPSSimulatorBaseState>();
         state->lambdas = lambdas;
         state->gammas = gammas;
+        state->canonicalFormExact = canonicalFormExact;
+        state->schmidtValuesDiscarded = schmidtValuesDiscarded;
 
         return state;
     }
@@ -331,6 +340,8 @@ class MPSSimulatorBase : public MPSSimulatorInterface
         lambdas = stateRef->lambdas;
         bondDimensions.Refresh(lambdas);
         gammas = stateRef->gammas;
+        canonicalFormExact = stateRef->canonicalFormExact;
+        schmidtValuesDiscarded = stateRef->schmidtValuesDiscarded;
     }
 
     void setStateDestructive(std::shared_ptr<MPSSimulatorStateInterface> &state) override
@@ -342,6 +353,8 @@ class MPSSimulatorBase : public MPSSimulatorInterface
         lambdas.swap(stateRef->lambdas);
         bondDimensions.Refresh(lambdas);
         gammas.swap(stateRef->gammas);
+        canonicalFormExact = stateRef->canonicalFormExact;
+        schmidtValuesDiscarded = stateRef->schmidtValuesDiscarded;
     }
 
     void print() const override
@@ -659,6 +672,18 @@ class MPSSimulatorBase : public MPSSimulatorInterface
 
     // if false, the SVDs (and the matrix products) are done single threaded, see SetMultithreading
     bool enableMultithreading = true;
+
+    // The right canonical form is exact as long as no gate discards Schmidt values. A truncation at one bond leaves
+    // the stored lambdas of the other bonds, and the orthonormality of the tensors to its left, approximate: whatever
+    // reads the environments of a site from them (the probabilities of a measurement, of a Kraus operator) is then
+    // off by an amount of the order of the weight discarded. False from such a truncation until the form is rebuilt
+    // from the tensors (ReCanonicalize) or the chain is reset; the gauge mode of MPSSimulatorImpl computes its
+    // environments from the tensors instead of taking them from the form while this is false.
+    bool canonicalFormExact = true;
+    // Whether a cut the user asked for (bond limit, singular value threshold) has discarded Schmidt values since the
+    // chain was last reset. Only for diagnostics: it tells a state that is approximate by request from one that is
+    // not.
+    bool schmidtValuesDiscarded = false;
 
     BondDimensionSummary<IndexType> bondDimensions;
     std::vector<LambdaType> lambdas;

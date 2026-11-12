@@ -270,6 +270,49 @@ class MPSSimulator : public MPSSimulatorInterface
             NotifyBondDimensions();
     }
 
+    // One sampled Kraus operator of a one-qubit channel, a step of a quantum trajectory: see
+    // MPSSimulatorImpl::ApplyKrausOperator, also for the precision of the weights and for what is refused.
+    // Returns the index of the operator applied.
+    size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, IndexType qubit)
+    {
+        if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        return impl.ApplyKrausOperator(kraus, random, qubitsMap[qubit]);
+    }
+
+    // The same for 4x4 operators on two qubits, `qubit` the low bit of the matrix index and `controllingQubit1`
+    // the high one. Qubits that are not neighbours on the chain are brought together first, as for a gate.
+    size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, IndexType qubit,
+                              IndexType controllingQubit1)
+    {
+        const IndexType count = static_cast<IndexType>(impl.getNrQubits());
+        if (qubit < 0 || qubit >= count || controllingQubit1 < 0 || controllingQubit1 >= count ||
+            qubit == controllingQubit1)
+            throw std::invalid_argument("Qubit index out of bounds");
+        if (abs(qubitsMap[qubit] - qubitsMap[controllingQubit1]) > 1)
+        {
+            if (meetingPositionCallback)
+                SwapQubitsToPosition(qubit, controllingQubit1, meetingPositionCallback(impl.getBondDimensions()));
+            else if (useOptimalMeetingPosition)
+                SwapQubitsToPosition(qubit, controllingQubit1, FindBestMeetingPositionLocal(qubit, controllingQubit1));
+            else
+                SwapQubits(qubit, controllingQubit1);
+            assert(abs(qubitsMap[qubit] - qubitsMap[controllingQubit1]) == 1);
+        }
+        const size_t chosen = impl.ApplyKrausOperator(kraus, random, qubitsMap[qubit], qubitsMap[controllingQubit1]);
+        if (bondDimensionCallback || bondDimensionSummaryCallback)
+            NotifyBondDimensions();
+        return chosen;
+    }
+
+    // Reduced density matrix of one qubit; the state is not changed.
+    MatrixClass LocalDensityMatrix(IndexType qubit)
+    {
+        if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        return impl.LocalDensityMatrix(qubitsMap[qubit]);
+    }
+
     void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
     {
         for (const auto &gate : gates)
@@ -368,6 +411,8 @@ class MPSSimulator : public MPSSimulatorInterface
         auto state = std::make_shared<MPSSimulatorState>();
         state->gammas.swap(baseState->gammas);
         state->lambdas.swap(baseState->lambdas);
+        state->canonicalFormExact = baseState->canonicalFormExact;
+        state->schmidtValuesDiscarded = baseState->schmidtValuesDiscarded;
         state->qubitsMap = qubitsMap;
         state->qubitsMapInv = qubitsMapInv;
         return state;
@@ -436,6 +481,17 @@ class MPSSimulator : public MPSSimulatorInterface
 
         sim->impl.lambdas = impl.lambdas;
         sim->impl.gammas = impl.gammas;
+        sim->impl.canonicalFormExact = impl.canonicalFormExact;
+        sim->impl.schmidtValuesDiscarded = impl.schmidtValuesDiscarded;
+        // A chain that keeps explicit environments (after a Kraus step) is only described with them.
+        sim->impl.gaugeMode = impl.gaugeMode;
+        sim->impl.gaugeForReads = impl.gaugeForReads;
+        sim->impl.leftEnv = impl.leftEnv;
+        sim->impl.rightEnv = impl.rightEnv;
+        sim->impl.leftValid = impl.leftValid;
+        sim->impl.rightValid = impl.rightValid;
+        sim->impl.leftCanonical = impl.leftCanonical;
+        sim->impl.rightCanonical = impl.rightCanonical;
 
         sim->useOptimalMeetingPosition = useOptimalMeetingPosition;
         sim->meetingPositionCallback = meetingPositionCallback;
@@ -450,6 +506,8 @@ class MPSSimulator : public MPSSimulatorInterface
 
             clonedSavedState->gammas = simState->gammas;
             clonedSavedState->lambdas = simState->lambdas;
+            clonedSavedState->canonicalFormExact = simState->canonicalFormExact;
+            clonedSavedState->schmidtValuesDiscarded = simState->schmidtValuesDiscarded;
             clonedSavedState->qubitsMap = simState->qubitsMap;
             clonedSavedState->qubitsMapInv = simState->qubitsMapInv;
 

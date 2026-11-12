@@ -156,7 +156,9 @@ class MPOSimulatorInterface
 
     // Manual versions of the same patches. RestoreTrace throws if Re(Tr ρ) is not safely
     // positive. Hermitize always builds (ρ + ρ†)/2 from the tensors (conjugate + ket↔bra),
-    // recanonicalizes, and compresses if a bond or entanglement limit is set.
+    // recanonicalizes, and compresses if a bond or entanglement limit is set. It keeps the
+    // trace of (ρ + ρ†)/2: with RestoreTraceAfterTruncation the trace is restored only when
+    // that compression cut something, so a deliberately unnormalized operator stays as it is.
     virtual void RestoreTrace() = 0;
     virtual void Hermitize() = 0;
 
@@ -175,6 +177,10 @@ class MPOSimulatorInterface
     // Explicit non-unitary-capable local operator API. Applies rho -> A rho A^dagger.
     // If A is not unitary the trace is generally not preserved; the normalized variants
     // condition on the operation succeeding by dividing the resulting state by its trace.
+    // They throw, and leave the state as it was, when that trace is zero, negative, not
+    // finite, or below 1e-12 of the trace before the operator: such a weight is the rounding
+    // of the contractions, not a branch. The comparison is relative, so an operator that is
+    // not normalized keeps its branches of ordinary probability.
     virtual void ApplyOperator(const Gates::AppliedGate<MatrixClass> &op) = 0;
     virtual void ApplyOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
     virtual void ApplyOperators(const std::vector<Gates::AppliedGate<MatrixClass>> &ops) = 0;
@@ -256,6 +262,10 @@ class MPOSimulatorInterface
         ApplyKrausOperators({E0, E1}, qubit);
     }
 
+    // Measures and collapses. The probabilities are relative to the trace, so an operator that is
+    // not normalized is measured like the state it is a multiple of (its trace has to be safely
+    // positive, as for the reads). An outcome whose probability is below 1e-12 is never taken:
+    // that is the rounding of the contractions, and the collapse would normalize it into the state.
     virtual bool MeasureQubit(IndexType qubit) = 0;
     virtual std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType> &qubits) = 0;
     virtual double GetProbability(IndexType qubit, bool zeroVal = true) const = 0;

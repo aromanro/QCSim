@@ -3,6 +3,9 @@
 #include "MPSSimulatorBase.h"
 #include "TensorPauli.h"
 
+#include <iomanip>
+#include <sstream>
+
 #define USE_FAST_SVD 1
 
 namespace QC
@@ -51,6 +54,11 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         else if (!gate.getRawOperatorMatrix().allFinite())
             throw std::invalid_argument("Gate matrix contains a non-finite value");
 
+        // Environments kept only for reads (see EnvironmentsForRead) end with them: a gate goes the way it always
+        // went on a chain that holds no Kraus operator.
+        if (gaugeForReads)
+            LeaveGaugeMode();
+
         if (gate.getQubitsNumber() == 1)
             ApplySingleQubitGate(gate, qubit);
         else
@@ -72,6 +80,7 @@ class MPSSimulatorImpl : public MPSSimulatorBase
     {
         if (!limitSize)
             return; // nothing to trim against
+        EnsureCanonical();
 
         for (IndexType qubit1 = 0; qubit1 < static_cast<IndexType>(lambdas.size()); ++qubit1)
         {
@@ -88,11 +97,24 @@ class MPSSimulatorImpl : public MPSSimulatorBase
 
     void ReCanonicalize() override
     {
+        RestoreCanonicalForm(true);
+    }
+
+    // The body of ReCanonicalize. Without `compress` the state is left as it is: the sweeps only drop the directions
+    // the decompositions find without weight, and none of the cuts the user asked for (bond limit, singular value
+    // threshold) is applied. That is what a read needs, see EnsureCanonical.
+    void RestoreCanonicalForm(bool compress)
+    {
+        // The sweeps below rebuild everything from the tensors: they need no environment and leave none stale.
+        LeaveGaugeMode();
         if (lambdas.empty())
+        {
+            canonicalFormExact = true;
             return;
+        }
 
         RunMaybeSingleThreaded(enableMultithreading, [&]() {
-            bool applyUserCompression = true;
+            bool applyUserCompression = compress;
             bool reduced;
             do
             {
@@ -114,9 +136,12 @@ class MPSSimulatorImpl : public MPSSimulatorBase
                 reduced = getBondDimensions() != previousDimensions;
                 // A relative cutoff must also hold for the refreshed spectra. Discarded
                 // weight is a per-compression budget: do not spend it again on refresh.
-                applyUserCompression = truncationMode == TruncationMode::RelativeToMax;
+                applyUserCompression = compress && truncationMode == TruncationMode::RelativeToMax;
             } while (reduced);
         });
+        // The last pass changed no dimension, so it discarded nothing: every lambda is the Schmidt spectrum of its
+        // bond and every tensor to the right of a bond is orthonormal.
+        canonicalFormExact = true;
     }
 
     // false if measured 0, true if measured 1
@@ -126,7 +151,18 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             throw std::invalid_argument("Qubit index out of bounds");
 
         const double rndVal = 1. - uniformZeroOne(rng);
+        // On a chain that holds Kraus operators a measurement is one more of them: the channel of the two
+        // projectors, with the same rule for the draw (0 when the number drawn is below its probability). The site
+        // is split again where the projector left it (see RegaugeSite); nothing sweeps the chain.
+        if (gaugeMode && !gaugeForReads)
+            return ApplyKrausOperator({zeroProjection.getRawOperatorMatrix(), oneProjection.getRawOperatorMatrix()},
+                                      rndVal, qubit) == 1;
+
+        // The probability is taken from the environments of the site when the canonical form is approximate (see
+        // GetProbability); the collapse and what follows it stay on the canonical path.
         const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
+        if (gaugeForReads)
+            LeaveGaugeMode();
         const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
 
         MatrixClass projMat = zeroMeasured ? zeroProjection.getRawOperatorMatrix() * 1. / sqrt(prob0)
@@ -168,6 +204,15 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             res[qubit] = MeasureQubit(qubit);
             return res;
         }
+        if (*qubits.cbegin() < 0 || *qubits.crbegin() >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        // On a chain that holds Kraus operators, one by one, each as the channel of its projectors (see MeasureQubit).
+        if (gaugeMode && !gaugeForReads)
+        {
+            for (const auto qubit : qubits)
+                res[qubit] = MeasureQubit(qubit);
+            return res;
+        }
 
         const auto lastIt = --qubits.end();
 
@@ -179,6 +224,8 @@ class MPSSimulatorImpl : public MPSSimulatorBase
 
             const double rndVal = 1. - uniformZeroOne(rng);
             const double prob0 = ValidMeasurementProbability(GetProbability(qubit));
+            if (gaugeForReads)
+                LeaveGaugeMode();
             const bool zeroMeasured = PickZeroMeasurement(rndVal, prob0);
 
             res[qubit] = !zeroMeasured;
@@ -217,6 +264,8 @@ class MPSSimulatorImpl : public MPSSimulatorBase
     {
         if (gates.empty())
             return 1.;
+        // The environments it needs, when the canonical form does not give them, are set up where the interval of
+        // the operators is known (see ExpectationValueImpl).
         std::complex<double> result;
         RunMaybeSingleThreaded(enableMultithreading, [&]() { result = ExpectationValueImpl(gates); });
         return result;
@@ -231,10 +280,26 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         return result;
     }
 
+    // Sampling needs the block to the right of every site. On an exact canonical form it is orthonormal; otherwise
+    // its environments are computed once and serve every sample until the chain changes (see EnvironmentsForRead).
     std::unordered_map<IndexType, bool> MeasureNoCollapse() override
     {
+        if (gammas.empty())
+            return {};
+        PrepareSampling();
         const size_t nrQubits = gammas.size();
         return MeasureNoCollapse(static_cast<IndexType>(nrQubits - 1));
+    }
+
+    // Brings every right environment up to date, where the chain keeps or needs them, inside the threading guard:
+    // the samples then only read them.
+    void PrepareSampling()
+    {
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            EnvironmentsForRead(0);
+            if (gaugeMode && !lambdas.empty())
+                RightEnvironment(0);
+        });
     }
 
     std::unordered_map<IndexType, bool> MeasureNoCollapse(const std::set<IndexType> &qubits) override
@@ -243,8 +308,419 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             return {};
         if (*qubits.cbegin() < 0 || *qubits.crbegin() >= static_cast<IndexType>(gammas.size()))
             throw std::invalid_argument("Qubit index out of bounds");
+        PrepareSampling();
 
         return MeasureNoCollapse(*qubits.crbegin());
+    }
+
+    // The base class answers from the canonical form: the squared lambdas to the left of the site, orthonormal
+    // tensors to its right. When the chain keeps explicit environments, or when gates have left that form
+    // approximate by discarding Schmidt values, the probability is taken from the environments of the site instead.
+    double GetProbability(IndexType qubit, bool zeroVal = true) const override
+    {
+        if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        if (!gaugeMode && canonicalFormExact)
+            return MPSSimulatorBase::GetProbability(qubit, zeroVal);
+
+        MPSSimulatorImpl *const self = const_cast<MPSSimulatorImpl *>(this);
+        Eigen::Matrix2cd rho;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            self->EnvironmentsForRead(qubit);
+            rho = self->SiteDensity(qubit);
+        });
+        return ClampProbability(rho(zeroVal ? 0 : 1, zeroVal ? 0 : 1).real());
+    }
+
+    // A saved state holds no environments: it is taken on the canonical path.
+    std::shared_ptr<MPSSimulatorStateInterface> getState() const override
+    {
+        EnsureCanonical();
+        return MPSSimulatorBase::getState();
+    }
+
+    void setState(const std::shared_ptr<MPSSimulatorStateInterface> &state) override
+    {
+        if (state)
+            LeaveGaugeMode();
+        MPSSimulatorBase::setState(state);
+    }
+
+    void setStateDestructive(std::shared_ptr<MPSSimulatorStateInterface> &state) override
+    {
+        if (state)
+            LeaveGaugeMode();
+        MPSSimulatorBase::setStateDestructive(state);
+    }
+
+    void Clear() override
+    {
+        LeaveGaugeMode();
+        MPSSimulatorBase::Clear();
+    }
+
+    void InitOnesState() override
+    {
+        LeaveGaugeMode();
+        MPSSimulatorBase::InitOnesState();
+    }
+
+    // setToQubitState and setToBasisState are not overridden: the base class resets the chain through Clear(), which
+    // ends the gauge mode above, and only once it has accepted its argument. A basis state that does not fit the
+    // register is refused (or ignored) before anything changes, and the chain then keeps its environments too.
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Quantum trajectories: one Kraus operator of a channel, drawn with the probability the state gives it.
+    //
+    // A non-unitary one-site operator takes the chain out of the canonical form every other operation here relies on:
+    // the tensor it acts on is no longer right-orthonormal, and the stored lambdas no longer describe the blocks to
+    // the left of the bonds on its right. Restoring the form costs a sweep of decompositions over the chain, as a
+    // measurement does, and a noisy circuit applies such an operator after every gate.
+    //
+    // Instead, from the first such operator on, the chain keeps its environments explicitly ('gauge mode'): for each
+    // bond the Gram matrix of the block to its left and of the block to its right, cached and recomputed only across
+    // the sites that changed since they were last used. Then
+    //  - the reduced density matrix of a site, which gives the probability of every Kraus operator, costs a few
+    //    matrix products, and applying the operator drawn leaves all the other tensors as they are;
+    //  - a two-qubit gate weighs its decomposition by the two environments instead of the left lambda, so that its
+    //    singular values are the Schmidt values of the bond and cutting them is the optimal truncation, exactly as
+    //    in the canonical form (see DecomposeWithEnvironments);
+    //  - a unitary one-qubit gate changes no environment.
+    // No operation sweeps the chain. Whatever assumes the canonical form (measurement, expectation values, saved
+    // states) restores it first with ReCanonicalize, which ends the gauge mode.
+
+    // Reduced density matrix of one site: rho(s, s') = <s| rho |s'>. The state is not changed. On a chain whose gates
+    // have discarded Schmidt values the canonical form no longer gives the environments of the site: they are
+    // computed from the tensors and kept for the reads that follow, as for the other reads (see
+    // EnvironmentsForRead), so the gates after this one are those of a chain that was not read.
+    MatrixClass LocalDensityMatrix(IndexType qubit)
+    {
+        if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        Eigen::Matrix2cd rho;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            EnvironmentsForRead(qubit);
+            rho = SiteDensity(qubit);
+        });
+        return rho;
+    }
+
+    // One step of a trajectory through the channel rho -> sum_k E_k rho E_k^dagger on one site: applies one of the
+    // 2x2 operators, chosen with the probability the state gives it, and renormalizes. `random` is uniform in
+    // [0, 1). Trace preservation is not checked: the weights are taken relative to their sum. Returns the index of
+    // the operator applied.
+    //
+    // Precision, as for the statevector (QubitRegister::ApplyKrausOperator). A weight that is a small part of what
+    // its terms add up to is read again from the tensors, on the canonical form, and one below (64 epsilon)^2
+    // times the bound on those terms counts as none: it is what the rounding of amplitudes that cancel leaves.
+    // Such an operator is never drawn, and when none is left the call throws std::domain_error with the largest
+    // weight found and the bound it fell below. This refuses, too, a branch that small which is exact.
+    size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, IndexType qubit)
+    {
+        if (qubit < 0 || qubit >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        if (kraus.empty())
+            throw std::invalid_argument("A channel must contain at least one Kraus operator");
+        for (const auto &e : kraus)
+            if (e.rows() != 2 || e.cols() != 2 || !e.allFinite())
+                throw std::invalid_argument("Matrix product state Kraus operators must be finite 2x2 matrices");
+
+        size_t chosen = 0;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            // The canonical form gives the environments of the site only while it is exact (see LocalDensityMatrix).
+            if (!gaugeMode && !canonicalFormExact)
+                EnterGaugeModeNormalized(qubit);
+            const Eigen::Matrix2cd rho = SiteDensity(qubit);
+            // Stack storage for the usual few operators: the weight of each, and its reach when it is in doubt.
+            double fewWeights[16], fewReaches[16];
+            std::vector<double> manyValues(kraus.size() > 16 ? 2 * kraus.size() : 0);
+            double *const weights = kraus.size() > 16 ? manyValues.data() : fewWeights;
+            double *const reaches = kraus.size() > 16 ? manyValues.data() + kraus.size() : fewReaches;
+            double total = 0., doubt = 0.;
+            for (size_t k = 0; k < kraus.size(); ++k)
+            {
+                const Eigen::Matrix2cd e = kraus[k];
+                const double weight = (e * rho * e.adjoint()).trace().real();
+                // The bound on the terms of that trace, 2 sum_a |column a of E|^2 rho(a, a): see UnresolvedWeight.
+                const double reach =
+                    2. * (e.col(0).squaredNorm() * rho(0, 0).real() + e.col(1).squaredNorm() * rho(1, 1).real());
+                weights[k] = weight > 0. ? weight : 0.;
+                if (weight >= UnresolvedWeight * reach)
+                    reaches[k] = -1.; // resolved
+                else
+                {
+                    reaches[k] = reach;
+                    doubt += DensityRounding * reach;
+                }
+                total += weights[k];
+            }
+
+            // Whether the weights were read on the canonical form, which the draw below then leaves to be applied.
+            bool canonical = false;
+            if (doubt == 0.)
+            {
+                if (!std::isfinite(total) || total <= 0.)
+                    throw std::domain_error("No Kraus operator has any probability on this state");
+                DrawOperator(weights, kraus.size(), total, 0., random, chosen);
+            }
+            else if (!(std::isfinite(total) && total > 0. &&
+                       DrawOperator(weights, kraus.size(), total, doubt, random, chosen) && reaches[chosen] < 0.))
+            {
+                // A weight in doubt decides the draw, or is the one drawn. The environments are Gram matrices: they
+                // hold a weight to the rounding of their largest entry, and the norm of what a nearly orthogonal
+                // operator leaves is below that. The canonical form is restored instead, where the weights are
+                // sums of squares of the tensor of the site (see CanonicalSiteWeight); they are all read there
+                // before anything is drawn, so that a weight that is there is found whatever the rounding made of
+                // it, and one that is not there is not drawn.
+                RestoreCanonicalForm(false);
+                total = 0.;
+                double largest = 0., cutoffOfLargest = 0.;
+                for (size_t k = 0; k < kraus.size(); ++k)
+                {
+                    double reach = 0.;
+                    const double weight = CanonicalSiteWeight(qubit, kraus[k], reach);
+                    const double cutoff = AmplitudeRounding * AmplitudeRounding * reach;
+                    if (weight > largest)
+                    {
+                        largest = weight;
+                        cutoffOfLargest = cutoff;
+                    }
+                    weights[k] = weight >= cutoff ? weight : 0.;
+                    total += weights[k];
+                }
+                if (!std::isfinite(total) || total <= 0.)
+                    ThrowNoProbability(largest, cutoffOfLargest);
+                DrawOperator(weights, kraus.size(), total, 0., random, chosen);
+                canonical = true;
+            }
+
+            const MatrixClass scaled = kraus[chosen] / std::sqrt(weights[chosen]);
+            const Eigen::Matrix2cd drawn = kraus[chosen];
+            // Read from the density matrix the weights came from; after the weights were read again on the canonical
+            // form the branch below is taken whatever the operator.
+            const bool rankOne = !canonical && LeavesOneState(drawn, rho, weights[chosen]);
+            if (canonical || (!rankOne && ProjectionLike(drawn)))
+            {
+                // A near-null operator, of which what was a small part of the state is now most, or one that nearly
+                // projects without leaving the site in one state: the lambdas know a small weight only to the
+                // rounding of the largest, and explicit environments would go on from Gram matrices that have all
+                // but lost their rank. The canonical form is rebuilt from the tensors, which also normalizes the
+                // state from them; the scale applied here only keeps the numbers in range. Both are rare: the first
+                // needs a state nearly orthogonal to the operator, the second a damping of all but a hundredth of
+                // an amplitude.
+                ApplySingleQubitGate(gammas[qubit], scaled);
+                NormalizeLoneSite();
+                RestoreCanonicalForm(false);
+                return;
+            }
+            // The environments are taken from the canonical form the first time, before the site changes. Those
+            // kept for reads serve as well: from here on the chain holds a Kraus operator.
+            EnterGaugeMode();
+            gaugeForReads = false;
+            ApplySingleQubitGate(gammas[qubit], scaled);
+            // Every environment that contains the site is stale: the left blocks of the bonds from this site on,
+            // and the right blocks of the bonds before it.
+            leftValid = std::min(leftValid, qubit);
+            rightValid = std::max(rightValid, qubit);
+            // A projection (a jump, a reset, one outcome of a measurement) leaves the site in one state, whatever
+            // the rest holds: the site is split again where the projection left it.
+            if (rankOne)
+                RegaugeSite(qubit, drawn);
+        });
+        return chosen;
+    }
+
+    // The same step for 4x4 operators on two neighbouring sites, `qubit` the low bit of the matrix index and
+    // `controllingQubit1` the high one. The two-site tensor is built once. With the environments around it, it
+    // gives the reduced density matrix of the pair, and so the probability of every operator; the operator drawn
+    // is applied to that same tensor, which is then split in one decomposition weighed by the environments, as
+    // for a two-qubit gate. The step costs what a gate costs, whatever the number of operators. The precision of
+    // the weights, and what is refused for want of one, are those of the one-site step.
+    size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, IndexType qubit,
+                              IndexType controllingQubit1)
+    {
+        const IndexType sites = static_cast<IndexType>(gammas.size());
+        if (qubit < 0 || qubit >= sites || controllingQubit1 < 0 || controllingQubit1 >= sites)
+            throw std::invalid_argument("Qubit index out of bounds");
+        if (std::abs(qubit - controllingQubit1) != 1)
+            throw std::invalid_argument("Two-qubit Kraus operators need to act on adjacent qubits");
+        if (kraus.empty())
+            throw std::invalid_argument("A channel must contain at least one Kraus operator");
+        for (const auto &e : kraus)
+            if (e.rows() != 4 || e.cols() != 4 || !e.allFinite())
+                throw std::invalid_argument("Two-qubit Kraus operators must be finite 4x4 matrices");
+
+        const IndexType qubit1 = std::min(qubit, controllingQubit1), qubit2 = qubit1 + 1;
+        // The left site is the high bit of the operators' index, unless it is `qubit`.
+        const bool reversed = qubit < controllingQubit1;
+        size_t chosen = 0;
+        double weight = 0.;
+        bool decomposed = false, projects = false;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            // The environments are taken from the canonical form the first time, before the sites change. Those
+            // kept for reads serve as well: from here on the chain holds a Kraus operator.
+            EnterGaugeMode();
+            gaugeForReads = false;
+            const IndexType bonds = static_cast<IndexType>(lambdas.size());
+            // theta(j * szl + l, k * szr + r), with j and k the states of the left and of the right site
+            const MatrixClass theta = ReshapeTheta(ContractTwoQubits(qubit1));
+            const IndexType szl = theta.rows() / 2, szr = theta.cols() / 2;
+            MatrixClass weighted = theta;
+            if (qubit1 > 0)
+            {
+                const MatrixClass &left = LeftEnvironment(qubit1 - 1);
+                for (IndexType j = 0; j < 2; ++j)
+                    weighted.middleRows(j * szl, szl).noalias() = left * theta.middleRows(j * szl, szl);
+            }
+            if (qubit2 < bonds)
+            {
+                const MatrixClass &right = RightEnvironment(qubit2);
+                for (IndexType k = 0; k < 2; ++k)
+                {
+                    const MatrixClass block = weighted.middleCols(k * szr, szr) * right.transpose();
+                    weighted.middleCols(k * szr, szr) = block;
+                }
+            }
+            // Where the block of one state of the pair starts, the state given in the index of the operators.
+            const auto row = [&](int index) { return (reversed ? index % 2 : index / 2) * szl; };
+            const auto col = [&](int index) { return (reversed ? index / 2 : index % 2) * szr; };
+
+            // rho(a, b) = <a| rho |b> = sum conj(theta_b) (G theta_a H^T), with G and H the environments
+            Eigen::Matrix4cd rho;
+            for (int a = 0; a < 4; ++a)
+                for (int b = 0; b < 4; ++b)
+                    rho(a, b) = theta.block(row(b), col(b), szl, szr)
+                                    .conjugate()
+                                    .cwiseProduct(weighted.block(row(a), col(a), szl, szr))
+                                    .sum();
+
+            // The weight of each operator, and its reach when the weight is in doubt (see UnresolvedWeight).
+            std::vector<double> weights(kraus.size()), reaches(kraus.size());
+            double total = 0., doubt = 0.;
+            for (size_t k = 0; k < kraus.size(); ++k)
+            {
+                const Eigen::Matrix4cd e = kraus[k];
+                const double w = (e * rho * e.adjoint()).trace().real();
+                double reach = 0.;
+                for (int a = 0; a < 4; ++a)
+                    reach += e.col(a).squaredNorm() * rho(a, a).real();
+                reach *= 4.;
+                weights[k] = w > 0. ? w : 0.;
+                if (w >= UnresolvedWeight * reach)
+                    reaches[k] = -1.; // resolved
+                else
+                {
+                    reaches[k] = reach;
+                    doubt += DensityRounding * reach;
+                }
+                total += weights[k];
+            }
+
+            if (doubt == 0.)
+            {
+                if (!std::isfinite(total) || total <= 0.)
+                    throw std::domain_error("No Kraus operator has any probability on this state");
+                DrawOperator(weights.data(), kraus.size(), total, 0., random, chosen);
+            }
+            else if (!(std::isfinite(total) && total > 0. &&
+                       DrawOperator(weights.data(), kraus.size(), total, doubt, random, chosen) &&
+                       reaches[chosen] < 0.))
+            {
+                // A weight in doubt decides the draw, or is the one drawn: as for one site, the canonical form is
+                // restored and every weight read there, as a sum of squares of what the operator leaves of the
+                // two-site tensor, before anything is drawn. The operator drawn is applied as it is, and the
+                // canonical decomposition normalizes by the singular values of what it left.
+                RestoreCanonicalForm(false);
+                const MatrixClass exact = ReshapeTheta(ContractTwoQubits(qubit1));
+                const IndexType exactL = exact.rows() / 2, exactR = exact.cols() / 2;
+                const auto exactRow = [&](int index) { return (reversed ? index % 2 : index / 2) * exactL; };
+                const auto exactCol = [&](int index) { return (reversed ? index / 2 : index % 2) * exactR; };
+                // The squared norm of a matrix of the shape of theta, its rows weighed by the left lambdas.
+                const auto squaredNorm = [&](const MatrixClass &matrix) {
+                    double sum = 0.;
+                    for (IndexType j = 0; j < 2; ++j)
+                        for (IndexType l = 0; l < exactL; ++l)
+                        {
+                            const double lambda = qubit1 == 0 ? 1. : lambdas[qubit1 - 1][l];
+                            sum += lambda * lambda * matrix.row(j * exactL + l).squaredNorm();
+                        }
+                    return sum;
+                };
+                const auto applyTo = [&](const Eigen::Matrix4cd &op) {
+                    MatrixClass applied = MatrixClass::Zero(exact.rows(), exact.cols());
+                    for (int a = 0; a < 4; ++a)
+                        for (int b = 0; b < 4; ++b)
+                            if (op(a, b) != std::complex<double>{})
+                                applied.block(exactRow(a), exactCol(a), exactL, exactR) +=
+                                    op(a, b) * exact.block(exactRow(b), exactCol(b), exactL, exactR);
+                    return applied;
+                };
+                double populations[4];
+                for (int a = 0; a < 4; ++a)
+                {
+                    MatrixClass part = MatrixClass::Zero(exact.rows(), exact.cols());
+                    part.block(exactRow(a), exactCol(a), exactL, exactR) =
+                        exact.block(exactRow(a), exactCol(a), exactL, exactR);
+                    populations[a] = squaredNorm(part);
+                }
+                total = 0.;
+                double largest = 0., cutoffOfLargest = 0.;
+                for (size_t k = 0; k < kraus.size(); ++k)
+                {
+                    const Eigen::Matrix4cd e = kraus[k];
+                    double reach = 0.;
+                    for (int a = 0; a < 4; ++a)
+                        reach += e.col(a).squaredNorm() * populations[a];
+                    reach *= 4.;
+                    const double w = squaredNorm(applyTo(e));
+                    const double cutoff = AmplitudeRounding * AmplitudeRounding * reach;
+                    if (w > largest)
+                    {
+                        largest = w;
+                        cutoffOfLargest = cutoff;
+                    }
+                    weights[k] = w >= cutoff ? w : 0.;
+                    total += weights[k];
+                }
+                if (!std::isfinite(total) || total <= 0.)
+                    ThrowNoProbability(largest, cutoffOfLargest);
+                DrawOperator(weights.data(), kraus.size(), total, 0., random, chosen);
+                const Eigen::Matrix4cd drawn = kraus[chosen] / std::sqrt(weights[chosen]);
+                DecomposeAndSetGammasImpl(applyTo(drawn), qubit1, qubit2, true);
+                // What was a small part of the state may now be most of it, and the lambdas knew it only to the
+                // rounding of the largest: the form is rebuilt once more, which normalizes from the tensors.
+                RestoreCanonicalForm(false);
+                decomposed = true;
+                return;
+            }
+            weight = weights[chosen];
+
+            const Eigen::Matrix4cd op = kraus[chosen] / std::sqrt(weight);
+            MatrixClass applied = MatrixClass::Zero(theta.rows(), theta.cols());
+            for (int a = 0; a < 4; ++a)
+                for (int b = 0; b < 4; ++b)
+                    if (op(a, b) != std::complex<double>{})
+                        applied.block(row(a), col(a), szl, szr) += op(a, b) * theta.block(row(b), col(b), szl, szr);
+            decomposed = DecomposeWithEnvironments(applied, qubit1, qubit2, (op.adjoint() * op).isIdentity(1e-10));
+            projects = ProjectionLike(Eigen::Matrix4cd(kraus[chosen]));
+        });
+        if (!decomposed)
+        {
+            // An environment has lost rank: the gate path restores the canonical form for this update.
+            const Gates::AppliedGate<MatrixClass> gate(MatrixClass(kraus[chosen] / std::sqrt(weight)), qubit,
+                                                       controllingQubit1);
+            ApplyTwoQubitGate(gate, qubit, controllingQubit1);
+        }
+        // As for one site: after an operator that nearly projects, the canonical form is rebuilt from the tensors.
+        if (projects)
+            RestoreCanonicalForm(false);
+        return chosen;
+    }
+
+    // Whether the chain keeps explicit environments instead of the canonical form (see above).
+    bool InGaugeMode() const
+    {
+        return gaugeMode;
     }
 
     // Computes <0|Psi> by contracting the current MPS chain with the zero state
@@ -283,6 +759,7 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             first = std::min(first, q);
             last = std::max(last, q);
         }
+        EnvironmentsForRead(first);
         std::vector<Eigen::Matrix2cd> operators(last - first + 1, Eigen::Matrix2cd::Identity());
         // Repeated operators at a site retain the caller's application order.
         for (const auto &gate : gates)
@@ -322,6 +799,8 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         std::sort(queries.begin(), queries.end(), [](const Query &a, const Query &b) {
             return a.first != b.first ? a.first < b.first : a.pauli < b.pauli;
         });
+        if (!queries.empty())
+            const_cast<MPSSimulatorImpl *>(this)->EnvironmentsForRead(queries.front().first);
         ExpectationWorkspace workspace;
         std::vector<MatrixClass> prefixes;
         IndexType groupFirst = -1, validUntil = 0;
@@ -393,7 +872,11 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         const Slice zero(g.data(), L, R, Eigen::OuterStride<>(2 * L));
         const Slice one(g.data() + L, L, R, Eigen::OuterStride<>(2 * L));
         const auto a = op(0, 0), b = op(0, 1), c = op(1, 0), d = op(1, 1);
-        if (first && last)
+        // With explicit environments the interval is closed by the Gram matrices of the blocks around it, where the
+        // canonical form has the squared lambdas on its left and nothing to add on its right.
+        const IndexType bonds = static_cast<IndexType>(lambdas.size());
+        MPSSimulatorImpl *const self = const_cast<MPSSimulatorImpl *>(this);
+        if (first && last && !gaugeMode)
         {
             std::complex<double> value = 0.;
             for (IndexType r = 0; r < R; ++r)
@@ -422,7 +905,15 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         }
         if (first)
         {
-            if (q != 0)
+            if (q != 0 && gaugeMode)
+            {
+                const MatrixClass &left = self->LeftEnvironment(q - 1);
+                w.work0.noalias() = left * w.ket0;
+                w.work1.noalias() = left * w.ket1;
+                w.ket0.swap(w.work0);
+                w.ket1.swap(w.work1);
+            }
+            else if (q != 0)
                 for (IndexType r = 0; r < R; ++r)
                     for (IndexType l = 0; l < L; ++l)
                     {
@@ -439,11 +930,210 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             w.ket1.swap(w.work1);
         }
         if (last)
+        {
+            if (gaugeMode && q < bonds)
+            {
+                const MatrixClass &right = self->RightEnvironment(q);
+                w.work0.noalias() = w.ket0 * right.transpose();
+                w.work1.noalias() = w.ket1 * right.transpose();
+                w.ket0.swap(w.work0);
+                w.ket1.swap(w.work1);
+            }
             return (zero.conjugate().cwiseProduct(w.ket0)).sum() + (one.conjugate().cwiseProduct(w.ket1)).sum();
+        }
         w.next.noalias() = zero.adjoint() * w.ket0;
         w.next.noalias() += one.adjoint() * w.ket1;
         w.left.swap(w.next);
         return 0.;
+    }
+
+    // Draws the operator for `random` among the weights. Returns whether the threshold is clear of the two ends of
+    // its interval by more than twice `doubt`, which is what the weights in doubt can move them by.
+    static bool DrawOperator(const double *weights, size_t count, double total, double doubt, double random,
+                             size_t &chosen)
+    {
+        const double threshold = random * total;
+        double accumulated = 0., lower = 0.;
+        for (size_t k = 0; k < count; ++k)
+        {
+            if (weights[k] <= 0.)
+                continue;
+            chosen = k; // also the fallback if rounding leaves the threshold above the last sum
+            lower = accumulated;
+            accumulated += weights[k];
+            if (threshold < accumulated)
+                break;
+        }
+        return threshold - lower > 2. * doubt && accumulated - threshold > 2. * doubt;
+    }
+
+    // Whether an operator nearly projects: its smallest singular value is below about a hundredth of the others.
+    // From the determinant, the product of the singular values, against the squared Frobenius norm, their sum of
+    // squares: for two of them s and r s, |det| / norm^2 is r / (1 + r^2).
+    static bool ProjectionLike(const Eigen::Matrix2cd &op)
+    {
+        return !(std::abs(op.determinant()) > 1e-2 * op.squaredNorm());
+    }
+
+    // Whether a one-site operator has rank one, to rounding: a projection in the wide sense, |a><b|.
+    static bool RankOne(const Eigen::Matrix2cd &op)
+    {
+        return !(std::abs(op.determinant()) > 1e-14 * op.squaredNorm());
+    }
+
+    // The state a rank-one operator |a><b| leaves the site in: its column of larger norm, normalized (the columns
+    // are multiples of each other). Zero for the zero operator.
+    static Eigen::Vector2cd KeptDirection(const Eigen::Matrix2cd &op)
+    {
+        Eigen::Vector2cd a = op.col(0).squaredNorm() >= op.col(1).squaredNorm() ? op.col(0) : op.col(1);
+        const double length = a.norm();
+        if (length > 0.)
+            a /= length;
+        else
+            a.setZero();
+        return a;
+    }
+
+    // Whether an operator leaves the site in one state whatever the rest holds, so that the site can be split again
+    // around that state (see RegaugeSite). An operator of rank one does, on any state. One that has rank one only
+    // to rounding, as diag(1, 1e-15), does not on a state that holds little of what it keeps: what it leaves outside
+    // its larger direction is then part of the result, or all of it. So the test is on the state. `rho` is the
+    // density matrix of the site before the operator and `weight` = tr(op rho op^dagger); the part of that weight
+    // outside the direction kept has to be below the rounding of the amplitudes.
+    static bool LeavesOneState(const Eigen::Matrix2cd &op, const Eigen::Matrix2cd &rho, double weight)
+    {
+        if (!RankOne(op))
+            return false;
+        const Eigen::Vector2cd a = KeptDirection(op);
+        // <a_perp| op, with a_perp = (-conj(a1), conj(a0)) the state orthogonal to a
+        const Eigen::RowVector2cd outside = -a[1] * op.row(0) + a[0] * op.row(1);
+        const double left = (outside * rho * outside.adjoint())(0, 0).real();
+        return left <= AmplitudeRounding * AmplitudeRounding * weight;
+    }
+
+    // A chain of one qubit has no bond, so the sweeps that normalize from the tensors have nothing to do there: its
+    // tensor is divided by its own norm.
+    void NormalizeLoneSite()
+    {
+        if (!lambdas.empty() || gammas.empty())
+            return;
+        Eigen::Map<Eigen::ArrayXcd> values(gammas[0].data(), gammas[0].size());
+        const double norm = std::sqrt(values.abs2().sum());
+        if (norm > 0. && std::isfinite(norm))
+            values /= norm;
+    }
+
+    // No operator is left to draw. When the weights were read from the tensors and the largest is positive, it is
+    // reported with the cutoff it fell below: such a weight is not told from the rounding of amplitudes that cancel.
+    [[noreturn]] static void ThrowNoProbability(double largest, double cutoff)
+    {
+        if (!(largest > 0.))
+            throw std::domain_error("No Kraus operator has any probability on this state");
+        std::ostringstream message;
+        message << "No Kraus operator has any probability on this state: the largest weight found, "
+                << std::setprecision(3) << largest << ", is below " << cutoff
+                << ", the rounding of amplitudes that cancel, and counts as none";
+        throw std::domain_error(message.str());
+    }
+
+    // After an operator |a><b| on `site`, in gauge mode: every slice of the tensor is a multiple of one matrix,
+    // T(l, s, r) = a(s) m(l, r), and the site is in the state a whatever the rest holds. With m = U S V^dagger, U goes
+    // into the tensor on the left, V^dagger into the one on the right, and the site keeps a(s) S: the same state,
+    // with the two bonds of the site at the rank the projection left them and in bases in which their
+    // environments are graded by S instead of having lost their rank. This is the local form of what the sweeps of
+    // a measurement do on the canonical path, and costs one decomposition of a bond-sized matrix. The lambdas of
+    // the two bonds only keep their dimensions here: nothing reads them in gauge mode.
+    void RegaugeSite(IndexType site, const Eigen::Matrix2cd &op)
+    {
+        const IndexType sites = static_cast<IndexType>(gammas.size());
+        const GammaType &gamma = gammas[site];
+        const IndexType L = gamma.dimension(0), R = gamma.dimension(2);
+        // a: the state the operator leaves the site in. The caller has checked that it does (see LeavesOneState).
+        const Eigen::Vector2cd a = KeptDirection(op);
+        if (!(a.squaredNorm() > 0.))
+            return;
+        const MatrixClass m = std::conj(a[0]) * Slice(gamma, 0) + std::conj(a[1]) * Slice(gamma, 1);
+        Eigen::BDCSVD<MatrixClass> svd(m, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        if (svd.info() != Eigen::Success)
+            return; // left as it is: a gate that meets the environments restores the canonical form
+        const IndexType rank = std::max<IndexType>(1, svd.rank());
+        const MatrixClass U = svd.matrixU().leftCols(rank), V = svd.matrixV().leftCols(rank);
+        const auto S = svd.singularValues().head(rank);
+
+        GammaType middle(rank, 2, rank);
+        middle.setZero();
+        for (IndexType s = 0; s < 2; ++s)
+            for (IndexType k = 0; k < rank; ++k)
+                middle(k, s, k) = a[s] * S[k];
+        if (site > 0)
+        {
+            const GammaType &left = gammas[site - 1];
+            const IndexType leftL = left.dimension(0);
+            GammaType updated(leftL, 2, rank);
+            for (IndexType s = 0; s < 2; ++s)
+                Eigen::Map<MatrixClass, 0, Eigen::OuterStride<>>(updated.data() + s * leftL, leftL, rank,
+                                                                 Eigen::OuterStride<>(2 * leftL))
+                    .noalias() = Slice(left, s) * U;
+            gammas[site - 1] = std::move(updated);
+            lambdas[site - 1] = LambdaType::Ones(rank);
+            bondDimensions.Update(site - 1, rank);
+        }
+        if (site + 1 < sites)
+        {
+            const GammaType &right = gammas[site + 1];
+            const IndexType rightR = right.dimension(2);
+            GammaType updated(rank, 2, rightR);
+            for (IndexType s = 0; s < 2; ++s)
+                Eigen::Map<MatrixClass, 0, Eigen::OuterStride<>>(updated.data() + s * rank, rank, rightR,
+                                                                 Eigen::OuterStride<>(2 * rank))
+                    .noalias() = V.adjoint() * Slice(right, s);
+            gammas[site + 1] = std::move(updated);
+            lambdas[site] = LambdaType::Ones(rank);
+            bondDimensions.Update(site, rank);
+        }
+        // At an end of the chain the missing side has dimension one and its factor is a phase: it stays in the site.
+        if (site == 0)
+            for (IndexType s = 0; s < 2; ++s)
+                for (IndexType k = 0; k < rank; ++k)
+                    middle(k, s, k) *= U(0, k);
+        if (site + 1 == sites)
+            for (IndexType s = 0; s < 2; ++s)
+                for (IndexType k = 0; k < rank; ++k)
+                    middle(k, s, k) *= std::conj(V(0, k));
+        gammas[site] = std::move(middle);
+        // The two bonds have new bases: their environments, and those that contain the site, are computed again.
+        leftValid = std::min(leftValid, std::max<IndexType>(site - 1, 0));
+        rightValid = std::max(rightValid, std::min<IndexType>(site + 1, static_cast<IndexType>(lambdas.size())));
+    }
+
+    static bool ProjectionLike(const Eigen::Matrix4cd &op)
+    {
+        const double mean = op.squaredNorm() / 4.;
+        return !(std::abs(op.determinant()) > 1e-2 * mean * mean);
+    }
+
+    // On an exact canonical form the block to the left of a site has the squared lambdas of its left bond as weights
+    // and the block to its right is orthonormal, so the squared norm of the state after a one-site operator is
+    // sum lambda(l)^2 |sum_a op(s, a) B(l, a, r)|^2: a sum of squares of what the operator leaves of the tensor, which
+    // holds down to the rounding of the tensor itself. `reach` receives the bound on the terms of the same weight
+    // taken from the density matrix of the site, 2 sum_a |column a of op|^2 rho(a, a).
+    double CanonicalSiteWeight(IndexType site, const Eigen::Matrix2cd &op, double &reach) const
+    {
+        const GammaType &gamma = gammas[site];
+        const IndexType L = gamma.dimension(0), R = gamma.dimension(2);
+        double weight = 0., zeroPopulation = 0., onePopulation = 0.;
+        for (IndexType r = 0; r < R; ++r)
+            for (IndexType l = 0; l < L; ++l)
+            {
+                const double lambda2 = site == 0 ? 1. : lambdas[site - 1][l] * lambdas[site - 1][l];
+                const std::complex<double> zero = gamma(l, 0, r), one = gamma(l, 1, r);
+                weight += lambda2 *
+                          (std::norm(op(0, 0) * zero + op(0, 1) * one) + std::norm(op(1, 0) * zero + op(1, 1) * one));
+                zeroPopulation += lambda2 * std::norm(zero);
+                onePopulation += lambda2 * std::norm(one);
+            }
+        reach = 2. * (op.col(0).squaredNorm() * zeroPopulation + op.col(1).squaredNorm() * onePopulation);
+        return weight;
     }
 
     // M = B_i reshaped as (L, 2R). QR of M^dagger gives M = R^dagger Q^dagger:
@@ -480,14 +1170,47 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         bondDimensions.Update(site - 1, lambdas[site - 1].size());
     }
 
-    static double ValidMeasurementProbability(double probability)
+    // Brings a measurement probability into [0, 1]. One that is outside by more than rounding is reported on cerr,
+    // with its value and what the settings say of the cause, and the simulation goes on with the clamped value.
+    double ValidMeasurementProbability(double probability) const
     {
         constexpr double toleranceLow = 1E-9;
         constexpr double toleranceHigh = 1E-5;
         if (probability < -toleranceLow || probability > 1. + toleranceHigh)
-            std::cerr << "Invalid measurement probability produced by the MPS state" << std::endl;
+            ReportInvalidProbability(probability);
 
         return ClampProbability(std::clamp(probability, 0., 1.));
+    }
+
+    // Only what is already known goes into the message: the probability, the truncation settings, the bond
+    // dimensions and whether anything was truncated. The canonical form is exact when a probability is taken (see
+    // EnsureCanonical), so a value out of range means that the state itself is off its norm.
+    void ReportInvalidProbability(double probability) const
+    {
+        std::ostringstream message;
+        message << "Invalid measurement probability produced by the MPS state: " << std::setprecision(12) << probability
+                << std::setprecision(3);
+        if (probability > 1.)
+            message << " (above 1 by " << probability - 1. << "). ";
+        else
+            message << " (below 0 by " << -probability << "). ";
+        // A truncation alone no longer gives this: the form is rebuilt, and the state normalized, before a read that
+        // follows one. What was truncated is still said, as it tells how approximate the state is.
+        message << "The state is off its norm, as after a gate that is not unitary. Truncation is not the cause: ";
+        if (schmidtValuesDiscarded)
+        {
+            message << "Schmidt values have been discarded (";
+            if (limitSize)
+                message << "bond limit " << chi << ", ";
+            if (limitEntanglement)
+                message << "singular value threshold " << singularValueThreshold
+                        << (truncationMode == TruncationMode::RelativeToMax ? " relative to the largest, "
+                                                                            : " of discarded weight, ");
+            message << "largest bond " << getMaxBondDimension() << "), but the canonical form was rebuilt after that.";
+        }
+        else
+            message << "no Schmidt value has been discarded (largest bond " << getMaxBondDimension() << ").";
+        std::cerr << message.str() << std::endl;
     }
 
     static bool PickZeroMeasurement(double rndVal, double prob0)
@@ -570,14 +1293,465 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         }
 
         const bool isSwapGate = gate.isSwapGate();
-        if (!dontApplyGate && isSwapGate && TrySwapProductSites(qubit1))
+        if (!gaugeMode && !dontApplyGate && isSwapGate && TrySwapProductSites(qubit1))
             return;
 
         // the size is (2 * left bond dim) x (2 * right bond dim)
         const MatrixClass thetaMatrix = ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed);
 
+        if (gaugeMode)
+        {
+            const auto &op = gate.getRawOperatorMatrix();
+            const bool unitary = dontApplyGate || isSwapGate || (op.adjoint() * op).isIdentity(1e-10);
+            bool decomposed = false;
+            RunMaybeSingleThreaded(enableMultithreading, [&]() {
+                decomposed = DecomposeWithEnvironments(thetaMatrix, qubit1, qubit2, unitary);
+            });
+            if (decomposed)
+                return;
+            // An environment has lost rank (a projection was applied). The canonical form is restored for this
+            // update, whose own environments are then exact, and the explicit ones go on from it. The update may
+            // truncate, which leaves the left site off the canonical form; but the form was exact until then, so
+            // it still describes the left blocks up to the bond of the update and the right blocks from it on.
+            // The others, which contain the two sites, are recomputed.
+            RestoreCanonicalForm(false);
+            DecomposeAndSetGammas(ConstructTheta(gate, qubit1, dontApplyGate, isSwapGate, reversed), qubit1, qubit2);
+            SetCanonicalEnvironments();
+            leftValid = qubit1 + 1;
+            rightValid = qubit1;
+            return;
+        }
+
         DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2);
     }
+
+    // ---- gauge mode (see ApplyKrausOperator) ----
+
+    using SliceMap = Eigen::Map<const MatrixClass, 0, Eigen::OuterStride<>>;
+
+    // The matrix of a site tensor for one value of its physical index.
+    static SliceMap Slice(const GammaType &gamma, IndexType physical)
+    {
+        const IndexType L = gamma.dimension(0);
+        return SliceMap(gamma.data() + physical * L, L, gamma.dimension(2), Eigen::OuterStride<>(2 * L));
+    }
+
+    // The canonical form describes the same state: restoring it changes no observable. None of the cuts the user
+    // asked for is applied here, so that reading a state (a probability, an expectation value, a saved state) leaves
+    // it as it is; the gates and the measurements that follow apply them as they do on a chain that never left the
+    // form.
+    //
+    // This is for what needs the chain on its canonical path: saving it, trimming it. It ends the gauge mode, by
+    // restoring the form, or by dropping the environments when they were only kept for reads. It does not repair a
+    // form that gates have left approximate by discarding Schmidt values (see canonicalFormExact): what reads such a
+    // chain takes the environments from the tensors instead (see EnvironmentsForRead), which costs matrix products
+    // where a repair costs a decomposition per site.
+    void EnsureCanonical()
+    {
+        if (!gaugeMode)
+            return;
+        if (gaugeForReads)
+            LeaveGaugeMode();
+        else
+            RestoreCanonicalForm(false);
+    }
+
+    void EnsureCanonical() const
+    {
+        const_cast<MPSSimulatorImpl *>(this)->EnsureCanonical();
+    }
+
+    // Makes the environments available to a read that does not change the chain (a probability, an expectation
+    // value, a sample), with `site` one of the sites read. On an exact canonical form the lambdas and the
+    // orthonormal tensors are the environments, and nothing is done. On a form that truncations have left
+    // approximate they are computed from the tensors, by matrix products, and kept for the reads that follow: the
+    // chain is then in gauge mode for reading only, and the next gate drops them and goes on as before.
+    void EnvironmentsForRead(IndexType site)
+    {
+        if (gaugeMode || canonicalFormExact)
+            return;
+        EnterGaugeModeNormalized(site);
+        gaugeForReads = true;
+    }
+
+    void LeaveGaugeMode()
+    {
+        gaugeMode = false;
+        gaugeForReads = false;
+        leftEnv.clear();
+        rightEnv.clear();
+        leftCanonical.clear();
+        rightCanonical.clear();
+        leftValid = rightValid = 0;
+    }
+
+    // The environments of an exact canonical form: the left block of a bond has the squared Schmidt values as its
+    // Gram matrix and the right block, built of right-orthonormal tensors, the identity.
+    void SetCanonicalEnvironments()
+    {
+        const IndexType bonds = static_cast<IndexType>(lambdas.size());
+        leftEnv.resize(bonds);
+        rightEnv.resize(bonds);
+        for (IndexType bond = 0; bond < bonds; ++bond)
+        {
+            leftEnv[bond] = lambdas[bond].cwiseAbs2().template cast<std::complex<double>>().asDiagonal();
+            rightEnv[bond] = MatrixClass::Identity(lambdas[bond].size(), lambdas[bond].size());
+        }
+        leftCanonical.assign(bonds, 1);
+        rightCanonical.assign(bonds, 1);
+        leftValid = bonds;
+        rightValid = 0;
+        gaugeMode = true;
+    }
+
+    // The environments come from the canonical form while it is exact. Once a gate has discarded Schmidt values it
+    // no longer gives them (see canonicalFormExact), and they are all computed from the tensors, when first needed.
+    void EnterGaugeMode()
+    {
+        if (gaugeMode)
+            return;
+        if (canonicalFormExact)
+        {
+            SetCanonicalEnvironments();
+            return;
+        }
+        const IndexType bonds = static_cast<IndexType>(lambdas.size());
+        leftEnv.resize(bonds);
+        rightEnv.resize(bonds);
+        leftCanonical.assign(bonds, 0);
+        rightCanonical.assign(bonds, 0);
+        leftValid = 0;
+        rightValid = bonds;
+        gaugeMode = true;
+    }
+
+    // Enters the gauge mode before a read of `site` on a chain whose canonical form is not exact. Such a chain is
+    // not exactly normalized either: each truncation normalized it by lambdas that the next one left approximate.
+    // The environments of the site, computed from the tensors, give the norm, and it is put into the tensor of the
+    // site, which none of the environments computed so far contains. The gauge mode then starts, as it does from an
+    // exact form, on a state of unit norm.
+    void EnterGaugeModeNormalized(IndexType site)
+    {
+        EnterGaugeMode();
+        const double norm = SiteDensity(site).trace().real();
+        if (norm > 0. && std::isfinite(norm))
+            Eigen::Map<Eigen::ArrayXcd>(gammas[site].data(), gammas[site].size()) /= std::sqrt(norm);
+    }
+
+    // G(r', r) = <L_r'|L_r> for the block of the sites up to `bond`: G_j = sum_s M_s^dagger G_(j-1) M_s.
+    const MatrixClass &LeftEnvironment(IndexType bond)
+    {
+        for (IndexType b = leftValid; b <= bond; ++b)
+        {
+            const GammaType &gamma = gammas[b];
+            const IndexType R = gamma.dimension(2);
+            MatrixClass env = MatrixClass::Zero(R, R);
+            for (IndexType s = 0; s < 2; ++s)
+            {
+                const SliceMap m = Slice(gamma, s);
+                if (b == 0)
+                    env.noalias() += m.adjoint() * m;
+                else
+                {
+                    const MatrixClass weighted = leftEnv[b - 1] * m;
+                    env.noalias() += m.adjoint() * weighted;
+                }
+            }
+            leftEnv[b] = std::move(env);
+            leftCanonical[b] = 0;
+        }
+        leftValid = std::max(leftValid, bond + 1);
+        return leftEnv[bond];
+    }
+
+    // H(l', l) = <R_l'|R_l> for the block of the sites after `bond`: H_(j-1) = sum_s conj(M_s) H_j M_s^T.
+    const MatrixClass &RightEnvironment(IndexType bond)
+    {
+        const IndexType bonds = static_cast<IndexType>(lambdas.size());
+        for (IndexType b = rightValid - 1; b >= bond; --b)
+        {
+            const GammaType &gamma = gammas[b + 1];
+            const IndexType L = gamma.dimension(0);
+            MatrixClass env = MatrixClass::Zero(L, L);
+            for (IndexType s = 0; s < 2; ++s)
+            {
+                const SliceMap m = Slice(gamma, s);
+                if (b + 1 == bonds)
+                    env.noalias() += m.conjugate() * m.transpose();
+                else
+                {
+                    const MatrixClass weighted = m.conjugate() * rightEnv[b + 1];
+                    env.noalias() += weighted * m.transpose();
+                }
+            }
+            rightEnv[b] = std::move(env);
+            rightCanonical[b] = 0;
+        }
+        rightValid = std::min(rightValid, bond);
+        return rightEnv[bond];
+    }
+
+    // rho(s, s') = sum conj(M_s'(l', r')) (G M_s H^T)(l', r'), with G and H the environments of the site.
+    Eigen::Matrix2cd SiteDensity(IndexType site)
+    {
+        const GammaType &gamma = gammas[site];
+        const IndexType bonds = static_cast<IndexType>(lambdas.size());
+        MatrixClass weighted[2];
+        for (IndexType s = 0; s < 2; ++s)
+        {
+            const SliceMap m = Slice(gamma, s);
+            if (site == 0)
+                weighted[s] = m;
+            else if (gaugeMode)
+                weighted[s].noalias() = LeftEnvironment(site - 1) * m;
+            else
+                weighted[s] = lambdas[site - 1].cwiseAbs2().template cast<std::complex<double>>().asDiagonal() * m;
+            if (gaugeMode && site < bonds)
+            {
+                const MatrixClass right = weighted[s] * RightEnvironment(site).transpose();
+                weighted[s] = right;
+            }
+        }
+        Eigen::Matrix2cd rho;
+        for (IndexType s = 0; s < 2; ++s)
+            for (IndexType s2 = 0; s2 < 2; ++s2)
+                rho(s, s2) = Slice(gamma, s2).conjugate().cwiseProduct(weighted[s]).sum();
+        return rho;
+    }
+
+    // DecomposeAndSetGammas for a chain in gauge mode: theta is weighed by factors of both environments instead of
+    // the left lambda. With G = A^dagger A to the left and H = D^dagger D to the right, the norm of the state is the
+    // Frobenius norm of theta' = (1 (x) A) theta (1 (x) D)^T, so the singular values of theta' are the Schmidt
+    // values of the middle bond and cutting them is the optimal truncation. With theta' = U S W^dagger, the new
+    // tensors are X = theta (1 (x) D)^T W, which is (1 (x) A)^-1 U S computed without inverting A, and
+    // Y = W^dagger (1 (x) D)^-T. In the canonical form A is the diagonal of the left lambdas and D the identity,
+    // and this is Hastings' update.
+    //
+    // The factors come from the environments, which are Gram matrices, and a Gram matrix holds a weight only to the
+    // rounding of its entries. This update is therefore used only where its factors are as good as the canonical
+    // ones, and returns false otherwise, with nothing changed, for the caller to restore the canonical form:
+    //  - An environment still in its canonical form (the diagonal of the squared lambdas, the identity) is used as
+    //    it is: its square root is the lambdas themselves.
+    //  - A left environment accumulated through products is factored after scaling to a unit diagonal. A Gram
+    //    matrix is graded like the weights of its bond, and its entries are known relative to the diagonal ones on
+    //    their row and column, so the scaling takes the grading out exactly and what is left says how well the
+    //    directions are told apart: a direction of small weight is as accurate as a large one, and the pivots of the
+    //    scaled matrix fall only when the vectors of the left block have become nearly dependent, which is what a
+    //    projection (a jump, a reset) does. Below ScaledPivotLimit the update is refused.
+    //  - The right factor is also inverted. An accumulated right environment is scaled in the same way, the
+    //    grading going into a diagonal that is inverted exactly; when the pivots of the scaled matrix spread beyond
+    //    RightPivotLimit, or a direction has no weight at all, the update is refused.
+    // No singular value is dropped beyond the numerical rank of the decomposition, as in the canonical form: when
+    // the factors are accepted they resolve the small ones too.
+    //
+    // `unitary` says that theta holds a unitary gate (or none): without truncation the other environments then keep
+    // their values.
+    bool DecomposeWithEnvironments(const MatrixClass &thetaMatrix, IndexType qubit1, IndexType qubit2, bool unitary)
+    {
+        const IndexType bonds = static_cast<IndexType>(lambdas.size());
+        const IndexType szl = thetaMatrix.rows() / 2, szr = thetaMatrix.cols() / 2;
+
+        MatrixClass weighted = thetaMatrix;
+        // The environments are brought up to date before their flags are read: recomputing one clears its flag.
+        const MatrixClass *const leftGram = qubit1 > 0 ? &LeftEnvironment(qubit1 - 1) : nullptr;
+        const MatrixClass *const rightGram = qubit2 < bonds ? &RightEnvironment(qubit2) : nullptr;
+        if (leftGram && leftCanonical[qubit1 - 1])
+        {
+            const Eigen::VectorXd scale = leftGram->diagonal().real().cwiseMax(0.).cwiseSqrt();
+            for (IndexType j = 0; j < 2; ++j)
+                weighted.middleRows(j * szl, szl) =
+                    scale.template cast<std::complex<double>>().asDiagonal() * thetaMatrix.middleRows(j * szl, szl);
+        }
+        else if (leftGram)
+        {
+            // G = S C S with S the square roots of its diagonal and C = P^T L D L^dagger P, so A = sqrt(D) L^dagger P S
+            const MatrixClass &gram = *leftGram;
+            Eigen::VectorXd diagonal = gram.diagonal().real();
+            if (!diagonal.allFinite())
+                return false;
+            Eigen::VectorXd inverse(szl);
+            for (IndexType i = 0; i < szl; ++i)
+            {
+                if (diagonal[i] > 0.)
+                {
+                    diagonal[i] = std::sqrt(diagonal[i]);
+                    inverse[i] = 1. / diagonal[i];
+                }
+                else if (diagonal[i] == 0. && gram.row(i).cwiseAbs().maxCoeff() == 0.)
+                    inverse[i] = 0.; // a direction without weight: it takes no part
+                else
+                    return false; // the rounding of a cancellation, not a weight
+            }
+            MatrixClass scaled = inverse.template cast<std::complex<double>>().asDiagonal() * gram *
+                                 inverse.template cast<std::complex<double>>().asDiagonal();
+            for (IndexType i = 0; i < szl; ++i)
+                if (inverse[i] == 0.)
+                    scaled(i, i) = 1.;
+            const Eigen::LDLT<MatrixClass> factor(scaled);
+            if (factor.info() != Eigen::Success)
+                return false;
+            const Eigen::VectorXd pivots = factor.vectorD().real();
+            if (!pivots.allFinite() || !(pivots.minCoeff() > ScaledPivotLimit * pivots.maxCoeff()))
+                return false;
+            const Eigen::VectorXd scale = pivots.cwiseSqrt();
+            for (IndexType j = 0; j < 2; ++j)
+            {
+                MatrixClass block =
+                    diagonal.template cast<std::complex<double>>().asDiagonal() * thetaMatrix.middleRows(j * szl, szl);
+                block = factor.transpositionsP() * block;
+                block = factor.matrixU() * block;
+                weighted.middleRows(j * szl, szl) = scale.template cast<std::complex<double>>().asDiagonal() * block;
+            }
+        }
+        MatrixClass rightFactor; // D, upper triangular; left empty for a canonical right environment, the identity
+        if (rightGram && !rightCanonical[qubit2])
+        {
+            // H = S C S with S the square roots of its diagonal and C = U^dagger U, so D = U S, still upper triangular.
+            // The grading goes into S, which is inverted exactly; a direction without weight cannot be.
+            Eigen::VectorXd diagonal = rightGram->diagonal().real();
+            if (!diagonal.allFinite() || !(diagonal.minCoeff() > 0.))
+                return false;
+            diagonal = diagonal.cwiseSqrt();
+            const Eigen::VectorXd inverse = diagonal.cwiseInverse();
+            const MatrixClass scaled = inverse.template cast<std::complex<double>>().asDiagonal() * (*rightGram) *
+                                       inverse.template cast<std::complex<double>>().asDiagonal();
+            const Eigen::LLT<MatrixClass, Eigen::Upper> factor(scaled);
+            if (factor.info() != Eigen::Success)
+                return false;
+            rightFactor = factor.matrixU();
+            const auto pivots = rightFactor.diagonal().real();
+            if (!rightFactor.allFinite() || !(pivots.minCoeff() > RightPivotLimit * pivots.maxCoeff()))
+                return false;
+            rightFactor = rightFactor * diagonal.template cast<std::complex<double>>().asDiagonal();
+            for (IndexType k = 0; k < 2; ++k)
+            {
+                const MatrixClass block = weighted.middleCols(k * szr, szr) * rightFactor.transpose();
+                weighted.middleCols(k * szr, szr) = block;
+            }
+        }
+
+#ifdef USE_FAST_SVD
+        const bool computeWithJacobi = weighted.rows() < blockSizeLimit && weighted.cols() < blockSizeLimit;
+        if (computeWithJacobi)
+            jacobiSVD.compute(weighted);
+        else
+            SVD.compute(weighted);
+        if ((computeWithJacobi ? jacobiSVD.info() : SVD.info()) != Eigen::Success)
+            throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
+        const MatrixClass &VmatrixFull = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
+        const LambdaType &SvaluesFull = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
+        const IndexType numericalRank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
+#else
+        jacobiSVD.compute(weighted);
+        if (jacobiSVD.info() != Eigen::Success)
+            throw std::runtime_error("MPS two-qubit SVD failed (non-finite or numerically invalid input)");
+        const MatrixClass &VmatrixFull = jacobiSVD.matrixV();
+        const LambdaType &SvaluesFull = jacobiSVD.singularValues();
+        const IndexType numericalRank = jacobiSVD.rank();
+#endif
+        // The same cuts as in the canonical form: these are the Schmidt values of the bond.
+        IndexType szm = limitEntanglement
+                            ? ComputeCompressedRank(SvaluesFull, numericalRank, truncationMode, singularValueThreshold)
+                            : numericalRank;
+        if (szm == 0)
+            szm = 1;
+        const IndexType sz = limitSize ? std::min<IndexType>(chi, szm) : szm;
+
+        LambdaType newLambda = SvaluesFull.head(sz);
+        const double norm = newLambda.norm();
+        if (norm > 0)
+            newLambda /= norm;
+
+        // mixed = (1 (x) D)^T W and rows = W^dagger (1 (x) D)^-T
+        MatrixClass mixed = VmatrixFull.leftCols(sz);
+        MatrixClass rows = mixed.adjoint();
+        if (rightFactor.size() != 0)
+        {
+            const MatrixClass lower = rightFactor.transpose();
+            for (IndexType k = 0; k < 2; ++k)
+            {
+                const MatrixClass block = lower * mixed.middleRows(k * szr, szr);
+                mixed.middleRows(k * szr, szr) = block;
+                auto columns = rows.middleCols(k * szr, szr);
+                lower.template triangularView<Eigen::Lower>().template solveInPlace<Eigen::OnTheRight>(columns);
+            }
+            if (!rows.allFinite())
+                return false;
+        }
+
+        // Build everything first, then commit together, as the canonical decomposition does.
+        GammaType newLeft(szl, 2, sz), newRight(sz, 2, szr);
+        Eigen::Map<MatrixClass> leftB(newLeft.data(), 2 * szl, sz);
+        leftB.noalias() = thetaMatrix * mixed;
+        if (norm > 0 && norm != 1.)
+            leftB /= norm;
+        for (IndexType k = 0; k < szr; ++k)
+            for (IndexType j = 0; j < 2; ++j)
+            {
+                const IndexType jind = j * szr + k;
+                for (IndexType i = 0; i < sz; ++i)
+                    newRight(i, j, k) = rows(i, jind);
+            }
+        MatrixClass newLeftEnv = newLambda.cwiseAbs2().template cast<std::complex<double>>().asDiagonal();
+
+        lambdas[qubit1] = std::move(newLambda);
+        bondDimensions.Update(qubit1, lambdas[qubit1].size());
+        gammas[qubit1] = std::move(newLeft);
+        gammas[qubit2] = std::move(newRight);
+
+        // In the new basis of the middle bond the two environments are those of the canonical form.
+        leftEnv[qubit1] = std::move(newLeftEnv);
+        rightEnv[qubit1] = MatrixClass::Identity(sz, sz);
+        leftCanonical[qubit1] = rightCanonical[qubit1] = 1;
+        if (sz < numericalRank)
+            schmidtValuesDiscarded = true;
+        if (unitary && sz >= numericalRank)
+        {
+            // Nothing else changed: a unitary on the two sites, of which every direction the decomposition found
+            // was kept, leaves the left blocks that contain both, and the right blocks that contain both, with the
+            // Gram matrices they had.
+            leftValid = std::max(leftValid, qubit1 + 1);
+            rightValid = std::min(rightValid, qubit1);
+        }
+        else
+        {
+            leftValid = qubit1 + 1;
+            rightValid = qubit1;
+        }
+        return true;
+    }
+
+    // Explicit environments: leftEnv[bond] is current for bond < leftValid, rightEnv[bond] for bond >= rightValid.
+    bool gaugeMode = false;
+    // The gauge mode was entered by a read on a chain whose canonical form is approximate, and no Kraus operator
+    // has been applied in it: the tensors are still those of the canonical path (see EnvironmentsForRead).
+    bool gaugeForReads = false;
+    std::vector<MatrixClass> leftEnv, rightEnv;
+    IndexType leftValid = 0, rightValid = 0;
+    // Whether a current environment still has its canonical form (the diagonal of the squared lambdas on the left,
+    // the identity on the right), as set from that form or by a decomposition, and was not accumulated through
+    // products: see the cut in DecomposeWithEnvironments.
+    std::vector<char> leftCanonical, rightCanonical;
+    // The smallest pivot, relative to the largest, of an accumulated left environment scaled to a unit diagonal for
+    // which DecomposeWithEnvironments still uses it: the relative error of the weight of a direction is the rounding
+    // of the environment over its pivot.
+    static constexpr double ScaledPivotLimit = 1e-4;
+    // The same for the pivots of the factor of an accumulated right environment, scaled likewise, which is inverted:
+    // the rounding of the new right tensor grows as the inverse of this.
+    static constexpr double RightPivotLimit = 1e-2;
+
+    // The weight tr(E rho E^dagger) of a Kraus operator is in doubt when it is below this fraction of its reach, the
+    // bound on the terms it sums, d sum_a |column a of E|^2 rho(a, a): it is then what their cancellation left, and
+    // its relative error is the rounding of rho over this fraction. The usual operators of a noise channel
+    // (diagonal, a single entry per column, a multiple of a unitary) have a weight of half or a quarter of their
+    // reach on any state, so only an operator nearly orthogonal to the state is concerned.
+    static constexpr double UnresolvedWeight = 1e-3;
+    // The relative rounding assumed in the entries of a density matrix taken through the environments: times the
+    // reach of an operator, how far the weight computed from it can be from the true one.
+    static constexpr double DensityRounding = 1e-12;
+    // The relative rounding of a tensor entry after a local operator. A weight read on the canonical form that is
+    // below its square times the reach is the rounding of entries that cancel exactly, and counts as none.
+    static constexpr double AmplitudeRounding = 64. * 2.220446049250313e-16;
 
     // For L = middle = R = 1, SWAP turns a * b^T into b * a^T. Split that
     // rank-one matrix directly, including the normalization done by the SVD path.
@@ -708,6 +1882,15 @@ class MPSSimulatorImpl : public MPSSimulatorBase
 
         assert(sz <= VmatrixFull.cols());
         assert(2 * szr == VmatrixFull.rows());
+
+        // Discarding Schmidt values here leaves the lambdas of the other bonds, and the tensors to the left of this
+        // one, only approximately canonical.
+        if (sz < numericalRank)
+        {
+            canonicalFormExact = false;
+            if (applyUserCompression)
+                schmidtValuesDiscarded = true;
+        }
 
         // Build the new lambda and both B tensors first, then commit them together (noexcept moves),
         // so an allocation failure cannot leave the lambda paired with the old tensors.
@@ -958,8 +2141,16 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             const SliceMap zeroMat(gammas[qubit].data(), dim1, dim2, Eigen::OuterStride<>(2 * dim1));
             Eigen::RowVectorXcd zeroVec = vec * zeroMat;
 
+            // With explicit environments the block to the right of the site is not orthonormal: the squared norm
+            // of a branch is taken in the Gram matrix of that block, v H^T v^dagger.
+            const MatrixClass *const right =
+                gaugeMode && qubit < static_cast<IndexType>(lambdas.size()) ? &RightEnvironment(qubit) : nullptr;
+            const auto squaredNorm = [right](const Eigen::RowVectorXcd &branch) {
+                return right ? (branch * right->transpose()).dot(branch).real() : branch.squaredNorm();
+            };
+
             // the probability for the current qubit to be 0, conditioned on the values picked so far
-            const double prob0 = ValidMeasurementProbability(zeroVec.squaredNorm());
+            const double prob0 = ValidMeasurementProbability(squaredNorm(zeroVec));
 
             // 2. use that probability to measure the qubit
             const double rndVal = 1. - uniformZeroOne(rng);
@@ -976,7 +2167,10 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             {
                 const SliceMap oneMat(gammas[qubit].data() + dim1, dim1, dim2, Eigen::OuterStride<>(2 * dim1));
                 vec = vec * oneMat;
-                vec /= std::sqrt(1. - prob0);
+                // In the Gram matrix the branch is normalized by its own norm, which is 1 - prob0 only up to the
+                // rounding of the environments.
+                const double prob1 = right ? squaredNorm(vec) : 1. - prob0;
+                vec /= std::sqrt(prob1 > 0. ? prob1 : 1. - prob0);
             }
         }
 
