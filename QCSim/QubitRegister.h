@@ -673,25 +673,24 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
         double total = 0., doubt = 0.;
         for (size_t k = 0; k < kraus.size(); ++k)
         {
-            double weight = 0.;
+            // The weight, and what the terms of its sum can add up to: a bound on them, d * sum_a |column a of E|^2
+            // rho(a, a), by Cauchy-Schwarz. The entries of rho are known to their own rounding, so the weight is
+            // known to that rounding of its reach. A weight that is a small fraction of its reach is what the
+            // cancellation of the terms left (see UnresolvedWeight), whatever its sign. The reach is d times the
+            // terms with a = b, so it comes out of the same pass.
+            double weight = 0., diagonal = 0.;
             for (Eigen::Index row = 0; row < dimension; ++row)
                 for (Eigen::Index a = 0; a < dimension; ++a)
                     for (Eigen::Index b = 0; b < dimension; ++b)
-                        weight += std::real(std::complex<double>(kraus[k](row, a)) * std::complex<double>(rho(a, b)) *
-                                            std::conj(std::complex<double>(kraus[k](row, b))));
-            // What the terms of that sum can add up to: a bound on them, d * sum_a |column a of E|^2 rho(a, a), by
-            // Cauchy-Schwarz. The entries of rho are known to their own rounding, so the weight is known to that
-            // rounding of its reach. A weight that is a small fraction of its reach is what the cancellation of the
-            // terms left (see UnresolvedWeight), whatever its sign.
-            double reach = 0.;
-            for (Eigen::Index a = 0; a < dimension; ++a)
-            {
-                double column = 0.;
-                for (Eigen::Index row = 0; row < dimension; ++row)
-                    column += std::norm(std::complex<double>(kraus[k](row, a)));
-                reach += column * std::real(std::complex<double>(rho(a, a)));
-            }
-            reach *= static_cast<double>(dimension);
+                    {
+                        const double term =
+                            std::real(std::complex<double>(kraus[k](row, a)) * std::complex<double>(rho(a, b)) *
+                                      std::conj(std::complex<double>(kraus[k](row, b))));
+                        weight += term;
+                        if (a == b)
+                            diagonal += term;
+                    }
+            const double reach = static_cast<double>(dimension) * diagonal;
             weights[k] = weight > 0. ? weight : 0.;
             if (weight >= UnresolvedWeight * reach)
                 reaches[k] = -1.; // resolved

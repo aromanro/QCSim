@@ -3,6 +3,7 @@
 #include "MPSSimulatorBase.h"
 #include "TensorPauli.h"
 
+#include <array>
 #include <iomanip>
 #include <sstream>
 
@@ -1505,7 +1506,7 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             else if (gaugeMode)
                 weighted[s].noalias() = LeftEnvironment(site - 1) * m;
             else
-                weighted[s] = lambdas[site - 1].cwiseAbs2().template cast<std::complex<double>>().asDiagonal() * m;
+                weighted[s] = lambdas[site - 1].cwiseAbs2().asDiagonal() * m;
             if (gaugeMode && site < bonds)
             {
                 const MatrixClass right = weighted[s] * RightEnvironment(site).transpose();
@@ -1555,21 +1556,29 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         // The environments are brought up to date before their flags are read: recomputing one clears its flag.
         const MatrixClass *const leftGram = qubit1 > 0 ? &LeftEnvironment(qubit1 - 1) : nullptr;
         const MatrixClass *const rightGram = qubit2 < bonds ? &RightEnvironment(qubit2) : nullptr;
+        // At the bonds of a short chain the fixed costs of this update exceed its arithmetic, so it keeps them low:
+        // the reals of a bond are on the stack (BondReals), a factorization takes the place of the matrix it factors,
+        // and the products with half of the tensor share one buffer. The real diagonals multiply the complex matrices
+        // as they are: cast to complex first, such a product is several times slower with MSVC.
+        MatrixClass product;
         if (leftGram && leftCanonical[qubit1 - 1])
         {
-            const Eigen::VectorXd scale = leftGram->diagonal().real().cwiseMax(0.).cwiseSqrt();
+            BondReals reals(szl);
+            Eigen::Map<Eigen::VectorXd> scale(reals.Part(0), szl);
+            scale = leftGram->diagonal().real().cwiseMax(0.).cwiseSqrt();
             for (IndexType j = 0; j < 2; ++j)
-                weighted.middleRows(j * szl, szl) =
-                    scale.template cast<std::complex<double>>().asDiagonal() * thetaMatrix.middleRows(j * szl, szl);
+                weighted.middleRows(j * szl, szl) = scale.asDiagonal() * thetaMatrix.middleRows(j * szl, szl);
         }
         else if (leftGram)
         {
             // G = S C S with S the square roots of its diagonal and C = P^T L D L^dagger P, so A = sqrt(D) L^dagger P S
             const MatrixClass &gram = *leftGram;
-            Eigen::VectorXd diagonal = gram.diagonal().real();
+            BondReals reals(szl);
+            Eigen::Map<Eigen::VectorXd> diagonal(reals.Part(0), szl), inverse(reals.Part(1), szl),
+                scale(reals.Part(2), szl);
+            diagonal = gram.diagonal().real();
             if (!diagonal.allFinite())
                 return false;
-            Eigen::VectorXd inverse(szl);
             for (IndexType i = 0; i < szl; ++i)
             {
                 if (diagonal[i] > 0.)
@@ -1582,25 +1591,25 @@ class MPSSimulatorImpl : public MPSSimulatorBase
                 else
                     return false; // the rounding of a cancellation, not a weight
             }
-            MatrixClass scaled = inverse.template cast<std::complex<double>>().asDiagonal() * gram *
-                                 inverse.template cast<std::complex<double>>().asDiagonal();
+            MatrixClass scaled = inverse.asDiagonal() * gram * inverse.asDiagonal();
             for (IndexType i = 0; i < szl; ++i)
                 if (inverse[i] == 0.)
                     scaled(i, i) = 1.;
-            const Eigen::LDLT<MatrixClass> factor(scaled);
+            // in place: `scaled` holds the factors from here on
+            const Eigen::LDLT<Eigen::Ref<MatrixClass>> factor(scaled);
             if (factor.info() != Eigen::Success)
                 return false;
-            const Eigen::VectorXd pivots = factor.vectorD().real();
+            const auto pivots = factor.vectorD().real();
             if (!pivots.allFinite() || !(pivots.minCoeff() > ScaledPivotLimit * pivots.maxCoeff()))
                 return false;
-            const Eigen::VectorXd scale = pivots.cwiseSqrt();
+            scale = pivots.cwiseSqrt();
             for (IndexType j = 0; j < 2; ++j)
             {
-                MatrixClass block =
-                    diagonal.template cast<std::complex<double>>().asDiagonal() * thetaMatrix.middleRows(j * szl, szl);
-                block = factor.transpositionsP() * block;
-                block = factor.matrixU() * block;
-                weighted.middleRows(j * szl, szl) = scale.template cast<std::complex<double>>().asDiagonal() * block;
+                auto rows = weighted.middleRows(j * szl, szl);
+                rows = diagonal.asDiagonal() * thetaMatrix.middleRows(j * szl, szl);
+                rows = factor.transpositionsP() * rows;
+                product.noalias() = factor.matrixU() * rows;
+                rows = scale.asDiagonal() * product;
             }
         }
         MatrixClass rightFactor; // D, upper triangular; left empty for a canonical right environment, the identity
@@ -1608,25 +1617,26 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         {
             // H = S C S with S the square roots of its diagonal and C = U^dagger U, so D = U S, still upper triangular.
             // The grading goes into S, which is inverted exactly; a direction without weight cannot be.
-            Eigen::VectorXd diagonal = rightGram->diagonal().real();
+            BondReals reals(szr);
+            Eigen::Map<Eigen::VectorXd> diagonal(reals.Part(0), szr), inverse(reals.Part(1), szr);
+            diagonal = rightGram->diagonal().real();
             if (!diagonal.allFinite() || !(diagonal.minCoeff() > 0.))
                 return false;
             diagonal = diagonal.cwiseSqrt();
-            const Eigen::VectorXd inverse = diagonal.cwiseInverse();
-            const MatrixClass scaled = inverse.template cast<std::complex<double>>().asDiagonal() * (*rightGram) *
-                                       inverse.template cast<std::complex<double>>().asDiagonal();
-            const Eigen::LLT<MatrixClass, Eigen::Upper> factor(scaled);
-            if (factor.info() != Eigen::Success)
+            inverse = diagonal.cwiseInverse();
+            // C, which its factorization replaces by U in the upper triangle
+            rightFactor = inverse.asDiagonal() * (*rightGram) * inverse.asDiagonal();
+            if (Eigen::LLT<Eigen::Ref<MatrixClass>, Eigen::Upper>(rightFactor).info() != Eigen::Success)
                 return false;
-            rightFactor = factor.matrixU();
+            rightFactor.template triangularView<Eigen::StrictlyLower>().setZero();
             const auto pivots = rightFactor.diagonal().real();
             if (!rightFactor.allFinite() || !(pivots.minCoeff() > RightPivotLimit * pivots.maxCoeff()))
                 return false;
-            rightFactor = rightFactor * diagonal.template cast<std::complex<double>>().asDiagonal();
+            rightFactor = rightFactor * diagonal.asDiagonal();
             for (IndexType k = 0; k < 2; ++k)
             {
-                const MatrixClass block = weighted.middleCols(k * szr, szr) * rightFactor.transpose();
-                weighted.middleCols(k * szr, szr) = block;
+                product.noalias() = weighted.middleCols(k * szr, szr) * rightFactor.transpose();
+                weighted.middleCols(k * szr, szr) = product;
             }
         }
 
@@ -1670,8 +1680,8 @@ class MPSSimulatorImpl : public MPSSimulatorBase
             const MatrixClass lower = rightFactor.transpose();
             for (IndexType k = 0; k < 2; ++k)
             {
-                const MatrixClass block = lower * mixed.middleRows(k * szr, szr);
-                mixed.middleRows(k * szr, szr) = block;
+                product.noalias() = lower * mixed.middleRows(k * szr, szr);
+                mixed.middleRows(k * szr, szr) = product;
                 auto columns = rows.middleCols(k * szr, szr);
                 lower.template triangularView<Eigen::Lower>().template solveInPlace<Eigen::OnTheRight>(columns);
             }
@@ -1720,6 +1730,30 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         }
         return true;
     }
+
+    // The reals of a bond that a decomposition needs while it runs (the diagonal of an environment, its inverse, the
+    // roots of the pivots), in up to three parts: on the stack up to SmallBond, where allocating them costs more than
+    // the work on them, and allocated above it.
+    class BondReals
+    {
+      public:
+        explicit BondReals(IndexType bond)
+            : size(bond), allocated(bond > SmallBond ? static_cast<size_t>(Parts * bond) : size_t(0))
+        {
+        }
+
+        double *Part(int part)
+        {
+            return (allocated.empty() ? onStack.data() : allocated.data()) + part * size;
+        }
+
+      private:
+        static constexpr IndexType SmallBond = 64;
+        static constexpr int Parts = 3;
+        const IndexType size;
+        std::array<double, Parts * SmallBond> onStack;
+        std::vector<double> allocated;
+    };
 
     // Explicit environments: leftEnv[bond] is current for bond < leftValid, rightEnv[bond] for bond >= rightValid.
     bool gaugeMode = false;

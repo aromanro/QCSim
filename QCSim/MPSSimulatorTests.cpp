@@ -2542,6 +2542,83 @@ static bool KrausGaugeModeRegressionTestMPS()
                             "An MPS probability differs from the dense reference");
                 }
             }
+
+            // Bonds above the size up to which a two-qubit update keeps the reals of a bond on the stack: layers of
+            // random gates take the middle bond of 14 qubits to 128, with a damping step after every gate so that the
+            // updates run against accumulated environments. Compared after every layer, on a copy: the chain itself
+            // is not read, and stays in gauge mode. The test sees the bonds, not where the reals were taken from: a
+            // counter put into a copy of the header showed them allocated three times against an accumulated left
+            // environment, three times against a right one, and once against a canonical left one (the last step).
+            {
+                const int qubits = 14;
+                std::mt19937_64 random(4242);
+                std::uniform_real_distribution<double> uniform;
+                Impl mps(qubits);
+                Eigen::VectorXcd reference = Eigen::VectorXcd::Zero(Eigen::Index{1} << qubits);
+                reference[0] = 1.;
+                Matrix noJump = Matrix::Zero(2, 2), jump = Matrix::Zero(2, 2);
+                noJump(0, 0) = 1.;
+                noJump(1, 1) = std::sqrt(1. - 0.05);
+                jump(0, 1) = std::sqrt(0.05);
+                unsigned int gateSeed = 9000;
+                // Two-qubit updates in gauge mode whose own outer bond, to the left or to the right of the pair, is
+                // above 64: the reals of that bond are the ones that do not fit the stack. Of the bonds of 14 qubits
+                // only the middle one can be, which passes 64 in the eleventh layer, so these are the gates next to
+                // it in the odd layers after that.
+                int leftAboveStack = 0, rightAboveStack = 0;
+                for (int layer = 0; layer < 17; ++layer)
+                {
+                    for (int pair = layer % 2; pair + 1 < qubits; pair += 2)
+                    {
+                        if (mps.InGaugeMode())
+                        {
+                            if (pair > 0 && mps.getBondDimension(pair - 1) > 64)
+                                ++leftAboveStack;
+                            if (pair + 2 < qubits && mps.getBondDimension(pair + 1) > 64)
+                                ++rightAboveStack;
+                        }
+                        const Matrix u = Unitary(4, ++gateSeed);
+                        mps.ApplyGate(Gate(u, pair, pair + 1));
+                        apply2(reference, u, pair, pair + 1);
+                        const int q = pair + (layer / 2) % 2;
+                        const size_t drawn = mps.ApplyKrausOperator({noJump, jump}, uniform(random), q);
+                        apply1(reference, drawn == 0 ? noJump : jump, q);
+                        reference /= reference.norm();
+                    }
+                    const Impl copy(mps);
+                    const Eigen::VectorXcd state = copy.getRegisterStorage();
+                    Close(state.squaredNorm(), 1., "An MPS step at a large bond left the norm off");
+                    Require(distance(state, reference) < 1E-11,
+                            "An MPS step at a large bond differs from the dense reference");
+                }
+                // The third place where the reals of a bond are taken: a left environment still in its canonical
+                // form. A gate on the middle bond leaves the environments of that bond so, the damping step on the
+                // site to its right keeps the left one, and the next gate starts at that site.
+                {
+                    const int middle = qubits / 2 - 1; // the bond between the sites 6 and 7
+                    const Matrix onMiddle = Unitary(4, ++gateSeed), next = Unitary(4, ++gateSeed);
+                    mps.ApplyGate(Gate(onMiddle, middle, middle + 1));
+                    apply2(reference, onMiddle, middle, middle + 1);
+                    Require(mps.ApplyKrausOperator({noJump, jump}, 0., middle + 1) == 0,
+                            "An MPS damping step with a zero draw did not take its first operator");
+                    apply1(reference, noJump, middle + 1);
+                    reference /= reference.norm();
+                    Require(mps.InGaugeMode() && mps.getBondDimension(middle) > 64,
+                            "The MPS chain is not in gauge mode at a middle bond above 64");
+                    mps.ApplyGate(Gate(next, middle + 1, middle + 2));
+                    apply2(reference, next, middle + 1, middle + 2);
+                    const Impl copy(mps);
+                    const Eigen::VectorXcd state = copy.getRegisterStorage();
+                    Close(state.squaredNorm(), 1., "An MPS step next to a canonical large bond left the norm off");
+                    Require(distance(state, reference) < 1E-11,
+                            "An MPS step next to a canonical large bond differs from the dense reference");
+                }
+                std::cout << "MPS large bonds: largest " << mps.getMaxBondDimension()
+                          << "; two-qubit updates in gauge mode with an outer bond above 64: " << leftAboveStack
+                          << " to the left, " << rightAboveStack << " to the right" << std::endl;
+                Require(leftAboveStack >= 2 && rightAboveStack >= 2,
+                        "The MPS chain made too few two-qubit updates in gauge mode next to a bond above 64");
+            }
         }
 
         // An operator that has rank one only to rounding, diag(1, 1e-15), leaves a site in one state only if the site
