@@ -769,7 +769,8 @@ inline bool BorrowedTables()
                 return Eigen::VectorXcd(sim.getRegisterStorage());
             };
             const Eigen::VectorXcd structured = apply([&](auto &sim) { sim.ApplyStructuredGate(gate); });
-            const Eigen::VectorXcd direct = apply([&](auto &sim) { sim.ApplyDiagonalGate(gate.diagonal, gate.qubits); });
+            const Eigen::VectorXcd direct =
+                apply([&](auto &sim) { sim.ApplyDiagonalGate(gate.diagonal, gate.qubits); });
             const Eigen::VectorXcd viewed =
                 apply([&](auto &sim) { sim.ApplyStructuredGateView(Gates::StructuredGateView(gate)); });
             const Eigen::VectorXcd applied = apply([&](auto &sim) { sim.ApplyGate(Gates::AppliedGate<>(gate)); });
@@ -828,7 +829,8 @@ inline bool BorrowedTables()
                 }
                 catch (const std::invalid_argument &)
                 {
-                    first = std::memcmp(sim.getRegisterStorage().data(), initial.data(), sizeof(Complex) * dimension) == 0;
+                    first =
+                        std::memcmp(sim.getRegisterStorage().data(), initial.data(), sizeof(Complex) * dimension) == 0;
                 }
                 try
                 {
@@ -917,12 +919,16 @@ inline bool SharedTableKernels()
             for (size_t &q : qubits)
                 q = (q + 1) % n;
             remapped.setQubits(qubits);
-            const std::vector<Applied> variants{source,          source.Adjoint(),   source.Transposed(),
-                                                remapped,        remapped.Adjoint(), remapped.Adjoint().Adjoint(),
+            const std::vector<Applied> variants{source,
+                                                source.Adjoint(),
+                                                source.Transposed(),
+                                                remapped,
+                                                remapped.Adjoint(),
+                                                remapped.Adjoint().Adjoint(),
                                                 remapped.Transposed().Adjoint()};
             const Eigen::VectorXcd initial = State(dimension, 0.27);
-            const Eigen::MatrixXcd rho = 0.35 * initial * initial.adjoint() +
-                                         0.65 * State(dimension, 0.81) * State(dimension, 0.81).adjoint();
+            const Eigen::MatrixXcd rho =
+                0.35 * initial * initial.adjoint() + 0.65 * State(dimension, 0.81) * State(dimension, 0.81).adjoint();
             for (const Applied &gate : variants)
             {
                 const Eigen::MatrixXcd dense = Dense(*gate.getStructuredGate(), n);

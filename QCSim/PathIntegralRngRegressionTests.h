@@ -206,11 +206,13 @@ inline void InvalidMeasurements(size_t &checks)
 inline void ExtremeTotals(size_t &checks)
 {
     const double tiny = std::sqrt(3. * std::numeric_limits<double>::denorm_min());
+
     struct Case
     {
         std::complex<double> zero, one;
         double ones;
     };
+
     const Case cases[] = {
         // Squares below the smallest double.
         {{std::sqrt(.7) * 0x1p-540, 0.}, {0., std::sqrt(.3) * 0x1p-540}, .3},

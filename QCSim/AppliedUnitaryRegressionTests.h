@@ -53,8 +53,11 @@ template <class Gate> inline void GateAndAdjoint(const Gate &source)
     Applied assigned;
     assigned = moved;
     Verify(assigned);
-    assigned = assigned;
-    assigned = std::move(assigned);
+    // Assignment to itself, by copy and by move. Through a reference, so that
+    // the compiler does not warn about what the test is there to check.
+    Applied &itself = assigned;
+    assigned = itself;
+    assigned = std::move(itself);
     Verify(assigned);
     Applied moveAssigned;
     moveAssigned = std::move(assigned);
@@ -205,9 +208,8 @@ template <class Gate> inline void VerifyReproducible(const Gate &gate, const cha
             message);
     auto inverse = descriptor;
     inverse.adjoint = true;
-    Require(
-        Gates::VerifyUnitaryGateDescriptor(Eigen::MatrixXcd(gate.getRawOperatorMatrix().adjoint()), inverse),
-        message);
+    Require(Gates::VerifyUnitaryGateDescriptor(Eigen::MatrixXcd(gate.getRawOperatorMatrix().adjoint()), inverse),
+            message);
 }
 
 inline void ConstructorReproducibility()

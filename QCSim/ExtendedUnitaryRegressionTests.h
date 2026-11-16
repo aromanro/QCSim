@@ -747,10 +747,12 @@ inline void ExactControlStructure()
             }
         return matrix;
     };
+
     struct Case
     {
         unsigned width, target, selecting;
     };
+
     for (const Case &c : {Case{2, 1, 1}, Case{2, 1, 0}, Case{2, 0, 0}, Case{3, 0, 2}, Case{3, 1, 4}, Case{3, 2, 0}})
     {
         const Eigen::MatrixXcd matrix = controlled(c.width, c.target, c.selecting);
@@ -854,6 +856,7 @@ inline void HistoryReplayOrders()
         size_t qubit;
         bool x;
     };
+
     std::vector<Step> surviving;
     const auto apply = [](ExtendedStabilizer &s, const Step &step) {
         if (step.x)

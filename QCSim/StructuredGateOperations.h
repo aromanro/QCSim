@@ -30,8 +30,8 @@ template <class Simulator, class MatrixClass> class StructuredGateOperations
     {
         if (matrix.rows() != 2 || matrix.cols() != 2)
             throw std::invalid_argument("A multi-controlled target matrix must be 2x2");
-        ApplyView(Gates::StructuredGateView::Controlled({matrix(0, 0), matrix(0, 1), matrix(1, 0), matrix(1, 1)}, target,
-                                                        controls, controlState));
+        ApplyView(Gates::StructuredGateView::Controlled({matrix(0, 0), matrix(0, 1), matrix(1, 0), matrix(1, 1)},
+                                                        target, controls, controlState));
     }
 
     void ApplyMultiControlledGate(const Gates::QuantumGateWithOp<MatrixClass> &gate, size_t target,
@@ -129,8 +129,8 @@ template <class Simulator, class MatrixClass> class StructuredGateOperations
     // A simulator that can apply borrowed tables takes the view; any other
     // one is handed an owning copy, as before.
     template <class S>
-    static auto ApplyViewTo(S &simulator, const Gates::StructuredGateView &gate, int)
-        -> decltype(simulator.ApplyStructuredGateView(gate))
+    static auto ApplyViewTo(S &simulator, const Gates::StructuredGateView &gate,
+                            int) -> decltype(simulator.ApplyStructuredGateView(gate))
     {
         return simulator.ApplyStructuredGateView(gate);
     }

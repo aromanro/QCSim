@@ -461,8 +461,9 @@ inline void ChooseRecording(CachedTransfer &compiled)
     if (native.found)
     {
         compiled.operation = native.type;
-        compiled.recording =
-            table.qubits == 1 ? Recording::Single : native.exchanged ? Recording::ExchangedPair : Recording::Pair;
+        compiled.recording = table.qubits == 1  ? Recording::Single
+                             : native.exchanged ? Recording::ExchangedPair
+                                                : Recording::Pair;
         return;
     }
     compiled.operation = table.qubits == 1   ? OperationType::LOCAL_1Q

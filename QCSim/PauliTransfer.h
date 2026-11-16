@@ -436,7 +436,8 @@ template <class Slot, unsigned SetBits = 3> struct TransferCache
                          ~(UINT32_C(0x80) << (8 * (home % Ways)));
         for (; marks; marks &= marks - 1)
         {
-            Slot &slot = slots[set * Ways + (static_cast<size_t>(Clifford::detail::TrailingZero(uint64_t(marks))) >> 3)];
+            Slot &slot =
+                slots[set * Ways + (static_cast<size_t>(Clifford::detail::TrailingZero(uint64_t(marks))) >> 3)];
             if (slot.table && matches(slot))
                 return &slot;
         }
@@ -463,9 +464,9 @@ template <class Slot, unsigned SetBits = 3> struct TransferCache
         Slot *const first = &slots[set * Ways];
         const uint32_t before = ages[set] ^ UINT32_C(0x03020100);
         // Exactly one age is zero.
-        const unsigned oldest =
-            static_cast<unsigned>(Clifford::detail::TrailingZero(
-                uint64_t((before - UINT32_C(0x01010101)) & ~before & UINT32_C(0x80808080)))) >> 3;
+        const unsigned oldest = static_cast<unsigned>(Clifford::detail::TrailingZero(
+                                    uint64_t((before - UINT32_C(0x01010101)) & ~before & UINT32_C(0x80808080)))) >>
+                                3;
         first[oldest] = std::move(first[way]);
         // Every entry is one step older; the moved one takes its age along,
         // and the home holds the newest.
@@ -753,9 +754,9 @@ inline std::shared_ptr<const LocalTransfer> CompileControlledTarget(const Eigen:
     while ((mask >> target) & 1U)
         ++target;
     // The Pauli coefficients of V by local label: I, X, Z, Y.
-    const std::array<std::complex<double>, 4> coefficients{
-        {(v(0, 0) + v(1, 1)) / 2., (v(0, 1) + v(1, 0)) / 2., (v(0, 0) - v(1, 1)) / 2.,
-         std::complex<double>(0., 1.) * (v(0, 1) - v(1, 0)) / 2.}};
+    const std::array<std::complex<double>, 4> coefficients{{(v(0, 0) + v(1, 1)) / 2., (v(0, 1) + v(1, 0)) / 2.,
+                                                            (v(0, 0) - v(1, 1)) / 2.,
+                                                            std::complex<double>(0., 1.) * (v(0, 1) - v(1, 0)) / 2.}};
     const unsigned controls = qubits - 1, count = 1U << controls;
     const auto compress = [&](unsigned bits) {
         return (bits & ((1U << target) - 1)) | ((bits >> (target + 1)) << target);
@@ -1219,8 +1220,8 @@ std::shared_ptr<const LocalTransfer> CompileVerifiedUnitary(const Matrix &matrix
     if (descriptor.controls > 2 || dimension != (2U << descriptor.controls))
         return {};
     Eigen::Matrix2cd v;
-    v << matrix(dimension - 2, dimension - 2), matrix(dimension - 2, dimension - 1), matrix(dimension - 1, dimension - 2),
-        matrix(dimension - 1, dimension - 1);
+    v << matrix(dimension - 2, dimension - 2), matrix(dimension - 2, dimension - 1),
+        matrix(dimension - 1, dimension - 2), matrix(dimension - 1, dimension - 1);
     return CompileVerifiedSingle(v, descriptor.controls, descriptor);
 }
 
@@ -1274,8 +1275,8 @@ struct CachedTransfer
 // and nothing it reads has just been written, so the table of a repeated gate
 // is found without waiting on a chain of multiplications or on the store
 // buffer.
-template <class Matrix> void MatrixEntryWords(const Matrix &matrix, unsigned qubits, unsigned entry, uint64_t &real,
-                                              uint64_t &imaginary)
+template <class Matrix>
+void MatrixEntryWords(const Matrix &matrix, unsigned qubits, unsigned entry, uint64_t &real, uint64_t &imaginary)
 {
     const std::complex<double> value = matrix(entry >> qubits, entry & ((1U << qubits) - 1U));
     const double parts[2] = {value.real(), value.imag()};
@@ -1455,7 +1456,9 @@ template <class Matrix> std::shared_ptr<const LocalTransfer> CompilePauliPair(co
     for (unsigned k = Clifford::detail::Popcount(x & z) & 3U; k; --k)
         b = Complex(b.imag(), -b.real());
     constexpr double half = .5 * std::numeric_limits<double>::epsilon();
-    const auto kept = [&](const RoundedSum &sum) { return std::abs(sum.value) > half * sum.Rounding() ? sum.value : 0.; };
+    const auto kept = [&](const RoundedSum &sum) {
+        return std::abs(sum.value) > half * sum.Rounding() ? sum.value : 0.;
+    };
     RoundedSum norm, difference, real, imaginary;
     for (double part : {a.real(), a.imag()})
     {
@@ -1682,7 +1685,8 @@ struct InteractionKey
 // An interaction that the entry at the home of its key does not hold: look
 // among the other entries, then compile and keep the table.
 inline std::shared_ptr<const LocalTransfer> InteractionTransferMiss(TransferCache<InteractionSlot> &cache,
-                                                                    const InteractionKey &key, double angle, double beta)
+                                                                    const InteractionKey &key, double angle,
+                                                                    double beta)
 {
     if (const InteractionSlot *found = cache.Moved(key.hash, key))
         return found->table;

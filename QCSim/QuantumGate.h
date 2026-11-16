@@ -100,7 +100,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class TwoQubitsControlledGate : 
     using BaseClass = TwoQubitsGate<MatrixClass>;
     using OpClass = typename BaseClass::BaseClass;
 
-    TwoQubitsControlledGate() {};
+    TwoQubitsControlledGate(){};
 
     bool isControlled() const override
     {
@@ -373,8 +373,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ControlledRxGate : public 
   public:
     UnitaryGateDescriptor getUnitaryDescriptor() const override
     {
-        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rx, {{recordedTheta}}, 1,
-                                            {{recordedCosSin}});
+        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rx, {{recordedTheta}}, 1, {{recordedCosSin}});
     }
 
     using BaseClass = ControlledRotationGate<MatrixClass>;
@@ -408,8 +407,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ControlledRyGate : public 
   public:
     UnitaryGateDescriptor getUnitaryDescriptor() const override
     {
-        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Ry, {{recordedTheta}}, 1,
-                                            {{recordedCosSin}});
+        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Ry, {{recordedTheta}}, 1, {{recordedCosSin}});
     }
 
     using BaseClass = ControlledRotationGate<MatrixClass>;
@@ -443,8 +441,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ControlledRzGate : public 
   public:
     UnitaryGateDescriptor getUnitaryDescriptor() const override
     {
-        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rz, {{recordedTheta}}, 1,
-                                            {{recordedCosSin}});
+        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rz, {{recordedTheta}}, 1, {{recordedCosSin}});
     }
 
     using BaseClass = ControlledRotationGate<MatrixClass>;
@@ -482,7 +479,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsControlledGate 
     using BaseClass = ThreeQubitsGate<MatrixClass>;
     using OpClass = typename BaseClass::BaseClass;
 
-    ThreeQubitsControlledGate() {};
+    ThreeQubitsControlledGate(){};
 
     bool isControlled() const override
     {

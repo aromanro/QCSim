@@ -581,8 +581,8 @@ class PathIntegralSimulator
         return work;
     }
 
-    size_t GrowthAwareCut(const std::vector<QC::Gates::AppliedGate<>> &source, const char *branching,
-                          size_t splitLimit, size_t legacyCut) const
+    size_t GrowthAwareCut(const std::vector<QC::Gates::AppliedGate<>> &source, const char *branching, size_t splitLimit,
+                          size_t legacyCut) const
     {
         if (source.empty())
             return 0;
@@ -663,8 +663,7 @@ class PathIntegralSimulator
                 ++gatesAdded;
             }
             if (growthAware)
-                gatesAdded =
-                    source.size() - GrowthAwareCut(source, branching, splitLimit, source.size() - gatesAdded);
+                gatesAdded = source.size() - GrowthAwareCut(source, branching, splitLimit, source.size() - gatesAdded);
             nextBack.reserve(gatesAdded);
             for (size_t index = source.size(); index > source.size() - gatesAdded;)
             {
@@ -821,9 +820,8 @@ class PathIntegralSimulator
         CompactColumn(const Detail::CompactGate &operation, const Gates::StructuredRotationCoefficients *table)
             : gate(operation), kind(operation.OperationKind()), axis(operation.Axis()),
               conjugated(operation.conjugated), diagonal(operation.core->operation.diagonal.data()),
-              angles(operation.core->operation.angles.data()),
-              coefficients(table ? table->data() : nullptr), targetWord(operation.target / 64),
-              targetMask(uint64_t{1} << (operation.target % 64))
+              angles(operation.core->operation.angles.data()), coefficients(table ? table->data() : nullptr),
+              targetWord(operation.target / 64), targetMask(uint64_t{1} << (operation.target % 64))
         {
         }
 
@@ -908,26 +906,26 @@ class PathIntegralSimulator
             // satisfies leaves it as it is.
             bool changed = false;
             const unsigned rowCount = diagonal ? 1U : 2U;
-            current.TransformMoved(changed, [&](Detail::MutableStateView &state,
-                                                std::complex<double> &amplitude) noexcept {
-                if (std::norm(amplitude) < epsilon)
-                    return false;
-                const auto values = column(state.getWords());
-                for (unsigned row = 0; row < rowCount; ++row)
-                    if (Detail::RetainGateCoefficient(values[row], epsilon))
-                    {
-                        if (fixedRows && !StructuredEndpointMatches(gate, state, fixedRows, endpoint, row))
-                            return false;
-                        if (!diagonal && state.get(gate.target) != (row != 0))
+            current.TransformMoved(
+                changed, [&](Detail::MutableStateView &state, std::complex<double> &amplitude) noexcept {
+                    if (std::norm(amplitude) < epsilon)
+                        return false;
+                    const auto values = column(state.getWords());
+                    for (unsigned row = 0; row < rowCount; ++row)
+                        if (Detail::RetainGateCoefficient(values[row], epsilon))
                         {
-                            state.set(gate.target, row != 0);
-                            changed = true;
+                            if (fixedRows && !StructuredEndpointMatches(gate, state, fixedRows, endpoint, row))
+                                return false;
+                            if (!diagonal && state.get(gate.target) != (row != 0))
+                            {
+                                state.set(gate.target, row != 0);
+                                changed = true;
+                            }
+                            amplitude *= values[row];
+                            return true;
                         }
-                        amplitude *= values[row];
-                        return true;
-                    }
-                return false;
-            });
+                    return false;
+                });
         }
         else
         {
@@ -1053,25 +1051,25 @@ class PathIntegralSimulator
             // column. When no present state is moved (the controls of a
             // controlled gate are nowhere satisfied) the index stays valid.
             bool changed = false;
-            current.TransformMoved(changed, [&](Detail::MutableStateView &state,
-                                                std::complex<double> &amplitude) noexcept {
-                if (std::norm(amplitude) < epsilon)
-                    return false;
-                const unsigned column = gate.Column<Arity>(state);
-                if (!gate.counts[column])
-                    return false;
-                if (!gate.diagonal)
-                {
-                    const unsigned row = gate.rows[column][0];
-                    if (row != column)
-                    {
-                        gate.SetRow<Arity>(state, row);
-                        changed = true;
-                    }
-                }
-                amplitude = gate.Value(column, 0) * amplitude;
-                return true;
-            });
+            current.TransformMoved(changed,
+                                   [&](Detail::MutableStateView &state, std::complex<double> &amplitude) noexcept {
+                                       if (std::norm(amplitude) < epsilon)
+                                           return false;
+                                       const unsigned column = gate.Column<Arity>(state);
+                                       if (!gate.counts[column])
+                                           return false;
+                                       if (!gate.diagonal)
+                                       {
+                                           const unsigned row = gate.rows[column][0];
+                                           if (row != column)
+                                           {
+                                               gate.SetRow<Arity>(state, row);
+                                               changed = true;
+                                           }
+                                       }
+                                       amplitude = gate.Value(column, 0) * amplitude;
+                                       return true;
+                                   });
             return;
         }
         unsigned expansion = 0;
@@ -1392,8 +1390,8 @@ class PathIntegralSimulator
                 continue;
             auto nextState = currentState;
             gate.SetRow<Arity>(nextState, row);
-            amplitude += gate.Value(column, transition) *
-                         PropagateCached<Compact>(nextState, endState, gateIndex + 1, gates);
+            amplitude +=
+                gate.Value(column, transition) * PropagateCached<Compact>(nextState, endState, gateIndex + 1, gates);
         }
         return amplitude;
     }

@@ -957,8 +957,8 @@ inline void RawMatrixResidue()
     // verification and takes the same path as the raw matrix.
     Gates::RxGate<> replaced(.3);
     replaced.setOperator(Eigen::MatrixXcd(u.getRawOperatorMatrix()));
-    const auto unverified = PauliDetail::MatrixTransfer(replaced.getRawOperatorMatrix(), 1,
-                                                        Gates::GetUnitaryGateDescriptor(replaced));
+    const auto unverified =
+        PauliDetail::MatrixTransfer(replaced.getRawOperatorMatrix(), 1, Gates::GetUnitaryGateDescriptor(replaced));
     Require(SameTable(*unverified, *PauliDetail::MatrixTransfer(u.getRawOperatorMatrix(), 1)),
             "An unverified typed gate did not take the raw matrix path");
 
@@ -970,8 +970,10 @@ inline void RawMatrixResidue()
     {
         const size_t q = 3 * gate;
         simulator.ApplyGate(Applied(Gates::UGate<>(.3 + gate, .2, .1, .4).getRawOperatorMatrix(), q));
-        simulator.ApplyGate(Applied(Gates::ControlledUGate<>(.5 + gate, .3, -.2, .11).getRawOperatorMatrix(), q + 1, q));
-        simulator.ApplyGate(Applied(Gates::CCUGate<>(.7 + gate, -.33, .17, -.41).getRawOperatorMatrix(), q, q + 1, q + 2));
+        simulator.ApplyGate(
+            Applied(Gates::ControlledUGate<>(.5 + gate, .3, -.2, .11).getRawOperatorMatrix(), q + 1, q));
+        simulator.ApplyGate(
+            Applied(Gates::CCUGate<>(.7 + gate, -.33, .17, -.41).getRawOperatorMatrix(), q, q + 1, q + 2));
     }
     PauliStringXZWithCoefficient observable(100);
     observable.Z[99] = true;
@@ -1014,15 +1016,15 @@ inline void RawMatrixResidue()
     // What is not rounding survives: a tiny product, a small cancellation
     // that exceeds its rounding, a scale and a filter.
     const Eigen::MatrixXcd identity2 = Eigen::MatrixXcd::Identity(2, 2), identity4 = Eigen::MatrixXcd::Identity(4, 4);
-    const auto embedded = [&](const Eigen::MatrixXcd &single) {
-        return Embed(single, {0}, 3);
-    };
+    const auto embedded = [&](const Eigen::MatrixXcd &single) { return Embed(single, {0}, 3); };
     const auto tiny = PauliDetail::MatrixTransfer(embedded(Gates::RxGate<>(1e-9).getRawOperatorMatrix()), 3);
     Require(std::abs(std::abs(Coefficient(*tiny, 3, 2)) / std::sin(1e-9) - 1.) < 1e-15 &&
                 Coefficient(*tiny, 2, 3) == -Coefficient(*tiny, 3, 2),
             "A tiny rotation coefficient of a raw matrix was dropped");
-    const auto nearby = PauliDetail::MatrixTransfer(embedded(Gates::RyGate<>(M_PI_2 + 1e-15).getRawOperatorMatrix()), 3);
-    Require(Coefficient(*nearby, 2, 2) < -2e-16, "A genuine near-Clifford coefficient of an embedded matrix was dropped");
+    const auto nearby =
+        PauliDetail::MatrixTransfer(embedded(Gates::RyGate<>(M_PI_2 + 1e-15).getRawOperatorMatrix()), 3);
+    Require(Coefficient(*nearby, 2, 2) < -2e-16,
+            "A genuine near-Clifford coefficient of an embedded matrix was dropped");
     const auto scaled = PauliDetail::MatrixTransfer(Eigen::MatrixXcd((1. + 1e-15) * ccu.getRawOperatorMatrix()), 3);
     Require(scaled->KeepsIdentitySupport() && Coefficient(*scaled, 0, 0) > 1. + 1e-15 && !(scaled->unchanged & 1U),
             "A scaled raw matrix lost its scale");
@@ -1061,7 +1063,8 @@ inline void RawMatrixResidue()
     Require(needed == std::vector<unsigned char>({0, 1, 1}), "A rescaling gate widened the backward cone");
     output.clear();
     const double rescaled = cone.ExpectationValue(std::string("Z"), output);
-    Require(output.size() == 2 && std::abs(rescaled - std::cos(.3) * Coefficient(operations[1].Transfer(), 0, 0)) < 1e-15,
+    Require(output.size() == 2 &&
+                std::abs(rescaled - std::cos(.3) * Coefficient(operations[1].Transfer(), 0, 0)) < 1e-15,
             "A rescaling gate outside the cone was not applied");
 }
 
@@ -1139,7 +1142,8 @@ inline void FixedQubitColumns()
             if (!((value >> target) & 1U))
             {
                 const Eigen::MatrixXcd block =
-                    Gates::UGate<>(.3 + .41 * index, .2 - .13 * index, -.5 + .29 * index, .1 * index).getRawOperatorMatrix();
+                    Gates::UGate<>(.3 + .41 * index, .2 - .13 * index, -.5 + .29 * index, .1 * index)
+                        .getRawOperatorMatrix();
                 ++index;
                 for (unsigned row = 0; row < 2; ++row)
                     for (unsigned col = 0; col < 2; ++col)
@@ -1261,7 +1265,8 @@ inline void RecordingPaths()
     Eigen::MatrixXcd firstMatrix = Eigen::MatrixXcd::Identity(4, 4), secondMatrix = firstMatrix;
     firstMatrix(3, 3) = std::polar(1., .4375);
     secondMatrix(3, 3) = std::polar(1., -1.1875);
-    const auto firstTable = PauliDetail::CompileMatrix(firstMatrix, 2), secondTable = PauliDetail::CompileMatrix(secondMatrix, 2);
+    const auto firstTable = PauliDetail::CompileMatrix(firstMatrix, 2),
+               secondTable = PauliDetail::CompileMatrix(secondMatrix, 2);
     for (unsigned other = 0; other < 100; ++other)
     {
         Eigen::MatrixXcd otherMatrix = firstMatrix;
@@ -1271,8 +1276,10 @@ inline void RecordingPaths()
         PauliDetail::InteractionTransfer('Z', 'Z', 1. + .0625 * other);
         const bool odd = other & 1U;
         const double angle = odd ? -1.1875 : .4375;
-        Require(SameTable(*PauliDetail::MatrixTransfer(odd ? secondMatrix : firstMatrix, 2), odd ? *secondTable : *firstTable) &&
-                    SameTable(*PauliDetail::ParameterizedTransfer(OperationType::CP, angle), *PauliDetail::CompileCP(angle)) &&
+        Require(SameTable(*PauliDetail::MatrixTransfer(odd ? secondMatrix : firstMatrix, 2),
+                          odd ? *secondTable : *firstTable) &&
+                    SameTable(*PauliDetail::ParameterizedTransfer(OperationType::CP, angle),
+                              *PauliDetail::CompileCP(angle)) &&
                     SameTable(*PauliDetail::InteractionTransfer('Z', 'Z', angle),
                               *PauliDetail::CompilePairRotation('Z', 'Z', angle)),
                 "A table cache returned the table of another gate");
@@ -1292,19 +1299,20 @@ inline void NativeDispatch()
         recorded.SetNrQubits(9);
         tabled.SetNrQubits(9);
         recorded.ApplyGate(gate, qubits[0], qubits[1], qubits[2]);
-        const auto table = PauliDetail::MatrixTransfer(gate.getRawOperatorMatrix(), arity,
-                                                       Gates::GetUnitaryGateDescriptor(gate));
+        const auto table =
+            PauliDetail::MatrixTransfer(gate.getRawOperatorMatrix(), arity, Gates::GetUnitaryGateDescriptor(gate));
         std::vector<std::unique_ptr<Operator>> operations;
-        operations.push_back(std::make_unique<OperatorLocal>(
-            arity == 1 ? OperationType::LOCAL_1Q : arity == 2 ? OperationType::LOCAL_2Q : OperationType::LOCAL_3Q,
-            qubits[0], qubits[1], qubits[2], table));
+        operations.push_back(std::make_unique<OperatorLocal>(arity == 1   ? OperationType::LOCAL_1Q
+                                                             : arity == 2 ? OperationType::LOCAL_2Q
+                                                                          : OperationType::LOCAL_3Q,
+                                                             qubits[0], qubits[1], qubits[2], table));
         tabled.SetOperations(std::move(operations));
         const auto recordedOperations = recorded.GetOperations();
         Require(recordedOperations.size() == 1, "A gate object was not recorded as one operation");
         const bool native = !IsPauliLocalGate(recordedOperations.front()->GetType());
         if (native != expectNative)
-            throw std::runtime_error(std::string(expectNative ? "No native kernel was used for " : "A table was replaced for ") +
-                                     name);
+            throw std::runtime_error(
+                std::string(expectNative ? "No native kernel was used for " : "A table was replaced for ") + name);
         for (unsigned label = 0; label < (1U << (2 * arity)); ++label)
         {
             PauliStringXZWithCoefficient pauli(9);
@@ -1368,7 +1376,8 @@ inline void NativeDispatch()
     check(Gates::ControlledRzGate<>(.3), false, "CRz");
     check(Gates::CCUGate<>(.43, -.71, .19, .23), false, "CCU");
     check(Gates::ToffoliGate<>(), false, "CCX");
-    check(Applied(Eigen::MatrixXcd((1. + 1e-15) * Gates::HadamardGate<>().getRawOperatorMatrix()), 0), false, "scaled H");
+    check(Applied(Eigen::MatrixXcd((1. + 1e-15) * Gates::HadamardGate<>().getRawOperatorMatrix()), 0), false,
+          "scaled H");
     PauliPropagator simulator;
     simulator.SetNrQubits(3);
     simulator.ApplyControlledGate(Gates::PauliZGate<>(), 2, 0);
@@ -1433,9 +1442,9 @@ inline void CompactGates()
     std::vector<Applied> gates;
     gates.push_back(Applied::Diagonal({std::exp(.3 * i), std::exp(-.7 * i)}, {1}));
     gates.push_back(Applied::Diagonal({1., std::exp(.3 * i), std::exp(-.2 * i), std::exp(.9 * i)}, {2, 0}));
-    gates.push_back(Applied::Diagonal(
-        {1., std::exp(.1 * i), std::exp(.2 * i), std::exp(.3 * i), std::exp(.4 * i), std::exp(.5 * i), std::exp(.6 * i), -1.},
-        {1, 2, 0}));
+    gates.push_back(Applied::Diagonal({1., std::exp(.1 * i), std::exp(.2 * i), std::exp(.3 * i), std::exp(.4 * i),
+                                       std::exp(.5 * i), std::exp(.6 * i), -1.},
+                                      {1, 2, 0}));
     const Gates::UGate<> u(.43, -.71, .19, .23);
     gates.push_back(Applied::MultiControlled(u, 2, {}));
     gates.push_back(Applied::MultiControlled(u, 2, {0}));
@@ -1559,7 +1568,8 @@ inline void NonunitaryProbabilities()
             "Probabilities after a raw unitary matrix are not normalised");
     const size_t operations = simulator.GetOperations().size();
     simulator.ApplyGate(Applied(filter, 0));
-    Require(std::abs(simulator.ExpectationValue("II") - .625) < 1e-15, "A raw filter lost its unnormalised expectation");
+    Require(std::abs(simulator.ExpectationValue("II") - .625) < 1e-15,
+            "A raw filter lost its unnormalised expectation");
     Require(refused(simulator) == 4 && simulator.GetOperations().size() == operations + 1,
             "Probabilities after a matrix that is not unitary were not refused");
     PauliPropagator imported, shared;
@@ -1584,12 +1594,12 @@ inline void RawPauliPairs()
 {
     using Complex = std::complex<double>;
     const std::vector<std::pair<Complex, Complex>> pairs{
-        {Complex(std::cos(.37), 0.), Complex(0., -std::sin(.37))},           // exp(-i t P)
+        {Complex(std::cos(.37), 0.), Complex(0., -std::sin(.37))}, // exp(-i t P)
         {Complex(std::cos(1.1) * .6, std::cos(1.1) * .8), Complex(std::sin(1.1) * .8, -std::sin(1.1) * .6)},
-        {Complex(.3, -.7), Complex(.2, .45)},                                // not unitary
-        {Complex(1., 0.), Complex(0., 1e-200)},                              // a tiny genuine term
-        {Complex(0., 0.), Complex(.6, .8)},                                  // a Pauli with a phase
-        {Complex(std::sqrt(.5), 0.), Complex(0., -std::sqrt(.5))}};          // the quarter turn
+        {Complex(.3, -.7), Complex(.2, .45)},                       // not unitary
+        {Complex(1., 0.), Complex(0., 1e-200)},                     // a tiny genuine term
+        {Complex(0., 0.), Complex(.6, .8)},                         // a Pauli with a phase
+        {Complex(std::sqrt(.5), 0.), Complex(0., -std::sqrt(.5))}}; // the quarter turn
     for (unsigned qubits = 1; qubits <= 3; ++qubits)
     {
         const unsigned dimension = 1U << qubits, count = dimension * dimension;
@@ -1621,8 +1631,7 @@ inline void RawPauliPairs()
                 CheckTransfer(matrix, qubits, pair);
                 // A matrix one rounding away from the form takes the general path.
                 Eigen::MatrixXcd nearby = matrix;
-                nearby(dimension - 1, dimension - 1) =
-                    Complex(std::nextafter(a.real(), 2.), a.imag());
+                nearby(dimension - 1, dimension - 1) = Complex(std::nextafter(a.real(), 2.), a.imag());
                 Require(!PauliDetail::CompilePauliPair(nearby, qubits),
                         "A matrix that is not exactly a I + b P took its shortcut");
             }

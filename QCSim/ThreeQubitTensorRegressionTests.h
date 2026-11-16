@@ -360,7 +360,8 @@ template <bool MPO, class Simulator> void CheckWideTables()
         const std::vector<size_t> controls(qubits.begin() + 1, qubits.end());
         const auto angles = randomAngles(controls.size());
         simulator.ApplyMultiplexedRX(angles, qubits[0], controls);
-        EvolveCompact<MPO>(reference, Gate::MultiplexedRotation(Gates::RotationAxis::X, angles, qubits[0], controls), count);
+        EvolveCompact<MPO>(reference, Gate::MultiplexedRotation(Gates::RotationAxis::X, angles, qubits[0], controls),
+                           count);
         simulator.ApplyMultiplexedRY(angles, qubits[2], {qubits[0], qubits[1], qubits[3], qubits[4]});
         EvolveCompact<MPO>(reference,
                            Gate::MultiplexedRotation(Gates::RotationAxis::Y, angles, qubits[2],
@@ -548,7 +549,8 @@ template <bool MPO, class Simulator> void CheckCompactGates()
         Gate gate = Gate::Diagonal(table, local);
         simulator.ApplyGate(gate);
         apply(gate);
-        simulator.ApplyDiagonalGate(std::vector<Complex>{1., Complex(0., 1.), -1., Complex(0., -1.)}, {local[1], local[0]});
+        simulator.ApplyDiagonalGate(std::vector<Complex>{1., Complex(0., 1.), -1., Complex(0., -1.)},
+                                    {local[1], local[0]});
         apply(Gate::Diagonal({1., Complex(0., 1.), -1., Complex(0., -1.)}, {local[1], local[0]}));
         gate = Gate::MultiplexedRotation(Gates::RotationAxis::Y, {0.3, -1.1, 2.2, 0.6}, local[1], {local[2], local[0]});
         simulator.ApplyGate(gate);
@@ -566,9 +568,8 @@ template <bool MPO, class Simulator> void CheckCompactGates()
         // Malformed gates are rejected before anything changes.
         Throws<std::invalid_argument>([&] { simulator.ApplyDiagonalGate(std::vector<Complex>(8, 1.), {0, 1, 2, 3}); },
                                       "Tensor network accepted a diagonal table of the wrong size");
-        Throws<std::invalid_argument>(
-            [&] { simulator.ApplyMultiplexedRX(std::vector<double>(8, 0.2), 0, {1, 0, 3}); },
-            "Tensor network accepted a multiplexer whose target is a control");
+        Throws<std::invalid_argument>([&] { simulator.ApplyMultiplexedRX(std::vector<double>(8, 0.2), 0, {1, 0, 3}); },
+                                      "Tensor network accepted a multiplexer whose target is a control");
         Throws<std::invalid_argument>([&] { simulator.ApplyMCX(2, {0, 2, 4, 5}); },
                                       "Tensor network accepted a target among its controls");
         Throws<std::invalid_argument>([&] { simulator.ApplyMCX(2, {0, 1, 4, 9}); },
@@ -585,8 +586,9 @@ template <bool MPO, class Simulator> void CheckCompactGates()
             apply(gate);
         }
         else
-            Throws<std::invalid_argument>([&] { simulator.ApplyGate(Gate::MultiControlled(shrinking, 1, {0, 2, 4, 6})); },
-                                          "MPS applied a wide controlled operator that is not unitary");
+            Throws<std::invalid_argument>(
+                [&] { simulator.ApplyGate(Gate::MultiControlled(shrinking, 1, {0, 2, 4, 6})); },
+                "MPS applied a wide controlled operator that is not unitary");
         Close(Storage<MPO>(simulator), reference, "A rejected compact gate changed the tensor-network state");
     }
 
@@ -629,7 +631,8 @@ template <bool MPO, class Simulator> void CheckCompactGates()
         reference = Storage<MPO>(simulator);
         Require(reference.allFinite(), "A truncated multi-controlled gate left a non-finite state");
         if constexpr (!MPO)
-            Require(std::abs(reference.norm() - 1.) < 1E-9, "A truncated multi-controlled gate left the MPS off its norm");
+            Require(std::abs(reference.norm() - 1.) < 1E-9,
+                    "A truncated multi-controlled gate left the MPS off its norm");
         const Gate gate = controlledGate(5, Unitary(2, 5100 + cap));
         simulator.ApplyGate(gate);
         EvolveCompact<MPO>(reference, gate, count);
@@ -933,7 +936,8 @@ template <bool MPO> void Check()
             reference(0, 0) = 1.;
             if constexpr (MPO)
             {
-                simulator.setToMixtureOfBasisStates(std::vector<std::pair<size_t, double>>{{size_t(0), 0.7}, {size_t(19), 0.3}});
+                simulator.setToMixtureOfBasisStates(
+                    std::vector<std::pair<size_t, double>>{{size_t(0), 0.7}, {size_t(19), 0.3}});
                 reference(0, 0) = 0.7;
                 reference(19, 19) = 0.3;
             }

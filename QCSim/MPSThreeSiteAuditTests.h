@@ -191,7 +191,8 @@ inline void CheckCanonicalWeights()
             for (Eigen::Index basis = 0; basis < state.size(); ++basis)
                 if (!(basis & (Eigen::Index{1} << site)))
                     probability += std::norm(state[basis]);
-            Close(simulator.GetProbability(site), probability, "MPS three-site cut left stale probability environments");
+            Close(simulator.GetProbability(site), probability,
+                  "MPS three-site cut left stale probability environments");
         }
         fidelity[refresh] = std::norm(exact.dot(state));
         // With the limits lifted, what follows is exact for the state the chain holds:
@@ -294,37 +295,37 @@ inline void CheckRoutingAfterReads()
 {
     for (int routing = 0; routing < 3; ++routing)
     {
-        TensorNetworks::MPSSimulator read(6);
-        read.SetMultithreading(false);
-        read.setLimitBondDimension(2);
+        TensorNetworks::MPSSimulator probed(6);
+        probed.SetMultithreading(false);
+        probed.setLimitBondDimension(2);
         for (int layer = 0; layer < 3; ++layer)
             for (int site = 0; site < 5; ++site)
-                read.ApplyGate(Gate(Unitary(4, 401 + 7 * layer + site)), site, site + 1);
-        read.SetUseOptimalMeetingPosition(routing != 0);
+                probed.ApplyGate(Gate(Unitary(4, 401 + 7 * layer + site)), site, site + 1);
+        probed.SetUseOptimalMeetingPosition(routing != 0);
         if (routing == 2)
-            read.SetMeetingPositionCallback([](const auto &) { return 2; });
-        auto unread = read.Clone();
+            probed.SetMeetingPositionCallback([](const auto &) { return 2; });
+        auto unread = probed.Clone();
         int readNotifications = 0, unreadNotifications = 0;
-        read.SetBondDimensionCallback([&](const auto &) { ++readNotifications; });
+        probed.SetBondDimensionCallback([&](const auto &) { ++readNotifications; });
         unread->SetBondDimensionCallback([&](const auto &) { ++unreadNotifications; });
         // Truncation leaves approximate canonical weights. A probability read
         // creates temporary environments that must be dropped by the first
         // internal routing SWAP, just as by the old public gate entry point.
-        (void)read.GetProbability(3);
+        (void)probed.GetProbability(3);
         const Gate gate(Unitary(4, 439));
-        read.ApplyGate(gate, 5, 0);
+        probed.ApplyGate(gate, 5, 0);
         unread->ApplyGate(gate, 5, 0);
-        Close(read.getRegisterStorage(), unread->getRegisterStorage(),
+        Close(probed.getRegisterStorage(), unread->getRegisterStorage(),
               "MPS routing after a read changed truncated gate evolution");
-        Require(read.getQubitsMap() == unread->getQubitsMap(), "MPS routing after a read changed logical mapping");
+        Require(probed.getQubitsMap() == unread->getQubitsMap(), "MPS routing after a read changed logical mapping");
         Require(readNotifications > 1 && readNotifications == unreadNotifications,
                 "MPS routing after a read changed bond callback boundaries");
-        (void)read.GetProbability(1);
-        read.MoveAtBeginningOfChain({3, 5});
+        (void)probed.GetProbability(1);
+        probed.MoveAtBeginningOfChain({3, 5});
         unread->MoveAtBeginningOfChain({3, 5});
-        Close(read.getRegisterStorage(), unread->getRegisterStorage(),
+        Close(probed.getRegisterStorage(), unread->getRegisterStorage(),
               "MPS chain reordering after a read changed truncated state");
-        Require(read.getQubitsMap() == unread->getQubitsMap() && readNotifications == unreadNotifications,
+        Require(probed.getQubitsMap() == unread->getQubitsMap() && readNotifications == unreadNotifications,
                 "MPS chain reordering changed maps or callback boundaries");
     }
 }

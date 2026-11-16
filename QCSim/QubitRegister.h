@@ -922,9 +922,8 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
     }
 
   protected:
-    void ApplyStructuredGateImpl(const Gates::StructuredGateView &gate,
-                                 const Gates::AppliedGate<MatrixClass> *recorded, bool tablesValidated,
-                                 bool adjointTables = false,
+    void ApplyStructuredGateImpl(const Gates::StructuredGateView &gate, const Gates::AppliedGate<MatrixClass> *recorded,
+                                 bool tablesValidated, bool adjointTables = false,
                                  const Gates::StructuredRotationCoefficients *coefficients = nullptr)
     {
         if (tablesValidated)

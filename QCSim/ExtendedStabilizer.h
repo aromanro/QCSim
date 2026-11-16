@@ -1483,8 +1483,7 @@ class ExtendedStabilizer
     }
 
     // A compact gate carries its own qubits; other gate types have none.
-    template <class Gate>
-    static auto CompactOperation(const Gate &gate, int) -> decltype(gate.getStructuredGate())
+    template <class Gate> static auto CompactOperation(const Gate &gate, int) -> decltype(gate.getStructuredGate())
     {
         return gate.getStructuredGate();
     }
@@ -1569,8 +1568,8 @@ class ExtendedStabilizer
     }
 
     template <class Matrix>
-    static const std::shared_ptr<const MatrixAction> &CompileMatrixAction(const Matrix &matrix, unsigned arity,
-                                                                         const Gates::UnitaryGateDescriptor &descriptor)
+    static const std::shared_ptr<const MatrixAction> &CompileMatrixAction(
+        const Matrix &matrix, unsigned arity, const Gates::UnitaryGateDescriptor &descriptor)
     {
         using LocalMatrix = Gates::UnitaryLocalMatrix;
         const auto key = detail::MatrixKey(matrix);
@@ -2015,8 +2014,8 @@ class ExtendedStabilizer
         void Add(const std::complex<double> &result) noexcept
         {
             const __m128d magnitude = _mm_andnot_pd(_mm_set1_pd(-0.0), _mm_set_pd(result.imag(), result.real()));
-            found = _mm_or_pd(found,
-                              _mm_and_pd(_mm_cmple_pd(magnitude, limit), _mm_cmpgt_pd(magnitude, _mm_setzero_pd())));
+            found =
+                _mm_or_pd(found, _mm_and_pd(_mm_cmple_pd(magnitude, limit), _mm_cmpgt_pd(magnitude, _mm_setzero_pd())));
         }
 
         bool Found() const noexcept
@@ -2075,15 +2074,14 @@ class ExtendedStabilizer
             {
                 const __m128d parts = _mm_andnot_pd(
                     sign, _mm_loadu_pd(reinterpret_cast<const double *>(sources + (v ^ termOffsets[term]))));
-                sums = _mm_add_pd(
-                    sums, _mm_add_pd(_mm_andnot_pd(sign, _mm_mul_pd(_mm_set1_pd(realMagnitudes[term]), parts)),
-                                     _mm_andnot_pd(sign, _mm_mul_pd(_mm_set1_pd(imaginaryMagnitudes[term]),
-                                                                    _mm_shuffle_pd(parts, parts, 1)))));
+                sums = _mm_add_pd(sums,
+                                  _mm_add_pd(_mm_andnot_pd(sign, _mm_mul_pd(_mm_set1_pd(realMagnitudes[term]), parts)),
+                                             _mm_andnot_pd(sign, _mm_mul_pd(_mm_set1_pd(imaginaryMagnitudes[term]),
+                                                                            _mm_shuffle_pd(parts, parts, 1)))));
             }
             double *value = reinterpret_cast<double *>(results + v);
             const __m128d result = _mm_loadu_pd(value);
-            const __m128d keep =
-                _mm_and_pd(_mm_cmpgt_pd(_mm_andnot_pd(sign, result), _mm_mul_pd(scale, sums)), one);
+            const __m128d keep = _mm_and_pd(_mm_cmpgt_pd(_mm_andnot_pd(sign, result), _mm_mul_pd(scale, sums)), one);
             _mm_storeu_pd(value, _mm_mul_pd(result, keep));
         }
 #else
@@ -2119,9 +2117,8 @@ class ExtendedStabilizer
     {
 #ifdef QCSIM_AVX2
         const auto both = [](const std::complex<double> *values) {
-            return _mm256_insertf128_pd(
-                _mm256_castpd128_pd256(_mm_loadu_pd(reinterpret_cast<const double *>(values))),
-                _mm_loadu_pd(reinterpret_cast<const double *>(values + 1)), 1);
+            return _mm256_insertf128_pd(_mm256_castpd128_pd256(_mm_loadu_pd(reinterpret_cast<const double *>(values))),
+                                        _mm_loadu_pd(reinterpret_cast<const double *>(values + 1)), 1);
         };
         const __m256d sign = _mm256_set1_pd(-0.0);
         const __m256d inPlace = _mm256_andnot_pd(sign, both(pair));
@@ -2136,10 +2133,9 @@ class ExtendedStabilizer
                                                                          _mm256_permute_pd(parts, 5)))));
         }
         const __m256d result = both(results);
-        const __m256d keep =
-            _mm256_and_pd(_mm256_cmp_pd(_mm256_andnot_pd(sign, result), _mm256_mul_pd(_mm256_set1_pd(rounding), sums),
-                                        _CMP_GT_OQ),
-                          _mm256_set1_pd(1.0));
+        const __m256d keep = _mm256_and_pd(
+            _mm256_cmp_pd(_mm256_andnot_pd(sign, result), _mm256_mul_pd(_mm256_set1_pd(rounding), sums), _CMP_GT_OQ),
+            _mm256_set1_pd(1.0));
         _mm256_storeu_pd(reinterpret_cast<double *>(results), _mm256_mul_pd(result, keep));
 #else
         ClearRoundedParts(results, pair, nullptr, 2, termOffsets, realMagnitudes, imaginaryMagnitudes, 0, nrTerms,
@@ -2194,10 +2190,11 @@ class ExtendedStabilizer
         }
         {
             size_t count = nrControls;
-            action.sum.ForEachTerm([&paulis, &coefficients, &count](detail::LocalPauli pauli, std::complex<double> value) {
-                paulis[count] = pauli;
-                coefficients[count++] = value;
-            });
+            action.sum.ForEachTerm(
+                [&paulis, &coefficients, &count](detail::LocalPauli pauli, std::complex<double> value) {
+                    paulis[count] = pauli;
+                    coefficients[count++] = value;
+                });
         }
 
         // Logical images of the terms, with i^|x&z| and their signs folded
@@ -2448,8 +2445,8 @@ class ExtendedStabilizer
             {
                 std::complex<double> result(0.0, 0.0);
                 for (size_t term = nrControls; term < nrTerms; ++term, ++read)
-                    result += signedCoefficients[readSigns[read] ^ unsigned(labelParity[term])] *
-                              selected[readSources[read]];
+                    result +=
+                        signedCoefficients[readSigns[read] ^ unsigned(labelParity[term])] * selected[readSources[read]];
                 std::complex<double> rest = amplitudes[v] - selected[v];
                 if (weight != 1.0)
                     rest *= weight;
@@ -2715,8 +2712,7 @@ class ExtendedStabilizer
             std::min(UnitaryHistory::MaxCheckpoints, UnitaryHistory::CheckpointBytes / std::max<size_t>(bytes, 1));
         std::array<size_t, UnitaryHistory::MaxCheckpoints> wanted{};
         size_t nrWanted = 0;
-        for (size_t distance = 1; checkpoints.size() + nrWanted < allowed && distance < removed - start;
-             distance *= 2)
+        for (size_t distance = 1; checkpoints.size() + nrWanted < allowed && distance < removed - start; distance *= 2)
             wanted[nrWanted++] = removed - distance;
 
         // Park the live components: they return untouched if the replay
@@ -3142,8 +3138,8 @@ class ExtendedStabilizer
                     {
                         const unsigned parity = labelParity[term];
                         first += signedCoefficients[readSigns[term] ^ parity] * pair[readSources[term]];
-                        second += signedCoefficients[readSigns[nrTerms + term] ^ parity] *
-                                  pair[readSources[nrTerms + term]];
+                        second +=
+                            signedCoefficients[readSigns[nrTerms + term] ^ parity] * pair[readSources[nrTerms + term]];
                     }
                     sums.Set(0, first);
                     sums.Set(1, second);

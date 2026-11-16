@@ -1146,14 +1146,13 @@ bool CliffordCompactGateRegression()
                            operations(QC::Gates::ECRGate<>().getRawOperatorMatrix()) == 4 &&
                            operations(QC::Gates::RxGate<>(quarter).getRawOperatorMatrix()) == 1,
                        "Named Clifford gates keep their short circuits") ||
-        !CliffordCheck(QC::detail::FindCanonicalClifford(QC::Gates::TGate<>().getRawOperatorMatrix()) == nullptr &&
-                           QC::detail::FindCanonicalClifford(QC::Gates::ControlledRzGate<>(.3).getRawOperatorMatrix()) ==
-                               nullptr &&
-                           QC::detail::FindCanonicalClifford(QC::Gates::ToffoliGate<>().getRawOperatorMatrix()) ==
-                               nullptr &&
-                           QC::detail::FindCanonicalClifford(QC::Gates::HadamardGate<>().getOperatorMatrix(3, 1)) !=
-                               nullptr,
-                       "Recognition order changed which matrices are Cliffords"))
+        !CliffordCheck(
+            QC::detail::FindCanonicalClifford(QC::Gates::TGate<>().getRawOperatorMatrix()) == nullptr &&
+                QC::detail::FindCanonicalClifford(QC::Gates::ControlledRzGate<>(.3).getRawOperatorMatrix()) ==
+                    nullptr &&
+                QC::detail::FindCanonicalClifford(QC::Gates::ToffoliGate<>().getRawOperatorMatrix()) == nullptr &&
+                QC::detail::FindCanonicalClifford(QC::Gates::HadamardGate<>().getOperatorMatrix(3, 1)) != nullptr,
+            "Recognition order changed which matrices are Cliffords"))
         return false;
     // More matrices than one cache set holds: each lookup still answers for its own matrix.
     std::vector<Eigen::MatrixXcd> matrices;

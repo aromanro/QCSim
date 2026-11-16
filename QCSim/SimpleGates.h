@@ -996,7 +996,8 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
                 if (std::find(qubits.begin() + (diagonal ? 0 : 1), qubits.begin() + i, qubits[i]) != qubits.begin() + i)
                     throw std::invalid_argument("Gate qubits must be distinct");
             }
-            if (!diagonal && (qubits[0] == none || std::find(qubits.begin() + 1, qubits.end(), qubits[0]) != qubits.end()))
+            if (!diagonal &&
+                (qubits[0] == none || std::find(qubits.begin() + 1, qubits.end(), qubits[0]) != qubits.end()))
                 throw std::invalid_argument("Target must be in range and distinct from controls");
             Rebind(qubits);
         }
@@ -1730,8 +1731,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class RxGate : public RotationGa
   public:
     UnitaryGateDescriptor getUnitaryDescriptor() const override
     {
-        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rx, {{recordedTheta}}, 0,
-                                            {{recordedCosSin}});
+        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rx, {{recordedTheta}}, 0, {{recordedCosSin}});
     }
 
     using BaseClass = RotationGate<MatrixClass>;
@@ -1765,8 +1765,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class RyGate : public RotationGa
   public:
     UnitaryGateDescriptor getUnitaryDescriptor() const override
     {
-        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Ry, {{recordedTheta}}, 0,
-                                            {{recordedCosSin}});
+        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Ry, {{recordedTheta}}, 0, {{recordedCosSin}});
     }
 
     using BaseClass = RotationGate<MatrixClass>;
@@ -1800,8 +1799,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class RzGate : public RotationGa
   public:
     UnitaryGateDescriptor getUnitaryDescriptor() const override
     {
-        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rz, {{recordedTheta}}, 0,
-                                            {{recordedCosSin}});
+        return UnitaryGateDescriptor::Built(UnitaryGateDescriptor::Kind::Rz, {{recordedTheta}}, 0, {{recordedCosSin}});
     }
 
     using BaseClass = RotationGate<MatrixClass>;

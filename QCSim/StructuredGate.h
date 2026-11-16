@@ -337,15 +337,16 @@ struct StructuredSelector
             size_t length = 1;
             while (i + length < qubits.size() && qubits[i + length] == first + length && (first + length) / 64 == word)
                 ++length;
-            runs.push_back({word, length == 64 ? ~uint64_t{0} : (uint64_t{1} << length) - 1, unsigned(first % 64),
-                            unsigned(i)});
+            runs.push_back(
+                {word, length == 64 ? ~uint64_t{0} : (uint64_t{1} << length) - 1, unsigned(first % 64), unsigned(i)});
             i += length;
         }
         for (size_t i = 0; i < qubits.size(); ++i)
         {
             const size_t word = qubits[i] / 64;
             const uint64_t bit = uint64_t{1} << (qubits[i] % 64);
-            auto found = std::find_if(matches.begin(), matches.end(), [word](const Match &m) { return m.word == word; });
+            auto found =
+                std::find_if(matches.begin(), matches.end(), [word](const Match &m) { return m.word == word; });
             if (found == matches.end())
             {
                 matches.push_back({word, 0, 0});
@@ -400,8 +401,9 @@ struct StructuredGateInfo
     {
         if (gate.kind == StructuredGate::Kind::Diagonal)
         {
-            anyNonzero = std::any_of(gate.diagonal.begin(), gate.diagonal.end(),
-                                     [](const std::complex<double> &value) { return value != std::complex<double>(0.); });
+            anyNonzero = std::any_of(gate.diagonal.begin(), gate.diagonal.end(), [](const std::complex<double> &value) {
+                return value != std::complex<double>(0.);
+            });
             return;
         }
         if (gate.kind != StructuredGate::Kind::MultiplexedRotation)

@@ -80,7 +80,8 @@ class MPOSimulatorImpl : public MPOSimulatorBase,
         if (qubits.empty())
         {
             // A table of one entry is a scalar: rho is multiplied by its squared modulus.
-            ApplyOperator(Gates::AppliedGate<MatrixClass>(MatrixClass(gate.diagonal[0] * MatrixClass::Identity(2, 2)), 0));
+            ApplyOperator(
+                Gates::AppliedGate<MatrixClass>(MatrixClass(gate.diagonal[0] * MatrixClass::Identity(2, 2)), 0));
             return;
         }
         ApplyGate(Gates::AppliedGate<MatrixClass>(gate.DenseMatrix<MatrixClass>(3), qubits[0],
@@ -153,7 +154,8 @@ class MPOSimulatorImpl : public MPOSimulatorBase,
                                     for (IndexType a = 0; a < leftRank; ++a)
                                         for (IndexType a2 = 0; a2 < leftRank; ++a2)
                                         {
-                                            const std::complex<double> factor = ketPart(a, c) * std::conj(braPart(a2, c2));
+                                            const std::complex<double> factor =
+                                                ketPart(a, c) * std::conj(braPart(a2, c2));
                                             if (factor == std::complex<double>(0.))
                                                 continue;
                                             const IndexType rowOffset = (a * leftRank + a2) * L,

@@ -50,7 +50,7 @@ namespace TableTrainDetail
 // The tensor train of `table`, whose index holds position 0 in its highest bit. The ranks may
 // not exceed rankLimit.
 inline std::vector<std::array<Eigen::MatrixXcd, 2>> DecomposeTable(std::vector<std::complex<double>> table,
-                                                                    size_t positions, Eigen::Index rankLimit)
+                                                                   size_t positions, Eigen::Index rankLimit)
 {
     using Matrix = Eigen::MatrixXcd;
     std::vector<std::array<Matrix, 2>> cores(positions);
@@ -64,9 +64,9 @@ inline std::vector<std::array<Eigen::MatrixXcd, 2>> DecomposeTable(std::vector<s
     {
         const Eigen::JacobiSVD<Matrix, Eigen::ComputeThinU | Eigen::ComputeThinV> svd(rest);
         const auto &values = svd.singularValues();
-        const double floor =
-            values.size() ? values[0] * double(std::max(rest.rows(), rest.cols())) * std::numeric_limits<double>::epsilon()
-                          : 0.;
+        const double floor = values.size() ? values[0] * double(std::max(rest.rows(), rest.cols())) *
+                                                 std::numeric_limits<double>::epsilon()
+                                           : 0.;
         Eigen::Index kept = 0;
         while (kept < values.size() && values[kept] > floor)
             ++kept;
@@ -122,7 +122,8 @@ ChainOperator MakeChainOperator(const Gates::StructuredGate &gate, const SiteOf 
     for (size_t k = 0; k < gate.qubits.size(); ++k)
         positions.emplace_back(static_cast<Eigen::Index>(siteOf(gate.qubits[k])), static_cast<unsigned>(k));
     if (multiplexed)
-        positions.emplace_back(static_cast<Eigen::Index>(siteOf(gate.target)), static_cast<unsigned>(gate.qubits.size()));
+        positions.emplace_back(static_cast<Eigen::Index>(siteOf(gate.target)),
+                               static_cast<unsigned>(gate.qubits.size()));
     std::sort(positions.begin(), positions.end());
     for (size_t p = 1; p < positions.size(); ++p)
         if (positions[p].first == positions[p - 1].first)
@@ -152,7 +153,8 @@ ChainOperator MakeChainOperator(const Gates::StructuredGate &gate, const SiteOf 
             if (channel)
                 ordered[index] = rotation[selector][second ? 1 : 0];
             else
-                ordered[index] = Complex(rotation[selector][0], second ? rotation[selector][1] : -rotation[selector][1]);
+                ordered[index] =
+                    Complex(rotation[selector][0], second ? rotation[selector][1] : -rotation[selector][1]);
         }
     }
     const auto cores = TableTrainDetail::DecomposeTable(std::move(ordered), tableBits, rankLimit);

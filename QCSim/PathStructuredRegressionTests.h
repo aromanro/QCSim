@@ -222,9 +222,9 @@ inline void LoweredTables()
             for (double epsilon : {0., 1E-15})
             {
                 const Sparse lowered(gate, epsilon), reference(dense, epsilon);
-                Require(!lowered.structured && lowered.arity == reference.arity &&
-                            lowered.counts == reference.counts && lowered.maxFanout == reference.maxFanout &&
-                            lowered.diagonal == reference.diagonal && lowered.injective == reference.injective,
+                Require(!lowered.structured && lowered.arity == reference.arity && lowered.counts == reference.counts &&
+                            lowered.maxFanout == reference.maxFanout && lowered.diagonal == reference.diagonal &&
+                            lowered.injective == reference.injective,
                         "A small compact gate was not lowered to the dense transition metadata");
                 for (unsigned column = 0; column < (1u << lowered.arity); ++column)
                     for (unsigned t = 0; t < lowered.counts[column]; ++t)
@@ -241,10 +241,11 @@ inline void LoweredTables()
     for (const auto &gate : fewQubits)
     {
         const auto matrix = gate.getStructuredGate()->DenseMatrix<Eigen::MatrixXcd>();
-        Require((gate.Adjoint().getStructuredGate()->DenseMatrix<Eigen::MatrixXcd>() - matrix.adjoint()).norm() == 0. &&
-                    (gate.Transposed().getStructuredGate()->DenseMatrix<Eigen::MatrixXcd>() - matrix.transpose())
-                            .norm() == 0.,
-                "The adjoint or transpose of a compact gate is not that of its matrix");
+        Require(
+            (gate.Adjoint().getStructuredGate()->DenseMatrix<Eigen::MatrixXcd>() - matrix.adjoint()).norm() == 0. &&
+                (gate.Transposed().getStructuredGate()->DenseMatrix<Eigen::MatrixXcd>() - matrix.transpose()).norm() ==
+                    0.,
+            "The adjoint or transpose of a compact gate is not that of its matrix");
     }
 }
 
@@ -308,15 +309,16 @@ inline void SharedTables()
     auto moved = identity;
     moved.setQubits({7, 6, 5, 4, 3, 2, 1});
     for (const Gate &derived : {identity.Adjoint(), identity.Transposed(), moved, Gate(identity)})
-        Require(derived.getCompactPayload()->core == payload->core && derived.getCompactPayload()->Info(false) == info &&
-                    Sparse(derived, 1E-15).maxFanout == 1 && payload->Info(false) == info,
+        Require(derived.getCompactPayload()->core == payload->core &&
+                    derived.getCompactPayload()->Info(false) == info && Sparse(derived, 1E-15).maxFanout == 1 &&
+                    payload->Info(false) == info,
                 "A derived compact gate copied or analysed the shared table again");
     std::vector<double> angles(64);
     for (size_t i = 0; i < angles.size(); ++i)
         angles[i] = .11 + .07 * double(i);
     const auto generic = Gate::MultiplexedRotation(Gates::RotationAxis::Y, angles, 6, controls);
-    Require(Sparse(generic, 0.).maxFanout == 2 && generic.isBranching() &&
-                !generic.getCompactPayload()->Info(false) && !generic.getCompactPayload()->Coefficients(false),
+    Require(Sparse(generic, 0.).maxFanout == 2 && generic.isBranching() && !generic.getCompactPayload()->Info(false) &&
+                !generic.getCompactPayload()->Coefficients(false),
             "A multiplexer whose first angles branch should not need its whole table");
     // A frontier broader than the table keeps the cosines and sines; the
     // gates derived afterwards use the same ones.
@@ -348,8 +350,8 @@ inline void SharedTables()
     circuit.emplace_back(Gates::HadamardGate<>().getRawOperatorMatrix(), 6);
     Require(shifted.getCompactPayload()->core == table.getCompactPayload()->core &&
                 shifted.getStructuredGate() != table.getStructuredGate() &&
-                shifted.getStructuredGate()->diagonal == phases && table.Adjoint().Adjoint().getStructuredGate() ==
-                                                                       table.getStructuredGate(),
+                shifted.getStructuredGate()->diagonal == phases &&
+                table.Adjoint().Adjoint().getStructuredGate() == table.getStructuredGate(),
             "Remapping or inverting a diagonal did not share its table");
     QubitRegister<> reference(8);
     reference.ApplyGates(circuit);
@@ -389,12 +391,12 @@ inline void UnmovedKeys()
     for (size_t q = 0; q < 6; ++q)
         prepare.emplace_back(Gates::HadamardGate<>().getRawOperatorMatrix(), q);
     const std::vector<Gate> steps{
-        Gate::MultiControlled(Gates::PauliXGate<>(), 7, {6, 8, 9, 0}),               // control 6 is never set
-        Gate(Gates::CNOTGate<>().getRawOperatorMatrix(), 7, 6),                       // dense, control never set
-        Gate(Gates::ToffoliGate<>().getRawOperatorMatrix(), 8, 0, 6),                 // dense, one control never set
-        Gate::MultiControlled(Gates::PauliXGate<>(), 6, {0, 1, 2, 3}),               // moves a sixteenth of the states
-        Gate(Gates::CNOTGate<>().getRawOperatorMatrix(), 7, 6),                       // now moves those
-        Gate::MultiControlled(Gates::PauliYGate<>(), 9, {7, 6, 5, 0}, 3),            // moves some, with a phase
+        Gate::MultiControlled(Gates::PauliXGate<>(), 7, {6, 8, 9, 0}),    // control 6 is never set
+        Gate(Gates::CNOTGate<>().getRawOperatorMatrix(), 7, 6),           // dense, control never set
+        Gate(Gates::ToffoliGate<>().getRawOperatorMatrix(), 8, 0, 6),     // dense, one control never set
+        Gate::MultiControlled(Gates::PauliXGate<>(), 6, {0, 1, 2, 3}),    // moves a sixteenth of the states
+        Gate(Gates::CNOTGate<>().getRawOperatorMatrix(), 7, 6),           // now moves those
+        Gate::MultiControlled(Gates::PauliYGate<>(), 9, {7, 6, 5, 0}, 3), // moves some, with a phase
         Gate(Gates::ToffoliGate<>().getRawOperatorMatrix(), 8, 9, 7),
     };
     Simulator sim;

@@ -317,7 +317,8 @@ class MPOSimulator : public MPOSimulatorInterface,
         if (qubits.empty())
         {
             // A table of one entry is a scalar: rho is multiplied by its squared modulus.
-            ApplyOperator(Gates::AppliedGate<MatrixClass>(MatrixClass(gate.diagonal[0] * MatrixClass::Identity(2, 2)), 0));
+            ApplyOperator(
+                Gates::AppliedGate<MatrixClass>(MatrixClass(gate.diagonal[0] * MatrixClass::Identity(2, 2)), 0));
             return;
         }
         ApplyGate(Gates::AppliedGate<MatrixClass>(gate.DenseMatrix<MatrixClass>(3), qubits[0],

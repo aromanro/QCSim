@@ -720,8 +720,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                                                    size_t count)
     {
         using Complex = std::complex<double>;
-        if (PrefersBlockedDiagonal(qubits, shift, entries,
-                                   Parallel && TeamThreads(count) > 1))
+        if (PrefersBlockedDiagonal(qubits, shift, entries, Parallel && TeamThreads(count) > 1))
         {
             BlockedDiagonal<Parallel>(state, values, qubits, shift, count, Conjugated);
             return;
@@ -815,13 +814,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 1, lowest);
             return;
         }
-        ForEachStructuredIndex<Parallel>(count, count, qubits, shift, std::numeric_limits<size_t>::max(),
-                                         [&](size_t i, size_t selector) {
-                                             const Complex value =
-                                                 Conjugated ? std::conj(values[selector]) : values[selector];
-                                             if (value != Complex(1.))
-                                                 state(i) *= value;
-                                         });
+        ForEachStructuredIndex<Parallel>(
+            count, count, qubits, shift, std::numeric_limits<size_t>::max(), [&](size_t i, size_t selector) {
+                const Complex value = Conjugated ? std::conj(values[selector]) : values[selector];
+                if (value != Complex(1.))
+                    state(i) *= value;
+            });
     }
 
     template <bool Parallel>
