@@ -7,6 +7,7 @@
 #undef TESTS_CPP_
 
 #include "QubitRegister.h"
+#include "StructuredGateRegressionTests.h"
 
 #include "BernsteinVazirani.h"
 #include "CheckCHSHInequality.h"
@@ -760,6 +761,8 @@ bool basicTests()
     bool res = registerMeasurementsTests();
     if (res)
         res = checkGates();
+    if (res)
+        res = StatevectorStructuredGateTests();
     if (res)
         res = checkExpectationValuesStatevector();
     if (res)

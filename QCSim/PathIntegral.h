@@ -138,8 +138,7 @@ class PathIntegralSimulator
             auto fullCircuit = circuit;
             fullCircuit.reserve(circuit.size() + circuitBack.size());
             for (auto it = circuitBack.rbegin(); it != circuitBack.rend(); ++it)
-                fullCircuit.emplace_back(it->getRawOperatorMatrix().transpose(), it->getQubit1(), it->getQubit2(),
-                                         it->getQubit3());
+                fullCircuit.push_back(TransposedGate(*it));
             PrepareCircuit(fullCircuit, doublings, false, useGrowthAwareSplit);
         }
         doublingsLimit = doublings;
@@ -161,8 +160,7 @@ class PathIntegralSimulator
             auto fullCircuit = circuit;
             fullCircuit.reserve(circuit.size() + circuitBack.size());
             for (auto it = circuitBack.rbegin(); it != circuitBack.rend(); ++it)
-                fullCircuit.emplace_back(it->getRawOperatorMatrix().transpose(), it->getQubit1(), it->getQubit2(),
-                                         it->getQubit3());
+                fullCircuit.push_back(TransposedGate(*it));
             PrepareCircuit(fullCircuit, doublingsLimit, false, enabled);
         }
         useGrowthAwareSplit = enabled;
@@ -289,7 +287,8 @@ class PathIntegralSimulator
         }
 
         if (const auto *compiled = Compiled())
-            return PropagateCached(startBits, endBits, 0, compiled->forward);
+            return compiled->compact ? PropagateCached<true>(startBits, endBits, 0, compiled->forward)
+                                     : PropagateCached<false>(startBits, endBits, 0, compiled->forward);
         return Propagate(startBits, endBits, 0);
     }
 
@@ -300,14 +299,19 @@ class PathIntegralSimulator
         size_t nQubits = 0;
         for (const auto &gate : circuit)
         {
-            nQubits = std::max(nQubits, gate.getQubit1() + 1);
-            if (gate.getQubitsNumber() > 1)
-                nQubits = std::max(nQubits, gate.getQubit2() + 1);
-            if (gate.getQubitsNumber() > 2)
-                nQubits = std::max(nQubits, gate.getQubit3() + 1);
+            // A dense gate has three stored indices; a wrong matrix size is
+            // reported when the circuit is prepared.
+            const auto qubits = GateQubits(gate);
+            const size_t arity = qubits.compact ? qubits.compact->Arity() : std::min<size_t>(gate.getQubitsNumber(), 3);
+            for (size_t q = 0; q < arity; ++q)
+                nQubits = std::max(nQubits, qubits[q] + 1);
         }
+        // A register this wide cannot be stored: the failure of constructing
+        // its start state, for compact and dense gates alike.
+        if (nQubits > FastVectorBool::MaxWords * 64)
+            throw std::length_error("Path integral states support at most 1024 qubits");
 
-        const std::vector<bool> startState(nQubits, false);
+        const std::vector<bool> startState(std::max<size_t>(1, nQubits), false);
 
         PropagateAll(circuit, startState);
     }
@@ -331,6 +335,7 @@ class PathIntegralSimulator
     struct CompiledTables
     {
         std::vector<Detail::SparseGate> forward, backward;
+        bool compact = false; // some gate is applied from compact tables instead of listed transitions
     };
 
     struct ForwardCache
@@ -380,6 +385,31 @@ class PathIntegralSimulator
                 next->forward.emplace_back(gate, epsilon);
             for (const auto &gate : circuitBack)
                 next->backward.emplace_back(gate, epsilon);
+            // Repeated queries read the cosines and sines of a multiplexer
+            // from a table kept with the gate instead of evaluating them at
+            // every visit. The table counts against the same byte budget.
+            size_t spare = compiledGateCacheMaxBytes - count * sizeof(Detail::SparseGate);
+            for (const auto *half : {&next->forward, &next->backward})
+                for (const auto &entry : *half)
+                {
+                    const Detail::CompactGate *compact = entry.structured;
+                    next->compact = next->compact || compact;
+                    if (!compact || compact->OperationKind() != Gates::StructuredGate::Kind::MultiplexedRotation ||
+                        compact->Coefficients(false))
+                        continue;
+                    const size_t entries = compact->TableSize();
+                    if (entries > spare / sizeof(std::array<double, 2>))
+                        continue;
+                    try
+                    {
+                        compact->Coefficients(true);
+                        spare -= entries * sizeof(std::array<double, 2>);
+                    }
+                    catch (const std::bad_alloc &)
+                    {
+                        // The table is optional: such a gate keeps evaluating its angles.
+                    }
+                }
             compiledTables = std::move(next);
         }
         catch (const std::bad_alloc &)
@@ -394,18 +424,60 @@ class PathIntegralSimulator
         return compiledTables.get();
     }
 
-    // One byte per gate records its final local writes. A qubit repeated in a
+    // One local-bit mask per gate records its final writes. A qubit repeated in a
     // gate is represented only by its last overwrite, matching SetRow.
     struct TouchSchedule
     {
-        std::vector<unsigned char> finishing;
+        std::vector<uint64_t> finishing;
         std::array<uint64_t, FastVectorBool::MaxWords> touched{};
         size_t width = 0;
     };
 
-    static std::array<size_t, 3> GateQubits(const QC::Gates::AppliedGate<> &gate)
+    // The qubits of a gate in its local bit order. A compact gate lists its
+    // target first and then its controls (a diagonal: its table bits).
+    struct QubitList
     {
-        return {gate.getQubit1(), gate.getQubit2(), gate.getQubit3()};
+        const Detail::CompactGate *compact;
+        std::array<size_t, 3> dense;
+
+        size_t operator[](size_t bit) const
+        {
+            return compact ? compact->Qubit(bit) : dense[bit];
+        }
+    };
+
+    static QubitList GateQubits(const QC::Gates::AppliedGate<> &gate)
+    {
+        return {gate.getCompactPayload(), {gate.getQubit1(), gate.getQubit2(), gate.getQubit3()}};
+    }
+
+    // The number of qubits of a gate of a circuit that PrepareCircuit has
+    // checked: a dense gate then has a 2, 4 or 8 row matrix that agrees with
+    // its arity, so the matrix answers without a virtual call.
+    static size_t GateArity(const QC::Gates::AppliedGate<> &gate, const QubitList &qubits)
+    {
+        if (qubits.compact)
+            return qubits.compact->Arity();
+        const auto rows = gate.getRawOperatorMatrix().rows();
+        return rows == 2 ? 1 : (rows == 4 ? 2 : 3);
+    }
+
+    // The tables of a compact gate were validated once, when it was created;
+    // only its qubits depend on where it is used. A dense gate may repeat a
+    // qubit, a compact one may not. A qubit outside the register is reported
+    // with the same exception as for a dense gate.
+    static void CheckCompactQubits(const Detail::CompactGate &gate, size_t width, const char *outside)
+    {
+        if (!gate.distinct)
+            throw std::invalid_argument("Gate qubits must be distinct");
+        if (gate.Arity() && gate.maxQubit >= width)
+            throw std::out_of_range(outside);
+    }
+
+    // Compact gates share their tables with their transpose.
+    static QC::Gates::AppliedGate<> TransposedGate(const QC::Gates::AppliedGate<> &gate)
+    {
+        return gate.Transposed();
     }
 
     static TouchSchedule BuildTouches(const std::vector<QC::Gates::AppliedGate<>> &gates)
@@ -415,10 +487,8 @@ class PathIntegralSimulator
         for (size_t index = gates.size(); index;)
         {
             const auto &gate = gates[--index];
-            const size_t arity = gate.getQubitsNumber();
-            if (!arity || arity > 3)
-                throw std::invalid_argument("Path integral gates must act on one to three qubits");
             const auto qubits = GateQubits(gate);
+            const size_t arity = GateArity(gate, qubits);
             for (size_t local = arity; local;)
             {
                 const size_t bit = --local, qubit = qubits[bit];
@@ -426,7 +496,7 @@ class PathIntegralSimulator
                     throw std::out_of_range("Path integral gate qubit exceeds the state capacity");
                 const uint64_t mask = uint64_t{1} << (qubit % 64);
                 if (!(result.touched[qubit / 64] & mask))
-                    result.finishing[index] |= static_cast<unsigned char>(1u << bit);
+                    result.finishing[index] |= uint64_t{1} << bit;
                 result.touched[qubit / 64] |= mask;
                 result.width = std::max(result.width, qubit + 1);
             }
@@ -439,10 +509,14 @@ class PathIntegralSimulator
     {
         for (size_t index = 0; index < gates.size(); ++index)
         {
+            // Most gates are not the last to write any qubit: nothing to limit.
+            if (!schedule.finishing[index])
+                continue;
             const auto qubits = GateQubits(gates[index]);
-            for (size_t bit = 0; bit < gates[index].getQubitsNumber(); ++bit)
-                if (opposite.touched[qubits[bit] / 64] & (uint64_t{1} << (qubits[bit] % 64)))
-                    schedule.finishing[index] &= static_cast<unsigned char>(~(1u << bit));
+            size_t bit = 0;
+            for (uint64_t rest = schedule.finishing[index]; rest; rest >>= 1, ++bit)
+                if ((rest & 1) && (opposite.touched[qubits[bit] / 64] & (uint64_t{1} << (qubits[bit] % 64))))
+                    schedule.finishing[index] &= ~(uint64_t{1} << bit);
         }
     }
 
@@ -470,7 +544,8 @@ class PathIntegralSimulator
         for (const auto &gate : source)
         {
             const auto qubits = GateQubits(gate);
-            for (size_t local = 0; local < gate.getQubitsNumber(); ++local)
+            const size_t arity = GateArity(gate, qubits);
+            for (size_t local = 0; local < arity; ++local)
                 ++remaining[qubits[local]];
         }
         std::array<uint64_t, FastVectorBool::MaxWords> varying{};
@@ -481,18 +556,16 @@ class PathIntegralSimulator
             const size_t index = backwards ? source.size() - 1 - step : step;
             const auto &gate = source[index];
             const auto qubits = GateQubits(gate);
-            const Detail::SparseGate transitions =
-                backwards
-                    ? Detail::SparseGate(QC::Gates::AppliedGate<>(gate.getRawOperatorMatrix().transpose(),
-                                                                  gate.getQubit1(), gate.getQubit2(), gate.getQubit3()),
-                                         epsilon)
-                    : Detail::SparseGate(gate, epsilon);
-            bool active = transitions.maxFanout > 1;
-            for (size_t local = 0; local < transitions.arity; ++local)
+            // A backward step applies the transpose: its fanout is read from
+            // the rows of the same matrix or compact operation.
+            const unsigned fanout = Detail::GateFanout(gate, epsilon, backwards);
+            const size_t arity = GateArity(gate, qubits);
+            bool active = fanout > 1;
+            for (size_t local = 0; local < arity; ++local)
                 active = active || bool(varying[qubits[local] / 64] & (uint64_t{1} << (qubits[local] % 64)));
-            if (transitions.maxFanout > 1)
-                fanoutLog += std::log2(double(transitions.maxFanout));
-            for (size_t local = 0; local < transitions.arity; ++local)
+            if (fanout > 1)
+                fanoutLog += std::log2(double(fanout));
+            for (size_t local = 0; local < arity; ++local)
             {
                 const size_t qubit = qubits[local];
                 const uint64_t bit = uint64_t{1} << (qubit % 64);
@@ -502,14 +575,14 @@ class PathIntegralSimulator
                     varying[qubit / 64] &= ~bit;
             }
             const double supportLog = std::min(fanoutLog, double(MaskWeight(varying)));
-            total += std::exp2(std::min(60., supportLog)) * (1. + transitions.arity);
+            total += std::exp2(std::min(60., supportLog)) * (1. + arity);
             work[backwards ? index : index + 1] = total;
         }
         return work;
     }
 
-    size_t GrowthAwareCut(const std::vector<QC::Gates::AppliedGate<>> &source, size_t splitLimit,
-                          size_t legacyCut) const
+    size_t GrowthAwareCut(const std::vector<QC::Gates::AppliedGate<>> &source, const char *branching,
+                          size_t splitLimit, size_t legacyCut) const
     {
         if (source.empty())
             return 0;
@@ -520,7 +593,7 @@ class PathIntegralSimulator
         for (size_t cut = source.size(); cut;)
         {
             --cut;
-            backwardBranches += source[cut].isBranching() ? 1 : 0;
+            backwardBranches += branching[cut] ? 1 : 0;
             if (backwardBranches > splitLimit)
                 break;
             const double candidate = forwardWork[cut] + backwardWork[cut];
@@ -541,13 +614,19 @@ class PathIntegralSimulator
         // behavior of repeated targets by evaluating such circuits forwards.
         for (const auto &gate : source)
         {
-            const auto qubits = GateQubits(gate);
+            if (const Detail::CompactGate *compact = gate.getCompactPayload())
+            {
+                CheckCompactQubits(*compact, FastVectorBool::MaxWords * 64,
+                                   "Path integral gate qubit exceeds the state capacity");
+                continue;
+            }
+            const std::array<size_t, 3> qubits = {gate.getQubit1(), gate.getQubit2(), gate.getQubit3()};
             const size_t arity = gate.getQubitsNumber();
             if (!arity || arity > 3)
-                throw std::invalid_argument("Path integral gates must act on one to three qubits");
+                throw std::invalid_argument("Path integral dense gates must act on one to three qubits");
             const auto &matrix = gate.getRawOperatorMatrix();
             const size_t dimension = size_t{1} << arity;
-            if (matrix.rows() != dimension || matrix.cols() != dimension)
+            if (static_cast<size_t>(matrix.rows()) != dimension || static_cast<size_t>(matrix.cols()) != dimension)
                 throw std::invalid_argument("Invalid path integral gate dimensions");
             for (size_t bit = 0; bit < arity; ++bit)
             {
@@ -562,24 +641,39 @@ class PathIntegralSimulator
         size_t gatesAdded = 0;
         if (splitLimit)
         {
+            // Whether a gate branches is read from its matrix once, not again
+            // for every pass over the circuit.
+            std::array<char, 64> fewFlags;
+            std::vector<char> manyFlags;
+            if (source.size() > fewFlags.size())
+                manyFlags.resize(source.size());
+            char *const branching = manyFlags.empty() ? fewFlags.data() : manyFlags.data();
             size_t doublings = 0;
-            for (const auto &gate : source)
-                doublings += gate.isBranching() ? 1 : 0;
+            for (size_t index = 0; index < source.size(); ++index)
+            {
+                branching[index] = source[index].isBranching() ? 1 : 0;
+                doublings += branching[index];
+            }
             const size_t halfDoublings = doublings / 2;
             doublings = 0;
-            for (auto it = source.rbegin(); it != source.rend(); ++it)
+            for (size_t index = source.size(); index--;)
             {
-                if (it->isBranching() && (++doublings > splitLimit || doublings > halfDoublings))
+                if (branching[index] && (++doublings > splitLimit || doublings > halfDoublings))
                     break;
                 ++gatesAdded;
             }
             if (growthAware)
-                gatesAdded = source.size() - GrowthAwareCut(source, splitLimit, source.size() - gatesAdded);
+                gatesAdded =
+                    source.size() - GrowthAwareCut(source, branching, splitLimit, source.size() - gatesAdded);
+            nextBack.reserve(gatesAdded);
             for (size_t index = source.size(); index > source.size() - gatesAdded;)
             {
                 const auto &gate = source[--index];
-                nextBack.emplace_back(gate.getRawOperatorMatrix().transpose(), gate.getQubit1(), gate.getQubit2(),
-                                      gate.getQubit3());
+                if (gate.getCompactPayload())
+                    nextBack.push_back(TransposedGate(gate));
+                else
+                    nextBack.emplace_back(gate.getRawOperatorMatrix().transpose(), gate.getQubit1(), gate.getQubit2(),
+                                          gate.getQubit3());
             }
         }
         std::vector<QC::Gates::AppliedGate<>> nextCircuit(source.begin(), source.end() - gatesAdded);
@@ -597,12 +691,19 @@ class PathIntegralSimulator
             intermediateAmplitudes.clear();
     }
 
-    static void ConstrainRows(Detail::SparseGate &gate, unsigned mask, const FastVectorBool &endpoint)
+    // The bits that the rows of a step must have at the positions of `mask`.
+    static unsigned RequiredRow(const Detail::SparseGate &gate, unsigned mask, const FastVectorBool &endpoint)
     {
         unsigned value = 0;
         for (unsigned bit = 0; bit < gate.arity; ++bit)
             if ((mask & (1u << bit)) && endpoint.get(gate.qubits[bit]))
                 value |= 1u << bit;
+        return value;
+    }
+
+    static void ConstrainRows(Detail::SparseGate &gate, unsigned mask, const FastVectorBool &endpoint)
+    {
+        const unsigned value = RequiredRow(gate, mask, endpoint);
         gate.maxFanout = 0;
         for (unsigned column = 0; column < (1u << gate.arity); ++column)
         {
@@ -619,14 +720,22 @@ class PathIntegralSimulator
     }
 
     void PropagateStepConstrained(const QC::Gates::AppliedGate<> &gate, AmplitudeMap &currentAmplitudes,
-                                  unsigned fixedRows, const FastVectorBool *endpoint)
+                                  uint64_t fixedRows, const FastVectorBool *endpoint)
     {
         if (currentAmplitudes.empty())
         {
             scratchAmplitudes.ReleaseIfOversized(0, currentAmplitudes.QubitCount());
             return;
         }
+        if (const Detail::CompactGate *compact = gate.getCompactPayload())
+            CheckCompactQubits(*compact, currentAmplitudes.QubitCount(),
+                               "Path integral gate qubit is outside the register");
         Detail::SparseGate transitions(gate, epsilon);
+        if (transitions.structured)
+        {
+            PropagateStructured(transitions, currentAmplitudes, fixedRows, endpoint);
+            return;
+        }
         currentAmplitudes.CompactIfSparse();
         for (unsigned i = 0; i < transitions.arity; ++i)
             if (transitions.qubits[i] >= currentAmplitudes.QubitCount())
@@ -634,23 +743,29 @@ class PathIntegralSimulator
         // A freshly compiled table is already query-local: constrain it in
         // place rather than copying the immutable-cache representation.
         if (fixedRows)
-            ConstrainRows(transitions, fixedRows, *endpoint);
+            ConstrainRows(transitions, static_cast<unsigned>(fixedRows), *endpoint);
         PropagateTransitions(transitions, currentAmplitudes);
     }
 
-    void PropagateCompiled(const Detail::SparseGate &transitions, AmplitudeMap &currentAmplitudes, unsigned fixedRows,
+    void PropagateCompiled(const Detail::SparseGate &transitions, AmplitudeMap &currentAmplitudes, uint64_t fixedRows,
                            const FastVectorBool *endpoint)
     {
         if (currentAmplitudes.empty())
             return;
+        if (transitions.structured)
+        {
+            PropagateStructured(transitions, currentAmplitudes, fixedRows, endpoint);
+            return;
+        }
         currentAmplitudes.CompactIfSparse();
         for (unsigned i = 0; i < transitions.arity; ++i)
             if (transitions.qubits[i] >= currentAmplitudes.QubitCount())
                 throw std::out_of_range("Path integral gate qubit is outside the register");
         if (fixedRows)
         {
-            auto constrained = transitions;
-            ConstrainRows(constrained, fixedRows, *endpoint);
+            // Only the transitions that survive are copied from the cached table.
+            const unsigned mask = static_cast<unsigned>(fixedRows);
+            const Detail::SparseGate constrained(transitions, mask, RequiredRow(transitions, mask, *endpoint));
             PropagateTransitions(constrained, currentAmplitudes);
         }
         else
@@ -679,6 +794,166 @@ class PathIntegralSimulator
             break;
         }
         scratchAmplitudes.ReleaseIfOversized(currentAmplitudes.size(), currentAmplitudes.QubitCount());
+    }
+
+    static const uint64_t *StateWords(const FastVectorBool &state)
+    {
+        return state.getWords().data();
+    }
+
+    static const uint64_t *StateWords(const StateView &state)
+    {
+        return state.getWords();
+    }
+
+    // One column of a compact operation: the coefficients that multiply an
+    // input state with its target set to 0 and to 1 (a diagonal has one
+    // coefficient). Everything that does not depend on the state is read once;
+    // the selector is gathered word by word and a control pattern is compared
+    // word by word. `table` supplies the cosines and sines of a multiplexer
+    // when they are kept with its tables; without it each visited angle is
+    // evaluated.
+    struct CompactColumn
+    {
+        using Complex = std::complex<double>;
+        using Kind = Gates::StructuredGate::Kind;
+
+        CompactColumn(const Detail::CompactGate &operation, const Gates::StructuredRotationCoefficients *table)
+            : gate(operation), kind(operation.OperationKind()), axis(operation.Axis()),
+              conjugated(operation.conjugated), diagonal(operation.core->operation.diagonal.data()),
+              angles(operation.core->operation.angles.data()),
+              coefficients(table ? table->data() : nullptr), targetWord(operation.target / 64),
+              targetMask(uint64_t{1} << (operation.target % 64))
+        {
+        }
+
+        std::array<Complex, 2> operator()(const uint64_t *words) const noexcept
+        {
+            if (kind == Kind::Diagonal)
+            {
+                const Complex value = diagonal[gate.selector.Gather(words)];
+                return {conjugated ? std::conj(value) : value, 0.};
+            }
+            const unsigned column = (words[targetWord] & targetMask) ? 1 : 0;
+            if (kind == Kind::Controlled)
+            {
+                if (!gate.selector.Matches(words))
+                    return column ? std::array<Complex, 2>{0., 1.} : std::array<Complex, 2>{1., 0.};
+                return {gate.matrix[column], gate.matrix[2 + column]};
+            }
+            const size_t selector = gate.selector.Gather(words);
+            double c, s;
+            if (coefficients)
+            {
+                c = coefficients[selector][0];
+                s = coefficients[selector][1];
+            }
+            else
+                detail::RotationHalfAngleCosSin(angles[selector], c, s);
+            if (conjugated)
+                s = -s;
+            if (axis == Gates::RotationAxis::X)
+                return column ? std::array<Complex, 2>{Complex(0., -s), c} : std::array<Complex, 2>{c, Complex(0., -s)};
+            if (axis == Gates::RotationAxis::Y)
+                return column ? std::array<Complex, 2>{-s, c} : std::array<Complex, 2>{c, s};
+            return column ? std::array<Complex, 2>{0., Complex(c, s)} : std::array<Complex, 2>{Complex(c, -s), 0.};
+        }
+
+        const Detail::CompactGate &gate;
+        const Kind kind;
+        const Gates::RotationAxis axis;
+        const bool conjugated;
+        const Complex *const diagonal;
+        const double *const angles;
+        const std::array<double, 2> *const coefficients;
+        const size_t targetWord;
+        const uint64_t targetMask;
+    };
+
+    template <class State>
+    static bool StructuredEndpointMatches(const Detail::CompactGate &gate, const State &state, uint64_t fixedRows,
+                                          const FastVectorBool *endpoint, unsigned targetValue)
+    {
+        const bool diagonal = gate.OperationKind() == Gates::StructuredGate::Kind::Diagonal;
+        for (size_t bit = 0; fixedRows; ++bit, fixedRows >>= 1)
+        {
+            if (!(fixedRows & 1))
+                continue;
+            const size_t qubit = gate.Qubit(bit);
+            const bool value = !diagonal && bit == 0 ? targetValue != 0 : state.get(qubit);
+            if (value != endpoint->get(qubit))
+                return false;
+        }
+        return true;
+    }
+
+    void PropagateStructured(const Detail::SparseGate &transitions, AmplitudeMap &current, uint64_t fixedRows,
+                             const FastVectorBool *endpoint)
+    {
+        const Detail::CompactGate &gate = *transitions.structured;
+        const bool diagonal = gate.OperationKind() == Gates::StructuredGate::Kind::Diagonal;
+        // The cosines and sines of a multiplexer are computed once and kept
+        // with its tables as soon as a frontier is broad enough to visit a
+        // good part of them; a narrower frontier evaluates only the angles it
+        // meets. Any allocation happens here, before the map changes.
+        const Gates::StructuredRotationCoefficients *table = nullptr;
+        if (gate.OperationKind() == Gates::StructuredGate::Kind::MultiplexedRotation)
+            table = gate.Coefficients(gate.fewAngles || current.size() > gate.TableSize());
+        const CompactColumn column(gate, table);
+        current.CompactIfSparse();
+        if (transitions.diagonal || transitions.injective)
+        {
+            // Only a key that really changes invalidates the index: a
+            // controlled permutation whose controls no present state
+            // satisfies leaves it as it is.
+            bool changed = false;
+            const unsigned rowCount = diagonal ? 1U : 2U;
+            current.TransformMoved(changed, [&](Detail::MutableStateView &state,
+                                                std::complex<double> &amplitude) noexcept {
+                if (std::norm(amplitude) < epsilon)
+                    return false;
+                const auto values = column(state.getWords());
+                for (unsigned row = 0; row < rowCount; ++row)
+                    if (Detail::RetainGateCoefficient(values[row], epsilon))
+                    {
+                        if (fixedRows && !StructuredEndpointMatches(gate, state, fixedRows, endpoint, row))
+                            return false;
+                        if (!diagonal && state.get(gate.target) != (row != 0))
+                        {
+                            state.set(gate.target, row != 0);
+                            changed = true;
+                        }
+                        amplitude *= values[row];
+                        return true;
+                    }
+                return false;
+            });
+        }
+        else
+        {
+            auto &next = scratchAmplitudes;
+            next.PrepareOutput(current.QubitCount(),
+                               transitions.ReserveSize(current.size(), current.QubitCount(), next.max_size()));
+            std::array<uint64_t, FastVectorBool::MaxWords> words;
+            for (const auto &item : current)
+            {
+                if (std::norm(item.second) < epsilon)
+                    continue;
+                const auto values = column(item.first.getWords());
+                std::copy_n(item.first.getWords(), current.wordCount, words.begin());
+                Detail::MutableStateView state(words.data(), current.QubitCount());
+                for (unsigned row = 0; row < 2; ++row)
+                    if (Detail::RetainGateCoefficient(values[row], epsilon) &&
+                        (!fixedRows || StructuredEndpointMatches(gate, item.first, fixedRows, endpoint, row)))
+                    {
+                        state.set(gate.target, row != 0);
+                        next[state] += values[row] * item.second;
+                    }
+            }
+            current.swap(next);
+            current.CompactIfSparse();
+        }
+        scratchAmplitudes.ReleaseIfOversized(current.size(), current.QubitCount());
     }
 
   private:
@@ -752,7 +1027,7 @@ class PathIntegralSimulator
                 for (unsigned t = 0; t < gate.counts[column]; ++t)
                 {
                     const unsigned row = gate.rows[column][t];
-                    output[row] += gate.values[column][t] * amplitude;
+                    output[row] += gate.Value(column, t) * amplitude;
                     retainedRows |= 1u << row;
                 }
             }
@@ -774,18 +1049,29 @@ class PathIntegralSimulator
     {
         if (gate.diagonal || gate.injective)
         {
-            current.Transform(!gate.diagonal,
-                              [&](Detail::MutableStateView &state, std::complex<double> &amplitude) noexcept {
-                                  if (std::norm(amplitude) < epsilon)
-                                      return false;
-                                  const unsigned column = gate.Column<Arity>(state);
-                                  if (!gate.counts[column])
-                                      return false;
-                                  if (!gate.diagonal)
-                                      gate.SetRow<Arity>(state, gate.rows[column][0]);
-                                  amplitude = gate.values[column][0] * amplitude;
-                                  return true;
-                              });
+            // A permutation rewrites a key only where its row differs from the
+            // column. When no present state is moved (the controls of a
+            // controlled gate are nowhere satisfied) the index stays valid.
+            bool changed = false;
+            current.TransformMoved(changed, [&](Detail::MutableStateView &state,
+                                                std::complex<double> &amplitude) noexcept {
+                if (std::norm(amplitude) < epsilon)
+                    return false;
+                const unsigned column = gate.Column<Arity>(state);
+                if (!gate.counts[column])
+                    return false;
+                if (!gate.diagonal)
+                {
+                    const unsigned row = gate.rows[column][0];
+                    if (row != column)
+                    {
+                        gate.SetRow<Arity>(state, row);
+                        changed = true;
+                    }
+                }
+                amplitude = gate.Value(column, 0) * amplitude;
+                return true;
+            });
             return;
         }
         unsigned expansion = 0;
@@ -812,7 +1098,7 @@ class PathIntegralSimulator
             for (unsigned t = 0; t < gate.counts[column]; ++t)
             {
                 gate.SetRow<Arity>(state, gate.rows[column][t]);
-                next[state] += gate.values[column][t] * item.second;
+                next[state] += gate.Value(column, t) * item.second;
             }
         }
         current.swap(next);
@@ -1036,7 +1322,62 @@ class PathIntegralSimulator
     }
 
     // TODO: this can be parallelized!
-    template <unsigned Arity>
+    template <class Continue>
+    std::complex<double> PropagateStructuredQuery(const Detail::CompactGate &gate, const FastVectorBool &current,
+                                                  const FastVectorBool &end, uint64_t fixedRows, const Continue &next)
+    {
+        using Kind = Gates::StructuredGate::Kind;
+        using Complex = std::complex<double>;
+        // One state at a time: only what its kind of operation needs is read.
+        const uint64_t *const words = StateWords(current);
+        const Kind kind = gate.OperationKind();
+        if (kind == Kind::Diagonal)
+        {
+            const Complex value = gate.Diagonal(gate.selector.Gather(words));
+            if (!Detail::RetainGateCoefficient(value, epsilon) ||
+                (fixedRows && !StructuredEndpointMatches(gate, current, fixedRows, &end, 0)))
+                return 0.;
+            return value * next(current);
+        }
+        const unsigned column = current.get(gate.target) ? 1 : 0;
+        std::array<Complex, 2> values;
+        if (kind == Kind::Controlled)
+        {
+            if (gate.selector.Matches(words))
+                values = {gate.matrix[column], gate.matrix[2 + column]};
+            else
+                values = column ? std::array<Complex, 2>{0., 1.} : std::array<Complex, 2>{1., 0.};
+        }
+        else
+        {
+            // The cosines and sines are read from the table kept with the gate:
+            // a short one is built at its first use, a long one when a compiled
+            // circuit or a broad frontier asked for it.
+            const auto block = gate.Block(gate.selector.Gather(words), gate.Coefficients(gate.fewAngles));
+            values = {block[column], block[2 + column]};
+        }
+        Complex result = 0.;
+        for (unsigned row = 0; row < 2; ++row)
+            if (Detail::RetainGateCoefficient(values[row], epsilon) &&
+                (!fixedRows || StructuredEndpointMatches(gate, current, fixedRows, &end, row)))
+            {
+                // The target keeps its value: the state is passed on as it is.
+                if (row == column)
+                    result += values[row] * next(current);
+                else
+                {
+                    auto state = current;
+                    state.set(gate.target, row != 0);
+                    result += values[row] * next(state);
+                }
+            }
+        return result;
+    }
+
+    // The recursion over compiled tables exists twice: for a circuit whose
+    // gates all list their transitions it is the plain recursion, without a
+    // test for compact operations at every step.
+    template <unsigned Arity, bool Compact>
     std::complex<double> PropagateCachedRows(const FastVectorBool &currentState, const FastVectorBool &endState,
                                              size_t gateIndex, const std::vector<Detail::SparseGate> &gates,
                                              unsigned fixedRows, unsigned requiredRow)
@@ -1051,18 +1392,25 @@ class PathIntegralSimulator
                 continue;
             auto nextState = currentState;
             gate.SetRow<Arity>(nextState, row);
-            amplitude += gate.values[column][transition] * PropagateCached(nextState, endState, gateIndex + 1, gates);
+            amplitude += gate.Value(column, transition) *
+                         PropagateCached<Compact>(nextState, endState, gateIndex + 1, gates);
         }
         return amplitude;
     }
 
+    template <bool Compact>
     std::complex<double> PropagateCached(const FastVectorBool &currentState, const FastVectorBool &endState,
                                          size_t gateIndex, const std::vector<Detail::SparseGate> &gates)
     {
         if (gateIndex == gates.size())
             return currentState == endState ? 1. : 0.;
         const auto &gate = gates[gateIndex];
-        const unsigned fixedRows = forwardTouches.finishing[gateIndex];
+        if (Compact && gate.structured)
+            return PropagateStructuredQuery(*gate.structured, currentState, endState,
+                                            forwardTouches.finishing[gateIndex], [&](const FastVectorBool &state) {
+                                                return PropagateCached<Compact>(state, endState, gateIndex + 1, gates);
+                                            });
+        const unsigned fixedRows = static_cast<unsigned>(forwardTouches.finishing[gateIndex]);
         unsigned requiredRow = 0;
         for (unsigned bit = 0; bit < gate.arity; ++bit)
             if ((fixedRows & (1u << bit)) && endState.get(gate.qubits[bit]))
@@ -1070,11 +1418,11 @@ class PathIntegralSimulator
         switch (gate.arity)
         {
         case 1:
-            return PropagateCachedRows<1>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
+            return PropagateCachedRows<1, Compact>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
         case 2:
-            return PropagateCachedRows<2>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
+            return PropagateCachedRows<2, Compact>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
         default:
-            return PropagateCachedRows<3>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
+            return PropagateCachedRows<3, Compact>(currentState, endState, gateIndex, gates, fixedRows, requiredRow);
         }
     }
 
@@ -1084,6 +1432,12 @@ class PathIntegralSimulator
             return currentState == endState ? std::complex<double>(1., 0.) : std::complex<double>(0., 0.);
 
         const auto &gate = circuit[gateIndex];
+        // A dense gate pays one inline test of its payload pointer here; its
+        // matrix, arity and qubits are then read as before.
+        if (const Detail::CompactGate *compact = gate.getCompactPayload())
+            return PropagateStructuredQuery(
+                *compact, currentState, endState, forwardTouches.finishing[gateIndex],
+                [&](const FastVectorBool &state) { return Propagate(state, endState, gateIndex + 1); });
         const auto &U = gate.getRawOperatorMatrix();
         const size_t gateQubits = gate.getQubitsNumber();
 
@@ -1092,8 +1446,8 @@ class PathIntegralSimulator
         // Previously this used a global mismatch count against the sum of
         // remaining gate arities. Only these final writes matter: after this
         // gate, no remaining gate can repair a mismatching finished bit.
-        const unsigned fixedRows = forwardTouches.finishing[gateIndex];
-        const auto qubits = GateQubits(gate);
+        const unsigned fixedRows = static_cast<unsigned>(forwardTouches.finishing[gateIndex]);
+        const std::array<size_t, 3> qubits = {gate.getQubit1(), gate.getQubit2(), gate.getQubit3()};
         unsigned requiredRow = 0;
         for (size_t bit = 0; bit < gateQubits; ++bit)
             if ((fixedRows & (1u << bit)) && endState.get(qubits[bit]))
@@ -1113,8 +1467,14 @@ class PathIntegralSimulator
                 if ((static_cast<unsigned>(row) & fixedRows) != requiredRow)
                     continue;
                 const std::complex<double> val = U(row, col);
-                if (std::norm(val) > epsilon)
+                if (Detail::RetainGateCoefficient(val, epsilon))
                 {
+                    // A diagonal entry leaves the state as it is: nothing to copy.
+                    if (row == col)
+                    {
+                        amplitude += val * Propagate(currentState, endState, gateIndex + 1);
+                        continue;
+                    }
                     auto nextState = currentState;
                     nextState.set(qubit, row == 1);
 
@@ -1136,8 +1496,13 @@ class PathIntegralSimulator
                 if ((static_cast<unsigned>(row) & fixedRows) != requiredRow)
                     continue;
                 const std::complex<double> val = U(row, col);
-                if (std::norm(val) > epsilon)
+                if (Detail::RetainGateCoefficient(val, epsilon))
                 {
+                    if (row == col)
+                    {
+                        amplitude += val * Propagate(currentState, endState, gateIndex + 1);
+                        continue;
+                    }
                     auto nextState = currentState;
                     nextState.set(qubit1, (row & 1) == 1);
                     nextState.set(qubit2, (row & 2) == 2);
@@ -1162,8 +1527,13 @@ class PathIntegralSimulator
                 if ((static_cast<unsigned>(row) & fixedRows) != requiredRow)
                     continue;
                 const std::complex<double> val = U(row, col);
-                if (std::norm(val) > epsilon)
+                if (Detail::RetainGateCoefficient(val, epsilon))
                 {
+                    if (row == col)
+                    {
+                        amplitude += val * Propagate(currentState, endState, gateIndex + 1);
+                        continue;
+                    }
                     auto nextState = currentState;
                     nextState.set(qubit1, (row & 1) == 1);
                     nextState.set(qubit2, (row & 2) == 2);

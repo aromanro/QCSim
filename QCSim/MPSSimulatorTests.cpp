@@ -9,6 +9,8 @@
 #include "ProductSwapRegressionTests.h"
 #include "QubitRegister.h"
 #include "TensorNetworkRegressionTests.h"
+#include "ThreeQubitTensorRegressionTests.h"
+#include "MPSThreeSiteAuditTests.h"
 
 #include <vector>
 
@@ -2736,7 +2738,8 @@ bool MPSSimulatorTests()
     }
     */
 
-    return QC::ProductSwapRegression::Run(false) && ObservableAndSummaryRegressionTestMPS() &&
+    return QC::MPSThreeSiteAudit::Run() && QC::ThreeQubitTensorRegression::Run(false) &&
+           QC::ProductSwapRegression::Run(false) && ObservableAndSummaryRegressionTestMPS() &&
            KrausGaugeModeRegressionTestMPS() && MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() &&
            WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() &&
            checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() &&

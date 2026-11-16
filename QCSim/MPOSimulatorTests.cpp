@@ -25,6 +25,7 @@
 #include "ProductSwapRegressionTests.h"
 #include "QubitRegister.h"
 #include "TensorNetworkRegressionTests.h"
+#include "ThreeQubitTensorRegressionTests.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -3903,6 +3904,10 @@ static bool LongMixedChainScaleTestMPO()
     mpo.ApplyGate(cnot, nrQubits - 1, 0); // routed through the whole chain
     if (!check(mpo, "Routed CNOT"))
         return false;
+    mpo.ApplyGate(QC::Gates::AppliedGate<>(QC::TensorNetworkRegression::Unitary(8, 315)), nrQubits - 1, nrQubits / 2,
+                  0);
+    if (!check(mpo, "Routed three-qubit gate with a scale exponent"))
+        return false;
     const Eigen::MatrixXcd ends = mpo.PartialTrace({0, nrQubits - 1});
     for (int d = 0; d < 4; ++d)
         if (std::abs(ends(d, d) - 0.25) > 1E-9)
@@ -4139,8 +4144,9 @@ bool MPOSimulatorTests()
     mpoNextSamplingSeed = seed;
     std::cout << "Circuit seed (32 bits): " << circuitSeed << "; starting sampling seed (64 bits): " << seed
               << " (override with QCSIM_MPO_TEST_SEED)" << std::endl;
-    return QC::ProductSwapRegression::Run(true) && MPOTestSeedParsing() && ObservableAndSummaryRegressionTestMPO() &&
-           QC::MPORegression::Run() && ValidationAndStateCompatibilityTestMPO() && InitialQubitsMapTestMPO() &&
+    return QC::ThreeQubitTensorRegression::Run(true) && QC::ProductSwapRegression::Run(true) && MPOTestSeedParsing() &&
+           ObservableAndSummaryRegressionTestMPO() && QC::MPORegression::Run() &&
+           ValidationAndStateCompatibilityTestMPO() && InitialQubitsMapTestMPO() &&
            MixtureValidationAndScalingTestMPO() && WideBasisInitializationTestMPO() &&
            KrausBondLimitAndLocalityTestMPO() && CollapseNormalizationAndAtomicFailureTestMPO() &&
            OneAndTwoQubitGatesTestMPO() && NonAdjacentGatesTestMPO() && NumericalRankStabilityTestMPO() &&

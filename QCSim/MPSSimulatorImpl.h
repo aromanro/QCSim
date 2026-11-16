@@ -1,7 +1,10 @@
 #pragma once
 
 #include "MPSSimulatorBase.h"
+#include "StructuredGateOperations.h"
+#include "TableTrain.h"
 #include "TensorPauli.h"
+#include "ThreeSiteTensor.h"
 
 #include <array>
 #include <iomanip>
@@ -15,7 +18,8 @@ namespace QC
 namespace TensorNetworks
 {
 
-class MPSSimulatorImpl : public MPSSimulatorBase
+class MPSSimulatorImpl : public MPSSimulatorBase,
+                         public StructuredGateOperations<MPSSimulatorImpl, MPSSimulatorInterface::MatrixClass>
 {
   public:
     friend class MPSSimulator;
@@ -32,27 +36,250 @@ class MPSSimulatorImpl : public MPSSimulatorBase
 
     void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) override
     {
-        ApplyGate(gate, gate.getQubit1(), gate.getQubit2());
+        if (const auto *compact = gate.getStructuredGate())
+            ApplyStructuredGate(*compact);
+        else if (gate.getQubitsNumber() <= 2)
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2());
+        else
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
     }
 
-    // three qubit gates not supported, convert them to two qubit gates
-    // also two qubit gates need to act on adjacent qubits
+    // The largest rank along the chain that a wide diagonal or multiplexed table may have
+    // here: between two sites the tensors grow by that factor before they are cut again.
+    static constexpr IndexType maxChainOperatorRank = 64;
+
+    // The chain operator of a diagonal or multiplexed gate on more than three qubits (see
+    // TableTrain.h). siteOf gives the site of a qubit. A diagonal must be unitary, as every
+    // gate applied in place on the canonical path.
+    template <class SiteOf>
+    static ChainOperator WideTableOperator(const Gates::StructuredGate &gate, const SiteOf &siteOf)
+    {
+        if (gate.kind == Gates::StructuredGate::Kind::Diagonal)
+            for (const auto &value : gate.diagonal)
+                if (!(std::abs(std::norm(value) - 1.) <= 1E-12))
+                    throw std::invalid_argument("MPS applies a diagonal on more than three qubits only when it is "
+                                                "unitary");
+        return MakeChainOperator(gate, siteOf, maxChainOperatorRank);
+    }
+
+    // A compact gate. A multi-controlled one-qubit unitary is applied in place for any number
+    // of controls at any sites (see ApplyMultiControlledSites). A diagonal or a multiplexed
+    // rotation on more than three qubits is applied in place as the chain operator of its
+    // table, whose cost is set by how strongly the table couples the chain (ApplyChainOperator).
+    // Every other compact gate is expanded to its matrix, on at most three qubits, which must
+    // then be consecutive sites as for every local gate here.
+    void ApplyStructuredGate(const Gates::StructuredGate &gate)
+    {
+        gate.Validate(gammas.size());
+        if (gate.kind == Gates::StructuredGate::Kind::Controlled && !gate.qubits.empty())
+        {
+            MatrixClass u(2, 2);
+            u << gate.matrix[0], gate.matrix[1], gate.matrix[2], gate.matrix[3];
+            if (gate.Arity() > 3 || ThreeSiteIsUnitary(u))
+            {
+                std::vector<IndexType> controls;
+                std::vector<bool> values;
+                for (size_t k = 0; k < gate.qubits.size(); ++k)
+                {
+                    controls.push_back(static_cast<IndexType>(gate.qubits[k]));
+                    values.push_back(gate.controlState == std::numeric_limits<size_t>::max() ||
+                                     ((gate.controlState >> k) & 1));
+                }
+                ApplyMultiControlledSites(u, static_cast<IndexType>(gate.target), controls, values);
+                return;
+            }
+        }
+        if (gate.Arity() > 3)
+        {
+            if (gate.kind == Gates::StructuredGate::Kind::Controlled)
+                throw std::invalid_argument("MPS applies a multi-controlled gate in place only for a unitary target");
+            ApplyChainOperator(WideTableOperator(gate, [](size_t qubit) { return static_cast<IndexType>(qubit); }));
+            return;
+        }
+        const auto qubits = gate.OrderedQubits();
+        if (qubits.empty())
+        {
+            // A table of one entry is a scalar; the normalized state keeps only its phase.
+            if (gate.diagonal[0] == std::complex<double>(0.))
+                throw std::domain_error("A zero operator cannot produce a normalized MPS");
+            ApplyGate(Gates::AppliedGate<MatrixClass>(
+                MatrixClass((gate.diagonal[0] / std::abs(gate.diagonal[0])) * MatrixClass::Identity(2, 2)), 0));
+            return;
+        }
+        ApplyGate(Gates::AppliedGate<MatrixClass>(gate.DenseMatrix<MatrixClass>(3), qubits[0],
+                                                  qubits.size() > 1 ? qubits[1] : 0,
+                                                  qubits.size() > 2 ? qubits[2] : 0));
+    }
+
+    // A unitary given as a chain of site matrices (see TableTrain.h), from its first site to
+    // its last. Each tensor takes the matrices of its site, which multiplies its two bonds by
+    // the ranks of the operator; then, as for a multi-controlled gate, one sweep back makes
+    // those sites orthonormal from the right and one sweep forward cuts every bond again, by
+    // its left lambda and with the limits the user has set. Nothing outside the sites changes.
+    void ApplyChainOperator(const ChainOperator &chain)
+    {
+        const IndexType first = chain.first, last = first + static_cast<IndexType>(chain.sites.size()) - 1;
+        if (chain.sites.empty() || first < 0 || last >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        // The sweeps below work on the canonical path: explicit environments end here.
+        EnsureCanonical();
+        for (IndexType site = first; site <= last; ++site)
+        {
+            const ChainOperator::Site &operators = chain.sites[static_cast<size_t>(site - first)];
+            IndexType leftRank = 0, rightRank = 0;
+            for (const auto &part : operators)
+                if (part.size())
+                {
+                    leftRank = part.rows();
+                    rightRank = part.cols();
+                }
+            const GammaType &gamma = gammas[site];
+            const IndexType L = gamma.dimension(0), R = gamma.dimension(2);
+            GammaType product(L * leftRank, 2, R * rightRank);
+            product.setZero();
+            for (IndexType out = 0; out < 2; ++out)
+                for (IndexType in = 0; in < 2; ++in)
+                {
+                    const auto &part = operators[static_cast<size_t>(2 * out + in)];
+                    if (!part.size())
+                        continue;
+                    for (IndexType b = 0; b < rightRank; ++b)
+                        for (IndexType a = 0; a < leftRank; ++a)
+                        {
+                            const std::complex<double> factor = part(a, b);
+                            if (factor == std::complex<double>(0.))
+                                continue;
+                            for (IndexType r = 0; r < R; ++r)
+                                for (IndexType l = 0; l < L; ++l)
+                                    product(a * L + l, out, b * R + r) += factor * gamma(l, in, r);
+                        }
+                }
+            gammas[site] = std::move(product);
+            if (site < last)
+            {
+                lambdas[site] = LambdaType::Ones(gammas[site].dimension(2));
+                bondDimensions.Update(site, lambdas[site].size());
+            }
+        }
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            for (IndexType site = last; site > first; --site)
+                RightCanonicalizeSite(site);
+            for (IndexType bond = first; bond < last; ++bond)
+            {
+                const MatrixClass theta = ReshapeTheta(ContractTwoQubits(bond));
+                DecomposeAndSetGammasImpl(theta, bond, bond + 1, true);
+            }
+        });
+    }
+
+    // A one-qubit unitary on `target`, applied where every control holds its value:
+    // O = 1 + (product of the control projectors) (x) (U - 1). The two terms make O an operator
+    // of bond dimension two along the chain, whatever the number of controls and wherever they
+    // sit, so it is applied in place: no swaps, no ancillas and no 2^k matrix. Between the first
+    // and the last of its sites each tensor becomes the direct sum of what the two terms make of
+    // it; one sweep back makes those sites orthonormal from the right and one sweep forward cuts
+    // every bond again, by its left lambda and with the limits the user has set, as a two-qubit
+    // gate does. A unitary leaves the Schmidt values of the bonds outside its sites as they were,
+    // so nothing outside is touched. The sites are positions in the chain.
+    void ApplyMultiControlledSites(const MatrixClass &u, IndexType target, const std::vector<IndexType> &controls,
+                                   const std::vector<bool> &controlValues)
+    {
+        const IndexType sites = static_cast<IndexType>(gammas.size());
+        if (u.rows() != 2 || u.cols() != 2 || !u.allFinite())
+            throw std::invalid_argument("A multi-controlled target matrix must be a finite 2x2 matrix");
+        if (!ThreeSiteIsUnitary(u))
+            throw std::invalid_argument("MPS applies a multi-controlled gate in place only for a unitary target");
+        if (controls.size() != controlValues.size())
+            throw std::invalid_argument("Each control needs its value");
+        if (target < 0 || target >= sites)
+            throw std::invalid_argument("Qubit index out of bounds");
+        // -1: the operator is the identity there; 0 or 1: a control with that value; 2: the target
+        std::vector<int> role(static_cast<size_t>(sites), -1);
+        role[target] = 2;
+        IndexType first = target, last = target;
+        for (size_t k = 0; k < controls.size(); ++k)
+        {
+            const IndexType control = controls[k];
+            if (control < 0 || control >= sites)
+                throw std::invalid_argument("Qubit index out of bounds");
+            if (role[control] != -1)
+                throw std::invalid_argument("Controls must be distinct and differ from the target");
+            role[control] = controlValues[k] ? 1 : 0;
+            first = std::min(first, control);
+            last = std::max(last, control);
+        }
+        if (controls.empty())
+        {
+            if (gaugeForReads)
+                LeaveGaugeMode();
+            ApplySingleQubitGate(gammas[target], u);
+            return;
+        }
+        if (u.isIdentity(0.))
+            return;
+
+        // The sweeps below work on the canonical path: explicit environments end here.
+        EnsureCanonical();
+        const MatrixClass difference = u - MatrixClass::Identity(2, 2);
+        for (IndexType site = first; site <= last; ++site)
+        {
+            const GammaType &gamma = gammas[site];
+            const IndexType L = gamma.dimension(0), R = gamma.dimension(2);
+            const IndexType rowOffset = site == first ? 0 : L, colOffset = site == last ? 0 : R;
+            GammaType sum(site == first ? L : 2 * L, 2, site == last ? R : 2 * R);
+            sum.setZero();
+            for (IndexType r = 0; r < R; ++r)
+                for (IndexType p = 0; p < 2; ++p)
+                    for (IndexType l = 0; l < L; ++l)
+                    {
+                        const std::complex<double> value = gamma(l, p, r);
+                        // the first term: the tensor as it is
+                        sum(l, p, r) = value;
+                        // the second: the projector, U - 1, or the tensor again
+                        if (role[site] == 2)
+                        {
+                            sum(rowOffset + l, 0, colOffset + r) += difference(0, p) * value;
+                            sum(rowOffset + l, 1, colOffset + r) += difference(1, p) * value;
+                        }
+                        else if (role[site] == -1 || role[site] == p)
+                            sum(rowOffset + l, p, colOffset + r) = value;
+                    }
+            gammas[site] = std::move(sum);
+            if (site < last)
+            {
+                lambdas[site] = LambdaType::Ones(gammas[site].dimension(2));
+                bondDimensions.Update(site, lambdas[site].size());
+            }
+        }
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            for (IndexType site = last; site > first; --site)
+                RightCanonicalizeSite(site);
+            for (IndexType bond = first; bond < last; ++bond)
+            {
+                const MatrixClass theta = ReshapeTheta(ContractTwoQubits(bond));
+                DecomposeAndSetGammasImpl(theta, bond, bond + 1, true);
+            }
+        });
+    }
+
+    // Two- and three-qubit gates need to act on consecutive sites.
     // don't try to apply a gate that doesn't satisfy these conditions
     // use swap gates to move qubits around
     // this is wrapped up into a higher level simulator that swaps the qubits for you and maps them to minimize swaps
     // so this should not be used directly
     void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) override
     {
-        if (gate.getQubitsNumber() > 2)
-            throw std::invalid_argument("Three qubit gates not supported");
+        const size_t gateQubits = gate.getQubitsNumber();
+        if (gateQubits < 1 || gateQubits > 2)
+            throw std::invalid_argument("This MPS overload requires a one- or two-qubit gate");
         else if ((qubit < 0 || qubit >= static_cast<IndexType>(gammas.size())) ||
-                 (gate.getQubitsNumber() == 2 &&
+                 (gateQubits == 2 &&
                   (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(gammas.size()))))
             throw std::invalid_argument("Qubit index out of bounds");
-        else if (gate.getQubitsNumber() == 2 &&
-                 std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
+        else if (gateQubits == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
             throw std::invalid_argument("Two qubit gates need to act on adjacent qubits");
-        else if (!gate.getRawOperatorMatrix().allFinite())
+        const auto &matrix = gate.getRawOperatorMatrix();
+        if (!matrix.allFinite())
             throw std::invalid_argument("Gate matrix contains a non-finite value");
 
         // Environments kept only for reads (see EnvironmentsForRead) end with them: a gate goes the way it always
@@ -60,16 +287,56 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         if (gaugeForReads)
             LeaveGaugeMode();
 
-        if (gate.getQubitsNumber() == 1)
-            ApplySingleQubitGate(gate, qubit);
+        if (gateQubits == 1)
+            ApplySingleQubitGate(gammas[qubit], matrix);
         else
             ApplyTwoQubitGate(gate, qubit, controllingQubit1);
+    }
+
+    void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
+                   IndexType controllingQubit2) override
+    {
+        if (gate.getQubitsNumber() != 3)
+        {
+            ApplyGate(gate, qubit, controllingQubit1);
+            return;
+        }
+        const auto &matrix = gate.getRawOperatorMatrix();
+        ThreeSite::Validate(matrix, static_cast<IndexType>(gammas.size()), qubit, controllingQubit1, controllingQubit2,
+                            true);
+        const bool unitary = ThreeSite::IsUnitary(matrix);
+        if (unitary)
+            ApplyThreeQubitGate(gate, qubit, controllingQubit1, controllingQubit2, true);
+        else
+        {
+            if ((matrix.array() == std::complex<double>(0.)).all())
+                throw std::domain_error("A zero three-qubit operator cannot produce a normalized MPS");
+            WithThreeSiteRollback(
+                [&]() { ApplyThreeQubitGate(gate, qubit, controllingQubit1, controllingQubit2, false); });
+        }
     }
 
     void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
     {
         for (const auto &gate : gates)
             ApplyGate(gate);
+    }
+
+    // How a unitary three-qubit gate treats a chain whose canonical form earlier cuts have left
+    // approximate. By default it does what a two-qubit gate does: it weighs its two cuts by the lambda
+    // to its left and stays on the canonical path. With `enable` it first brings the environments of
+    // its three sites up to date by QR sweeps and keeps explicit environments afterwards: the cuts are
+    // then the optimal ones for the state as it is, at the price of those sweeps and of slower updates
+    // from there on. On an exact canonical form, and on a chain that already keeps environments, the
+    // two are the same.
+    void setThreeQubitEnvironmentRefresh(bool enable)
+    {
+        refreshThreeSiteEnvironments = enable;
+    }
+
+    bool getThreeQubitEnvironmentRefresh() const
+    {
+        return refreshThreeSiteEnvironments;
     }
 
     // Walks over the chain and, wherever a bond dimension is bigger than the currently set
@@ -747,6 +1014,24 @@ class MPSSimulatorImpl : public MPSSimulatorBase
     }
 
   private:
+    static bool ThreeSiteIsUnitary(const MatrixClass &matrix)
+    {
+        return matrix.allFinite() && (matrix.adjoint() * matrix).isIdentity(1E-12);
+    }
+
+    // The wrapper owns this immutable SWAP and supplies adjacent physical
+    // sites. Reuse the normal update without revalidating its known matrix at
+    // every routing step; reads still leave gauge mode exactly as for a gate.
+    void ApplyRoutingSwap(const Gates::SwapGate<MatrixClass> &gate, IndexType first, IndexType second)
+    {
+        assert(first >= 0 && first < static_cast<IndexType>(gammas.size()));
+        assert(second >= 0 && second < static_cast<IndexType>(gammas.size()));
+        assert(std::abs(first - second) == 1);
+        if (gaugeForReads)
+            LeaveGaugeMode();
+        ApplyTwoQubitGate(gate, first, second);
+    }
+
     std::complex<double> ExpectationValueImpl(const std::vector<Gates::AppliedGate<MatrixClass>> &gates)
     {
         if (gates.empty())
@@ -1048,13 +1333,12 @@ class MPSSimulatorImpl : public MPSSimulatorBase
     {
         const IndexType sites = static_cast<IndexType>(gammas.size());
         const GammaType &gamma = gammas[site];
-        const IndexType L = gamma.dimension(0), R = gamma.dimension(2);
         // a: the state the operator leaves the site in. The caller has checked that it does (see LeavesOneState).
         const Eigen::Vector2cd a = KeptDirection(op);
         if (!(a.squaredNorm() > 0.))
             return;
         const MatrixClass m = std::conj(a[0]) * Slice(gamma, 0) + std::conj(a[1]) * Slice(gamma, 1);
-        Eigen::BDCSVD<MatrixClass> svd(m, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::BDCSVD<MatrixClass, Eigen::ComputeThinU | Eigen::ComputeThinV> svd(m);
         if (svd.info() != Eigen::Success)
             return; // left as it is: a gate that meets the environments restores the canonical form
         const IndexType rank = std::max<IndexType>(1, svd.rank());
@@ -1270,6 +1554,270 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         }
 
         return thetaMatrix;
+    }
+
+    ThreeSite::Split SplitThreeSite(const MatrixClass &theta, IndexType leftDimension, const LambdaType *leftLambda)
+    {
+        // A rare postselected branch can be far below sqrt(DBL_MIN). Normalize
+        // its common scale before the SVD and squared-weight rank decisions.
+        // Apply the same exact power-of-two scale to the unweighted tensor so
+        // the Hastings reconstruction still avoids inverse Schmidt values.
+        const double maximum = std::max(theta.real().cwiseAbs().maxCoeff(), theta.imag().cwiseAbs().maxCoeff());
+        if (!(maximum > 0.) || !std::isfinite(maximum))
+            throw std::domain_error("Three-qubit operator has no finite nonzero MPS output");
+        int exponent = 0;
+        std::frexp(maximum, &exponent);
+        MatrixClass scaledTheta;
+        const MatrixClass *unweighted = &theta;
+        if (exponent < -256 || exponent > 256)
+        {
+            scaledTheta = theta;
+            ThreeSite::ScalePowerOfTwo(scaledTheta, -exponent);
+            unweighted = &scaledTheta;
+        }
+        MatrixClass weighted;
+        if (leftLambda)
+            weighted = ThreeSite::Weighted(*unweighted, leftLambda, leftDimension);
+        const MatrixClass &input = leftLambda ? weighted : *unweighted;
+#ifdef USE_FAST_SVD
+        const bool computeWithJacobi = input.rows() < blockSizeLimit && input.cols() < blockSizeLimit;
+        if (computeWithJacobi)
+            jacobiSVD.compute(input);
+        else
+            SVD.compute(input);
+        if ((computeWithJacobi ? jacobiSVD.info() : SVD.info()) != Eigen::Success)
+            throw std::runtime_error("MPS three-site SVD failed");
+        const auto &values = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
+        const auto &V = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
+        const IndexType rank = computeWithJacobi ? jacobiSVD.rank() : SVD.rank();
+#else
+        jacobiSVD.compute(input);
+        if (jacobiSVD.info() != Eigen::Success)
+            throw std::runtime_error("MPS three-site SVD failed");
+        const auto &values = jacobiSVD.singularValues();
+        const auto &V = jacobiSVD.matrixV();
+        const IndexType rank = jacobiSVD.rank();
+#endif
+        IndexType kept =
+            limitEntanglement ? ComputeCompressedRank(values, rank, truncationMode, singularValueThreshold) : rank;
+        kept = std::max<IndexType>(1, limitSize ? std::min(chi, kept) : kept);
+        ThreeSite::Split result;
+        result.lambda = values.head(kept);
+        const double norm = result.lambda.stableNorm();
+        if (!(norm > 0.) || !std::isfinite(norm))
+            throw std::domain_error("Three-qubit operator has no finite nonzero MPS output");
+        result.left.noalias() = (*unweighted) * V.leftCols(kept);
+        result.right = V.leftCols(kept).adjoint();
+        result.lambda /= norm;
+        result.left /= norm;
+        result.truncated = kept < rank;
+        return result;
+    }
+
+    void LeftCanonicalizeSite(IndexType site)
+    {
+        const auto &gamma = gammas[site];
+        const IndexType L = gamma.dimension(0), R = gamma.dimension(2);
+        const IndexType rank = std::min(2 * L, R);
+        const Eigen::Map<const MatrixClass> matrix(gamma.data(), 2 * L, R);
+        Eigen::HouseholderQR<MatrixClass> qr(matrix);
+        const MatrixClass Q = qr.householderQ() * MatrixClass::Identity(2 * L, rank);
+        const MatrixClass transfer = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
+        const auto &next = gammas[site + 1];
+        const IndexType nextR = next.dimension(2);
+        const Eigen::Map<const MatrixClass> nextMatrix(next.data(), R, 2 * nextR);
+        const MatrixClass right = transfer * nextMatrix;
+        GammaType newLeft(L, 2, rank), newRight(rank, 2, nextR);
+        std::copy(Q.data(), Q.data() + Q.size(), newLeft.data());
+        std::copy(right.data(), right.data() + right.size(), newRight.data());
+        LambdaType placeholder = LambdaType::Ones(rank);
+        gammas[site] = std::move(newLeft);
+        gammas[site + 1] = std::move(newRight);
+        lambdas[site] = std::move(placeholder);
+        bondDimensions.Update(site, rank);
+    }
+
+    // A filter can annihilate the state after QR has changed its representation.
+    // Save only semantic state, including cached environments; SVD workspaces and
+    // RNG are unaffected. Ordinary unitary gates never enter this copying path.
+    template <class Operation> void WithThreeSiteRollback(Operation &&operation)
+    {
+        auto previousGammas = gammas;
+        auto previousLambdas = lambdas;
+        auto previousLeft = leftEnv, previousRight = rightEnv;
+        auto previousLeftCanonical = leftCanonical, previousRightCanonical = rightCanonical;
+        const auto previousLeftValid = leftValid, previousRightValid = rightValid;
+        const bool previousGauge = gaugeMode, previousReads = gaugeForReads;
+        const bool previousCanonical = canonicalFormExact, previousDiscarded = schmidtValuesDiscarded;
+        try
+        {
+            operation();
+        }
+        catch (...)
+        {
+            gammas.swap(previousGammas);
+            lambdas.swap(previousLambdas);
+            leftEnv.swap(previousLeft);
+            rightEnv.swap(previousRight);
+            leftCanonical.swap(previousLeftCanonical);
+            rightCanonical.swap(previousRightCanonical);
+            leftValid = previousLeftValid;
+            rightValid = previousRightValid;
+            gaugeMode = previousGauge;
+            gaugeForReads = previousReads;
+            canonicalFormExact = previousCanonical;
+            schmidtValuesDiscarded = previousDiscarded;
+            bondDimensions.Refresh(lambdas);
+            throw;
+        }
+    }
+
+    void ApplyThreeQubitGate(const GateClass &gate, IndexType target, IndexType control1, IndexType control2,
+                             bool unitary)
+    {
+        const IndexType first = std::min({target, control1, control2});
+        const auto &op = gate.getRawOperatorMatrix();
+        const double maximum = std::max(op.real().cwiseAbs().maxCoeff(), op.imag().cwiseAbs().maxCoeff());
+        if (!(maximum > 0.))
+            throw std::domain_error("A zero three-qubit operator cannot produce a normalized MPS");
+        int exponent = 0;
+        std::frexp(maximum, &exponent);
+        const bool extremeScale = exponent < -256 || exponent > 256;
+        MatrixClass scaledGate;
+        // Environments kept only for reads end with them, as for a two-qubit gate,
+        // unless this update is asked to refresh its own (see below).
+        if (gaugeForReads && unitary && !refreshThreeSiteEnvironments)
+            LeaveGaugeMode();
+        // A unitary gate on a chain that is on its canonical path weighs the cuts by
+        // the left lambda, as a two-qubit gate does. After earlier truncations those
+        // weights are approximate; refreshThreeSiteEnvironments then asks for current
+        // environments instead: QR transfers their weight into this interval without
+        // inverse Schmidt values or global SVDs, and the chain keeps explicit
+        // environments from there on. A chain that already keeps them (after a Kraus
+        // operator) always takes that path, and so do filters: normalizing a very
+        // rare outcome must not amplify the left B tensor by inverse tiny weights.
+        const bool canonicalWeights = !gaugeMode && unitary && (canonicalFormExact || !refreshThreeSiteEnvironments);
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            if (!canonicalWeights)
+            {
+                EnterGaugeMode();
+                gaugeForReads = false;
+                canonicalFormExact = false;
+                // Reuse exteriors established by a preceding three-site update.
+                // These are exact provenance flags, not approximate matrix tests.
+                const bool leftOrthonormal =
+                    first == 0 || (leftValid >= first && leftCanonical[first - 1] && lambdas[first - 1].isOnes(0.));
+                const bool rightOrthonormal = first + 2 == static_cast<IndexType>(lambdas.size()) ||
+                                              (rightValid <= first + 2 && rightCanonical[first + 2]);
+                if (!leftOrthonormal)
+                {
+                    IndexType boundary = std::min(first, leftValid);
+                    while (boundary > 0 && (!leftCanonical[boundary - 1] || !lambdas[boundary - 1].isOnes(0.)))
+                        --boundary;
+                    for (IndexType site = boundary; site < first; ++site)
+                        LeftCanonicalizeSite(site);
+                    for (IndexType bond = boundary; bond < first; ++bond)
+                    {
+                        leftEnv[bond] = MatrixClass::Identity(lambdas[bond].size(), lambdas[bond].size());
+                        leftCanonical[bond] = 1;
+                    }
+                }
+                if (!rightOrthonormal)
+                {
+                    const IndexType bonds = static_cast<IndexType>(lambdas.size());
+                    IndexType boundary = std::max(first + 2, rightValid);
+                    while (boundary < bonds && !rightCanonical[boundary])
+                        ++boundary;
+                    for (IndexType site = boundary; site > first + 2; --site)
+                        RightCanonicalizeSite(site);
+                    for (IndexType bond = first + 2; bond < boundary; ++bond)
+                    {
+                        rightEnv[bond] = MatrixClass::Identity(lambdas[bond].size(), lambdas[bond].size());
+                        rightCanonical[bond] = 1;
+                    }
+                }
+                leftValid = first;
+                rightValid = first + 2;
+            }
+            const IndexType L = gammas[first].dimension(0), R = gammas[first + 2].dimension(2);
+            MatrixClass theta = ThreeSite::Contract<2>(gammas[first], gammas[first + 1], gammas[first + 2]);
+            if (extremeScale)
+            {
+                scaledGate = op;
+                ThreeSite::RestrictToInputSupport<2>(scaledGate, theta, first, target, control1, control2, L, R);
+                const double activeMaximum =
+                    std::max(scaledGate.real().cwiseAbs().maxCoeff(), scaledGate.imag().cwiseAbs().maxCoeff());
+                int activeExponent = 0;
+                std::frexp(activeMaximum, &activeExponent);
+                ThreeSite::ScalePowerOfTwo(scaledGate, -activeExponent);
+            }
+            ThreeSite::Apply<2>(theta, extremeScale ? scaledGate : op, first, target, control1, control2, L, R);
+            const LambdaType *weights = canonicalWeights && first > 0 ? &lambdas[first - 1] : nullptr;
+            // Peel off the right site, then the middle. Both are thin-V Hastings
+            // updates: the retained left block is theta*V, never lambda^-1*U*S.
+            auto last = SplitThreeSite(theta, L, weights);
+            const IndexType lastBond = last.lambda.size();
+            const MatrixClass pair = Eigen::Map<const MatrixClass>(last.left.data(), 2 * L, 2 * lastBond);
+            auto left = SplitThreeSite(pair, L, weights);
+            const IndexType firstBond = left.lambda.size();
+            GammaType a(L, 2, firstBond), b(firstBond, 2, lastBond), c(lastBond, 2, R);
+            std::copy(left.left.data(), left.left.data() + left.left.size(), a.data());
+            std::copy(left.right.data(), left.right.data() + left.right.size(), b.data());
+            std::copy(last.right.data(), last.right.data() + last.right.size(), c.data());
+            gammas[first] = std::move(a);
+            gammas[first + 1] = std::move(b);
+            gammas[first + 2] = std::move(c);
+            lambdas[first] = std::move(left.lambda);
+            lambdas[first + 1] = std::move(last.lambda);
+            bondDimensions.Update(first, firstBond);
+            bondDimensions.Update(first + 1, lastBond);
+            if (left.truncated || last.truncated)
+            {
+                canonicalFormExact = false;
+                schmidtValuesDiscarded = true;
+            }
+            if (!unitary)
+                canonicalFormExact = false;
+            // With canonical weights the chain stays on its canonical path, exact or (after a
+            // cut) approximate like after a two-qubit gate, unless a cut is to be followed by
+            // explicit environments: the form was exact until this update then.
+            if (!canonicalWeights || ((left.truncated || last.truncated) && refreshThreeSiteEnvironments))
+            {
+                EnterGaugeMode();
+                if (canonicalWeights)
+                {
+                    // Tensors outside the interval are unchanged by either cut.
+                    for (IndexType bond = 0; bond < first; ++bond)
+                    {
+                        leftEnv[bond] = lambdas[bond].cwiseAbs2().template cast<std::complex<double>>().asDiagonal();
+                        leftCanonical[bond] = 1;
+                    }
+                    for (IndexType bond = first + 2; bond < static_cast<IndexType>(lambdas.size()); ++bond)
+                    {
+                        rightEnv[bond] = MatrixClass::Identity(lambdas[bond].size(), lambdas[bond].size());
+                        rightCanonical[bond] = 1;
+                    }
+                }
+                // The two cuts give the environments of the interval's own bonds exactly: the new
+                // left tensor times its left environment has the kept singular values as its Gram
+                // matrix, and the two tensors to its right are rows of V^dagger. The left one of
+                // the second bond follows too when the first cut kept every direction.
+                leftEnv[first] = lambdas[first].cwiseAbs2().template cast<std::complex<double>>().asDiagonal();
+                leftCanonical[first] = 1;
+                rightEnv[first] = MatrixClass::Identity(firstBond, firstBond);
+                rightEnv[first + 1] = MatrixClass::Identity(lastBond, lastBond);
+                rightCanonical[first] = rightCanonical[first + 1] = 1;
+                leftValid = first + 1;
+                rightValid = first;
+                if (!left.truncated)
+                {
+                    leftEnv[first + 1] =
+                        lambdas[first + 1].cwiseAbs2().template cast<std::complex<double>>().asDiagonal();
+                    leftCanonical[first + 1] = 1;
+                    leftValid = first + 2;
+                }
+            }
+        });
     }
 
     void ApplyTwoQubitGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
@@ -1755,6 +2303,8 @@ class MPSSimulatorImpl : public MPSSimulatorBase
         std::vector<double> allocated;
     };
 
+    // See setThreeQubitEnvironmentRefresh.
+    bool refreshThreeSiteEnvironments = false;
     // Explicit environments: leftEnv[bond] is current for bond < leftValid, rightEnv[bond] for bond >= rightValid.
     bool gaugeMode = false;
     // The gauge mode was entered by a read on a chain whose canonical form is approximate, and no Kraus operator

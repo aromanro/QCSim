@@ -1,6 +1,9 @@
 #pragma once
 
 #include "MPOSimulatorBase.h"
+#include "StructuredGateOperations.h"
+#include "TableTrain.h"
+#include "ThreeSiteTensor.h"
 
 #include <iostream>
 
@@ -19,7 +22,8 @@ namespace TensorNetworks
 // MPO, not a positivity-preserving purification. Therefore the result remains
 // an approximation to the density matrix, but it is not guaranteed to be a valid
 // density matrix after truncation.
-class MPOSimulatorImpl : public MPOSimulatorBase
+class MPOSimulatorImpl : public MPOSimulatorBase,
+                         public StructuredGateOperations<MPOSimulatorImpl, MPOSimulatorInterface::MatrixClass>
 {
   public:
     friend class MPOSimulator;
@@ -33,20 +37,320 @@ class MPOSimulatorImpl : public MPOSimulatorBase
 
     void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) override
     {
-        ApplyOperator(gate);
+        if (const auto *compact = gate.getStructuredGate())
+            ApplyStructuredGate(*compact);
+        else if (gate.getQubitsNumber() <= 2)
+            ApplyOperator(gate);
+        else
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
     }
 
-    // three qubit gates not supported, two qubit gates need to act on adjacent qubits
+    // A compact gate. A multi-controlled one-qubit operator is applied in place for any number
+    // of controls at any sites (see ApplyMultiControlledSites). A diagonal or multiplexed gate
+    // on at most three qubits is expanded to its matrix, on sites that must then be consecutive
+    // as for every local operator here; on more qubits it is applied in place as the chain
+    // operator of its table, whose cost is set by how strongly the table couples the chain.
+    void ApplyStructuredGate(const Gates::StructuredGate &gate)
+    {
+        gate.Validate(gammas.size());
+        if (gate.kind == Gates::StructuredGate::Kind::Controlled && !gate.qubits.empty())
+        {
+            MatrixClass u(2, 2);
+            u << gate.matrix[0], gate.matrix[1], gate.matrix[2], gate.matrix[3];
+            std::vector<IndexType> controls;
+            std::vector<bool> values;
+            for (size_t k = 0; k < gate.qubits.size(); ++k)
+            {
+                controls.push_back(static_cast<IndexType>(gate.qubits[k]));
+                values.push_back(gate.controlState == std::numeric_limits<size_t>::max() ||
+                                 ((gate.controlState >> k) & 1));
+            }
+            ApplyMultiControlledSites(u, static_cast<IndexType>(gate.target), controls, values);
+            return;
+        }
+        if (gate.Arity() > 3)
+        {
+            // A wide diagonal or multiplexed table is applied in place as the chain operator
+            // of the table (see ApplyChainOperator).
+            ApplyChainOperator(WideTableOperator(gate, [](size_t qubit) { return static_cast<IndexType>(qubit); }),
+                               WideTableIsUnitary(gate));
+            return;
+        }
+        const auto qubits = gate.OrderedQubits();
+        if (qubits.empty())
+        {
+            // A table of one entry is a scalar: rho is multiplied by its squared modulus.
+            ApplyOperator(Gates::AppliedGate<MatrixClass>(MatrixClass(gate.diagonal[0] * MatrixClass::Identity(2, 2)), 0));
+            return;
+        }
+        ApplyGate(Gates::AppliedGate<MatrixClass>(gate.DenseMatrix<MatrixClass>(3), qubits[0],
+                                                  qubits.size() > 1 ? qubits[1] : 0,
+                                                  qubits.size() > 2 ? qubits[2] : 0));
+    }
+
+    // The largest rank along the chain that a wide diagonal or multiplexed table may have
+    // here. The operator acts on the ket and on the bra side, so between two sites the tensors
+    // grow by the square of that rank before they are cut again.
+    static constexpr IndexType maxChainOperatorRank = 16;
+
+    // The chain operator of a diagonal or multiplexed gate on more than three qubits (see
+    // TableTrain.h); siteOf gives the site of a qubit.
+    template <class SiteOf>
+    static ChainOperator WideTableOperator(const Gates::StructuredGate &gate, const SiteOf &siteOf)
+    {
+        return MakeChainOperator(gate, siteOf, maxChainOperatorRank);
+    }
+
+    // A multiplexed rotation is unitary; a diagonal is when every entry has modulus one.
+    static bool WideTableIsUnitary(const Gates::StructuredGate &gate)
+    {
+        if (gate.kind == Gates::StructuredGate::Kind::Diagonal)
+            for (const auto &value : gate.diagonal)
+                if (!(std::abs(std::norm(value) - 1.) <= 1E-12))
+                    return false;
+        return true;
+    }
+
+    // rho -> O rho O^dagger for an operator given as a chain of site matrices (see
+    // TableTrain.h), from its first site to its last. Each tensor takes the matrices of its
+    // site on the ket leg and their conjugates on the bra leg, which multiplies its two bonds
+    // by the squared ranks of the operator; the bonds are then cut again as after a
+    // multi-controlled gate.
+    void ApplyChainOperator(const ChainOperator &chain, bool unitary)
+    {
+        const IndexType first = chain.first, last = first + static_cast<IndexType>(chain.sites.size()) - 1;
+        if (chain.sites.empty() || first < 0 || last >= static_cast<IndexType>(gammas.size()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        InvalidateSamplingCache();
+        for (IndexType site = first; site <= last; ++site)
+        {
+            const ChainOperator::Site &operators = chain.sites[static_cast<size_t>(site - first)];
+            IndexType leftRank = 0, rightRank = 0;
+            for (const auto &part : operators)
+                if (part.size())
+                {
+                    leftRank = part.rows();
+                    rightRank = part.cols();
+                }
+            const TensorType &gamma = gammas[site];
+            const IndexType L = gamma.dimension(0), R = gamma.dimension(3);
+            TensorType product(L * leftRank * leftRank, 2, 2, R * rightRank * rightRank);
+            product.setZero();
+            for (IndexType ketOut = 0; ketOut < 2; ++ketOut)
+                for (IndexType ketIn = 0; ketIn < 2; ++ketIn)
+                {
+                    const auto &ketPart = operators[static_cast<size_t>(2 * ketOut + ketIn)];
+                    if (!ketPart.size())
+                        continue;
+                    for (IndexType braOut = 0; braOut < 2; ++braOut)
+                        for (IndexType braIn = 0; braIn < 2; ++braIn)
+                        {
+                            const auto &braPart = operators[static_cast<size_t>(2 * braOut + braIn)];
+                            if (!braPart.size())
+                                continue;
+                            for (IndexType c = 0; c < rightRank; ++c)
+                                for (IndexType c2 = 0; c2 < rightRank; ++c2)
+                                    for (IndexType a = 0; a < leftRank; ++a)
+                                        for (IndexType a2 = 0; a2 < leftRank; ++a2)
+                                        {
+                                            const std::complex<double> factor = ketPart(a, c) * std::conj(braPart(a2, c2));
+                                            if (factor == std::complex<double>(0.))
+                                                continue;
+                                            const IndexType rowOffset = (a * leftRank + a2) * L,
+                                                            colOffset = (c * rightRank + c2) * R;
+                                            for (IndexType r = 0; r < R; ++r)
+                                                for (IndexType l = 0; l < L; ++l)
+                                                    product(rowOffset + l, ketOut, braOut, colOffset + r) +=
+                                                        factor * gamma(l, ketIn, braIn, r);
+                                        }
+                        }
+                }
+            gammas[site] = std::move(product);
+            if (site < last)
+            {
+                const IndexType cols = gammas[site].dimension(3);
+                lambdas[site] = LambdaType::Ones(cols);
+                bondDimensions.Update(site, cols);
+            }
+        }
+        // As after a multi-controlled gate: a unitary keeps a canonical chain canonical.
+        if (canonicalFormValid && unitary)
+            RunMaybeSingleThreaded(enableMultithreading, [&]() {
+                for (IndexType site = last; site > first; --site)
+                    RightCanonicalizeSite(site);
+            });
+        else
+            InvalidateCanonicalForm(first, last);
+        bool truncated = false;
+        for (IndexType bond = first; bond < last; ++bond)
+        {
+            const bool canonicalWeights = canonicalFormValid;
+            if (!canonicalWeights)
+                PrepareBond(bond);
+            const MatrixClass theta = ReshapeTheta(ContractTwoQubits(bond));
+            truncated = DecomposeAndSetGammas(theta, bond, bond + 1, true, canonicalWeights) || truncated;
+        }
+        ApplyPostTruncationPatches(truncated);
+    }
+
+    // Two- and three-qubit gates need to act on consecutive sites.
     // (the higher level MPOSimulator swaps qubits around to satisfy this)
     void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) override
     {
         ApplyOperator(gate, qubit, controllingQubit1);
     }
 
+    void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
+                   IndexType controllingQubit2) override
+    {
+        if (gate.getQubitsNumber() == 3)
+        {
+            ThreeSite::Validate(gate.getRawOperatorMatrix(), static_cast<IndexType>(gammas.size()), qubit,
+                                controllingQubit1, controllingQubit2, true);
+            ApplyThreeQubitGate(gate.getRawOperatorMatrix(), qubit, controllingQubit1, controllingQubit2);
+            return;
+        }
+        ApplyGate(gate, qubit, controllingQubit1);
+    }
+
     void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
     {
         for (const auto &gate : gates)
             ApplyGate(gate);
+    }
+
+    // A one-qubit operator on `target`, applied where every control holds its value:
+    // O = 1 + (product of the control projectors) (x) (U - 1), and rho -> O rho O^dagger.
+    // The two terms make O an operator of bond dimension two along the chain, whatever the
+    // number of controls and wherever they sit, so it is applied in place: no swaps, no
+    // ancillas and no 2^k matrix. Between the first and the last of its sites each tensor
+    // becomes the direct sum of what the four ket/bra combinations of the two terms make of
+    // it, and one sweep brings the bonds down again, with the limits the user has set.
+    // The sites are positions in the chain; U need not be unitary.
+    void ApplyMultiControlledSites(const MatrixClass &u, IndexType target, const std::vector<IndexType> &controls,
+                                   const std::vector<bool> &controlValues)
+    {
+        const IndexType sites = static_cast<IndexType>(gammas.size());
+        if (u.rows() != 2 || u.cols() != 2 || !u.allFinite())
+            throw std::invalid_argument("A multi-controlled target matrix must be a finite 2x2 matrix");
+        if (controls.size() != controlValues.size())
+            throw std::invalid_argument("Each control needs its value");
+        if (target < 0 || target >= sites)
+            throw std::invalid_argument("Qubit index out of bounds");
+        // -1: the operator is the identity there; 0 or 1: a control with that value; 2: the target
+        std::vector<int> role(static_cast<size_t>(sites), -1);
+        role[target] = 2;
+        IndexType first = target, last = target;
+        for (size_t k = 0; k < controls.size(); ++k)
+        {
+            const IndexType control = controls[k];
+            if (control < 0 || control >= sites)
+                throw std::invalid_argument("Qubit index out of bounds");
+            if (role[control] != -1)
+                throw std::invalid_argument("Controls must be distinct and differ from the target");
+            role[control] = controlValues[k] ? 1 : 0;
+            first = std::min(first, control);
+            last = std::max(last, control);
+        }
+        if (controls.empty())
+        {
+            ApplyValidatedOperator(u, 1, target, 0);
+            return;
+        }
+        if (u.isIdentity(0.))
+            return;
+
+        InvalidateSamplingCache();
+        const MatrixClass difference = u - MatrixClass::Identity(2, 2);
+        const bool unitary = (u.adjoint() * u).isIdentity(1E-12);
+        for (IndexType site = first; site <= last; ++site)
+        {
+            const TensorType &gamma = gammas[site];
+            const IndexType L = gamma.dimension(0), R = gamma.dimension(3);
+            // What the second term makes of the ket leg, of the bra leg, and of both;
+            // where the operator is the identity, all of them are the tensor itself.
+            TensorType ket, bra, both;
+            const TensorType *blocks[4] = {&gamma, &gamma, &gamma, &gamma};
+            if (role[site] != -1)
+            {
+                ket = TensorType(L, 2, 2, R);
+                bra = TensorType(L, 2, 2, R);
+                both = TensorType(L, 2, 2, R);
+                blocks[1] = &ket;
+                blocks[2] = &bra;
+                blocks[3] = &both;
+            }
+            if (role[site] == 2)
+            {
+                ket.setZero();
+                bra.setZero();
+                both.setZero();
+                for (IndexType r = 0; r < R; ++r)
+                    for (IndexType q = 0; q < 2; ++q)
+                        for (IndexType k = 0; k < 2; ++k)
+                            for (IndexType l = 0; l < L; ++l)
+                            {
+                                const std::complex<double> value = gamma(l, k, q, r);
+                                for (IndexType out = 0; out < 2; ++out)
+                                {
+                                    ket(l, out, q, r) += difference(out, k) * value;
+                                    bra(l, k, out, r) += std::conj(difference(out, q)) * value;
+                                    for (IndexType outBra = 0; outBra < 2; ++outBra)
+                                        both(l, out, outBra, r) +=
+                                            difference(out, k) * std::conj(difference(outBra, q)) * value;
+                                }
+                            }
+            }
+            else if (role[site] != -1)
+            {
+                const IndexType selected = role[site];
+                ket.setZero();
+                bra.setZero();
+                both.setZero();
+                for (IndexType r = 0; r < R; ++r)
+                    for (IndexType l = 0; l < L; ++l)
+                    {
+                        for (IndexType q = 0; q < 2; ++q)
+                            ket(l, selected, q, r) = gamma(l, selected, q, r);
+                        for (IndexType k = 0; k < 2; ++k)
+                            bra(l, k, selected, r) = gamma(l, k, selected, r);
+                        both(l, selected, selected, r) = gamma(l, selected, selected, r);
+                    }
+            }
+            const IndexType rows = site == first ? L : 4 * L, cols = site == last ? R : 4 * R;
+            TensorType sum(rows, 2, 2, cols);
+            sum.setZero();
+            for (IndexType block = 0; block < 4; ++block)
+                CopyGammaBlock(*blocks[block], sum, site == first ? 0 : block * L, site == last ? 0 : block * R);
+            gammas[site] = std::move(sum);
+            if (site < last)
+            {
+                lambdas[site] = LambdaType::Ones(cols);
+                bondDimensions.Update(site, cols);
+            }
+        }
+
+        // A unitary leaves the weights of the bonds outside its sites as they were, so a chain
+        // on its canonical form stays on it: the sites after the first are made orthonormal
+        // from the right, then every bond is cut with its left lambda as usual. Otherwise the
+        // sites join the window that the sweep below moves along.
+        if (canonicalFormValid && unitary)
+            RunMaybeSingleThreaded(enableMultithreading, [&]() {
+                for (IndexType site = last; site > first; --site)
+                    RightCanonicalizeSite(site);
+            });
+        else
+            InvalidateCanonicalForm(first, last);
+        bool truncated = false;
+        for (IndexType bond = first; bond < last; ++bond)
+        {
+            const bool canonicalWeights = canonicalFormValid;
+            if (!canonicalWeights)
+                PrepareBond(bond);
+            const MatrixClass theta = ReshapeTheta(ContractTwoQubits(bond));
+            truncated = DecomposeAndSetGammas(theta, bond, bond + 1, true, canonicalWeights) || truncated;
+        }
+        ApplyPostTruncationPatches(truncated);
     }
 
     // Compresses the current state using either or both configured limits, without a gate.
@@ -107,14 +411,26 @@ class MPOSimulatorImpl : public MPOSimulatorBase
 
     void ApplyOperator(const Gates::AppliedGate<MatrixClass> &op) override
     {
-        const size_t operatorQubits = ValidateOperator(op);
+        if (const auto *compact = op.getStructuredGate())
+        {
+            ApplyStructuredGate(*compact);
+            return;
+        }
+        const size_t operatorQubits = op.getQubitsNumber();
+        if (operatorQubits == 3)
+        {
+            ApplyOperator(op, CheckedThreeSiteQubit(op.getQubit1()), CheckedThreeSiteQubit(op.getQubit2()),
+                          CheckedThreeSiteQubit(op.getQubit3()));
+            return;
+        }
+        ValidateOperator(op, operatorQubits);
         ValidateQubits(operatorQubits, op.getQubit1(), op.getQubit2());
 
         ApplyValidatedOperator(op.getRawOperatorMatrix(), operatorQubits, static_cast<IndexType>(op.getQubit1()),
                                operatorQubits > 1 ? static_cast<IndexType>(op.getQubit2()) : 0);
     }
 
-    // three qubit operators not supported, two qubit operators need to act on adjacent qubits
+    // Multi-site operators need to act on adjacent qubits
     // (the higher level MPOSimulator swaps qubits around to satisfy this)
     void ApplyOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1 = 0) override
     {
@@ -130,9 +446,24 @@ class MPOSimulatorImpl : public MPOSimulatorBase
             ApplyOperator(op);
     }
 
+    void ApplyOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1,
+                       IndexType controllingQubit2) override
+    {
+        // ApplyGate's three-site path already implements A rho A^dagger and
+        // validates the finite 8x8 matrix and all three consecutive sites.
+        ApplyGate(op, qubit, controllingQubit1, controllingQubit2);
+    }
+
     void ApplyOperatorAndNormalize(const Gates::AppliedGate<MatrixClass> &op) override
     {
-        const size_t operatorQubits = ValidateOperator(op);
+        const size_t operatorQubits = op.getQubitsNumber();
+        if (operatorQubits == 3)
+        {
+            ApplyOperatorAndNormalize(op, CheckedThreeSiteQubit(op.getQubit1()), CheckedThreeSiteQubit(op.getQubit2()),
+                                      CheckedThreeSiteQubit(op.getQubit3()));
+            return;
+        }
+        ValidateOperator(op, operatorQubits);
         ValidateQubits(operatorQubits, op.getQubit1(), op.getQubit2());
 
         ApplyValidatedOperatorAndNormalize(op.getRawOperatorMatrix(), operatorQubits,
@@ -146,6 +477,20 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         ValidateQubits(operatorQubits, qubit, controllingQubit1);
 
         ApplyValidatedOperatorAndNormalize(op.getRawOperatorMatrix(), operatorQubits, qubit, controllingQubit1);
+    }
+
+    void ApplyOperatorAndNormalize(const GateClass &op, IndexType qubit, IndexType controllingQubit1,
+                                   IndexType controllingQubit2) override
+    {
+        if (op.getQubitsNumber() != 3)
+        {
+            ApplyOperatorAndNormalize(op, qubit, controllingQubit1);
+            return;
+        }
+        const auto &matrix = op.getRawOperatorMatrix();
+        ThreeSite::Validate(matrix, static_cast<IndexType>(gammas.size()), qubit, controllingQubit1, controllingQubit2,
+                            true);
+        ApplyValidatedOperatorAndNormalize(matrix, 3, qubit, controllingQubit1, controllingQubit2);
     }
 
     void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>> &ops) override
@@ -279,8 +624,10 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         ScopedFlag &operator=(const ScopedFlag &) = delete;
     };
 
-    void PrepareBond(IndexType bond)
+    void PrepareBond(IndexType bond, IndexType last = -1)
     {
+        if (last < 0)
+            last = bond + 1;
         InvalidateSamplingCache();
         RunMaybeSingleThreaded(enableMultithreading, [&]() {
             while (centerFirst < bond)
@@ -289,7 +636,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
                 ++centerFirst;
                 centerLast = std::max(centerLast, centerFirst);
             }
-            while (centerLast > bond + 1)
+            while (centerLast > last)
             {
                 RightCanonicalizeSite(centerLast);
                 --centerLast;
@@ -384,6 +731,13 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         return std::isfinite(value.real()) && std::isfinite(value.imag());
     }
 
+    static IndexType CheckedThreeSiteQubit(size_t qubit)
+    {
+        if (qubit > static_cast<size_t>(std::numeric_limits<IndexType>::max()))
+            throw std::invalid_argument("Qubit index out of bounds");
+        return static_cast<IndexType>(qubit);
+    }
+
     static size_t ValidateOperatorMatrix(const MatrixClass &matrix)
     {
         if (matrix.rows() <= 0 || matrix.cols() <= 0 || matrix.rows() != matrix.cols())
@@ -399,10 +753,10 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         return matrix.rows() == 2 ? 1 : 2;
     }
 
-    static size_t ValidateOperator(const GateClass &op)
+    static size_t ValidateOperator(const GateClass &op, size_t knownArity = 0)
     {
         const size_t matrixQubits = ValidateOperatorMatrix(op.getRawOperatorMatrix());
-        if (op.getQubitsNumber() != matrixQubits)
+        if ((knownArity ? knownArity : op.getQubitsNumber()) != matrixQubits)
             throw std::invalid_argument("Operator matrix dimensions do not match its declared arity");
         return matrixQubits;
     }
@@ -482,7 +836,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     }
 
     void ApplyValidatedOperatorAndNormalize(const MatrixClass &op, size_t operatorQubits, IndexType qubit,
-                                            IndexType controllingQubit1)
+                                            IndexType controllingQubit1, IndexType controllingQubit2 = 0)
     {
         if (operatorQubits == 1)
         {
@@ -497,7 +851,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
 
         try
         {
-            ApplyAndNormalizeWithoutBackup(op, operatorQubits, qubit, controllingQubit1);
+            ApplyAndNormalizeWithoutBackup(op, operatorQubits, qubit, controllingQubit1, controllingQubit2);
         }
         catch (...)
         {
@@ -567,7 +921,7 @@ class MPOSimulatorImpl : public MPOSimulatorBase
     }
 
     void ApplyAndNormalizeWithoutBackup(const MatrixClass &op, size_t operatorQubits, IndexType qubit,
-                                        IndexType controllingQubit1)
+                                        IndexType controllingQubit1, IndexType controllingQubit2 = 0)
     {
         const auto traceBefore = Trace();
         bool truncated = false;
@@ -578,7 +932,10 @@ class MPOSimulatorImpl : public MPOSimulatorBase
             // is only rounding.
             ScopedFlag deferred(deferPostTruncationPatches);
             truncatedWhileDeferred = false;
-            ApplyValidatedOperator(op, operatorQubits, qubit, controllingQubit1);
+            if (operatorQubits == 3)
+                ApplyThreeQubitGate(op, qubit, controllingQubit1, controllingQubit2);
+            else
+                ApplyValidatedOperator(op, operatorQubits, qubit, controllingQubit1);
             truncated = truncatedWhileDeferred;
         }
         auto trace = Trace();
@@ -884,6 +1241,126 @@ class MPOSimulatorImpl : public MPOSimulatorBase
         const MatrixClass thetaMatrix = ReshapeThetaBar(result);
         ApplyPostTruncationPatches(DecomposeAndSetGammas(thetaMatrix, qubit1, qubit2, true, canonicalWeights));
         InvalidateCanonicalForm(qubit1, qubit2);
+    }
+
+    ThreeSite::Split SplitThreeSite(const MatrixClass &theta, IndexType leftDimension, const LambdaType *leftLambda,
+                                    int64_t &removed)
+    {
+        MatrixClass weighted;
+        if (leftLambda)
+        {
+            // Only relative Schmidt weights matter for V and rank selection.
+            // Remove an extreme common scale before multiplying, so a perfectly
+            // representable weighted tensor cannot vanish through underflow.
+            const int weightExponent = OutOfRangeExponent(leftLambda->cwiseAbs().maxCoeff());
+            if (weightExponent)
+            {
+                LambdaType weights = *leftLambda;
+                ThreeSite::ScalePowerOfTwo(weights, -weightExponent);
+                weighted = ThreeSite::Weighted(theta, &weights, leftDimension);
+            }
+            else
+                weighted = ThreeSite::Weighted(theta, leftLambda, leftDimension);
+        }
+        const MatrixClass &input = leftLambda ? weighted : theta;
+#ifdef USE_FAST_SVD
+        const bool computeWithJacobi = input.rows() < blockSizeLimit && input.cols() < blockSizeLimit;
+        if (computeWithJacobi)
+            jacobiSVD.compute(input);
+        else
+            SVD.compute(input);
+        if ((computeWithJacobi ? jacobiSVD.info() : SVD.info()) != Eigen::Success)
+            throw std::runtime_error("MPO three-site SVD failed");
+        const auto &raw = computeWithJacobi ? jacobiSVD.singularValues() : SVD.singularValues();
+        const auto &V = computeWithJacobi ? jacobiSVD.matrixV() : SVD.matrixV();
+        const IndexType nonzero = computeWithJacobi ? jacobiSVD.nonzeroSingularValues() : SVD.nonzeroSingularValues();
+        const double threshold = computeWithJacobi ? jacobiSVD.threshold() : SVD.threshold();
+#else
+        jacobiSVD.compute(input);
+        if (jacobiSVD.info() != Eigen::Success)
+            throw std::runtime_error("MPO three-site SVD failed");
+        const auto &raw = jacobiSVD.singularValues();
+        const auto &V = jacobiSVD.matrixV();
+        const IndexType nonzero = jacobiSVD.nonzeroSingularValues();
+        const double threshold = jacobiSVD.threshold();
+#endif
+        const int exponent = OutOfRangeExponent(raw.size() > 0 ? raw[0] : 0.);
+        LambdaType values = raw;
+        if (exponent)
+            ThreeSite::ScalePowerOfTwo(values, -exponent);
+        const IndexType rank = NumericalRank(values, nonzero, threshold);
+        IndexType kept =
+            limitEntanglement ? ComputeCompressedRank(values, rank, truncationMode, singularValueThreshold) : rank;
+        kept = std::max<IndexType>(1, limitSize ? std::min(chi, kept) : kept);
+        ThreeSite::Split result;
+        result.lambda = values.head(kept);
+        result.left.noalias() = theta * V.leftCols(kept);
+        RescaleIfOutOfRange(result.left, removed);
+        result.right = V.leftCols(kept).adjoint();
+        result.truncated = kept < rank;
+        return result;
+    }
+
+    void ApplyThreeQubitGate(const MatrixClass &gate, IndexType target, IndexType control1, IndexType control2)
+    {
+        const IndexType first = std::min({target, control1, control2});
+        InvalidateSamplingCache();
+        const bool canonicalWeights = canonicalFormValid;
+        if (!canonicalWeights)
+            PrepareBond(first, first + 2);
+        bool truncated = false;
+        RunMaybeSingleThreaded(enableMultithreading, [&]() {
+            const IndexType L = gammas[first].dimension(0), R = gammas[first + 2].dimension(3);
+            // rho transforms with two factors of the operator. Keep their common
+            // scale out of the contractions, even when its square is outside the
+            // floating-point range; the existing MPO exponent stores it exactly.
+            int gateExponent = OutOfRangeExponent(MaxAbs(gate));
+            const bool extremeGate = gateExponent != 0;
+            MatrixClass theta = ThreeSite::Contract<4>(gammas[first], gammas[first + 1], gammas[first + 2]);
+            MatrixClass scaledGate;
+            if (extremeGate)
+            {
+                scaledGate = gate;
+                ThreeSite::RestrictToInputSupport<4>(scaledGate, theta, first, target, control1, control2, L, R);
+                gateExponent = OutOfRangeExponent(MaxAbs(scaledGate));
+                ThreeSite::ScalePowerOfTwo(scaledGate, -gateExponent);
+            }
+            const MatrixClass &operation = extremeGate ? scaledGate : gate;
+            int64_t removed = 2 * int64_t(gateExponent);
+            RescaleIfOutOfRange(theta, removed);
+            ThreeSite::Apply<4>(theta, operation, first, target, control1, control2, L, R);
+            RescaleIfOutOfRange(theta, removed);
+            const LambdaType *weights = canonicalWeights && first > 0 ? &lambdas[first - 1] : nullptr;
+            auto last = SplitThreeSite(theta, L, weights, removed);
+            const IndexType lastBond = last.lambda.size();
+            const MatrixClass pair = Eigen::Map<const MatrixClass>(last.left.data(), 4 * L, 4 * lastBond);
+            auto left = SplitThreeSite(pair, L, weights, removed);
+            const IndexType firstBond = left.lambda.size();
+            TensorType a(L, 2, 2, firstBond), b(firstBond, 2, 2, lastBond), c(lastBond, 2, 2, R);
+            std::copy(left.left.data(), left.left.data() + left.left.size(), a.data());
+            std::copy(left.right.data(), left.right.data() + left.right.size(), b.data());
+            std::copy(last.right.data(), last.right.data() + last.right.size(), c.data());
+            gammas[first] = std::move(a);
+            gammas[first + 1] = std::move(b);
+            gammas[first + 2] = std::move(c);
+            lambdas[first] = std::move(left.lambda);
+            lambdas[first + 1] = std::move(last.lambda);
+            bondDimensions.Update(first, firstBond);
+            bondDimensions.Update(first + 1, lastBond);
+            scaleExponent += removed;
+            truncated = left.truncated || last.truncated;
+            if (!canonicalWeights)
+            {
+                canonicalFormValid = false;
+                centerFirst = centerLast = first;
+            }
+            else if (truncated)
+                InvalidateCanonicalForm(first, first);
+            if (extremeGate || !(gate.adjoint() * gate).isIdentity(1E-12))
+                InvalidateCanonicalForm(first, first);
+        });
+        // Both splits must be committed before hermitization/trace restoration.
+        ApplyPostTruncationPatches(truncated);
     }
 
     void ApplyTwoQubitGate(const MatrixClass &gate, IndexType qubit, IndexType controllingQubit1)

@@ -276,13 +276,17 @@ class PauliPropagator
     {
         pos = std::min(pos, operations->size());
         if (pos < operations->size())
+        {
             MutableOperations().resize(pos);
+            nonunitaryMatrices = nonunitaryMatrices && HasNonunitaryMatrix(*operations);
+        }
     }
 
     void ClearOperations()
     {
         operations = std::make_shared<Program>();
         importedSamplingTables = false;
+        nonunitaryMatrices = false;
         InvalidateSampling();
         pos = 0;
     }
@@ -448,6 +452,118 @@ class PauliPropagator
         AddFixed(OperationType::CSWAP, target1, target2, control);
     }
 
+    // Matrix gate arguments always follow local bits (q0, q1, q2), matching
+    // QubitRegister::ApplyGate. Existing named controlled methods retain their
+    // historical (control, target) order.
+    // A gate with the native kernel of its action (a Pauli, H, S, a square
+    // root of X, a rotation about one axis, CX, CY, CZ, a swap) is recorded
+    // as that operation; any other gate is recorded as its local table.
+    // A compact applied gate on at most three qubits is expanded to its matrix.
+    template <class AppliedGate> void ApplyGate(const AppliedGate &gate)
+    {
+        const size_t arity = gate.getQubitsNumber();
+        if (!arity || arity > 3)
+        {
+            if (arity > 3 && CompactGate(gate))
+                throw std::invalid_argument(
+                    "A compact gate on more than three qubits has no local Pauli table; decompose it first");
+            throw std::invalid_argument("Gate must act on one to three qubits");
+        }
+        const size_t qubits[] = {gate.getQubit1(), gate.getQubit2(), gate.getQubit3()};
+        for (size_t i = 0; i < arity; ++i)
+            if (qubits[i] >= static_cast<size_t>(nrQubits))
+                throw std::out_of_range("Pauli qubit outside register");
+        ApplyGate(gate, int(qubits[0]), arity > 1 ? int(qubits[1]) : 0, arity > 2 ? int(qubits[2]) : 0);
+    }
+
+    template <class Gate> void ApplyGate(const Gate &gate, int q0, int q1 = 0, int q2 = 0)
+    {
+        if (const auto *compact = CompactGate(gate))
+        {
+            ApplyCompact(*compact, q0, q1, q2);
+            return;
+        }
+        AddCompiled(q0, q1, q2,
+                    PauliDetail::CachedMatrixTransfer(gate.getRawOperatorMatrix(),
+                                                      static_cast<unsigned>(gate.getQubitsNumber()),
+                                                      Gates::GetUnitaryGateDescriptor(gate)));
+    }
+
+    // A compact gate on at most three qubits, on its own qubits: the target
+    // first and then the controls, or the table bits of a diagonal.
+    void ApplyStructuredGate(const Gates::StructuredGate &gate)
+    {
+        if (gate.Arity() > 3)
+            throw std::invalid_argument(
+                "A compact gate on more than three qubits has no local Pauli table; decompose it first");
+        gate.Validate(static_cast<size_t>(nrQubits));
+        const auto qubits = gate.OrderedQubits();
+        ApplyCompact(gate, qubits.empty() ? 0 : int(qubits[0]), qubits.size() > 1 ? int(qubits[1]) : 0,
+                     qubits.size() > 2 ? int(qubits[2]) : 0);
+    }
+
+    void ApplyRXX(int a, int b, double angle)
+    {
+        AddPairRotation(a, b, 'X', 'X', angle);
+    }
+
+    void ApplyRYY(int a, int b, double angle)
+    {
+        AddPairRotation(a, b, 'Y', 'Y', angle);
+    }
+
+    void ApplyRZZ(int a, int b, double angle)
+    {
+        AddPairRotation(a, b, 'Z', 'Z', angle);
+    }
+
+    void ApplyRZX(int a, int b, double angle)
+    {
+        AddPairRotation(a, b, 'Z', 'X', angle);
+    }
+
+    void ApplyRXY(int a, int b, double angle)
+    {
+        AddPairRotation(a, b, 'X', 'Y', angle);
+    }
+
+    void ApplyXXPlusYY(int a, int b, double theta, double beta = 0.)
+    {
+        AddLocal(OperationType::LOCAL_2Q, a, b, 0, PauliDetail::InteractionTransfer('+', 0, theta, beta));
+    }
+
+    void ApplyXXMinusYY(int a, int b, double theta, double beta = 0.)
+    {
+        AddLocal(OperationType::LOCAL_2Q, a, b, 0, PauliDetail::InteractionTransfer('-', 0, theta, beta));
+    }
+
+    void ApplyECR(int a, int b)
+    {
+        AddLocal(OperationType::LOCAL_2Q, a, b, 0, PauliDetail::ECRTransfer());
+    }
+
+    void ApplyDCX(int a, int b)
+    {
+        AddLocal(OperationType::LOCAL_2Q, a, b, 0, PauliDetail::DCXTransfer());
+    }
+
+    // A single-qubit gate, or its 2 by 2 matrix, under one or two controls.
+    // The table is that of ControlledGate / DoublyControlledGate of the gate,
+    // found from the single-qubit matrix without building the larger one.
+    template <class Gate> void ApplyControlledGate(const Gate &gate, int control, int target)
+    {
+        AddCompiled(target, control, 0,
+                    PauliDetail::CachedControlledTransfer(SingleQubitMatrix(gate, 0), 1,
+                                                          Gates::GetUnitaryGateDescriptor(gate)));
+    }
+
+    template <class Gate> void ApplyDoublyControlledGate(const Gate &gate, int control1, int control2, int target)
+    {
+        AddCompiled(target, control1, control2,
+                    PauliDetail::CachedControlledTransfer(SingleQubitMatrix(gate, 0), 2,
+                                                          Gates::GetUnitaryGateDescriptor(gate)));
+    }
+
     // ---- Noise channels ----
     //
     // Each call records one operation. The observable is propagated through
@@ -591,6 +707,7 @@ class PauliPropagator
         }
         operations = std::move(program);
         importedSamplingTables = externalTables;
+        nonunitaryMatrices = externalTables && HasNonunitaryMatrix(*operations);
         InvalidateSampling();
         pos = std::min(pos, operations->size());
     }
@@ -610,6 +727,7 @@ class PauliPropagator
         {
             operations = source.operations;
             importedSamplingTables = source.importedSamplingTables;
+            nonunitaryMatrices = source.nonunitaryMatrices;
             InvalidateSampling();
         }
         pos = source.pos;
@@ -738,6 +856,7 @@ class PauliPropagator
     {
         for (int q : qubits)
             CheckQubit(q);
+        RequireTracePreserving();
         std::vector<bool> result;
         result.reserve(qubits.size());
         for (int q : qubits)
@@ -754,6 +873,7 @@ class PauliPropagator
     {
         if (!nrQubits || (nrQubits < int(8 * sizeof(size_t)) && outcome >= (size_t(1) << nrQubits)))
             return 0.;
+        RequireTracePreserving();
         if (nrQubits <= maximumMomentQubits && CanUseMoments(static_cast<size_t>(nrQubits)))
         {
             std::vector<int> qubits(static_cast<size_t>(nrQubits));
@@ -814,6 +934,7 @@ class PauliPropagator
     std::vector<bool> Sample(const std::vector<int> &qubits)
     {
         CheckSampleQubits(qubits);
+        RequireTracePreserving();
         return WithTerm([&](auto tag) {
             using T = decltype(tag);
             Sampler<T> local;
@@ -826,6 +947,7 @@ class PauliPropagator
     std::unordered_map<std::vector<bool>, size_t> SampleCounts(const std::vector<int> &qubits, size_t shots)
     {
         CheckSampleQubits(qubits);
+        RequireTracePreserving();
         if (!shots)
             return {};
         return WithTerm([&](auto tag) {
@@ -995,6 +1117,11 @@ class PauliPropagator
         MutableOperations().push_back(PauliDetail::Operation::Rotation(type, q, angle));
     }
 
+    void AddPairRotation(int a, int b, char first, char second, double angle)
+    {
+        AddLocal(OperationType::LOCAL_2Q, a, b, 0, PauliDetail::InteractionTransfer(first, second, angle));
+    }
+
     void AddProjector(int q, bool one, double coefficient)
     {
         PauliDetail::Operation op(OperationType::PROJ, q);
@@ -1019,6 +1146,124 @@ class PauliPropagator
     void AddFixed(OperationType type, int a, int b, int c = 0)
     {
         AddLocal(type, a, b, c, PauliDetail::FixedTransfer(type));
+    }
+
+    // Record the table of a gate given as a matrix. A rotation about one axis
+    // and a Clifford with a native kernel are recorded as those operations:
+    // the action is the same, the kernels are faster, and rotations can fuse.
+    // The choice is made once for a cache entry. A table that is recorded as
+    // itself, the frequent case, is shared from here.
+    void AddCompiled(int a, int b, int c, PauliDetail::CachedTransfer &compiled)
+    {
+        if (compiled.recording == PauliDetail::CachedTransfer::Recording::Table)
+        {
+            AddLocal(compiled.operation, a, b, c, compiled.table);
+            if (compiled.nonunitary)
+                nonunitaryMatrices = true;
+        }
+        else
+            AddNative(a, b, c, compiled);
+    }
+
+    // The same for an entry not yet examined, or recorded as a native operation.
+    void AddNative(int a, int b, int c, PauliDetail::CachedTransfer &compiled)
+    {
+        using Recording = PauliDetail::CachedTransfer::Recording;
+        if (compiled.recording == Recording::Unknown)
+            PauliDetail::ChooseRecording(compiled);
+        switch (compiled.recording)
+        {
+        case Recording::Table:
+            AddCompiled(a, b, c, compiled);
+            break;
+        case Recording::Rotation:
+            CheckQubit(a);
+            MutableOperations().push_back(PauliDetail::Operation::Rotation(
+                compiled.operation, a, compiled.angle, compiled.cosine, compiled.sine, compiled.quarter));
+            break;
+        case Recording::Single:
+            Add(compiled.operation, a);
+            break;
+        case Recording::Pair:
+            AddTwo(compiled.operation, a, b);
+            break;
+        default:
+            AddTwo(compiled.operation, b, a);
+            break;
+        }
+    }
+
+    // Whether a recorded table is the action of a matrix that is not unitary.
+    static bool HasNonunitaryMatrix(const Program &program)
+    {
+        return std::any_of(program.begin(), program.end(), [](const PauliDetail::Operation &op) {
+            return !op.Custom() && IsPauliLocalGate(op.type) && op.Transfer().nonunitary;
+        });
+    }
+
+    // Sampling, measurement and outcome probabilities take <I> = 1. After a
+    // matrix that is not unitary that no longer holds, and the numbers they
+    // would return are neither the normalised nor the unnormalised
+    // distribution, so they are refused. Expectation values stay available.
+    void RequireTracePreserving() const
+    {
+        if (nonunitaryMatrices)
+            throw std::domain_error("The circuit contains a matrix gate that is not unitary: "
+                                    "outcome probabilities are not defined for it");
+    }
+
+    // Expand a compact gate on at most three qubits to its matrix, whose
+    // local bits are (q0, q1, q2): the target first, then the controls.
+    void ApplyCompact(const Gates::StructuredGate &gate, int q0, int q1, int q2)
+    {
+        if (gate.Arity() > 3)
+            throw std::invalid_argument(
+                "A compact gate on more than three qubits has no local Pauli table; decompose it first");
+        const auto matrix = gate.DenseMatrix<Gates::UnitaryLocalMatrix>(3);
+        AddCompiled(q0, q1, q2, PauliDetail::CachedMatrixTransfer(matrix, static_cast<unsigned>(gate.Arity())));
+    }
+
+    // Whether a gate keeps a matrix. A compact gate keeps none, and the
+    // matrix accessor of its base class then answers with an arity of zero
+    // without a virtual call. Types that are not built on that class are asked
+    // for a compact operation whenever they can hold one.
+    template <class Matrix> static bool KeepsMatrix(const Gates::QuantumGateWithOp<Matrix> *gate)
+    {
+        return gate->Gates::QuantumGateWithOp<Matrix>::getQubitsNumber() != 0;
+    }
+
+    static bool KeepsMatrix(const void *)
+    {
+        return false;
+    }
+
+    // The compact operation of a gate that holds one in place of its matrix.
+    // A gate with a matrix, typed or raw and behind any reference, pays one
+    // comparison for the question: only a gate without a matrix is asked.
+    template <class Gate> static auto CompactGateOf(const Gate &gate, int) -> decltype(gate.getStructuredGate())
+    {
+        return KeepsMatrix(&gate) ? nullptr : gate.getStructuredGate();
+    }
+
+    template <class Gate> static const Gates::StructuredGate *CompactGateOf(const Gate &, long)
+    {
+        return nullptr;
+    }
+
+    template <class Gate> static const Gates::StructuredGate *CompactGate(const Gate &gate)
+    {
+        return CompactGateOf(gate, 0);
+    }
+
+    // The 2 by 2 matrix of a single-qubit gate object, or the matrix itself.
+    template <class Gate> static auto SingleQubitMatrix(const Gate &gate, int) -> decltype(gate.getRawOperatorMatrix())
+    {
+        return gate.getRawOperatorMatrix();
+    }
+
+    template <class Gate> static const Gate &SingleQubitMatrix(const Gate &gate, long)
+    {
+        return gate;
     }
 
     static void CheckProbability(double value, const char *name)
@@ -1435,6 +1680,7 @@ class PauliPropagator
     uint64_t samplingRevision = 0;
     int samplingEligibility = -1;
     bool importedSamplingTables = false;
+    bool nonunitaryMatrices = false;
     std::unique_ptr<SamplingCacheBase> samplingCache;
 };
 } // namespace QC

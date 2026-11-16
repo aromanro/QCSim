@@ -1,4 +1,5 @@
 #include "Clifford.h"
+#include "ExtendedStabilizer.h"
 #include "Tests.h"
 
 #include "PauliStringXZCoeff.h"
@@ -514,6 +515,686 @@ bool CliffordDistributionRegression()
                 return false;
     }
     return CliffordCheck(ones > 850 && ones < 1200, "Terminal sampler frequencies");
+}
+
+bool CliffordGenericGateRegression()
+{
+    const auto check = [](const QC::Gates::QuantumGateWithOp<> &gate) {
+        CliffordRegressionSimulator actual(3);
+        QC::QubitRegister<> reference(3);
+        actual.ApplyH(0);
+        actual.ApplyS(0);
+        actual.ApplyCX(2, 0);
+        actual.ApplyH(1);
+        reference.ApplyGate(QC::Gates::HadamardGate<>(), 0);
+        reference.ApplyGate(QC::Gates::SGate<>(), 0);
+        reference.ApplyGate(QC::Gates::CNOTGate<>(), 2, 0);
+        reference.ApplyGate(QC::Gates::HadamardGate<>(), 1);
+        actual.GetQubitProbability(2);
+        const QC::Gates::AppliedGate<> applied(gate.getRawOperatorMatrix(), 2, 0, 1);
+        actual.ApplyGate(applied);
+        reference.ApplyGate(gate, 2, 0, 1);
+        const auto &state = reference.getRegisterStorage();
+        for (unsigned code = 0; code < 64; ++code)
+        {
+            std::string pauli(3, 'I');
+            const char axes[] = {'I', 'X', 'Y', 'Z'};
+            for (unsigned q = 0; q < 3; ++q)
+                pauli[q] = axes[(code >> (2 * q)) & 3U];
+            std::complex<double> expected = 0.;
+            for (unsigned input = 0; input < 8; ++input)
+            {
+                unsigned output = input;
+                std::complex<double> coefficient = 1.;
+                for (unsigned q = 0; q < 3; ++q)
+                {
+                    const bool bit = (input >> q) & 1U;
+                    if (pauli[q] == 'X' || pauli[q] == 'Y')
+                        output ^= 1U << q;
+                    if (pauli[q] == 'Y')
+                        coefficient *= std::complex<double>(0., bit ? -1. : 1.);
+                    else if (pauli[q] == 'Z' && bit)
+                        coefficient = -coefficient;
+                }
+                expected += std::conj(state[output]) * coefficient * state[input];
+            }
+            if (!CliffordCheck(std::abs(expected.real() - actual.ExpectationValue(pauli)) < 3e-14,
+                               "Generic Clifford gate matches statevector Pauli expectations"))
+                return false;
+        }
+        return CliffordCheck(std::abs(actual.GetQubitProbability(2) - reference.GetQubitProbability(2)) < 3e-14,
+                             "Generic Clifford gate refreshes cached probabilities");
+    };
+    for (int code = 0; code <= 14; ++code)
+        if (!check(*GetGate(code)))
+            return false;
+    if (!check(QC::Gates::ECRGate<>()) || !check(QC::Gates::DCXGate<>()) || !check(QC::Gates::SplitterGate<>()))
+        return false;
+    for (const auto &matrix : {QC::Gates::DCXGate<>().getRawOperatorMatrix().adjoint().eval(),
+                               QC::Gates::SplitterGate<>().getRawOperatorMatrix().adjoint().eval()})
+        if (!check(QC::Gates::AppliedGate<>(matrix, 0, 1, 2)))
+            return false;
+
+    // All 24 projective one-qubit Cliffords, encoded without a sequence of
+    // rounded Hadamard products: eight monomial and sixteen full matrices.
+    const auto phase = [](unsigned power) { return QC::detail::LocalPauliSum::IPower(power); };
+    for (unsigned a = 0; a < 4; ++a)
+    {
+        for (unsigned flip = 0; flip < 2; ++flip)
+        {
+            Eigen::MatrixXcd matrix = Eigen::MatrixXcd::Zero(2, 2);
+            matrix(flip, 0) = 1.;
+            matrix(1 ^ flip, 1) = phase(a);
+            if (!check(QC::Gates::AppliedGate<>(matrix, 0)))
+                return false;
+        }
+        for (unsigned b = 0; b < 4; ++b)
+        {
+            Eigen::MatrixXcd matrix = QC::Gates::HadamardGate<>().getRawOperatorMatrix();
+            for (unsigned row = 0; row < 2; ++row)
+                for (unsigned col = 0; col < 2; ++col)
+                    matrix(row, col) = QC::detail::CliffordPhase(matrix(row, col), a * row + b * col);
+            if (!check(QC::Gates::AppliedGate<>(matrix, 0)))
+                return false;
+        }
+    }
+
+    // Exercise every generator image independently, rather than only one
+    // initial stabilizer state. ConjugatePauli returns U^dagger P U.
+    const auto checkImages = [](const Eigen::MatrixXcd &matrix,
+                                std::shared_ptr<const QC::detail::LocalGate> compiled = {}) {
+        if (!compiled)
+            compiled = QC::detail::FindCanonicalCliffordOwned(matrix);
+        if (!CliffordCheck(compiled != nullptr, "Canonical local Clifford is recognized"))
+            return false;
+        const unsigned dimension = static_cast<unsigned>(matrix.rows());
+        const auto pauliMatrix = [dimension](unsigned x, unsigned z) {
+            Eigen::MatrixXcd result = Eigen::MatrixXcd::Zero(dimension, dimension);
+            const auto coefficient = QC::detail::LocalPauliSum::IPower(QC::Clifford::detail::Popcount(x & z));
+            for (unsigned col = 0; col < dimension; ++col)
+                result(col ^ x, col) = (QC::Clifford::detail::Popcount(col & z) & 1U) ? -coefficient : coefficient;
+            return result;
+        };
+        for (unsigned x = 0; x < dimension; ++x)
+            for (unsigned z = 0; z < dimension; ++z)
+            {
+                bool negative;
+                const auto image = compiled->ConjugatePauli({uint8_t(x), uint8_t(z)}, negative);
+                const Eigen::MatrixXcd expected = matrix.adjoint() * pauliMatrix(x, z) * matrix;
+                const Eigen::MatrixXcd actual = (negative ? -1. : 1.) * pauliMatrix(image.x, image.z);
+                if (!CliffordCheck((expected - actual).cwiseAbs().maxCoeff() < 2e-15,
+                                   "Synthesized Clifford matches every dense Pauli image"))
+                    return false;
+            }
+        return true;
+    };
+    // The fixed gates retain their original 1/sqrt(2) bits. Quarter-angle
+    // constructors use sqrt(.5); recognition accepts either complete encoding.
+    constexpr double quarter = 1.57079632679489661923;
+    constexpr double legacyAmplitude = 0x1.6a09e667f3bccp-1;
+    constexpr double constructorAmplitude = 0x1.6a09e667f3bcdp-1;
+    std::array<Eigen::MatrixXcd, 3> legacyMatrices{Eigen::MatrixXcd(2, 2), Eigen::MatrixXcd(2, 2),
+                                                   Eigen::MatrixXcd(2, 2)};
+    legacyMatrices[0] << legacyAmplitude, legacyAmplitude, legacyAmplitude, -legacyAmplitude;
+    legacyMatrices[1] << legacyAmplitude, std::complex<double>(0., -legacyAmplitude),
+        std::complex<double>(0., legacyAmplitude), -legacyAmplitude;
+    legacyMatrices[2] << legacyAmplitude, std::complex<double>(0., legacyAmplitude),
+        std::complex<double>(0., legacyAmplitude), legacyAmplitude;
+    if (!CliffordCheck(legacyMatrices[0] == QC::Gates::HadamardGate<>().getRawOperatorMatrix() &&
+                           legacyMatrices[1] == QC::Gates::HyGate<>().getRawOperatorMatrix() &&
+                           legacyMatrices[2] == QC::Gates::SplitterGate<>().getRawOperatorMatrix(),
+                       "Fixed gate constructor coefficients retain their legacy binary encodings"))
+        return false;
+    for (unsigned qubits = 1; qubits <= 3; ++qubits)
+        for (unsigned q = 0; q < qubits; ++q)
+        {
+            for (const auto &legacy : legacyMatrices)
+            {
+                const QC::Gates::AppliedGate<> raw(legacy, 0);
+                const auto embedded =
+                    static_cast<const QC::Gates::QuantumGateWithOp<> &>(raw).getOperatorMatrix(qubits, q).eval();
+                if (!checkImages(embedded) || !check(QC::Gates::AppliedGate<>(embedded, 0, 1, 2)))
+                    return false;
+            }
+            for (const auto &embedded : {QC::Gates::RxGate<>(quarter).getOperatorMatrix(qubits, q).eval(),
+                                         QC::Gates::RyGate<>(quarter).getOperatorMatrix(qubits, q).eval()})
+                if (!checkImages(embedded) || !check(QC::Gates::AppliedGate<>(embedded, 0, 1, 2)))
+                    return false;
+        }
+    for (int theta : {-1, 1})
+        for (unsigned phi = 0; phi < 4; ++phi)
+            for (unsigned lambda = 0; lambda < 4; ++lambda)
+                for (unsigned gamma = 0; gamma < 4; ++gamma)
+                {
+                    const QC::Gates::UGate<> gate(theta * quarter, phi * quarter, lambda * quarter, gamma * quarter);
+                    if (!checkImages(gate.getRawOperatorMatrix()) || !check(gate))
+                        return false;
+                }
+    for (unsigned first = 0; first < 3; ++first)
+        for (unsigned second = 0; second < 3; ++second)
+            if (first != second)
+            {
+                const auto embedded = QC::Gates::ECRGate<>().getOperatorMatrix(3, first, second).eval();
+                if (!checkImages(embedded) || !check(QC::Gates::AppliedGate<>(embedded, 0, 1, 2)))
+                    return false;
+            }
+    const Eigen::MatrixXcd swap = QC::Gates::SwapGate<>().getRawOperatorMatrix();
+    const Eigen::MatrixXcd ecr = QC::Gates::ECRGate<>().getRawOperatorMatrix();
+    const auto tensor = [](const Eigen::MatrixXcd &low, const Eigen::MatrixXcd &high) {
+        Eigen::MatrixXcd result(low.rows() * high.rows(), low.cols() * high.cols());
+        for (Eigen::Index row = 0; row < result.rows(); ++row)
+            for (Eigen::Index col = 0; col < result.cols(); ++col)
+                result(row, col) = low(row % low.rows(), col % low.cols()) * high(row / low.rows(), col / low.cols());
+        return result;
+    };
+    for (const auto &matrix : {(swap * ecr).eval(), (swap * ecr * swap).eval(),
+                               tensor(QC::Gates::RxGate<>(quarter).getRawOperatorMatrix(),
+                                      QC::Gates::SquareRootNOTGate<>().getRawOperatorMatrix()),
+                               tensor(ecr, QC::Gates::SquareRootNOTGate<>().getRawOperatorMatrix())})
+        if (!checkImages(matrix) || !check(QC::Gates::AppliedGate<>(matrix, 0, 1, 2)))
+            return false;
+    QC::ExtendedStabilizer fromU(8), nativeH(8), typedH(8);
+    for (unsigned q = 0; q < 8; ++q)
+    {
+        fromU.ApplyGate(QC::Gates::UGate<>(quarter, 0., 2 * quarter), q);
+        nativeH.ApplyH(q);
+        typedH.ApplyGate(QC::Gates::HadamardGate<>(), q);
+        if (!CliffordCheck(fromU.GetFrames().front().GetFrameSize() == 1 &&
+                               nativeH.GetFrames().front().GetFrameSize() == 1 &&
+                               typedH.GetFrames().front().GetFrameSize() == 1,
+                           "Quarter-angle U gates preserve a single Extended stabilizer component"))
+            return false;
+    }
+    for (unsigned basis = 0; basis < 256; ++basis)
+        if (!CliffordCheck(
+                std::abs(fromU.getBasisStateProbability(basis) - nativeH.getBasisStateProbability(basis)) < 1e-15 &&
+                    std::abs(fromU.getBasisStateProbability(basis) - typedH.getBasisStateProbability(basis)) < 1e-15,
+                "Eight disjoint U-encoded Hadamards match native and typed Hadamards"))
+            return false;
+    for (unsigned q = 0; q < 3; ++q)
+    {
+        const Eigen::MatrixXcd embedded = QC::Gates::HadamardGate<>().getOperatorMatrix(3, q);
+        if (!check(QC::Gates::AppliedGate<>(embedded, 0, 1, 2)) || !checkImages(embedded))
+            return false;
+    }
+    // SX/SXdg use the exact dyadic eighth-phase family. Embedding them or
+    // composing with signed permutations must not force a generic expansion.
+    for (unsigned qubits = 1; qubits <= 3; ++qubits)
+        for (unsigned q = 0; q < qubits; ++q)
+            for (bool dagger : {false, true})
+            {
+                const Eigen::MatrixXcd embedded = dagger
+                                                      ? QC::Gates::SquareRootNOTDagGate<>().getOperatorMatrix(qubits, q)
+                                                      : QC::Gates::SquareRootNOTGate<>().getOperatorMatrix(qubits, q);
+                std::vector<Eigen::MatrixXcd> matrices{
+                    embedded, QC::Gates::PauliZGate<>().getOperatorMatrix(qubits, q) * embedded,
+                    QC::Gates::SGate<>().getOperatorMatrix(qubits, q) * embedded};
+                if (qubits > 1)
+                    matrices.push_back(QC::Gates::CNOTGate<>().getOperatorMatrix(qubits, (q + 1) % qubits, q) *
+                                       embedded);
+                for (const auto &matrix : matrices)
+                    if (!checkImages(matrix) || !check(QC::Gates::AppliedGate<>(matrix, 0, 1, 2)))
+                        return false;
+            }
+    std::array<unsigned, 3> permutation{0, 1, 2};
+    do
+    {
+        Eigen::MatrixXcd matrix = Eigen::MatrixXcd::Zero(8, 8);
+        for (unsigned input = 0; input < 8; ++input)
+        {
+            unsigned output = 0;
+            for (unsigned q = 0; q < 3; ++q)
+                output |= ((input >> q) & 1U) << permutation[q];
+            matrix(output, input) = 1.;
+        }
+        if (!check(QC::Gates::AppliedGate<>(matrix, 0, 1, 2)) || !checkImages(matrix))
+            return false;
+    } while (std::next_permutation(permutation.begin(), permutation.end()));
+
+    // Canonical H layers sandwiched by independently generated signed affine
+    // permutations cover all support sizes and nonlocal generator images.
+    const Eigen::MatrixXcd heldMatrix = QC::Gates::HadamardGate<>().getOperatorMatrix(3, 1);
+    const auto heldCompilation = QC::detail::FindCanonicalCliffordOwned(heldMatrix);
+    std::mt19937 random(7751);
+    for (unsigned trial = 0; trial < 96; ++trial)
+    {
+        const unsigned hMask = trial & 7U;
+        const double amplitude = 1. / std::sqrt(double(1U << QC::Clifford::detail::Popcount(hMask)));
+        Eigen::MatrixXcd matrix = Eigen::MatrixXcd::Zero(8, 8);
+        for (unsigned row = 0; row < 8; ++row)
+            for (unsigned col = 0; col < 8; ++col)
+                if (!((row ^ col) & ~hMask))
+                    matrix(row, col) =
+                        (QC::Clifford::detail::Popcount(row & col & hMask) & 1U) ? -amplitude : amplitude;
+        for (unsigned side = 0; side < 2; ++side)
+            for (unsigned step = 0; step < 12; ++step)
+            {
+                const unsigned target = random() % 3, control = (target + 1 + random() % 2) % 3;
+                if (random() & 1U)
+                {
+                    for (unsigned index = 0; index < 8; ++index)
+                        if (((index >> control) & 1U) && !((index >> target) & 1U))
+                        {
+                            if (side)
+                                matrix.col(index).swap(matrix.col(index ^ (1U << target)));
+                            else
+                                matrix.row(index).swap(matrix.row(index ^ (1U << target)));
+                        }
+                }
+                else
+                    for (unsigned row = 0; row < 8; ++row)
+                        for (unsigned col = 0; col < 8; ++col)
+                            if (((side ? col : row) >> target) & 1U)
+                                matrix(row, col) = QC::detail::CliffordPhase(matrix(row, col), 1);
+            }
+        if (!checkImages(matrix) || !check(QC::Gates::AppliedGate<>(matrix, 0, 1, 2)))
+            return false;
+        if (trial < 8)
+        {
+            // Cover support sizes 1, 2, 4 and 8 with all four balanced global
+            // phases, constructing their canonical entries directly.
+            const double balanced = 1. / std::sqrt(double(2U << QC::Clifford::detail::Popcount(hMask)));
+            Eigen::MatrixXcd eighth = Eigen::MatrixXcd::Zero(8, 8);
+            for (unsigned row = 0; row < 8; ++row)
+                for (unsigned col = 0; col < 8; ++col)
+                {
+                    const auto value = matrix(row, col);
+                    if (value.real() != 0.)
+                        eighth(row, col) = std::copysign(1., value.real()) * std::complex<double>(balanced, balanced);
+                    else if (value.imag() != 0.)
+                        eighth(row, col) = std::copysign(1., value.imag()) * std::complex<double>(-balanced, balanced);
+                }
+            for (unsigned turn = 0; turn < 4; ++turn)
+            {
+                if (!checkImages(eighth) || !check(QC::Gates::AppliedGate<>(eighth, 0, 1, 2)))
+                    return false;
+                for (Eigen::Index index = 0; index < eighth.size(); ++index)
+                    eighth.data()[index] = QC::detail::CliffordPhase(eighth.data()[index], 1);
+            }
+        }
+    }
+    if (!checkImages(heldMatrix, heldCompilation))
+        return false;
+    // Retained compilations outlive both bounded-cache eviction and the
+    // producing thread's thread_local caches.
+    const auto fromOtherThread = std::async(std::launch::async, [heldMatrix] {
+                                     return QC::detail::FindCanonicalCliffordOwned(heldMatrix);
+                                 }).get();
+    if (!checkImages(heldMatrix, fromOtherThread))
+        return false;
+    for (int turn = -4; turn <= 4; ++turn)
+    {
+        const double angle = turn * quarter;
+        if (!check(QC::Gates::RxGate<>(angle)) || !check(QC::Gates::RyGate<>(angle)) ||
+            !check(QC::Gates::RzGate<>(angle)) || !check(QC::Gates::PhaseShiftGate<>(angle)) ||
+            !check(QC::Gates::RXXGate<>(angle)) || !check(QC::Gates::RYYGate<>(angle)) ||
+            !check(QC::Gates::RZZGate<>(angle)) || !check(QC::Gates::RZXGate<>(angle)) ||
+            !check(QC::Gates::RXYGate<>(angle)))
+            return false;
+    }
+    // Constructor matrices reduce quarter turns modulo eight, including the
+    // largest odd quarter turn supported by the exact-angle helper.
+    for (int turn : {-1048575, -11, -9, 9, 11, 1048575})
+    {
+        const double angle = turn * quarter;
+        if (!check(QC::Gates::RxGate<>(angle)) || !check(QC::Gates::RyGate<>(angle)) ||
+            !check(QC::Gates::RzGate<>(angle)) || !check(QC::Gates::RXXGate<>(angle)) ||
+            !check(QC::Gates::RYYGate<>(angle)) || !check(QC::Gates::RZZGate<>(angle)) ||
+            !check(QC::Gates::RZXGate<>(angle)) || !check(QC::Gates::RXYGate<>(angle)))
+            return false;
+    }
+    CliffordRegressionSimulator actual(3);
+    actual.ApplyH(0);
+    const CliffordRegressionSimulator before(actual);
+    // Either complete encoding is valid, but no entry may select a different
+    // family. Neighbors outside the two accepted values and tiny new entries
+    // must retain the generic path and be rejected by the Clifford-only API.
+    const Eigen::MatrixXcd highH = QC::Gates::UGate<>(quarter, 0., 2 * quarter).getRawOperatorMatrix();
+    const Eigen::MatrixXcd lowH = legacyMatrices[0];
+    for (bool balanced : {false, true})
+    {
+        Eigen::MatrixXcd canonical =
+            balanced ? tensor(highH, QC::Gates::SquareRootNOTGate<>().getRawOperatorMatrix()) : highH;
+        const double low = legacyAmplitude * (balanced ? .5 : 1.);
+        const double high = constructorAmplitude * (balanced ? .5 : 1.);
+        for (unsigned variant = 0; variant < 7; ++variant)
+        {
+            Eigen::MatrixXcd perturbed = canonical;
+            const double magnitude = variant == 0   ? std::nextafter(low, 0.)
+                                     : variant == 1 ? std::nextafter(high, 1.)
+                                     : variant == 2 ? low
+                                                    : high;
+            for (Eigen::Index index = 0; index < perturbed.size(); ++index)
+            {
+                const auto value = perturbed.data()[index];
+                perturbed.data()[index] = {value.real() == 0. ? 0. : std::copysign(magnitude, value.real()),
+                                           value.imag() == 0. ? 0. : std::copysign(magnitude, value.imag())};
+            }
+            if (variant == 2 || variant == 3)
+            {
+                const double opposite = variant == 2 ? high : low;
+                const auto first = perturbed(0, 0);
+                perturbed(0, 0) = {std::copysign(opposite, first.real()),
+                                   balanced ? std::copysign(opposite, first.imag()) : 0.};
+            }
+            else if (variant == 4)
+                perturbed(0, 0) = {high, balanced ? low : 1e-310};
+            else if (variant == 5)
+                perturbed *= 1. + 1e-12;
+            else if (variant == 6)
+                perturbed(0, 0) = -perturbed(0, 0);
+            if (!CliffordCheck(QC::detail::FindCanonicalClifford(perturbed) == nullptr &&
+                                   CliffordRejects<std::invalid_argument>(
+                                       [&] { actual.ApplyGate(QC::Gates::AppliedGate<>(perturbed, 0, 1, 2)); }) &&
+                                   actual.SameTableau(before) && checkImages(canonical),
+                               "Exact recognition rejects mixed encodings, outer neighbors and invalid phases"))
+                return false;
+        }
+    }
+    // A scaled raw matrix that is bit-identical to a constructor encoding is
+    // indistinguishable from that encoding. This does not accept other rounded
+    // products: even products of canonical H matrices can be noncanonical.
+    if (!CliffordCheck(lowH * std::nextafter(1., 2.) == highH && checkImages(highH),
+                       "Bit-identical scaled aliases share the accepted constructor encoding"))
+        return false;
+    for (const auto &matrix : {(lowH * lowH).eval(), (highH * highH).eval(), tensor(lowH, lowH), tensor(highH, highH),
+                               tensor(tensor(lowH, lowH), lowH), tensor(tensor(highH, highH), highH)})
+        if (!CliffordCheck(QC::detail::FindCanonicalClifford(matrix) == nullptr,
+                           "Arbitrary rounded products are not snapped to canonical Clifford matrices"))
+            return false;
+    Eigen::MatrixXcd altered = QC::Gates::HadamardGate<>().getRawOperatorMatrix();
+    altered(0, 0) = std::nextafter(altered(0, 0).real(), 1.);
+    if (!CliffordCheck(
+            CliffordRejects<std::invalid_argument>([&] { actual.ApplyGate(QC::Gates::TGate<>(), 0); }) &&
+                CliffordRejects<std::invalid_argument>(
+                    [&] { actual.ApplyGate(QC::Gates::RxGate<>(quarter + 1e-15), 0); }) &&
+                CliffordRejects<std::invalid_argument>(
+                    [&] { actual.ApplyGate(QC::Gates::AppliedGate<>(altered, 0)); }) &&
+                CliffordRejects<std::invalid_argument>([&] { actual.ApplyGate(QC::Gates::CNOTGate<>(), 0, 0); }) &&
+                CliffordRejects<std::invalid_argument>(
+                    [&] { actual.ApplyGate(QC::Gates::ToffoliGate<>(), 0, 1, 2); }) &&
+                CliffordRejects<std::invalid_argument>(
+                    [&] { actual.ApplyGate(QC::Gates::FredkinGate<>(), 0, 1, 2); }) &&
+                actual.SameTableau(before),
+            "Generic Clifford gate rejects non-Clifford and invalid inputs before mutation"))
+        return false;
+    Eigen::MatrixXcd embedded = QC::Gates::HadamardGate<>().getOperatorMatrix(3, 1);
+    const auto original = QC::detail::FindCanonicalCliffordOwned(embedded);
+    for (unsigned variant = 0; variant < 3; ++variant)
+    {
+        Eigen::MatrixXcd perturbed = embedded;
+        if (variant == 0)
+            perturbed(0, 0) = std::nextafter(perturbed(0, 0).real(), 1.);
+        else if (variant == 1)
+            perturbed(0, 1) = 1e-310;
+        else
+            perturbed *= 1. + 1e-12;
+        if (!CliffordCheck(QC::detail::FindCanonicalClifford(perturbed) == nullptr &&
+                               CliffordRejects<std::invalid_argument>(
+                                   [&] { actual.ApplyGate(QC::Gates::AppliedGate<>(perturbed, 0, 1, 2)); }) &&
+                               actual.SameTableau(before) && QC::detail::FindCanonicalClifford(embedded) != nullptr &&
+                               checkImages(embedded, original),
+                           "Exact synthesis rejects perturbations and scaled filters without cache poisoning"))
+            return false;
+    }
+    const Eigen::MatrixXcd dyadic = QC::Gates::SquareRootNOTGate<>().getOperatorMatrix(3, 0);
+    for (unsigned variant = 0; variant < 10; ++variant)
+    {
+        Eigen::MatrixXcd perturbed = dyadic;
+        switch (variant)
+        {
+        case 0:
+            perturbed *= std::nextafter(1., 2.);
+            break;
+        case 1:
+            perturbed(0, 0) = {std::nextafter(.5, 1.), .5};
+            break;
+        case 2:
+            perturbed(0, 0) = {.5, std::nextafter(.5, 1.)};
+            break;
+        case 3:
+            perturbed(0, 2) = 1e-310;
+            break;
+        case 4:
+            perturbed(0, 0) = 1. / std::sqrt(2.);
+            break;
+        case 5:
+            perturbed(0, 1) = 1. / std::sqrt(2.);
+            break;
+        case 6:
+            perturbed *= 1. + 1e-12;
+            break;
+        case 7:
+            perturbed *= std::sqrt(2.);
+            break;
+        case 8:
+            perturbed = std::complex<double>(.5, .5) * Eigen::MatrixXcd::Identity(8, 8);
+            break;
+        default:
+            perturbed(0, 1) = 0.;
+            break;
+        }
+        if (!CliffordCheck(QC::detail::FindCanonicalClifford(perturbed) == nullptr &&
+                               CliffordRejects<std::invalid_argument>(
+                                   [&] { actual.ApplyGate(QC::Gates::AppliedGate<>(perturbed, 0, 1, 2)); }) &&
+                               actual.SameTableau(before) && checkImages(dyadic),
+                           "Eighth-phase recognition preserves global normalization and exact coefficients"))
+            return false;
+    }
+    return true;
+}
+
+bool CliffordSingleRotationRegression()
+{
+    constexpr double quarter = 1.57079632679489661923;
+    using Simulator = QC::Clifford::StabilizerSimulator;
+    using ApplyRotation = void (Simulator::*)(size_t, double);
+    const ApplyRotation rotations[] = {&Simulator::ApplyRx, &Simulator::ApplyRy, &Simulator::ApplyRz,
+                                       &Simulator::ApplyPhase};
+    for (unsigned axis = 0; axis < 4; ++axis)
+        for (int turns = -8; turns <= 8; ++turns)
+            for (unsigned input = 0; input < 6; ++input)
+            {
+                CliffordRegressionSimulator actual(1);
+                Eigen::Vector2cd state = Eigen::Vector2cd::Zero();
+                state[0] = 1.;
+                if (input & 1U)
+                {
+                    actual.ApplyX(0);
+                    state = QC::Gates::PauliXGate<>().getRawOperatorMatrix() * state;
+                }
+                if (input >= 2)
+                {
+                    actual.ApplyH(0);
+                    state = QC::Gates::HadamardGate<>().getRawOperatorMatrix() * state;
+                }
+                if (input >= 4)
+                {
+                    actual.ApplyS(0);
+                    state = QC::Gates::SGate<>().getRawOperatorMatrix() * state;
+                }
+                // Populate the probability cache before both diagonal and
+                // non-diagonal updates, including the Pauli bit-flip cases.
+                actual.GetQubitProbability(0);
+                const double angle = turns * quarter;
+                Eigen::Matrix2cd matrix;
+                if (axis == 0)
+                    matrix = QC::Gates::RxGate<>(angle).getRawOperatorMatrix();
+                else if (axis == 1)
+                    matrix = QC::Gates::RyGate<>(angle).getRawOperatorMatrix();
+                else if (axis == 2)
+                    matrix = QC::Gates::RzGate<>(angle).getRawOperatorMatrix();
+                else
+                    matrix = QC::Gates::PhaseShiftGate<>(angle).getRawOperatorMatrix();
+                state = matrix * state;
+                (actual.*rotations[axis])(0, angle);
+                const auto coherence = std::conj(state[0]) * state[1];
+                if (!CliffordCheck(std::abs(actual.ExpectationValue("X") - 2. * coherence.real()) < 3e-14 &&
+                                       std::abs(actual.ExpectationValue("Y") - 2. * coherence.imag()) < 3e-14 &&
+                                       std::abs(actual.ExpectationValue("Z") -
+                                                (std::norm(state[0]) - std::norm(state[1]))) < 3e-14 &&
+                                       std::abs(actual.GetQubitProbability(0) - std::norm(state[1])) < 3e-14,
+                                   "Single-qubit Clifford rotations and cached probabilities"))
+                    return false;
+            }
+    for (auto apply : rotations)
+    {
+        CliffordRegressionSimulator actual(1);
+        actual.ApplyH(0);
+        actual.GetQubitProbability(0);
+        const CliffordRegressionSimulator before(actual);
+        for (double invalid : {std::nextafter(quarter, 0.), std::nextafter(quarter, 2.),
+                               std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()})
+            if (!CliffordCheck(CliffordRejects<std::invalid_argument>([&] { (actual.*apply)(0, invalid); }) &&
+                                   actual.SameTableau(before) && actual.GetQubitProbability(0) == .5,
+                               "Reject non-Clifford rotations before mutation"))
+                return false;
+        if (!CliffordCheck(CliffordRejects<std::out_of_range>([&] { (actual.*apply)(1, 0.); }) &&
+                               actual.SameTableau(before),
+                           "Validate even identity rotations"))
+            return false;
+    }
+    return true;
+}
+
+// Compact gates on at most three qubits are recognized through their dense
+// matrices; the named gates keep their short circuits; a matrix that is not a
+// Clifford is rejected before the tableau or its caches change.
+bool CliffordCompactGateRegression()
+{
+    using Applied = QC::Gates::AppliedGate<>;
+    constexpr double quarter = 1.57079632679489661923;
+    const std::complex<double> i(0., 1.);
+    const Eigen::MatrixXcd x = QC::Gates::PauliXGate<>().getRawOperatorMatrix();
+    const auto prepare = [](CliffordRegressionSimulator &sim) {
+        sim.ApplyH(0);
+        sim.ApplyS(0);
+        sim.ApplyCX(2, 0);
+        sim.ApplyH(1);
+        sim.ApplyCX(3, 1);
+        sim.ApplySx(3);
+    };
+    const auto same = [&](const Applied &compact, const auto &native) {
+        CliffordRegressionSimulator actual(4), expected(4);
+        prepare(actual);
+        prepare(expected);
+        // Fill the probability cache first: the gate has to refresh it.
+        for (size_t q = 0; q < 4; ++q)
+            actual.GetQubitProbability(q);
+        actual.ApplyGate(compact);
+        native(expected);
+        bool ok = actual.SameTableau(expected);
+        for (size_t q = 0; q < 4; ++q)
+            ok = ok && actual.GetQubitProbability(q) == expected.GetQubitProbability(q);
+        return ok;
+    };
+    if (!CliffordCheck(same(Applied::Diagonal({1., 1., 1., -1.}, {0, 2}), [](auto &s) { s.ApplyCZ(0, 2); }),
+                       "Compact CZ diagonal") ||
+        !CliffordCheck(same(Applied::Diagonal({1., i}, {1}), [](auto &s) { s.ApplyS(1); }), "Compact S diagonal") ||
+        !CliffordCheck(same(Applied::MultiControlled(x, 3, {1}), [](auto &s) { s.ApplyCX(3, 1); }),
+                       "Compact X with one control") ||
+        !CliffordCheck(same(Applied::MultiControlled(x, 3, {1}, 0),
+                            [](auto &s) {
+                                s.ApplyX(1);
+                                s.ApplyCX(3, 1);
+                                s.ApplyX(1);
+                            }),
+                       "Compact X with a control on zero") ||
+        !CliffordCheck(same(Applied::MultiControlled(QC::Gates::HadamardGate<>().getRawOperatorMatrix(), 2, {}),
+                            [](auto &s) { s.ApplyH(2); }),
+                       "Compact gate without controls") ||
+        !CliffordCheck(same(Applied::MultiplexedRotation(QC::Gates::RotationAxis::Z, {quarter, -quarter}, 0, {2}),
+                            [=](auto &s) { s.ApplyRZZ(0, 2, quarter); }),
+                       "Compact multiplexed Z rotation at quarter turns") ||
+        !CliffordCheck(same(Applied::MultiplexedRotation(QC::Gates::RotationAxis::X, {2 * quarter, 0.}, 1, {0}),
+                            [](auto &s) {
+                                s.ApplyX(0);
+                                s.ApplyCX(1, 0);
+                                s.ApplyX(0);
+                                s.ApplyS(0);
+                            }),
+                       "Compact multiplexed X rotation by a half turn"))
+        return false;
+
+    CliffordRegressionSimulator actual(4);
+    prepare(actual);
+    for (size_t q = 0; q < 4; ++q)
+        actual.GetQubitProbability(q);
+    const CliffordRegressionSimulator before(actual);
+    const auto rejects = [&](const Applied &gate) {
+        return CliffordRejects<std::invalid_argument>([&] { actual.ApplyGate(gate); }) && actual.SameTableau(before) &&
+               actual.GetQubitProbability(3) == before.GetQubitProbability(3);
+    };
+    if (!CliffordCheck(rejects(Applied::MultiControlled(x, 3, {0, 1})), "Compact Toffoli is not a Clifford") ||
+        !CliffordCheck(rejects(Applied::Diagonal({1., std::polar(1., .5 * quarter)}, {0})),
+                       "Compact T diagonal is not a Clifford") ||
+        !CliffordCheck(rejects(Applied::MultiplexedRotation(QC::Gates::RotationAxis::Y, {.3, quarter}, 1, {0})),
+                       "Compact multiplexed rotation by a generic angle is not a Clifford") ||
+        !CliffordCheck(rejects(Applied::Diagonal(std::vector<std::complex<double>>(16, 1.), {0, 1, 2, 3})),
+                       "Compact gates on four qubits are rejected") ||
+        !CliffordCheck(rejects(Applied::MultiControlled(x, 3, {0, 1, 2})), "Compact X with three controls is rejected"))
+        return false;
+
+    // The named gates keep the catalog's circuits, whatever recognizes them first.
+    const auto operations = [](const Eigen::MatrixXcd &matrix) {
+        const auto compiled = QC::detail::FindCanonicalCliffordOwned(matrix);
+        return compiled ? compiled->Cliffords().size() : size_t(1000);
+    };
+    if (!CliffordCheck(operations(QC::Gates::CNOTGate<>().getRawOperatorMatrix()) == 1 &&
+                           operations(QC::Gates::SquareRootNOTGate<>().getRawOperatorMatrix()) == 1 &&
+                           operations(QC::Gates::PauliYGate<>().getRawOperatorMatrix()) == 1 &&
+                           operations(QC::Gates::ECRGate<>().getRawOperatorMatrix()) == 4 &&
+                           operations(QC::Gates::RxGate<>(quarter).getRawOperatorMatrix()) == 1,
+                       "Named Clifford gates keep their short circuits") ||
+        !CliffordCheck(QC::detail::FindCanonicalClifford(QC::Gates::TGate<>().getRawOperatorMatrix()) == nullptr &&
+                           QC::detail::FindCanonicalClifford(QC::Gates::ControlledRzGate<>(.3).getRawOperatorMatrix()) ==
+                               nullptr &&
+                           QC::detail::FindCanonicalClifford(QC::Gates::ToffoliGate<>().getRawOperatorMatrix()) ==
+                               nullptr &&
+                           QC::detail::FindCanonicalClifford(QC::Gates::HadamardGate<>().getOperatorMatrix(3, 1)) !=
+                               nullptr,
+                       "Recognition order changed which matrices are Cliffords"))
+        return false;
+    // More matrices than one cache set holds: each lookup still answers for its own matrix.
+    std::vector<Eigen::MatrixXcd> matrices;
+    for (int turns = -8; turns <= 8; ++turns)
+    {
+        matrices.push_back(QC::Gates::RxGate<>(turns * quarter).getRawOperatorMatrix());
+        matrices.push_back(QC::Gates::RZXGate<>(turns * quarter).getRawOperatorMatrix());
+        matrices.push_back(QC::Gates::RzGate<>(turns * quarter + .01).getRawOperatorMatrix());
+        matrices.push_back(QC::Gates::RXYGate<>(turns * quarter).getOperatorMatrix(3, 2, 0));
+    }
+    for (unsigned round = 0; round < 3; ++round)
+        for (size_t index = 0; index < matrices.size(); ++index)
+        {
+            const auto *compiled = QC::detail::FindCanonicalClifford(matrices[index]);
+            const bool clifford = index % 4 != 2;
+            if (!CliffordCheck((compiled != nullptr) == clifford, "Cached recognition answered for another matrix"))
+                return false;
+            if (!compiled)
+                continue;
+            const Eigen::MatrixXcd &matrix = matrices[index];
+            const unsigned dimension = static_cast<unsigned>(matrix.rows());
+            for (unsigned z = 1; z < dimension; z <<= 1)
+            {
+                bool negative;
+                const auto image = compiled->ConjugatePauli({0, uint8_t(z)}, negative);
+                Eigen::MatrixXcd pauli = Eigen::MatrixXcd::Zero(dimension, dimension), expected = pauli;
+                for (unsigned col = 0; col < dimension; ++col)
+                {
+                    pauli(col, col) = (col & z) ? -1. : 1.;
+                    const auto coefficient =
+                        QC::detail::LocalPauliSum::IPower(QC::Clifford::detail::Popcount(image.x & image.z));
+                    expected(col ^ image.x, col) =
+                        (negative ? -1. : 1.) *
+                        ((QC::Clifford::detail::Popcount(col & image.z) & 1U) ? -coefficient : coefficient);
+                }
+                if (!CliffordCheck((matrix.adjoint() * pauli * matrix - expected).cwiseAbs().maxCoeff() < 2e-15,
+                                   "Cached recognition returned another matrix's circuit"))
+                    return false;
+            }
+        }
+    return true;
 }
 
 bool CliffordBoundaryRegression()
@@ -1111,9 +1792,10 @@ bool CliffordMixedRegression()
 bool CliffordRegressionTests()
 {
     std::cout << "\nClifford gates, inverse tableau, probability, sampling and boundary regressions" << std::endl;
-    if (!CliffordMixedRegression() || !CliffordPackedRegression() || !CliffordDistributionRegression() ||
-        !CliffordBoundaryRegression() || !CliffordCountsRegression() || !CliffordResetRegression() ||
-        !CliffordSwapRegression() || !CliffordMeasurementRegression())
+    if (!CliffordGenericGateRegression() || !CliffordSingleRotationRegression() || !CliffordMixedRegression() ||
+        !CliffordPackedRegression() || !CliffordDistributionRegression() || !CliffordBoundaryRegression() ||
+        !CliffordCountsRegression() || !CliffordResetRegression() || !CliffordSwapRegression() ||
+        !CliffordMeasurementRegression() || !CliffordCompactGateRegression())
         return false;
     std::cout << "Success" << std::endl;
     return true;

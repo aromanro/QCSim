@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Tests.h"
+#include "StructuredGateRegressionTests.h"
 
 #include "DensityMatrix.h"
 #include "QubitRegister.h"
@@ -2446,10 +2447,11 @@ bool DensityMatrixTests()
     const std::mt19937 savedGenerator = gen;
     gen.seed(0xD35A17U);
     const bool result =
-        DensityMatrixUnitaryTest() && DensityMatrixDenseGateReferenceTest() && DensityMatrixThreeQubitGateTest() &&
-        DensityMatrixChannelsTest() && DensityMatrixGenericChannelTest() && DensityMatrixSuperoperatorTest() &&
-        StatevectorKrausTrajectoryTest() && DensityMatrixInitializationAndValidationTest() &&
-        DensityMatrixMeasurementTest() && DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
+        DensityMatrixStructuredGateTests() && DensityMatrixUnitaryTest() && DensityMatrixDenseGateReferenceTest() &&
+        DensityMatrixThreeQubitGateTest() && DensityMatrixChannelsTest() && DensityMatrixGenericChannelTest() &&
+        DensityMatrixSuperoperatorTest() && StatevectorKrausTrajectoryTest() &&
+        DensityMatrixInitializationAndValidationTest() && DensityMatrixMeasurementTest() &&
+        DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
         DensityMatrixMeasurementStatisticsTest() && DensityMatrixCollapseTest() && DensityMatrixRareCollapseTest() &&
         DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
         DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest();
