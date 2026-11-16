@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "StructuredGateRegressionTests.h"
 #include "Tests.h"
 
 #include "DensityMatrix.h"
@@ -1087,11 +1088,7 @@ static bool DensityMatrixInitializationAndValidationTest()
         !DM_ExpectInvalidArgument([&] { dm.GetQubitProbability(2); }, "Out-of-range probability qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.MeasureQubit(2); }, "Out-of-range measured qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.DephaseMeasure(2); }, "Out-of-range dephased qubit") ||
-        !DM_ExpectInvalidArgument(
-            [&] {
-                dm.MeasureNoCollapse(std::set<size_t>{0, 2});
-            },
-            "Out-of-range subset qubit") ||
+        !DM_ExpectInvalidArgument([&] { dm.MeasureNoCollapse(std::set<size_t>{0, 2}); }, "Out-of-range subset qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.RepeatedMeasure(1, 0, 1); }, "Reversed measurement range") ||
         !DM_ExpectInvalidArgument([&] { dm.RepeatedMeasureUnordered(0, 2, 1); }, "Out-of-range measurement range"))
         return false;
@@ -1109,11 +1106,7 @@ static bool DensityMatrixInitializationAndValidationTest()
     nonFiniteKraus(1, 1) = std::numeric_limits<double>::infinity();
     if (!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({}, 0); }, "Empty Kraus channel") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({0.5 * i2}, 0); }, "Non trace-preserving Kraus channel") ||
-        !DM_ExpectInvalidArgument(
-            [&] {
-                dm.ApplyChannel({i2, i4}, 0);
-            },
-            "Mismatched Kraus dimensions") ||
+        !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i2, i4}, 0); }, "Mismatched Kraus dimensions") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i4}, 0, 0); }, "Duplicate two-qubit channel arguments") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i2}, 2); }, "Out-of-range channel qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i8}, 0); }, "Unsupported three-qubit channel") ||
@@ -1133,16 +1126,10 @@ static bool DensityMatrixInitializationAndValidationTest()
         !DM_ExpectInvalidArgument([&] { dm.ExpectationValue(std::string("IA")); }, "Invalid Pauli operator") ||
         !DM_ExpectInvalidArgument([&] { dm.setToBasisState(4); }, "Out-of-range basis state") ||
         !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({}); }, "Empty basis-state mixture") ||
-        !DM_ExpectInvalidArgument(
-            [&] {
-                dm.setToMixtureOfBasisStates({{0, 0.}, {7, 1.}});
-            },
-            "Mixture without a valid positive weight") ||
-        !DM_ExpectInvalidArgument(
-            [&] {
-                dm.setToMixtureOfBasisStates({{0, std::numeric_limits<double>::infinity()}});
-            },
-            "Non-finite mixture weight"))
+        !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({{0, 0.}, {7, 1.}}); },
+                                  "Mixture without a valid positive weight") ||
+        !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({{0, std::numeric_limits<double>::infinity()}}); },
+                                  "Non-finite mixture weight"))
         return false;
 
     if ((dm.getDensityMatrix() - original).norm() > 1E-12)
@@ -2446,10 +2433,11 @@ bool DensityMatrixTests()
     const std::mt19937 savedGenerator = gen;
     gen.seed(0xD35A17U);
     const bool result =
-        DensityMatrixUnitaryTest() && DensityMatrixDenseGateReferenceTest() && DensityMatrixThreeQubitGateTest() &&
-        DensityMatrixChannelsTest() && DensityMatrixGenericChannelTest() && DensityMatrixSuperoperatorTest() &&
-        StatevectorKrausTrajectoryTest() && DensityMatrixInitializationAndValidationTest() &&
-        DensityMatrixMeasurementTest() && DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
+        DensityMatrixStructuredGateTests() && DensityMatrixUnitaryTest() && DensityMatrixDenseGateReferenceTest() &&
+        DensityMatrixThreeQubitGateTest() && DensityMatrixChannelsTest() && DensityMatrixGenericChannelTest() &&
+        DensityMatrixSuperoperatorTest() && StatevectorKrausTrajectoryTest() &&
+        DensityMatrixInitializationAndValidationTest() && DensityMatrixMeasurementTest() &&
+        DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
         DensityMatrixMeasurementStatisticsTest() && DensityMatrixCollapseTest() && DensityMatrixRareCollapseTest() &&
         DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
         DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest();

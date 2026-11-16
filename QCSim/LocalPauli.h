@@ -7,45 +7,12 @@
 #include <limits>
 
 #include "BitOps.h"
+#include "GateAngles.h"
 
 namespace QC
 {
 namespace detail
 {
-
-// True when angle is a multiple of pi/2, which quarterTurns receives. The
-// one rule for every simulator: angle must equal the rounded product
-// turns * (pi/2), so k * M_PI_2 and similar expressions count as exact.
-inline bool TryGetQuarterTurns(double angle, long long &quarterTurns)
-{
-    constexpr double quarterTurnAngle = 1.57079632679489661923132169163975144;
-    const double turns = angle / quarterTurnAngle;
-    if (!(std::abs(turns) < static_cast<double>(std::numeric_limits<long long>::max())))
-        return false;
-    const auto roundedTurns = static_cast<long long>(std::llround(turns));
-    if (angle != static_cast<double>(roundedTurns) * quarterTurnAngle)
-        return false;
-    quarterTurns = roundedTurns;
-    return true;
-}
-
-// cos and sin of angle, exact at multiples of pi/2. Returns whether angle is
-// such a multiple, by the rule of TryGetQuarterTurns.
-inline bool QuarterTurnCosSin(double angle, double &cosine, double &sine)
-{
-    long long quarterTurns = 0;
-    if (TryGetQuarterTurns(angle, quarterTurns))
-    {
-        static constexpr double values[4][2] = {{1., 0.}, {0., 1.}, {-1., 0.}, {0., -1.}};
-        const auto &value = values[((quarterTurns % 4) + 4) % 4];
-        cosine = value[0];
-        sine = value[1];
-        return true;
-    }
-    cosine = std::cos(angle);
-    sine = std::sin(angle);
-    return false;
-}
 
 // A Pauli string on the at most three qubits of a gate. Local qubit j sets
 // bit j of x and z; both bits mean Y, with the convention

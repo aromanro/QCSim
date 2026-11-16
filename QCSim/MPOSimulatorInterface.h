@@ -172,9 +172,19 @@ class MPOSimulatorInterface
 
     virtual void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) = 0;
     virtual void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+
+    virtual void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
+                           IndexType controllingQubit2)
+    {
+        if (gate.getQubitsNumber() > 2)
+            throw std::invalid_argument("Three-qubit gates are not implemented by this MPO backend");
+        ApplyGate(gate, qubit, controllingQubit1);
+    }
+
     virtual void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) = 0;
 
-    // Explicit non-unitary-capable local operator API. Applies rho -> A rho A^dagger.
+    // Explicit non-unitary-capable local operator API (at most three qubits in
+    // MPOSimulator/MPOSimulatorImpl). Applies rho -> A rho A^dagger.
     // If A is not unitary the trace is generally not preserved; the normalized variants
     // condition on the operation succeeding by dividing the resulting state by its trace.
     // They throw, and leave the state as it was, when that trace is zero, negative, not
@@ -183,9 +193,26 @@ class MPOSimulatorInterface
     // not normalized keeps its branches of ordinary probability.
     virtual void ApplyOperator(const Gates::AppliedGate<MatrixClass> &op) = 0;
     virtual void ApplyOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+
+    virtual void ApplyOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1,
+                               IndexType controllingQubit2)
+    {
+        if (op.getQubitsNumber() > 2)
+            throw std::invalid_argument("Three-qubit operators are not implemented by this MPO backend");
+        ApplyOperator(op, qubit, controllingQubit1);
+    }
+
     virtual void ApplyOperators(const std::vector<Gates::AppliedGate<MatrixClass>> &ops) = 0;
     virtual void ApplyOperatorAndNormalize(const Gates::AppliedGate<MatrixClass> &op) = 0;
     virtual void ApplyOperatorAndNormalize(const GateClass &op, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+
+    virtual void ApplyOperatorAndNormalize(const GateClass &op, IndexType qubit, IndexType controllingQubit1,
+                                           IndexType controllingQubit2)
+    {
+        if (op.getQubitsNumber() > 2)
+            throw std::invalid_argument("Three-qubit operators are not implemented by this MPO backend");
+        ApplyOperatorAndNormalize(op, qubit, controllingQubit1);
+    }
 
     // Applies a multi-Kraus channel: rho -> sum_i K_i rho K_i^dagger.
     // Completeness Σ_i K_i^dagger K_i = I is controlled by setKrausCompletenessCheck;

@@ -1,6 +1,15 @@
 #pragma once
 
+#include "QuantumGate.h"
+
+#include <unsupported/Eigen/CXX11/Tensor>
+
+#include <complex>
+#include <memory>
 #include <set>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
 
 namespace QC
 {
@@ -86,6 +95,15 @@ class MPSSimulatorInterface
     virtual void print() const = 0;
     virtual void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) = 0;
     virtual void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) = 0;
+
+    virtual void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
+                           IndexType controllingQubit2)
+    {
+        if (gate.getQubitsNumber() > 2)
+            throw std::invalid_argument("Three-qubit gates are not implemented by this MPS backend");
+        ApplyGate(gate, qubit, controllingQubit1);
+    }
+
     virtual void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) = 0;
     virtual bool MeasureQubit(IndexType qubit) = 0;
     virtual std::unordered_map<IndexType, bool> MeasureQubits(const std::set<IndexType> &qubits) = 0;

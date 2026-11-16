@@ -30,7 +30,8 @@ class MPSSimulatorState : public MPSSimulatorBaseState
 // this is going to allow two qubit gates to be applied on qubits that are not adjacent
 // it's a sort of decorator pattern, contains the simulator inside and exposes the same interface
 // adding on top of the implementation the qubits mapping
-class MPSSimulator : public MPSSimulatorInterface
+class MPSSimulator : public MPSSimulatorInterface,
+                     public StructuredGateOperations<MPSSimulator, MPSSimulatorInterface::MatrixClass>
 {
   public:
     // Callback signature: (bondDims) -> meetPosition
@@ -146,6 +147,17 @@ class MPSSimulator : public MPSSimulatorInterface
         return impl.getTruncationMode();
     }
 
+    // See MPSSimulatorImpl::setThreeQubitEnvironmentRefresh.
+    void setThreeQubitEnvironmentRefresh(bool enable)
+    {
+        impl.setThreeQubitEnvironmentRefresh(enable);
+    }
+
+    bool getThreeQubitEnvironmentRefresh() const
+    {
+        return impl.getThreeQubitEnvironmentRefresh();
+    }
+
     void SetMultithreading(bool enable = true) override
     {
         impl.SetMultithreading(enable);
@@ -210,32 +222,95 @@ class MPSSimulator : public MPSSimulatorInterface
 
     void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) override
     {
-        ApplyGate(gate, gate.getQubit1(), gate.getQubit2());
+        if (const auto *compact = gate.getStructuredGate())
+            ApplyStructuredGate(*compact);
+        else if (gate.getQubitsNumber() <= 2)
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2());
+        else
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
+    }
+
+    // A compact gate on logical qubits; also what ApplyMCX, ApplyMCZ, ApplyMCP, ApplyMCRX/Y/Z,
+    // ApplyMCU, ApplyMultiControlledGate, ApplyDiagonalGate and the multiplexed rotations call.
+    // A multi-controlled one-qubit unitary on more than three qubits is applied where its
+    // qubits are, for any number of controls: no routing, no ancillas. So is a diagonal or a
+    // multiplexed rotation on more than three qubits, as the chain operator of its table.
+    // Every other compact gate is expanded to its matrix and routed as a local gate.
+    void ApplyStructuredGate(const Gates::StructuredGate &gate)
+    {
+        gate.Validate(impl.getNrQubits());
+        if (gate.kind == Gates::StructuredGate::Kind::Controlled && gate.Arity() > 3)
+        {
+            MatrixClass u(2, 2);
+            u << gate.matrix[0], gate.matrix[1], gate.matrix[2], gate.matrix[3];
+            std::vector<IndexType> controls;
+            std::vector<bool> values;
+            for (size_t k = 0; k < gate.qubits.size(); ++k)
+            {
+                controls.push_back(qubitsMap[gate.qubits[k]]);
+                values.push_back(gate.controlState == std::numeric_limits<size_t>::max() ||
+                                 ((gate.controlState >> k) & 1));
+            }
+            impl.ApplyMultiControlledSites(u, qubitsMap[gate.target], controls, values);
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
+                NotifyBondDimensions();
+            return;
+        }
+        if (gate.Arity() > 3)
+        {
+            // A wide diagonal or multiplexed table is applied where its qubits are, as the
+            // chain operator of the table: no routing.
+            impl.ApplyChainOperator(
+                MPSSimulatorImpl::WideTableOperator(gate, [this](size_t qubit) { return qubitsMap[qubit]; }));
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
+                NotifyBondDimensions();
+            return;
+        }
+        const auto qubits = gate.OrderedQubits();
+        if (qubits.empty())
+        {
+            // A table of one entry is a scalar; the normalized state keeps only its phase.
+            if (gate.diagonal[0] == std::complex<double>(0.))
+                throw std::domain_error("A zero operator cannot produce a normalized MPS");
+            ApplyGate(Gates::AppliedGate<MatrixClass>(
+                MatrixClass((gate.diagonal[0] / std::abs(gate.diagonal[0])) * MatrixClass::Identity(2, 2)), 0));
+            return;
+        }
+        ApplyGate(Gates::AppliedGate<MatrixClass>(gate.DenseMatrix<MatrixClass>(3), qubits[0],
+                                                  qubits.size() > 1 ? qubits[1] : 0,
+                                                  qubits.size() > 2 ? qubits[2] : 0));
     }
 
     void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) override
     {
+        const size_t gateQubits = gate.getQubitsNumber();
+        if (gateQubits < 1 || gateQubits > 2)
+            throw std::invalid_argument("This MPS overload requires a one- or two-qubit gate");
         if (qubit < 0 || qubit >= static_cast<IndexType>(impl.getNrQubits()))
             throw std::invalid_argument("Qubit index out of bounds");
-        else if (gate.getQubitsNumber() > 1 &&
+        else if (gateQubits > 1 &&
                  (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits())))
             throw std::invalid_argument("Qubit index out of bounds");
+        // Compact payloads have no dense matrix; reject them before any routing.
+        // The impl validates and reuses the matrix for a one-site application.
+        if (gateQubits > 1)
+            (void)gate.getRawOperatorMatrix();
 
         // A SWAP only exchanges where the two logical qubits live, so it is applied to the map:
         // no routing, no tensor update, no truncation and no bond dimension change to report
-        if (gate.getQubitsNumber() == 2 && gate.isSwapGate() && qubit != controllingQubit1)
+        if (gateQubits == 2 && gate.isSwapGate() && qubit != controllingQubit1)
         {
             ExchangeQubitPositions(qubit, controllingQubit1);
             return;
         }
 
         IndexType qubit1 = qubitsMap[qubit];
-        IndexType qubit2 = gate.getQubitsNumber() > 1 ? qubitsMap[controllingQubit1] : qubit1;
+        IndexType qubit2 = gateQubits > 1 ? qubitsMap[controllingQubit1] : qubit1;
 
         // for two qubit gates:
         // if the qubits are not adjacent, apply swap gates until they are
         // don't forget to update the qubitsMap
-        if (gate.getQubitsNumber() > 1 && abs(qubit1 - qubit2) > 1)
+        if (gateQubits > 1 && abs(qubit1 - qubit2) > 1)
         {
             if (meetingPositionCallback)
             {
@@ -266,7 +341,60 @@ class MPSSimulator : public MPSSimulatorInterface
 
         impl.ApplyGate(gate, qubit1, qubit2);
 
-        if ((bondDimensionCallback || bondDimensionSummaryCallback) && gate.getQubitsNumber() > 1)
+        if ((bondDimensionCallback || bondDimensionSummaryCallback) && gateQubits > 1)
+            NotifyBondDimensions();
+    }
+
+    void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
+                   IndexType controllingQubit2) override
+    {
+        if (gate.getQubitsNumber() != 3)
+        {
+            ApplyGate(gate, qubit, controllingQubit1);
+            return;
+        }
+        const auto &matrix = gate.getRawOperatorMatrix();
+        ThreeSite::Validate(matrix, static_cast<IndexType>(impl.getNrQubits()), qubit, controllingQubit1,
+                            controllingQubit2);
+        if ((matrix.array() == std::complex<double>(0.)).all())
+            throw std::domain_error("A zero three-qubit operator cannot produce a normalized MPS");
+        const bool unitary = ThreeSite::IsUnitary(matrix);
+        if (unitary)
+        {
+            BringThreeQubitsTogether(qubit, controllingQubit1, controllingQubit2);
+            impl.ApplyThreeQubitGate(gate, qubitsMap[qubit], qubitsMap[controllingQubit1], qubitsMap[controllingQubit2],
+                                     true);
+        }
+        else
+        {
+            auto previousMap = qubitsMap, previousInverse = qubitsMapInv;
+            std::vector<BondNotification> notifications;
+            try
+            {
+                impl.WithThreeSiteRollback([&]() {
+                    // A failed filter must not expose tentative routing or cuts
+                    // to observers. Preserve the per-swap payloads, but deliver
+                    // them after commit, when queries see the final state.
+                    BringThreeQubitsTogether(qubit, controllingQubit1, controllingQubit2, false, &notifications);
+                    impl.ApplyThreeQubitGate(gate, qubitsMap[qubit], qubitsMap[controllingQubit1],
+                                             qubitsMap[controllingQubit2], false);
+                });
+            }
+            catch (...)
+            {
+                qubitsMap.swap(previousMap);
+                qubitsMapInv.swap(previousInverse);
+                throw;
+            }
+            for (const auto &notification : notifications)
+            {
+                if (bondDimensionCallback)
+                    bondDimensionCallback(notification.dimensions);
+                if (bondDimensionSummaryCallback)
+                    bondDimensionSummaryCallback(notification.maximum);
+            }
+        }
+        if (bondDimensionCallback || bondDimensionSummaryCallback)
             NotifyBondDimensions();
     }
 
@@ -478,6 +606,7 @@ class MPSSimulator : public MPSSimulatorInterface
         sim->impl.singularValueThreshold = impl.singularValueThreshold;
         sim->impl.truncationMode = impl.truncationMode;
         sim->impl.enableMultithreading = impl.enableMultithreading;
+        sim->impl.refreshThreeSiteEnvironments = impl.refreshThreeSiteEnvironments;
 
         sim->impl.lambdas = impl.lambdas;
         sim->impl.gammas = impl.gammas;
@@ -594,7 +723,7 @@ class MPSSimulator : public MPSSimulatorInterface
 
             assert(abs(movingQubitReal - toQubitReal) == 1);
 
-            impl.ApplyGate(swapGate, movingQubitReal, toQubitReal);
+            impl.ApplyRoutingSwap(swapGate, movingQubitReal, toQubitReal);
 
             // update the maps
             qubitsMap[logicalQubit] = toQubitReal;
@@ -691,6 +820,50 @@ class MPSSimulator : public MPSSimulatorInterface
             qubitsMapInv[i] = qubitsMap[i] = i;
     }
 
+    // The median physical site stays fixed. Only the two outer sites move,
+    // along disjoint paths, until they flank it; callbacks observe each swap.
+    struct BondNotification
+    {
+        std::vector<IndexType> dimensions;
+        IndexType maximum = 1;
+    };
+
+    void BringThreeQubitsTogether(IndexType q1, IndexType q2, IndexType q3, bool notify = true,
+                                  std::vector<BondNotification> *deferred = nullptr)
+    {
+        std::array<IndexType, 3> logical{q1, q2, q3};
+        std::sort(logical.begin(), logical.end(),
+                  [this](IndexType a, IndexType b) { return qubitsMap[a] < qubitsMap[b]; });
+        const IndexType middle = qubitsMap[logical[1]];
+        for (int side : {0, 2})
+        {
+            const IndexType moving = logical[side];
+            const IndexType step = side == 0 ? 1 : -1;
+            const IndexType destination = middle - step;
+            while (qubitsMap[moving] != destination)
+            {
+                const IndexType from = qubitsMap[moving], to = from + step;
+                const IndexType displaced = qubitsMapInv[to];
+                impl.ApplyRoutingSwap(swapGate, from, to);
+                ExchangeQubitPositions(moving, displaced);
+                if (bondDimensionCallback || bondDimensionSummaryCallback)
+                {
+                    if (notify)
+                        NotifyBondDimensions();
+                    else
+                    {
+                        BondNotification notification;
+                        if (bondDimensionCallback)
+                            notification.dimensions = impl.getBondDimensions();
+                        if (bondDimensionSummaryCallback)
+                            notification.maximum = impl.getMaxBondDimension();
+                        deferred->push_back(std::move(notification));
+                    }
+                }
+            }
+        }
+    }
+
     void ExchangeQubitPositions(IndexType qubit1, IndexType qubit2)
     {
         const IndexType real1 = qubitsMap[qubit1];
@@ -753,7 +926,7 @@ class MPSSimulator : public MPSSimulatorInterface
             const IndexType toQubitReal = movingQubitReal + (swapDown ? -1 : 1);
             const IndexType toQubitInv = qubitsMapInv[toQubitReal];
 
-            impl.ApplyGate(swapGate, movingQubitReal, toQubitReal);
+            impl.ApplyRoutingSwap(swapGate, movingQubitReal, toQubitReal);
 
             qubitsMap[toQubitInv] = movingQubitReal;
             qubitsMapInv[movingQubitReal] = toQubitInv;
@@ -825,7 +998,7 @@ class MPSSimulator : public MPSSimulatorInterface
                 const IndexType toReal = movingReal + 1;
                 const IndexType toInv = qubitsMapInv[toReal];
 
-                impl.ApplyGate(swapGate, movingReal, toReal);
+                impl.ApplyRoutingSwap(swapGate, movingReal, toReal);
 
                 qubitsMap[toInv] = movingReal;
                 qubitsMapInv[movingReal] = toInv;
@@ -848,7 +1021,7 @@ class MPSSimulator : public MPSSimulatorInterface
                 const IndexType toReal = movingReal - 1;
                 const IndexType toInv = qubitsMapInv[toReal];
 
-                impl.ApplyGate(swapGate, toReal, movingReal);
+                impl.ApplyRoutingSwap(swapGate, toReal, movingReal);
 
                 qubitsMap[toInv] = movingReal;
                 qubitsMapInv[movingReal] = toInv;
@@ -954,7 +1127,8 @@ class MPSSimulator : public MPSSimulatorInterface
             const double localBond3 = bMid * bMid * bMid;
             const double cutDamage = 0.5 * (prefixCut[i] + suffixCut[i]);
             const double outerContext = 0.05 * (bLeft * bMid * bRight);
-            const double tieBreak = (c2 > c1) ? (1e-6 * static_cast<double>(span - 1 - i)) : (1e-6 * static_cast<double>(i));
+            const double tieBreak =
+                (c2 > c1) ? (1e-6 * static_cast<double>(span - 1 - i)) : (1e-6 * static_cast<double>(i));
             const double score = localBond3 + cutDamage + outerContext + tieBreak;
 
             if (score < bestScore)

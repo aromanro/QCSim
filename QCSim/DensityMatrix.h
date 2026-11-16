@@ -44,7 +44,8 @@ inline std::atomic<size_t> &DensityParallelMinElementsSetting()
     return value;
 }
 
-template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd> class DensityMatrix
+template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd>
+class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass, MatrixClass>, MatrixClass>
 {
   public:
     using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
@@ -383,7 +384,19 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
 
     void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate)
     {
-        ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
+        if (const auto *payload = gate.getCompactPayload())
+        {
+            // As in the statevector register: the shared tables under the gate's
+            // own qubits, validated when the gate was made, with the cosines and
+            // sines of a multiplexer kept with the tables.
+            const bool multiplexed = payload->OperationKind() == Gates::StructuredGate::Kind::MultiplexedRotation;
+            ApplyStructuredGateImpl(payload->View(), true, payload->conjugated,
+                                    multiplexed ? payload->Coefficients(true) : nullptr);
+        }
+        else if (const auto *compact = gate.getStructuredGate())
+            ApplyStructuredGateImpl(*compact, false);
+        else
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
     }
 
     void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates)
@@ -392,6 +405,170 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             ApplyGate(gate);
     }
 
+    void ApplyStructuredGate(const Gates::StructuredGate &gate)
+    {
+        ApplyStructuredGateImpl(gate, false);
+    }
+
+    // The same for an operation whose tables stay with the caller.
+    void ApplyStructuredGateView(const Gates::StructuredGateView &gate)
+    {
+        ApplyStructuredGateImpl(gate, false);
+    }
+
+  private:
+    void ApplyStructuredGateImpl(const Gates::StructuredGateView &gate, bool tablesValidated,
+                                 bool adjointTables = false,
+                                 const Gates::StructuredRotationCoefficients *cached = nullptr)
+    {
+        if (tablesValidated)
+            gate.ValidateQubits(NrQubits);
+        else
+            gate.Validate(NrQubits);
+        if (gate.kind == Gates::StructuredGate::Kind::Diagonal)
+        {
+            const size_t changedValues = static_cast<size_t>(std::count_if(
+                gate.diagonal.begin(), gate.diagonal.end(), [](Scalar value) { return value != Scalar(1.); }));
+            if (!changedValues)
+                return;
+            // O(2^n) factors, instead of a 4^k diagonal superoperator. Their
+            // products are applied in one contiguous pass through rho.
+            std::vector<Scalar> factors(NrBasisStates);
+            const bool extremeFactors = std::any_of(gate.diagonal.begin(), gate.diagonal.end(), [](Scalar value) {
+                const double magnitude = std::max(std::abs(value.real()), std::abs(value.imag()));
+                return magnitude > 1E150 || (magnitude > 0. && magnitude < 1E-150);
+            });
+            std::array<size_t, std::numeric_limits<size_t>::digits> toggles{};
+            for (size_t k = 0; k < gate.qubits.size(); ++k)
+                toggles[gate.qubits[k]] = size_t{1} << k;
+            for (size_t bit = 1; bit < NrQubits; ++bit)
+                toggles[bit] ^= toggles[bit - 1];
+            size_t selector = 0;
+            factors[0] = gate.diagonal[0];
+            for (size_t i = 1; i < NrBasisStates; ++i)
+            {
+                selector ^= toggles[Clifford::detail::TrailingZero(i)];
+                factors[i] = gate.diagonal[selector];
+            }
+            // The tables of the adjoint operation: the conjugate factors.
+            if (adjointTables)
+                for (auto &factor : factors)
+                    factor = std::conj(factor);
+            // Keep exact identity skipping for sparse phase tables. A dense,
+            // ordinary-scale table can use contiguous Eigen packet arithmetic;
+            // extreme scales retain the guarded exponent path below.
+            const bool denseFactors = !extremeFactors && changedValues > gate.diagonal.size() / 2;
+            Scalar *const data = rho.data();
+            if (denseFactors)
+            {
+                ForEachRange(NrBasisStates, static_cast<size_t>(rho.size()), [&](size_t begin, size_t end) {
+                    for (size_t outer = begin; outer < end; ++outer)
+                    {
+                        const Scalar outerFactor = MatrixClass::IsRowMajor ? factors[outer] : std::conj(factors[outer]);
+                        using Array = Eigen::Array<Scalar, Eigen::Dynamic, 1>;
+                        Eigen::Map<Array> entries(data + outer * NrBasisStates, NrBasisStates);
+                        const Eigen::Map<const Array> inner(factors.data(), NrBasisStates);
+                        if constexpr (MatrixClass::IsRowMajor)
+                            entries *= outerFactor * inner.conjugate();
+                        else
+                            entries *= outerFactor * inner;
+                    }
+                });
+                return;
+            }
+            if (!extremeFactors)
+            {
+                // For identity-heavy tables the changed ket/bra rows form a
+                // sparse union. In a row with factor one, only its changed
+                // columns need arithmetic or memory traffic.
+                std::vector<size_t> changed;
+                changed.reserve(changedValues * (NrBasisStates / gate.diagonal.size()));
+                for (size_t i = 0; i < NrBasisStates; ++i)
+                    if (factors[i] != Scalar(1.))
+                        changed.push_back(i);
+                ForEachRange(NrBasisStates, static_cast<size_t>(rho.size()), [&](size_t begin, size_t end) {
+                    for (size_t outer = begin; outer < end; ++outer)
+                    {
+                        const Scalar outerFactor = MatrixClass::IsRowMajor ? factors[outer] : std::conj(factors[outer]);
+                        if (outerFactor == Scalar(1.))
+                        {
+                            for (size_t inner : changed)
+                            {
+                                const Scalar factor = outerFactor * (MatrixClass::IsRowMajor ? std::conj(factors[inner])
+                                                                                             : factors[inner]);
+                                data[outer * NrBasisStates + inner] *= factor;
+                            }
+                        }
+                        else
+                            for (size_t inner = 0; inner < NrBasisStates; ++inner)
+                            {
+                                const Scalar factor = outerFactor * (MatrixClass::IsRowMajor ? std::conj(factors[inner])
+                                                                                             : factors[inner]);
+                                if (factor != Scalar(1.))
+                                    data[outer * NrBasisStates + inner] *= factor;
+                            }
+                    }
+                });
+                return;
+            }
+            ForEachRange(NrBasisStates, static_cast<size_t>(rho.size()), [&](size_t begin, size_t end) {
+                for (size_t outer = begin; outer < end; ++outer)
+                {
+                    const Scalar outerFactor = MatrixClass::IsRowMajor ? factors[outer] : std::conj(factors[outer]);
+                    for (size_t inner = 0; inner < NrBasisStates; ++inner)
+                    {
+                        const Scalar innerFactor = MatrixClass::IsRowMajor ? std::conj(factors[inner]) : factors[inner];
+                        const Scalar factor = outerFactor * innerFactor;
+                        const double magnitude = std::max(std::abs(factor.real()), std::abs(factor.imag()));
+                        if ((!std::isfinite(magnitude) || magnitude < std::numeric_limits<double>::min()) &&
+                            outerFactor != Scalar(0.) && innerFactor != Scalar(0.))
+                        {
+                            // The combined factor may overflow/underflow even when
+                            // its product with this density entry is representable.
+                            // Keep common binary scales separate on this rare path.
+                            auto &entry = data[outer * NrBasisStates + inner];
+                            const auto split = [](Scalar value, int &exponent) {
+                                std::frexp(std::max(std::abs(value.real()), std::abs(value.imag())), &exponent);
+                                return Scalar(std::ldexp(value.real(), -exponent), std::ldexp(value.imag(), -exponent));
+                            };
+                            int a = 0, b = 0, c = 0;
+                            const Scalar left = split(outerFactor, a), right = split(innerFactor, b),
+                                         value = split(entry, c);
+                            const Scalar product = left * right * value;
+                            entry =
+                                Scalar(std::ldexp(product.real(), a + b + c), std::ldexp(product.imag(), a + b + c));
+                            continue;
+                        }
+                        if (factor != Scalar(1.))
+                            data[outer * NrBasisStates + inner] *= factor;
+                    }
+                }
+            });
+            return;
+        }
+        typename FlatCalculator::RotationCoefficients coefficients;
+        const typename FlatCalculator::RotationCoefficients *prepared = nullptr;
+        if (gate.kind == Gates::StructuredGate::Kind::MultiplexedRotation)
+        {
+            if (cached)
+                prepared = cached;
+            else
+            {
+                coefficients = FlatCalculator::PrepareStructuredRotation(gate);
+                prepared = &coefficients;
+            }
+        }
+        FlatView state(rho.data(), rho.size());
+        const size_t count = static_cast<size_t>(rho.size());
+        FlatCalculator::ApplyStructuredGateInPlace(state, gate, count, UseParallel(count),
+                                                   MatrixClass::IsRowMajor ? NrQubits : 0, false, prepared,
+                                                   adjointTables);
+        FlatCalculator::ApplyStructuredGateInPlace(state, gate, count, UseParallel(count),
+                                                   MatrixClass::IsRowMajor ? 0 : NrQubits, true, prepared,
+                                                   adjointTables);
+    }
+
+  public:
     // Generic completely positive trace preserving channel: rho' = sum_k E_k rho E_k^dagger.
     // The completeness relation sum_k E_k^dagger E_k = I is validated before changing the state.
     // The Kraus operators are small matrices (2x2 for a single qubit, 4x4 for two qubits) acting

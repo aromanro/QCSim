@@ -668,6 +668,21 @@ class AmplitudeMap
     // key changes in place: rebuild the index after all entries have moved.
     template <class Function> void Transform(bool keysChange, Function &&function, bool shrinkIndex = false)
     {
+        Rewrite(function, shrinkIndex, [keysChange]() noexcept { return keysChange; });
+    }
+
+    // The same for a kernel that learns only while it runs whether it alters a
+    // key: `moved` is read after the callbacks. A permutation that leaves
+    // every present state in place (a controlled gate whose controls are
+    // never satisfied) then keeps the index as it is.
+    template <class Function> void TransformMoved(const bool &moved, Function &&function)
+    {
+        Rewrite(function, false, [&moved]() noexcept { return moved; });
+    }
+
+    template <class Function, class KeysChanged>
+    void Rewrite(Function &function, bool shrinkIndex, const KeysChanged &keysChanged)
+    {
         static_assert(noexcept(function(std::declval<Detail::MutableStateView &>(), std::declval<Complex &>())),
                       "An in-place amplitude transform must not throw");
         size_t output = 0;
@@ -686,7 +701,7 @@ class AmplitudeMap
         }
         values.resize(output);
         keys.resize(output * wordCount);
-        if (keysChange || output != oldSize)
+        if (keysChanged() || output != oldSize)
         {
             // Measurement knows the surviving population. Shrinking the
             // logical index before rebuilding avoids clearing the old peak;

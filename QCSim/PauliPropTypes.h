@@ -44,7 +44,10 @@ enum class OperationType : unsigned char
     PAULI_CHANNEL_2Q,
     RESET,
     CHANNEL_1Q,
-    CHANNEL_2Q
+    CHANNEL_2Q,
+    LOCAL_1Q,
+    LOCAL_2Q,
+    LOCAL_3Q
 };
 
 inline int PauliOperationArity(OperationType type)
@@ -53,6 +56,7 @@ inline int PauliOperationArity(OperationType type)
     {
     case OperationType::CCX:
     case OperationType::CSWAP:
+    case OperationType::LOCAL_3Q:
         return 3;
     case OperationType::CX:
     case OperationType::CY:
@@ -72,6 +76,7 @@ inline int PauliOperationArity(OperationType type)
     case OperationType::CH:
     case OperationType::PAULI_CHANNEL_2Q:
     case OperationType::CHANNEL_2Q:
+    case OperationType::LOCAL_2Q:
         return 2;
     default:
         return 1;
@@ -127,6 +132,9 @@ inline bool IsPauliLocalGate(OperationType type)
     case OperationType::CSWAP:
     case OperationType::CHANNEL_1Q:
     case OperationType::CHANNEL_2Q:
+    case OperationType::LOCAL_1Q:
+    case OperationType::LOCAL_2Q:
+    case OperationType::LOCAL_3Q:
         return true;
     default:
         return false;

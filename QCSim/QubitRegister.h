@@ -14,11 +14,13 @@ namespace QC
 {
 
 template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::MatrixXcd>
-class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
+class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
+                      public StructuredGateOperations<QubitRegister<VectorClass, MatrixClass>, MatrixClass>
 {
   public:
     using GateClass = Gates::QuantumGateWithOp<MatrixClass>;
     using BaseClass = QubitRegisterCalculator<VectorClass, MatrixClass>;
+    using StructuredGateOperations<QubitRegister<VectorClass, MatrixClass>, MatrixClass>::ApplyDiagonalGate;
 
     QubitRegister(size_t N = 3, unsigned int addseed = 0)
         : NrQubits(N), NrBasisStates(1ULL << NrQubits), registerStorage(VectorClass::Zero(NrBasisStates)),
@@ -482,7 +484,21 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
 
     void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate)
     {
-        ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
+        if (const auto *payload = gate.getCompactPayload())
+        {
+            // The kernels read the shared tables of the gate under its own qubits:
+            // a remapped or adjoint gate needs no copy of them. The tables were
+            // validated when the gate was made and cannot change afterwards, so
+            // only the qubits are checked; the cosines and sines of a
+            // multiplexer are computed once and stay with the tables.
+            const bool multiplexed = payload->OperationKind() == Gates::StructuredGate::Kind::MultiplexedRotation;
+            ApplyStructuredGateImpl(payload->View(), &gate, true, payload->conjugated,
+                                    multiplexed ? payload->Coefficients(true) : nullptr);
+        }
+        else if (const auto *compact = gate.getStructuredGate())
+            ApplyStructuredGateImpl(*compact, &gate, false);
+        else
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
     }
 
     void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates)
@@ -491,12 +507,24 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
             ApplyGate(gate);
     }
 
+    void ApplyStructuredGate(const Gates::StructuredGate &gate)
+    {
+        ApplyStructuredGateImpl(gate, nullptr, false);
+    }
+
+    // The same for an operation whose tables stay with the caller: nothing is
+    // copied unless the register is recording its gates.
+    void ApplyStructuredGateView(const Gates::StructuredGateView &gate)
+    {
+        ApplyStructuredGateImpl(gate, nullptr, false);
+    }
+
     void ApplyOperatorMatrix(const MatrixClass &m)
     {
         registerStorage = m * registerStorage;
 
         if (recordGates)
-            computeGates.emplace_back(Gates::AppliedGate(m));
+            computeGates.emplace_back(Gates::AppliedGate(m, 0, 1, 2));
     }
 
     const VectorClass &getRegisterStorage() const
@@ -554,12 +582,15 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
         const bool recordSave = recordGates;
         recordGates = false;
 
-        for (const Gates::AppliedGate<MatrixClass> &gate : computeGates)
+        try
         {
-            if (gate.getQubitsNumber() > 3)
-                ApplyOperatorMatrix(gate.getRawOperatorMatrix());
-            else
-                ApplyGate(gate);
+            for (const auto &gate : computeGates)
+                ReplayRecordedGate(gate, false);
+        }
+        catch (...)
+        {
+            recordGates = recordSave;
+            throw;
         }
 
         recordGates = recordSave;
@@ -572,16 +603,15 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
         const bool recordSave = recordGates;
         recordGates = false;
 
-        for (auto it = computeGates.crbegin(); it != computeGates.crend(); ++it)
+        try
         {
-            if (it->getQubitsNumber() > 3)
-                ApplyOperatorMatrix(it->getRawOperatorMatrix().adjoint());
-            else
-            {
-                Gates::AppliedGate<MatrixClass> gate(it->getRawOperatorMatrix().adjoint(), it->getQubit1(),
-                                                     it->getQubit2(), it->getQubit3());
-                ApplyGate(gate);
-            }
+            for (auto gate = computeGates.rbegin(); gate != computeGates.rend(); ++gate)
+                ReplayRecordedGate(*gate, true);
+        }
+        catch (...)
+        {
+            recordGates = recordSave;
+            throw;
         }
 
         recordGates = recordSave;
@@ -854,14 +884,22 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
                                                     UseMultithreading());
 
         VectorClass savedState = registerStorage;
-
-        ApplyGates(gates);
-
-        const auto res = (savedState.adjoint() * registerStorage)(0);
-
-        registerStorage.swap(savedState); // restore the state
-
-        return res;
+        const bool recording = recordGates;
+        recordGates = false;
+        try
+        {
+            ApplyGates(gates);
+            const std::complex<double> result = (savedState.adjoint() * registerStorage)(0);
+            registerStorage.swap(savedState);
+            recordGates = recording;
+            return result;
+        }
+        catch (...)
+        {
+            registerStorage.swap(savedState);
+            recordGates = recording;
+            throw;
+        }
     }
 
     std::unique_ptr<QubitRegister<VectorClass, MatrixClass>> Clone() const
@@ -884,6 +922,60 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
     }
 
   protected:
+    void ApplyStructuredGateImpl(const Gates::StructuredGateView &gate, const Gates::AppliedGate<MatrixClass> *recorded,
+                                 bool tablesValidated, bool adjointTables = false,
+                                 const Gates::StructuredRotationCoefficients *coefficients = nullptr)
+    {
+        if (tablesValidated)
+            gate.ValidateQubits(NrQubits);
+        else
+            gate.Validate(NrQubits);
+        // Allocate a recording before touching the state; remove it if a kernel's
+        // temporary allocation fails. Compact operations remain compact in replay.
+        if (recordGates)
+        {
+            if (recorded)
+                computeGates.push_back(*recorded);
+            else
+                computeGates.emplace_back(gate.Materialize());
+        }
+        try
+        {
+            BaseClass::ApplyStructuredGateInPlace(registerStorage, gate, NrBasisStates, UseMultithreading(), 0, false,
+                                                  coefficients, adjointTables);
+        }
+        catch (...)
+        {
+            if (recordGates)
+                computeGates.pop_back();
+            throw;
+        }
+    }
+
+    void ReplayRecordedGate(const Gates::AppliedGate<MatrixClass> &gate, bool adjoint)
+    {
+        if (gate.getStructuredGate())
+        {
+            // The adjoint of a compact gate shares its tables.
+            if (adjoint)
+                ApplyGate(gate.Adjoint());
+            else
+                ApplyGate(gate);
+        }
+        else if (gate.getQubitsNumber() > 3)
+        {
+            if (adjoint)
+                ApplyOperatorMatrix(gate.getRawOperatorMatrix().adjoint());
+            else
+                ApplyOperatorMatrix(gate.getRawOperatorMatrix());
+        }
+        else if (adjoint)
+            ApplyGate(Gates::AppliedGate<MatrixClass>(gate.getRawOperatorMatrix().adjoint(), gate.getQubit1(),
+                                                      gate.getQubit2(), gate.getQubit3()));
+        else
+            ApplyGate(gate);
+    }
+
     bool UseMultithreading() const
     {
         return BaseClass::GetMultithreading() && NrBasisStates >= BaseClass::GetParallelMinBasisStates();
@@ -1036,6 +1128,8 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
         size_t usedQubits = 0;
         for (const auto &gate : gates)
         {
+            if (gate.getStructuredGate())
+                return false;
             const MatrixClass &m = gate.getRawOperatorMatrix();
             if (m.rows() != 2 || m.cols() != 2)
                 return false;
@@ -1114,6 +1208,7 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>
     std::uniform_real_distribution<double> uniformZeroOne;
 
     std::vector<Gates::AppliedGate<MatrixClass>> computeGates;
+
     bool recordGates;
 
     // The weight tr(E rho E^dagger) of a Kraus operator is in doubt when it is below this fraction of its reach, the

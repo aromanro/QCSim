@@ -43,7 +43,9 @@
 #include <omp.h>
 #endif
 
+#include "BitOps.h"
 #include "QuantumGate.h"
+#include "StructuredGateOperations.h"
 
 namespace QC
 {
@@ -200,6 +202,36 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         }
     }
 
+    using RotationCoefficients = std::vector<std::array<double, 2>>;
+
+    // Prepare before either density-matrix pass: allocation and trigonometry
+    // happen once, and the bra pass conjugates the coefficients as it reads them.
+    static RotationCoefficients PrepareStructuredRotation(const Gates::StructuredGateView &gate)
+    {
+        RotationCoefficients coefficients(gate.angles.size());
+        for (size_t i = 0; i < gate.angles.size(); ++i)
+            detail::RotationHalfAngleCosSin(gate.angles[i], coefficients[i][0], coefficients[i][1]);
+        return coefficients;
+    }
+
+    // The caller validates qubit ranges and table sizes once. The shift maps the
+    // operation onto ket or bra bits of a flattened density matrix. The gate is
+    // read through a view, so its tables may belong to the caller's caller.
+    // With adjointTables the tables are those of the adjoint operation: a
+    // diagonal is read conjugated and the angles of a multiplexer negated (the
+    // matrix of a controlled operation is taken as given). Coefficients, when
+    // supplied, are the half-angle cosines and sines of the angles as stored.
+    static void ApplyStructuredGateInPlace(VectorClass &state, const Gates::StructuredGateView &gate, size_t count,
+                                           bool parallel, size_t shift = 0, bool conjugate = false,
+                                           const RotationCoefficients *coefficients = nullptr,
+                                           bool adjointTables = false)
+    {
+        if (parallel)
+            StructuredGateKernel<true>(state, gate, count, shift, conjugate, coefficients, adjointTables);
+        else
+            StructuredGateKernel<false>(state, gate, count, shift, conjugate, coefficients, adjointTables);
+    }
+
     // A linear map on the amplitudes that differ only in up to four index bits, applied in place. Entry (r, c) of
     // the row-major matrix multiplies the amplitude with local index c into the one with local index r; bit b of a
     // local index is bits[b]. The matrix is used as given, so it need not be unitary, and only its nonzero entries
@@ -309,8 +341,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             while (mask)
             {
                 const size_t bit = mask & (~mask + 1);
-                assert(fixedBits < 4);
-                lowMasks[fixedBits++] = bit - 1;
+                if (fixedBits < 4)
+                    lowMasks[fixedBits] = bit - 1;
+                ++fixedBits;
                 mask ^= bit;
             }
         }
@@ -428,7 +461,525 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         case 4:
             RunSelected<Parallel, 4>(plan, count, oneMask, function);
             break;
+        default: {
+            // Preserve the unrolled common kernels above. Arbitrary control sets
+            // deposit only once per tile, then walk its contiguous/strided run.
+            std::array<size_t, std::numeric_limits<size_t>::digits> masks;
+            size_t mask = zeroMask | oneMask;
+            unsigned bits = 0;
+            while (mask)
+            {
+                const size_t bit = mask & (~mask + 1);
+                masks[bits++] = bit - 1;
+                mask ^= bit;
+            }
+            const size_t active = count >> bits;
+            size_t tileSize = std::min(plan.tileSize, active);
+            const int threads = Parallel ? TeamThreads(count) : 1;
+            while (tileSize > 1 && active / tileSize < static_cast<size_t>(threads) * 4)
+                tileSize >>= 1;
+            ForEachTile<Parallel>(threads, active / tileSize, [&](size_t tile) {
+                size_t base = tile * tileSize;
+                for (unsigned k = 0; k < bits; ++k)
+                    base = (base & masks[k]) | ((base & ~masks[k]) << 1);
+                base |= oneMask;
+                for (size_t i = 0; i < tileSize; ++i)
+                    function(base + (i << plan.strideShift));
+            });
+            break;
         }
+        }
+    }
+
+    // `skippedQubit` leaves one entry of `qubits` out of the selector: the caller handles the
+    // table bit of a qubit that sits below the dropped low bits itself.
+    template <bool Parallel, class Function>
+    static void ForEachStructuredIndex(size_t entries, size_t work, const std::vector<size_t> &qubits, size_t shift,
+                                       size_t omittedBit, const Function &function, unsigned droppedLowBits = 0,
+                                       size_t skippedQubit = std::numeric_limits<size_t>::max())
+    {
+        std::array<size_t, std::numeric_limits<size_t>::digits> toggles{};
+        for (size_t k = 0; k < qubits.size(); ++k)
+        {
+            if (k == skippedQubit)
+                continue;
+            size_t bit = qubits[k] + shift;
+            if (bit > omittedBit)
+                --bit;
+            bit -= droppedLowBits;
+            toggles[bit] = size_t{1} << k;
+        }
+        for (size_t bit = 1; bit < toggles.size(); ++bit)
+            toggles[bit] ^= toggles[bit - 1];
+        constexpr size_t tileSize = 1024;
+        ForEachTile<Parallel>(Parallel ? TeamThreads(work) : 1, (entries + tileSize - 1) / tileSize, [&](size_t tile) {
+            const size_t begin = tile * tileSize, end = std::min(begin + tileSize, entries);
+            size_t selector = 0;
+            for (size_t k = 0; k < qubits.size(); ++k)
+            {
+                if (k == skippedQubit)
+                    continue;
+                size_t bit = qubits[k] + shift;
+                if (bit > omittedBit)
+                    --bit;
+                bit -= droppedLowBits;
+                selector |= ((begin >> bit) & 1) << k;
+            }
+            for (size_t i = begin; i < end; ++i)
+            {
+                function(i, selector);
+                // Advancing a binary counter flips its trailing ones and the
+                // following zero. One bit scan selects their precomputed XOR,
+                // independent of the control count.
+                const unsigned bit = Clifford::detail::TrailingZero(i + 1);
+                selector ^= toggles[bit];
+            }
+        });
+    }
+
+    // Whether a diagonal should go through BlockedDiagonal: its table is large and the plain
+    // traversal, which walks the state in order, would read it at scattered places. What
+    // decides is where the lowest ten state bits, the ones that change fastest, point in the
+    // table: `scattered` of them select a table bit above the eighth, that is, another page of
+    // the table for each of their values. Measured on 18 to 24 qubits: with eight or more such
+    // bits the plain traversal is 2 to 5 times slower than the blocked one as soon as the table
+    // exceeds the private caches (2^18 entries for one thread, 2^20 when the threads share the
+    // work); with five or more, 1.3 to 2 times from 2^22 entries on. Below that, and whenever
+    // the low state bits mostly stay within a page or do not select factors at all (a table on
+    // high qubits, taken in runs), the plain traversal is the faster one.
+    static bool PrefersBlockedDiagonal(const std::vector<size_t> &qubits, size_t shift, size_t entries, bool shared)
+    {
+        if (entries < (size_t{1} << (shared ? 20 : 18)) || std::is_sorted(qubits.begin(), qubits.end()))
+            return false;
+        unsigned scattered = 0, selecting = 0;
+        for (size_t k = 0; k < qubits.size(); ++k)
+            if (qubits[k] + shift < 10)
+            {
+                ++selecting;
+                scattered += k >= 8;
+            }
+        return scattered >= 8 || (scattered >= 5 && selecting >= 8 && entries >= (size_t{1} << 22));
+    }
+
+    // The amplitudes of a run of the state and the entries of a run of the table in
+    // BlockedDiagonal, as powers of two: a buffer of about 260 KB.
+    static constexpr unsigned blockedDiagonalBlockBits = 8;
+    static constexpr unsigned blockedDiagonalTableBits = 6;
+
+    // A diagonal with a large table whose bits are not in the order of the state bits. Walking
+    // the state in order reads such a table at scattered places, almost every factor a cache
+    // and TLB miss; reading it along its own order instead scatters the amplitudes. Both are
+    // avoided by going through a small buffer, as blocked bit-reversal copies do.
+    //
+    // The state bits are split in three: the lowest ones (a run of consecutive amplitudes), the
+    // ones that select the lowest table bits above those (a run of consecutive table entries),
+    // and the rest. For every value of the rest, the factors form a rectangle: its rows are
+    // runs of the state and its columns are runs of the table. The rectangle is first filled
+    // column by column, reading the table in order, then applied row by row, writing the state
+    // in order. Its rows are one cache line longer than a power of two, so that the entries of
+    // a column do not compete for the same cache set, which is what makes a direct walk over
+    // power-of-two strides slow.
+    template <bool Parallel>
+    static EIGEN_DONT_INLINE void BlockedDiagonal(const Amplitudes &state, const std::complex<double> *values,
+                                                  const std::vector<size_t> &qubits, size_t shift, size_t count,
+                                                  bool conjugated)
+    {
+        using Complex = std::complex<double>;
+        constexpr size_t digits = std::numeric_limits<size_t>::digits;
+        const unsigned nrBits = static_cast<unsigned>(Clifford::detail::TrailingZero(count));
+        const unsigned blockBits = std::min(nrBits, blockedDiagonalBlockBits);
+        const size_t blockSize = size_t{1} << blockBits;
+        // The table bit that every state bit selects; none for a state bit outside the table.
+        std::array<size_t, digits> weight{};
+        for (size_t k = 0; k < qubits.size(); ++k)
+            weight[qubits[k] + shift] = size_t{1} << k;
+        // The table offset of every position in a run of the state.
+        std::vector<size_t> low(blockSize, 0);
+        for (size_t j = 1; j < blockSize; ++j)
+            low[j] = low[j & (j - 1)] | weight[Clifford::detail::TrailingZero(j)];
+        // The state bits above a run, by growing table bit; bits outside the table first.
+        const unsigned upperBits = nrBits - blockBits;
+        std::array<unsigned, digits> order{};
+        for (unsigned m = 0; m < upperBits; ++m)
+            order[m] = blockBits + m;
+        std::stable_sort(order.begin(), order.begin() + upperBits,
+                         [&](unsigned a, unsigned b) { return weight[a] < weight[b]; });
+        unsigned outside = 0;
+        while (outside < upperBits && weight[order[outside]] == 0)
+            ++outside;
+        // The rows of the rectangle: the table bits that follow, at most tableBits of them.
+        const unsigned rowBits = std::min(upperBits - outside, blockedDiagonalTableBits);
+        const size_t rows = size_t{1} << rowBits;
+        std::vector<size_t> rowState(rows, 0), rowTable(rows, 0);
+        for (size_t r = 1; r < rows; ++r)
+        {
+            const unsigned bit = order[outside + Clifford::detail::TrailingZero(r)];
+            rowState[r] = rowState[r & (r - 1)] | (size_t{1} << bit);
+            rowTable[r] = rowTable[r & (r - 1)] | weight[bit];
+        }
+        // The other state bits form the counter of the rectangles: first the bits outside the
+        // table, for which the rectangle does not change, then the higher table bits.
+        std::array<unsigned, digits> outer{};
+        unsigned outerBits = 0;
+        for (unsigned m = 0; m < upperBits; ++m)
+            if (m < outside || m >= outside + rowBits)
+                outer[outerBits++] = order[m];
+        // Advancing the counter flips its trailing ones and the zero above them; the state
+        // offset and the table base change by the XOR of what those bits stand for.
+        std::array<size_t, digits + 1> stateToggle{}, baseToggle{};
+        size_t stateMask = 0, baseMask = 0;
+        for (unsigned m = 0; m < outerBits; ++m)
+        {
+            stateMask ^= size_t{1} << outer[m];
+            baseMask ^= weight[outer[m]];
+            stateToggle[m] = stateMask;
+            baseToggle[m] = baseMask;
+        }
+        const size_t rectangles = size_t{1} << outerBits;
+        const int threads = Parallel ? TeamThreads(count) : 1;
+        // Every tile fills its own buffer, so there are only as many tiles as a balanced
+        // schedule needs.
+        size_t tileSize = rectangles;
+        while (tileSize > 1 && rectangles / tileSize < static_cast<size_t>(threads) * 2)
+            tileSize >>= 1;
+        // One cache line (four entries) more than a run of the state per row.
+        const size_t stride = blockSize + 4;
+        ForEachTile<Parallel>(threads, rectangles / tileSize, [&](size_t tile) {
+            // Not initialized: every entry is written before it is read.
+            const std::unique_ptr<double[]> buffer(new double[2 * rows * stride]);
+            Complex *const factors = reinterpret_cast<Complex *>(buffer.get());
+            const size_t first = tile * tileSize;
+            size_t offset = 0, base = 0;
+            for (unsigned m = 0; m < outerBits; ++m)
+                if ((first >> m) & 1)
+                {
+                    offset |= size_t{1} << outer[m];
+                    base |= weight[outer[m]];
+                }
+            bool fill = true;
+            for (size_t c = first; c < first + tileSize; ++c)
+            {
+                if (fill)
+                {
+                    const Complex *const table = values + base;
+                    for (size_t j = 0; j < blockSize; ++j)
+                    {
+                        const Complex *const column = table + low[j];
+                        if (conjugated)
+                            for (size_t r = 0; r < rows; ++r)
+                                factors[r * stride + j] = std::conj(column[rowTable[r]]);
+                        else
+                            for (size_t r = 0; r < rows; ++r)
+                                factors[r * stride + j] = column[rowTable[r]];
+                    }
+                }
+                for (size_t r = 0; r < rows; ++r)
+                {
+                    const size_t begin = offset | rowState[r];
+                    const Complex *const row = factors + r * stride;
+                    bool done = false;
+#ifdef QCSIM_AVX2
+                    if constexpr (Amplitudes::contiguous && std::is_same_v<typename Amplitudes::Scalar, Complex>)
+                    {
+                        if (blockSize >= 2)
+                        {
+                            double *const p = reinterpret_cast<double *>(&state(begin));
+                            const double *const f = reinterpret_cast<const double *>(row);
+                            const __m128d one = _mm_set_pd(0., 1.);
+                            for (size_t j = 0; j < 2 * blockSize; j += 4)
+                            {
+                                const __m128d even = _mm_loadu_pd(f + j), odd = _mm_loadu_pd(f + j + 2);
+                                if (_mm_movemask_pd(_mm_and_pd(_mm_cmpeq_pd(even, one), _mm_cmpeq_pd(odd, one))) == 3)
+                                    continue;
+                                const WideCoefficient wide(even, odd);
+                                _mm256_storeu_pd(p + j, wide.Multiply(_mm256_loadu_pd(p + j)));
+                            }
+                            done = true;
+                        }
+                    }
+#endif
+                    if (!done)
+                        for (size_t j = 0; j < blockSize; ++j)
+                            if (row[j] != Complex(1.))
+                                state(begin + j) *= row[j];
+                }
+                const unsigned zero = static_cast<unsigned>(Clifford::detail::TrailingZero(c + 1));
+                offset ^= stateToggle[zero];
+                fill = baseToggle[zero] != 0;
+                base ^= baseToggle[zero];
+            }
+        });
+    }
+
+    // The traversals of a diagonal. Conjugated reads every factor conjugated as it is
+    // loaded, so the bra side of a density matrix and the adjoint of a compact gate use
+    // the table they were given.
+    template <bool Parallel, bool Conjugated>
+    static EIGEN_STRONG_INLINE void DiagonalKernel(const Amplitudes &state, const std::complex<double> *values,
+                                                   const std::vector<size_t> &qubits, size_t entries, size_t shift,
+                                                   size_t count)
+    {
+        using Complex = std::complex<double>;
+        if (PrefersBlockedDiagonal(qubits, shift, entries, Parallel && TeamThreads(count) > 1))
+        {
+            BlockedDiagonal<Parallel>(state, values, qubits, shift, count, Conjugated);
+            return;
+        }
+        // Below the lowest table qubit the factor does not change: a run of consecutive
+        // amplitudes shares it. Scale whole runs, and skip those whose factor is one; the
+        // run stays short enough to leave the tiles of the parallel loop fine-grained.
+        unsigned runBits = std::numeric_limits<size_t>::digits;
+        for (size_t q : qubits)
+            runBits = std::min<unsigned>(runBits, static_cast<unsigned>(q + shift));
+        if (qubits.empty())
+            runBits = 0;
+        runBits = std::min(runBits, 6u);
+        const size_t finest = size_t{4096} * static_cast<size_t>(Parallel ? TeamThreads(count) : 1);
+        while (runBits > 0 && (count >> runBits) < finest)
+            --runBits;
+        if (runBits > 0)
+        {
+            const size_t run = size_t{1} << runBits;
+            ForEachStructuredIndex<Parallel>(
+                count >> runBits, count, qubits, shift, std::numeric_limits<size_t>::max(),
+                [&](size_t block, size_t selector) {
+                    const size_t begin = block << runBits;
+#ifdef QCSIM_AVX2
+                    if constexpr (Amplitudes::contiguous && std::is_same_v<typename Amplitudes::Scalar, Complex>)
+                    {
+                        // The factor stays packed, and "it is one" is one packed comparison
+                        // and one branch (see the pair loop below).
+                        __m128d factor = _mm_loadu_pd(reinterpret_cast<const double *>(values + selector));
+                        if constexpr (Conjugated)
+                            factor = _mm_xor_pd(factor, _mm_set_pd(-0., 0.));
+                        if (_mm_movemask_pd(_mm_cmpeq_pd(factor, _mm_set_pd(0., 1.))) == 3)
+                            return;
+                        const WideCoefficient wide(factor, factor);
+                        double *const p = reinterpret_cast<double *>(&state(begin));
+                        for (size_t j = 0; j < 2 * run; j += 4)
+                            _mm256_storeu_pd(p + j, wide.Multiply(_mm256_loadu_pd(p + j)));
+                        return;
+                    }
+#endif
+                    const Complex value = Conjugated ? std::conj(values[selector]) : values[selector];
+                    if (value == Complex(1.))
+                        return;
+                    for (size_t j = 0; j < run; ++j)
+                        state(begin + j) *= value;
+                },
+                runBits);
+            return;
+        }
+        // A table qubit at bit zero: two neighbours differ in that table bit only, so the
+        // counter advances once per pair and the pair takes its two factors together.
+        size_t lowest = 0;
+        while (lowest < qubits.size() && qubits[lowest] + shift != 0)
+            ++lowest;
+        if (lowest < qubits.size() && count >= 4)
+        {
+            const size_t other = size_t{1} << lowest;
+            ForEachStructuredIndex<Parallel>(
+                count / 2, count, qubits, shift, std::numeric_limits<size_t>::max(),
+                [&](size_t pair, size_t selector) {
+#ifdef QCSIM_AVX2
+                    if constexpr (Amplitudes::contiguous && std::is_same_v<typename Amplitudes::Scalar, Complex>)
+                    {
+                        // The two factors stay packed from the table to the product. "Both are one"
+                        // is one packed comparison and one branch: written as four scalar
+                        // comparisons it can be compiled into a chain of flag moves that every
+                        // pair pays in full.
+                        __m128d first = _mm_loadu_pd(reinterpret_cast<const double *>(values + selector));
+                        __m128d second = _mm_loadu_pd(reinterpret_cast<const double *>(values + (selector | other)));
+                        if constexpr (Conjugated)
+                        {
+                            first = _mm_xor_pd(first, _mm_set_pd(-0., 0.));
+                            second = _mm_xor_pd(second, _mm_set_pd(-0., 0.));
+                        }
+                        const __m128d one = _mm_set_pd(0., 1.);
+                        if (_mm_movemask_pd(_mm_and_pd(_mm_cmpeq_pd(first, one), _mm_cmpeq_pd(second, one))) == 3)
+                            return;
+                        const WideCoefficient wide(first, second);
+                        double *const p = reinterpret_cast<double *>(&state(2 * pair));
+                        _mm256_storeu_pd(p, wide.Multiply(_mm256_loadu_pd(p)));
+                        return;
+                    }
+#endif
+                    const Complex even = Conjugated ? std::conj(values[selector]) : values[selector];
+                    const Complex odd = Conjugated ? std::conj(values[selector | other]) : values[selector | other];
+                    if (even == Complex(1.) && odd == Complex(1.))
+                        return;
+                    state(2 * pair) *= even;
+                    state(2 * pair + 1) *= odd;
+                },
+                1, lowest);
+            return;
+        }
+        ForEachStructuredIndex<Parallel>(
+            count, count, qubits, shift, std::numeric_limits<size_t>::max(), [&](size_t i, size_t selector) {
+                const Complex value = Conjugated ? std::conj(values[selector]) : values[selector];
+                if (value != Complex(1.))
+                    state(i) *= value;
+            });
+    }
+
+    template <bool Parallel>
+    static EIGEN_DONT_INLINE void ConjugatedDiagonalKernel(const Amplitudes &state, const std::complex<double> *values,
+                                                           const std::vector<size_t> &qubits, size_t entries,
+                                                           size_t shift, size_t count)
+    {
+        DiagonalKernel<Parallel, true>(state, values, qubits, entries, shift, count);
+    }
+
+    template <bool Parallel>
+    static void StructuredGateKernel(VectorClass &vector, const Gates::StructuredGateView &gate, size_t count,
+                                     size_t shift, bool conjugate, const RotationCoefficients *prepared,
+                                     bool adjointTables)
+    {
+        using Complex = std::complex<double>;
+        using Kind = Gates::StructuredGate::Kind;
+        const Amplitudes state(vector);
+        size_t controls = 0;
+        for (size_t q : gate.qubits)
+            controls |= size_t{1} << (q + shift);
+        if (gate.kind == Kind::Controlled)
+        {
+            size_t ones = 0;
+            for (size_t k = 0; k < gate.qubits.size(); ++k)
+                if ((gate.controlState >> k) & 1)
+                    ones |= size_t{1} << (gate.qubits[k] + shift);
+
+            struct SmallOperator
+            {
+                std::array<Complex, 4> values;
+
+                Complex operator()(size_t row, size_t col) const
+                {
+                    return values[2 * row + col];
+                }
+            } matrix{gate.matrix};
+
+            if (conjugate)
+                for (auto &value : matrix.values)
+                    value = std::conj(value);
+            ApplySingleTargetGate<Parallel>(state, matrix, size_t{1} << (gate.target + shift), {controls ^ ones, ones},
+                                            count, 0,
+                                            matrix.values[1] == Complex(0.) && matrix.values[2] == Complex(0.),
+                                            matrix.values[0] == Complex(0.) && matrix.values[3] == Complex(0.));
+            return;
+        }
+
+        if (gate.kind == Kind::Diagonal)
+        {
+            // Conjugated for the bra side of a density matrix, or as the adjoint of the
+            // operation that owns the table; both at once leave it as it is.
+            if (conjugate != adjointTables)
+                ConjugatedDiagonalKernel<Parallel>(state, gate.diagonal.data(), gate.qubits, gate.diagonal.size(),
+                                                   shift, count);
+            else
+                DiagonalKernel<Parallel, false>(state, gate.diagonal.data(), gate.qubits, gate.diagonal.size(), shift,
+                                                count);
+            return;
+        }
+
+        // One sine/cosine pair per selector, never per state amplitude. Every
+        // amplitude pair is touched once regardless of the number of controls.
+        RotationCoefficients localCoefficients;
+        if (!prepared)
+        {
+            localCoefficients = PrepareStructuredRotation(gate);
+            prepared = &localCoefficients;
+        }
+        const RotationCoefficients &coefficients = *prepared;
+        assert(coefficients.size() == gate.angles.size());
+        // Conjugation leaves a real Y rotation alone; the adjoint negates every angle.
+        const double sineSign =
+            (conjugate && gate.axis != Gates::RotationAxis::Y ? -1. : 1.) * (adjointTables ? -1. : 1.);
+        const size_t target = size_t{1} << (gate.target + shift);
+#ifdef QCSIM_AVX2
+        if constexpr (Amplitudes::contiguous && std::is_same_v<typename Amplitudes::Scalar, Complex>)
+        {
+            if (target > 1 && !(controls & 1) && count >= 256)
+            {
+                // Bit zero is free: two adjacent complex amplitudes share the
+                // selector on each side of the target. Drop that batching bit
+                // from the selector counter and process both pairs together.
+                const auto wideRotate = [&](auto axis) {
+                    ForEachStructuredIndex<Parallel>(
+                        count / 4, count, gate.qubits, shift, gate.target + shift,
+                        [&](size_t pair, size_t selector) {
+                            const size_t i = pair * 2;
+                            const size_t low = (i & (target - 1)) | ((i & ~(target - 1)) << 1);
+                            double *const p = reinterpret_cast<double *>(&state(low));
+                            double *const q = reinterpret_cast<double *>(&state(low | target));
+                            const __m256d x = _mm256_loadu_pd(p), y = _mm256_loadu_pd(q);
+                            const __m256d c = _mm256_set1_pd(coefficients[selector][0]);
+                            const double sine = sineSign * coefficients[selector][1];
+                            if constexpr (decltype(axis)::value == Gates::RotationAxis::Y)
+                            {
+                                const __m256d s = _mm256_set1_pd(sine);
+                                _mm256_storeu_pd(p, _mm256_sub_pd(_mm256_mul_pd(c, x), _mm256_mul_pd(s, y)));
+                                _mm256_storeu_pd(q, _mm256_add_pd(_mm256_mul_pd(s, x), _mm256_mul_pd(c, y)));
+                            }
+                            else
+                            {
+                                const __m256d s = _mm256_set_pd(-sine, sine, -sine, sine);
+                                if constexpr (decltype(axis)::value == Gates::RotationAxis::X)
+                                {
+                                    _mm256_storeu_pd(p, _mm256_add_pd(_mm256_mul_pd(c, x),
+                                                                      _mm256_mul_pd(s, _mm256_permute_pd(y, 5))));
+                                    _mm256_storeu_pd(q, _mm256_add_pd(_mm256_mul_pd(s, _mm256_permute_pd(x, 5)),
+                                                                      _mm256_mul_pd(c, y)));
+                                }
+                                else
+                                {
+                                    _mm256_storeu_pd(p, _mm256_add_pd(_mm256_mul_pd(c, x),
+                                                                      _mm256_mul_pd(s, _mm256_permute_pd(x, 5))));
+                                    _mm256_storeu_pd(q, _mm256_sub_pd(_mm256_mul_pd(c, y),
+                                                                      _mm256_mul_pd(s, _mm256_permute_pd(y, 5))));
+                                }
+                            }
+                        },
+                        1);
+                };
+                if (gate.axis == Gates::RotationAxis::X)
+                    wideRotate(std::integral_constant<Gates::RotationAxis, Gates::RotationAxis::X>{});
+                else if (gate.axis == Gates::RotationAxis::Y)
+                    wideRotate(std::integral_constant<Gates::RotationAxis, Gates::RotationAxis::Y>{});
+                else
+                    wideRotate(std::integral_constant<Gates::RotationAxis, Gates::RotationAxis::Z>{});
+                return;
+            }
+        }
+#endif
+        const auto rotate = [&](auto axis) {
+            ForEachStructuredIndex<Parallel>(
+                count / 2, count, gate.qubits, shift, gate.target + shift, [&](size_t i, size_t selector) {
+                    const size_t low = (i & (target - 1)) | ((i & ~(target - 1)) << 1), high = low | target;
+                    const double c = coefficients[selector][0], s = sineSign * coefficients[selector][1];
+                    const Complex a = state(low), b = state(high);
+                    if constexpr (decltype(axis)::value == Gates::RotationAxis::Z)
+                    {
+                        state(low) = Complex(c, -s) * a;
+                        state(high) = Complex(c, s) * b;
+                    }
+                    else if constexpr (decltype(axis)::value == Gates::RotationAxis::X)
+                    {
+                        state(low) = c * a + Complex(s * b.imag(), -s * b.real());
+                        state(high) = Complex(s * a.imag(), -s * a.real()) + c * b;
+                    }
+                    else
+                    {
+                        state(low) = c * a - s * b;
+                        state(high) = s * a + c * b;
+                    }
+                });
+        };
+        if (gate.axis == Gates::RotationAxis::X)
+            rotate(std::integral_constant<Gates::RotationAxis, Gates::RotationAxis::X>{});
+        else if (gate.axis == Gates::RotationAxis::Y)
+            rotate(std::integral_constant<Gates::RotationAxis, Gates::RotationAxis::Y>{});
+        else
+            rotate(std::integral_constant<Gates::RotationAxis, Gates::RotationAxis::Z>{});
     }
 
     template <bool Parallel>
@@ -478,11 +1029,48 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         {
         }
 
+        // The same from the two numbers as packed (real, imaginary) pairs.
+        WideCoefficient(__m128d first, __m128d second)
+        {
+            const __m256d both = _mm256_insertf128_pd(_mm256_castpd128_pd256(first), second, 1);
+            re = _mm256_movedup_pd(both);
+            im = _mm256_xor_pd(_mm256_permute_pd(both, 0xF), _mm256_set_pd(0., -0., 0., -0.));
+        }
+
         __m256d Multiply(__m256d v) const
         {
             return _mm256_add_pd(_mm256_mul_pd(re, v), _mm256_mul_pd(im, _mm256_permute_pd(v, 5)));
         }
     };
+
+    // A diagonal gate with neither entry equal to one, two amplitudes per vector: the pair
+    // itself when the target is bit zero, otherwise two neighbours of each half.
+    template <bool Parallel>
+    static inline bool TryWideDiagonalGate(const Amplitudes &state, size_t count, size_t target, ControlMasks controls,
+                                           const std::complex<double> &a, const std::complex<double> &d)
+    {
+        if (target != 1 && ((controls.zeros | controls.ones) & 1))
+            return false;
+        if (target == 1)
+        {
+            const WideCoefficient both(a, d);
+            ForEachSelected<Parallel>(count, target | controls.zeros, controls.ones, [&](size_t i) {
+                double *const p = reinterpret_cast<double *>(&state(i));
+                _mm256_storeu_pd(p, both.Multiply(_mm256_loadu_pd(p)));
+            });
+        }
+        else
+        {
+            const WideCoefficient av(a, a), dv(d, d);
+            ForEachSelected<Parallel>(count, target | controls.zeros | 1, controls.ones, [&](size_t i) {
+                double *const p = reinterpret_cast<double *>(&state(i));
+                double *const q = reinterpret_cast<double *>(&state(i | target));
+                _mm256_storeu_pd(p, av.Multiply(_mm256_loadu_pd(p)));
+                _mm256_storeu_pd(q, dv.Multiply(_mm256_loadu_pd(q)));
+            });
+        }
+        return true;
+    }
 
     template <bool Parallel>
     static inline bool TryWideDenseGate(const Amplitudes &state, size_t count, size_t target, ControlMasks controls,
@@ -491,9 +1079,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     {
         const size_t mask = controls.zeros | controls.ones;
         // For a higher target, two consecutive pairs can share a vector only
-        // when bit zero is free. Limit to one control so the index plan still
-        // needs at most three fixed bits (target, control, and batching bit).
-        if (target != 1 && ((mask & 1) || (mask & (mask - 1))))
+        // when bit zero is free. The selected-index iterator supports all
+        // other controls, including its general plan for more than four bits.
+        if (target != 1 && (mask & 1))
             return false;
         if (hadamard)
         {
@@ -541,6 +1129,37 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     }
 #endif
 
+    // A diagonal gate with neither entry equal to one: walk the pairs, each half with its own
+    // coefficient, instead of choosing the coefficient per amplitude. Kept out of line: inside
+    // ApplySingleTargetGate its loops changed how the compiler laid out the neighbouring
+    // kernels, which cost the short loops of small registers a quarter of their speed.
+    template <bool Parallel>
+    static EIGEN_DONT_INLINE void ScaleBothHalves(const Amplitudes &state, size_t count, size_t target,
+                                                  ControlMasks controls, const std::complex<double> &a,
+                                                  const std::complex<double> &d)
+    {
+#ifdef QCSIM_AVX2
+        if constexpr (Amplitudes::contiguous && std::is_same_v<typename Amplitudes::Scalar, std::complex<double>>)
+            if (count >= 256 && TryWideDiagonalGate<Parallel>(state, count, target, controls, a, d))
+                return;
+#endif
+#ifdef QCSIM_SSE2
+        const __m128d aRe = _mm_set1_pd(a.real()), aIm = _mm_set_pd(a.imag(), -a.imag());
+        const __m128d dRe = _mm_set1_pd(d.real()), dIm = _mm_set_pd(d.imag(), -d.imag());
+        ForEachSelected<Parallel>(count, target | controls.zeros, controls.ones, [&](size_t i) {
+            double *const p = reinterpret_cast<double *>(&state(i));
+            double *const q = reinterpret_cast<double *>(&state(i | target));
+            _mm_storeu_pd(p, MultiplyByCoefficient(aRe, aIm, _mm_loadu_pd(p)));
+            _mm_storeu_pd(q, MultiplyByCoefficient(dRe, dIm, _mm_loadu_pd(q)));
+        });
+#else
+        ForEachSelected<Parallel>(count, target | controls.zeros, controls.ones, [&](size_t i) {
+            state(i) *= a;
+            state(i | target) *= d;
+        });
+#endif
+    }
+
     template <bool Parallel, class Operator>
     static inline void ApplySingleTargetGate(const Amplitudes &state, const Operator &matrix, size_t target,
                                              ControlMasks controls, size_t count, size_t offset, bool diagonal,
@@ -554,8 +1173,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             else if (d == std::complex<double>(1., 0.))
                 ScaleSelected<Parallel>(state, count, target | controls.zeros, controls.ones, a);
             else
-                ForEachSelected<Parallel>(count, controls.zeros, controls.ones,
-                                          [&](size_t i) { state(i) *= (i & target) ? d : a; });
+                ScaleBothHalves<Parallel>(state, count, target, controls, a, d);
         }
         else if (antidiagonal)
         {

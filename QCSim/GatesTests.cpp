@@ -1,10 +1,18 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#include <array>
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <vector>
 
+#include "AppliedUnitaryRegressionTests.h"
+#include "DensityMatrix.h"
+#include "ExtendedUnitaryRegressionTests.h"
+#include "GateCoverageRegressionTests.h"
+#include "PathIntegral.h"
+#include "PauliGatePrecisionRegressionTests.h"
 #include "QuantumGate.h"
 #include "Tests.h"
 
@@ -248,11 +256,99 @@ bool checkSingleQubitGates()
     return checkSingleQubitGates1() && checkSingleQubitGates2();
 }
 
+bool checkExpandedLocalGateBackends()
+{
+    using namespace QC;
+    using namespace QC::Gates;
+    std::vector<AppliedGate<>> preparation;
+    for (size_t q = 0; q < 4; ++q)
+        preparation.emplace_back(UGate<>(0.3 + q * 0.17, -0.7 + q * 0.19, 0.2).getRawOperatorMatrix(), q);
+    preparation.emplace_back(CNOTGate<>().getRawOperatorMatrix(), 3, 0);
+    Eigen::VectorXcd initial = Eigen::VectorXcd::Zero(16);
+    initial[0] = 1.;
+    for (const auto &gate : preparation)
+    {
+        std::vector<unsigned> qubits{static_cast<unsigned>(gate.getQubit1())};
+        if (gate.getQubitsNumber() > 1)
+            qubits.push_back(static_cast<unsigned>(gate.getQubit2()));
+        initial = GateCoverageRegression::Apply(initial, gate.getRawOperatorMatrix(), qubits);
+    }
+    const std::vector<Eigen::MatrixXcd> matrices{
+        RZZGate<>(0.37).getRawOperatorMatrix(),
+        RXXGate<>(-0.21).getRawOperatorMatrix(),
+        RYYGate<>(0.53).getRawOperatorMatrix(),
+        RZXGate<>(-0.79).getRawOperatorMatrix(),
+        RXYGate<>(0.43).getRawOperatorMatrix(),
+        XXPlusYYGate<>(0.51, -0.29).getRawOperatorMatrix(),
+        XXMinusYYGate<>(-0.63, 0.31).getRawOperatorMatrix(),
+        ECRGate<>().getRawOperatorMatrix(),
+        DCXGate<>().getRawOperatorMatrix(),
+        CSGate<>().getRawOperatorMatrix(),
+        CSDGGate<>().getRawOperatorMatrix(),
+        iSwapGate<>().getRawOperatorMatrix(),
+        CCUGate<>(0.43, -0.71, 0.19, 0.23).getRawOperatorMatrix(),
+        DoublyControlledGate<>(HyGate<>()).getRawOperatorMatrix(),
+        DoublyControlledGate<>(SquareRootNOTDagGate<>()).getRawOperatorMatrix()};
+    for (const auto &matrix : matrices)
+    {
+        std::array<unsigned, 3> positions{0, 2, 3};
+        do
+        {
+            const size_t arity = matrix.rows() == 8 ? 3 : 2;
+            const std::vector<unsigned> qubits(positions.begin(), positions.begin() + arity);
+            const Eigen::VectorXcd expected = GateCoverageRegression::Apply(initial, matrix, qubits);
+            const AppliedGate<> applied(matrix, positions[0], positions[1], positions[2]);
+            QubitRegister<> state(4, 31);
+            state.setRegisterStorage(initial);
+            state.ApplyGate(applied);
+            DensityMatrix<> density(4, 31);
+            density.setDensityMatrix((initial * initial.adjoint()).eval());
+            density.ApplyGate(applied);
+            if ((state.getRegisterStorage() - expected).norm() > 1E-12 ||
+                (density.getDensityMatrix() - expected * expected.adjoint()).norm() > 1E-12)
+                return false;
+            auto circuit = preparation;
+            circuit.push_back(applied);
+            PathIntegral::PathIntegralSimulator path;
+            path.SetTrimValue(0.);
+            path.SetCircuit(circuit);
+            for (size_t output = 0; output < 16; ++output)
+            {
+                std::vector<bool> bits(4);
+                for (size_t q = 0; q < 4; ++q)
+                    bits[q] = ((output >> q) & 1) != 0;
+                if (std::abs(path.Propagate(bits) - expected[output]) > 1E-12)
+                    return false;
+            }
+        } while (std::next_permutation(positions.begin(), positions.end()));
+    }
+    std::cout << "Expanded gate statevector, density-matrix and path-integral comparisons passed.\n";
+    return true;
+}
+
 bool checkGates()
 {
     std::cout << "\nChecking unitarity of the quantum gates..." << std::endl;
 
     if (!checkSingleQubitGates() || !checkDoubleQubitGates() || !checkTripleQubitGates())
+        return false;
+
+    if (!QC::GateCoverageRegression::Run())
+        return false;
+
+    try
+    {
+        QC::PauliGatePrecisionRegression::Run();
+        QC::AppliedUnitaryRegression::Run();
+        QC::ExtendedUnitaryRegression::Run();
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << "Pauli/extended gate precision regression: " << error.what() << '\n';
+        return false;
+    }
+
+    if (!checkExpandedLocalGateBackends())
         return false;
 
     std::cout << "OK!" << std::endl;

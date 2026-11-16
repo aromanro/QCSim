@@ -6,6 +6,7 @@
 #include "PathIntegralLightconeRegressionTests.h"
 #include "PathIntegralRngRegressionTests.h"
 #include "PathIntegralRuntimeRegressionTests.h"
+#include "PathStructuredRegressionTests.h"
 #include "QubitRegister.h"
 
 bool TestPathIntegral()
@@ -13,6 +14,7 @@ bool TestPathIntegral()
     std::cout << "\nPath Integral tests" << std::endl;
     try
     {
+        QC::PathStructuredRegression::Run();
         QC::PathIntegralLightconeRegression::Run();
         QC::PathExpectationRegression::Run();
         QC::PathIntegralRuntimeRegression::Run();

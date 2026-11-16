@@ -35,7 +35,8 @@ class MPOSimulatorState : public MPOSimulatorBaseState
 // non adjacent qubits: it keeps a logical -> physical qubit mapping and inserts
 // swap gates to bring the involved qubits together before applying the gate.
 // This mirrors the MPSSimulator decorator over MPSSimulatorImpl.
-class MPOSimulator : public MPOSimulatorInterface
+class MPOSimulator : public MPOSimulatorInterface,
+                     public StructuredGateOperations<MPOSimulator, MPOSimulatorInterface::MatrixClass>
 {
   public:
     // Callback signature: (bondDims) -> meetPosition
@@ -267,12 +268,83 @@ class MPOSimulator : public MPOSimulatorInterface
 
     void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate) override
     {
-        ApplyOperator(gate);
+        if (const auto *compact = gate.getStructuredGate())
+            ApplyStructuredGate(*compact);
+        else if (gate.getQubitsNumber() <= 2)
+            ApplyOperator(gate);
+        else
+            ApplyGate(gate, gate.getQubit1(), gate.getQubit2(), gate.getQubit3());
+    }
+
+    // A compact gate on logical qubits; also what ApplyMCX, ApplyMCZ, ApplyMCP, ApplyMCRX/Y/Z,
+    // ApplyMCU, ApplyMultiControlledGate, ApplyDiagonalGate and the multiplexed rotations call.
+    // A multi-controlled one-qubit operator is applied where its qubits are, for any number of
+    // controls: no routing, no ancillas. A diagonal or multiplexed gate on at most three qubits
+    // is expanded to its matrix and routed as a local operator; on more qubits it is applied
+    // where its qubits are as well, as the chain operator of its table.
+    void ApplyStructuredGate(const Gates::StructuredGate &gate)
+    {
+        gate.Validate(impl.getNrQubits());
+        if (gate.kind == Gates::StructuredGate::Kind::Controlled && gate.Arity() > 3)
+        {
+            MatrixClass u(2, 2);
+            u << gate.matrix[0], gate.matrix[1], gate.matrix[2], gate.matrix[3];
+            std::vector<IndexType> controls;
+            std::vector<bool> values;
+            for (size_t k = 0; k < gate.qubits.size(); ++k)
+            {
+                controls.push_back(qubitsMap[gate.qubits[k]]);
+                values.push_back(gate.controlState == std::numeric_limits<size_t>::max() ||
+                                 ((gate.controlState >> k) & 1));
+            }
+            impl.ApplyMultiControlledSites(u, qubitsMap[gate.target], controls, values);
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
+                NotifyBondDimensions();
+            return;
+        }
+        if (gate.Arity() > 3)
+        {
+            // A wide diagonal or multiplexed table is applied where its qubits are, as the
+            // chain operator of the table: no routing.
+            impl.ApplyChainOperator(
+                MPOSimulatorImpl::WideTableOperator(gate, [this](size_t qubit) { return qubitsMap[qubit]; }),
+                MPOSimulatorImpl::WideTableIsUnitary(gate));
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
+                NotifyBondDimensions();
+            return;
+        }
+        const auto qubits = gate.OrderedQubits();
+        if (qubits.empty())
+        {
+            // A table of one entry is a scalar: rho is multiplied by its squared modulus.
+            ApplyOperator(
+                Gates::AppliedGate<MatrixClass>(MatrixClass(gate.diagonal[0] * MatrixClass::Identity(2, 2)), 0));
+            return;
+        }
+        ApplyGate(Gates::AppliedGate<MatrixClass>(gate.DenseMatrix<MatrixClass>(3), qubits[0],
+                                                  qubits.size() > 1 ? qubits[1] : 0,
+                                                  qubits.size() > 2 ? qubits[2] : 0));
     }
 
     void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1 = 0) override
     {
         ApplyOperator(gate, qubit, controllingQubit1);
+    }
+
+    void ApplyGate(const GateClass &gate, IndexType qubit, IndexType controllingQubit1,
+                   IndexType controllingQubit2) override
+    {
+        if (gate.getQubitsNumber() == 3)
+        {
+            ThreeSite::Validate(gate.getRawOperatorMatrix(), static_cast<IndexType>(impl.getNrQubits()), qubit,
+                                controllingQubit1, controllingQubit2);
+            BringThreeQubitsTogether(qubit, controllingQubit1, controllingQubit2);
+            impl.ApplyGate(gate, qubitsMap[qubit], qubitsMap[controllingQubit1], qubitsMap[controllingQubit2]);
+            if (bondDimensionCallback || bondDimensionSummaryCallback)
+                NotifyBondDimensions();
+            return;
+        }
+        ApplyGate(gate, qubit, controllingQubit1);
     }
 
     void ApplyGates(const std::vector<Gates::AppliedGate<MatrixClass>> &gates) override
@@ -283,7 +355,19 @@ class MPOSimulator : public MPOSimulatorInterface
 
     void ApplyOperator(const Gates::AppliedGate<MatrixClass> &op) override
     {
-        const size_t qubitsNumber = ValidateOperator(op);
+        if (const auto *compact = op.getStructuredGate())
+        {
+            ApplyStructuredGate(*compact);
+            return;
+        }
+        const size_t qubitsNumber = op.getQubitsNumber();
+        if (qubitsNumber == 3)
+        {
+            ApplyOperator(op, CheckedAppliedQubit(op.getQubit1()), CheckedAppliedQubit(op.getQubit2()),
+                          CheckedAppliedQubit(op.getQubit3()));
+            return;
+        }
+        ValidateOperator(op, qubitsNumber);
         const IndexType qubit = CheckedAppliedQubit(op.getQubit1());
         const IndexType controllingQubit1 = qubitsNumber > 1 ? CheckedAppliedQubit(op.getQubit2()) : 0;
 
@@ -302,9 +386,22 @@ class MPOSimulator : public MPOSimulatorInterface
             ApplyOperator(op);
     }
 
+    void ApplyOperator(const GateClass &op, IndexType qubit, IndexType controllingQubit1,
+                       IndexType controllingQubit2) override
+    {
+        ApplyGate(op, qubit, controllingQubit1, controllingQubit2);
+    }
+
     void ApplyOperatorAndNormalize(const Gates::AppliedGate<MatrixClass> &op) override
     {
-        const size_t qubitsNumber = ValidateOperator(op);
+        const size_t qubitsNumber = op.getQubitsNumber();
+        if (qubitsNumber == 3)
+        {
+            ApplyOperatorAndNormalize(op, CheckedAppliedQubit(op.getQubit1()), CheckedAppliedQubit(op.getQubit2()),
+                                      CheckedAppliedQubit(op.getQubit3()));
+            return;
+        }
+        ValidateOperator(op, qubitsNumber);
         const IndexType qubit = CheckedAppliedQubit(op.getQubit1());
         const IndexType controllingQubit1 = qubitsNumber > 1 ? CheckedAppliedQubit(op.getQubit2()) : 0;
 
@@ -315,6 +412,33 @@ class MPOSimulator : public MPOSimulatorInterface
     {
         const size_t qubitsNumber = ValidateOperator(op);
         ApplyValidatedOperatorAndNormalize(op, qubit, controllingQubit1, qubitsNumber);
+    }
+
+    void ApplyOperatorAndNormalize(const GateClass &op, IndexType qubit, IndexType controllingQubit1,
+                                   IndexType controllingQubit2) override
+    {
+        if (op.getQubitsNumber() != 3)
+        {
+            ApplyOperatorAndNormalize(op, qubit, controllingQubit1);
+            return;
+        }
+        const auto &matrix = op.getRawOperatorMatrix();
+        ThreeSite::Validate(matrix, static_cast<IndexType>(impl.getNrQubits()), qubit, controllingQubit1,
+                            controllingQubit2);
+        const IndexType first =
+            std::min({qubitsMap[qubit], qubitsMap[controllingQubit1], qubitsMap[controllingQubit2]});
+        const IndexType last = std::max({qubitsMap[qubit], qubitsMap[controllingQubit1], qubitsMap[controllingQubit2]});
+        if (last - first > 2)
+            WithRoutingRollback([&]() {
+                BringThreeQubitsTogether(qubit, controllingQubit1, controllingQubit2);
+                impl.ApplyAndNormalizeWithoutBackup(matrix, 3, qubitsMap[qubit], qubitsMap[controllingQubit1],
+                                                    qubitsMap[controllingQubit2]);
+            });
+        else
+            impl.ApplyOperatorAndNormalize(op, qubitsMap[qubit], qubitsMap[controllingQubit1],
+                                           qubitsMap[controllingQubit2]);
+        if (bondDimensionCallback || bondDimensionSummaryCallback)
+            NotifyBondDimensions();
     }
 
     void ApplyKrausOperators(const std::vector<Gates::AppliedGate<MatrixClass>> &ops) override
@@ -956,10 +1080,10 @@ class MPOSimulator : public MPOSimulatorInterface
         return op.rows() == 2 ? 1 : 2;
     }
 
-    static size_t ValidateOperator(const GateClass &op)
+    static size_t ValidateOperator(const GateClass &op, size_t knownArity = 0)
     {
         const size_t matrixQubits = ValidateOperatorMatrix(op.getRawOperatorMatrix());
-        if (op.getQubitsNumber() != matrixQubits)
+        if ((knownArity ? knownArity : op.getQubitsNumber()) != matrixQubits)
             throw std::invalid_argument("Operator matrix dimensions do not match its declared arity");
         return matrixQubits;
     }
@@ -1249,6 +1373,30 @@ class MPOSimulator : public MPOSimulatorInterface
             SwapQubits(logical1, logical2);
     }
 
+    // Keep the median physical site fixed and route the outer two beside it.
+    void BringThreeQubitsTogether(IndexType q1, IndexType q2, IndexType q3)
+    {
+        std::array<IndexType, 3> logical{q1, q2, q3};
+        std::sort(logical.begin(), logical.end(),
+                  [this](IndexType a, IndexType b) { return qubitsMap[a] < qubitsMap[b]; });
+        const IndexType middle = qubitsMap[logical[1]];
+        for (int side : {0, 2})
+        {
+            const IndexType moving = logical[side];
+            const IndexType step = side == 0 ? 1 : -1;
+            const IndexType destination = middle - step;
+            while (qubitsMap[moving] != destination)
+            {
+                const IndexType from = qubitsMap[moving], to = from + step;
+                const IndexType displaced = qubitsMapInv[to];
+                impl.ApplyGate(swapGate, from, to);
+                ExchangeQubitPositions(moving, displaced);
+                if (bondDimensionCallback || bondDimensionSummaryCallback)
+                    NotifyBondDimensions();
+            }
+        }
+    }
+
     // Brings the two logical qubits to adjacent physical positions using nearest
     // neighbour swaps. The default heuristic prefers the chain middle when the
     // qubits straddle it, otherwise it moves the qubit that is closer to an end.
@@ -1454,7 +1602,8 @@ class MPOSimulator : public MPOSimulatorInterface
             const double localBond3 = bMid * bMid * bMid;
             const double cutDamage = 0.5 * (prefixCut[i] + suffixCut[i]);
             const double outerContext = 0.05 * (bLeft * bMid * bRight);
-            const double tieBreak = (c2 > c1) ? (1e-6 * static_cast<double>(span - 1 - i)) : (1e-6 * static_cast<double>(i));
+            const double tieBreak =
+                (c2 > c1) ? (1e-6 * static_cast<double>(span - 1 - i)) : (1e-6 * static_cast<double>(i));
             const double score = localBond3 + cutDamage + outerContext + tieBreak;
 
             if (score < bestScore)

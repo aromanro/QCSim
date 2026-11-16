@@ -6,9 +6,11 @@
 #include "Tests.h"
 
 #include "MPSSimulator.h"
+#include "MPSThreeSiteAuditTests.h"
 #include "ProductSwapRegressionTests.h"
 #include "QubitRegister.h"
 #include "TensorNetworkRegressionTests.h"
+#include "ThreeQubitTensorRegressionTests.h"
 
 #include <vector>
 
@@ -1881,11 +1883,7 @@ static bool LongChainSamplingAndValidationTestMPS()
     Eigen::MatrixXcd nonFinite = Eigen::MatrixXcd::Identity(4, 4);
     nonFinite(0, 0) = std::numeric_limits<double>::quiet_NaN();
     const QC::Gates::TwoQubitsGate<> nonFiniteGate(nonFinite);
-    if (!expectInvalid(
-            [&] {
-                smalls.MeasureQubits({0, 99});
-            },
-            "MeasureQubits with an invalid qubit") ||
+    if (!expectInvalid([&] { smalls.MeasureQubits({0, 99}); }, "MeasureQubits with an invalid qubit") ||
         !expectInvalid([&] { smalls.MeasureNoCollapse(std::set<IndexType>{99}); },
                        "MeasureNoCollapse with an invalid qubit") ||
         !expectInvalid([&] { smalls.MoveAtBeginningOfChain({99}); }, "MoveAtBeginningOfChain with an invalid qubit") ||
@@ -2736,7 +2734,8 @@ bool MPSSimulatorTests()
     }
     */
 
-    return QC::ProductSwapRegression::Run(false) && ObservableAndSummaryRegressionTestMPS() &&
+    return QC::MPSThreeSiteAudit::Run() && QC::ThreeQubitTensorRegression::Run(false) &&
+           QC::ProductSwapRegression::Run(false) && ObservableAndSummaryRegressionTestMPS() &&
            KrausGaugeModeRegressionTestMPS() && MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() &&
            WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() &&
            checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() &&

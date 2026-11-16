@@ -231,6 +231,18 @@ struct Operation
         return op;
     }
 
+    // The same rotation from the cosine and sine already evaluated for its
+    // angle (by a compiled table), and whether it is an encoded quarter turn.
+    static Operation Rotation(OperationType t, int q, double angle, double cosine, double sine, bool quarter)
+    {
+        Operation op(t, q);
+        op.angle = angle;
+        op.cosine = cosine;
+        op.sine = sine;
+        op.clifford = quarter;
+        return op;
+    }
+
     std::unique_ptr<Operator> Legacy() const
     {
         if (Custom())
@@ -373,6 +385,91 @@ inline const std::array<std::array<unsigned char, 16>, 15> &CliffordMaps()
         return result;
     }();
     return maps;
+}
+
+// A native Clifford operation with exactly the action of a table, and whether
+// its two qubits are those of the table in exchanged order.
+struct NativeClifford
+{
+    OperationType type = OperationType::X;
+    bool exchanged = false, found = false;
+};
+
+// Compare a Clifford table on one or two qubits with the signed permutations
+// of the native kernels. A match is an identity of the two actions, so the
+// recorder may use the kernel in place of the table.
+inline NativeClifford FindNativeClifford(const LocalTransfer &table)
+{
+    NativeClifford result;
+    if (!table.clifford || table.qubits > 2)
+        return result;
+    const unsigned count = 1U << (2 * table.qubits);
+    std::array<unsigned char, 16> image{};
+    for (unsigned p = 0; p < count; ++p)
+    {
+        const auto &entry = table.entries[table.offsets[p]];
+        image[p] = static_cast<unsigned char>(entry.pauli | (entry.coefficient < 0. ? 16 : 0));
+    }
+    // The label of the same Pauli with the two qubits exchanged; the sign bit stays.
+    const auto exchange = [](unsigned label) { return ((label & 3U) << 2) | ((label >> 2) & 3U) | (label & 16U); };
+    const auto &maps = CliffordMaps();
+    for (size_t gate = 0; gate < maps.size(); ++gate)
+    {
+        const auto type = static_cast<OperationType>(gate);
+        if (PauliOperationArity(type) != table.qubits)
+            continue;
+        bool same = true, mirrored = table.qubits == 2;
+        for (unsigned p = 0; p < count && (same || mirrored); ++p)
+        {
+            same = same && maps[gate][p] == image[p];
+            mirrored = mirrored && exchange(maps[gate][exchange(p)]) == image[p];
+        }
+        if (same || mirrored)
+        {
+            result.type = type;
+            result.exchanged = !same;
+            result.found = true;
+            return result;
+        }
+    }
+    return result;
+}
+
+// Choose how a compiled table is recorded: as the rotation it describes, as
+// the native Clifford with exactly its action, or as the table itself. The
+// choice stays with the cache entry of the table, so that a repeated gate is
+// examined once.
+inline void ChooseRecording(CachedTransfer &compiled)
+{
+    using Recording = CachedTransfer::Recording;
+    const LocalTransfer &table = *compiled.table;
+    compiled.nonunitary = table.nonunitary;
+    if (table.rotationAxis >= 0)
+    {
+        compiled.operation = table.rotationAxis == 0   ? OperationType::RX
+                             : table.rotationAxis == 1 ? OperationType::RY
+                                                       : OperationType::RZ;
+        // The table holds the cosine and sine the rotation kernel needs; it
+        // is a signed permutation exactly at an encoded quarter turn.
+        compiled.angle = table.rotationAngle;
+        RotationCosineSine(table, compiled.cosine, compiled.sine);
+        compiled.quarter = table.clifford;
+        compiled.recording = Recording::Rotation;
+        return;
+    }
+    const NativeClifford native = FindNativeClifford(table);
+    if (native.found)
+    {
+        compiled.operation = native.type;
+        compiled.recording = table.qubits == 1  ? Recording::Single
+                             : native.exchanged ? Recording::ExchangedPair
+                                                : Recording::Pair;
+        return;
+    }
+    compiled.operation = table.qubits == 1   ? OperationType::LOCAL_1Q
+                         : table.qubits == 2 ? OperationType::LOCAL_2Q
+                                             : OperationType::LOCAL_3Q;
+    compiled.recording = Recording::Table;
 }
 
 template <OperationType Axis, class T>
@@ -604,6 +701,9 @@ void Apply(const Operation &op, std::vector<T> &terms, size_t begin, size_t end,
     case OperationType::CSWAP:
     case OperationType::CHANNEL_1Q:
     case OperationType::CHANNEL_2Q:
+    case OperationType::LOCAL_1Q:
+    case OperationType::LOCAL_2Q:
+    case OperationType::LOCAL_3Q:
         ApplyLocal(op, terms, begin, end, extra);
         return;
     case OperationType::PAULI_CHANNEL_1Q: {
@@ -1177,8 +1277,17 @@ std::vector<unsigned char> BackwardCone(const std::vector<T> &terms, const std::
         bool intersects = op.type == OperationType::PROJ;
         // Public local tables can describe nonunital actions. Only skip their
         // identity input when the table promises the exact identity action.
+        // A table that merely rescales the identity (a matrix whose stored
+        // entries are unitary only up to their rounding) must still be applied
+        // to every term, but it cannot bring a term onto its qubits.
+        bool rescales = false;
         if (IsPauliLocalGate(op.type) && !(op.Transfer().unchanged & 1))
-            intersects = true;
+        {
+            if (op.Transfer().KeepsIdentitySupport())
+                rescales = true;
+            else
+                intersects = true;
+        }
         const int arity = PauliOperationArity(op.type);
         for (int q = 0; q < arity; ++q)
         {
@@ -1187,6 +1296,8 @@ std::vector<unsigned char> BackwardCone(const std::vector<T> &terms, const std::
         }
         if (!intersects)
         {
+            if (rescales)
+                continue;
             if (needed.empty())
                 needed.assign(operations.size(), 1);
             needed[index] = 0;

@@ -1190,7 +1190,16 @@ class MPOSimulatorBase : public MPOSimulatorInterface
         const int e = OutOfRangeExponent(MaxAbs(m));
         if (e != 0)
         {
-            m *= std::ldexp(1., -e);
+            const double factor = std::ldexp(1., -e);
+            if (std::isfinite(factor) && factor > 0.)
+                m *= factor;
+            else
+                for (Eigen::Index column = 0; column < m.cols(); ++column)
+                    for (Eigen::Index row = 0; row < m.rows(); ++row)
+                    {
+                        const auto value = m(row, column);
+                        m(row, column) = {std::ldexp(value.real(), -e), std::ldexp(value.imag(), -e)};
+                    }
             exponent += e;
         }
         return e;

@@ -328,6 +328,13 @@
     <ClInclude Include="QCSim\Frame.h" />
     <ClInclude Include="QCSim\Function.h" />
     <ClInclude Include="QCSim\GateStructure.h" />
+    <ClInclude Include="QCSim\GateCoverageRegressionTests.h" />
+    <ClInclude Include="QCSim\GateAngles.h" />
+    <ClInclude Include="QCSim\UnitaryGate.h" />
+    <ClInclude Include="QCSim\AppliedUnitaryRegressionTests.h" />
+    <ClInclude Include="QCSim\ExtendedUnitaryRegressionTests.h" />
+    <ClInclude Include="QCSim\LocalCliffordRecognition.h" />
+    <ClInclude Include="QCSim\PauliGatePrecisionRegressionTests.h" />
     <ClInclude Include="QCSim\GeneralElitzurVaidmanBomb.h" />
     <ClInclude Include="QCSim\GeneralizedEntanglingGate.h" />
     <ClInclude Include="QCSim\GroverAlgorithm.h" />
@@ -335,6 +342,7 @@
     <ClInclude Include="QCSim\HardyParadox.h" />
     <ClInclude Include="QCSim\IsingModel.h" />
     <ClInclude Include="QCSim\LocalPauli.h" />
+    <ClInclude Include="QCSim\LocalGateExtensions.h" />
     <ClInclude Include="QCSim\LocalPauliSum.h" />
     <ClInclude Include="QCSim\MagicSquare.h" />
     <ClInclude Include="QCSim\NonCliffordTestGates.h" />
@@ -343,6 +351,7 @@
     <ClInclude Include="QCSim\MPOSimulatorImpl.h" />
     <ClInclude Include="QCSim\MPOSimulatorInterface.h" />
     <ClInclude Include="QCSim\MPOSimulatorRegressionTests.h" />
+    <ClInclude Include="QCSim\MPSThreeSiteAuditTests.h" />
     <ClInclude Include="QCSim\MPSSimulator.h" />
     <ClInclude Include="QCSim\MPSSimulatorBase.h" />
     <ClInclude Include="QCSim\MPSSimulatorImpl.h" />
@@ -357,6 +366,7 @@
     <ClInclude Include="QCSim\PathIntegralColdRegressionTests.h" />
     <ClInclude Include="QCSim\PathIntegralExpectation.h" />
     <ClInclude Include="QCSim\PathIntegralExpectationRegressionTests.h" />
+    <ClInclude Include="QCSim\PathStructuredRegressionTests.h" />
     <ClInclude Include="QCSim\PathIntegralGate.h" />
     <ClInclude Include="QCSim\PathIntegralLightconeRegressionTests.h" />
     <ClInclude Include="QCSim\PathIntegralRuntimeRegressionTests.h" />
@@ -398,11 +408,17 @@
     <ClInclude Include="QCSim\SimpleGates.h" />
     <ClInclude Include="QCSim\SingleThreaded.h" />
     <ClInclude Include="QCSim\StabilizerState.h" />
+    <ClInclude Include="QCSim\StructuredGate.h" />
+    <ClInclude Include="QCSim\StructuredGateOperations.h" />
+    <ClInclude Include="QCSim\StructuredGateRegressionTests.h" />
     <ClInclude Include="QCSim\SuperdenseCoding.h" />
     <ClInclude Include="QCSim\Teleportation.h" />
     <ClInclude Include="QCSim\TeleportedCNOT.h" />
     <ClInclude Include="QCSim\TensorNetworkRegressionTests.h" />
     <ClInclude Include="QCSim\TensorPauli.h" />
+    <ClInclude Include="QCSim\TableTrain.h" />
+    <ClInclude Include="QCSim\ThreeSiteTensor.h" />
+    <ClInclude Include="QCSim\ThreeQubitTensorRegressionTests.h" />
     <ClInclude Include="QCSim\Tests.h" />
     <ClInclude Include="QCSim\ThreadPool.h" />
     <ClInclude Include="QCSim\Utils.h" />

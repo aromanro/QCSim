@@ -135,6 +135,27 @@ class LocalGate
         return cliffords;
     }
 
+    // Exact signed Pauli image under the recorded Clifford part. Reading
+    // packed rows needs no shared scratch, so immutable compiled gates can be
+    // used concurrently by independent simulators.
+    LocalPauli ConjugatePauli(LocalPauli input, bool &negative) const
+    {
+        LocalPauli result;
+        unsigned phase = Clifford::detail::Popcount(input.x & input.z);
+        for (unsigned z = 0; z < 2; ++z)
+            for (size_t q = 0; q < nrQubits; ++q)
+                if (((z ? input.z : input.x) >> q) & 1U)
+                {
+                    const auto image = (z ? inverseZ : inverseX)[q];
+                    const LocalPauli next{uint8_t(image.X.words[0]), uint8_t(image.Z.words[0])};
+                    phase += LocalPauliSum::ProductPhase(result, next) + (image.PhaseSign ? 2 : 0);
+                    result.x ^= next.x;
+                    result.z ^= next.z;
+                }
+        negative = (phase & 2U) != 0;
+        return result;
+    }
+
     // Apply the Clifford part, in order, to any map with the frame map's gate
     // names; qubits maps local qubits to the map's qubits.
     template <class Map> void ReplayCliffords(Map &map, const size_t *qubits) const
