@@ -377,10 +377,33 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
                 ApplyDensityDiagonal<3>(U, qubits);
             return;
         }
+        if (gateQubits == 1 &&
+            NrQubits >= (structure.kind == Gates::GateStructure::Kind::Antidiagonal ? AntidiagonalSuperoperatorQubits
+                                                                                    : OneQubitSuperoperatorQubits))
+        {
+            ApplyOneQubitGateSuperoperator(U, qubit);
+            return;
+        }
         const MatrixClass Uconj = U.conjugate(); // only the small operator
         ApplyGateToBuffer(U, structure, gateQubits, qubit, controllingQubit1, controllingQubit2, true);
         ApplyGateToBuffer(Uconj, structure, gateQubits, qubit, controllingQubit1, controllingQubit2, false);
     }
+
+    // From this many qubits on, a one-qubit gate that is not diagonal is applied to rho as its 4x4
+    // superoperator U (x) conj(U), in one pass over the matrix, instead of U on the ket bits and conj(U)
+    // on the bra bits in two. A dense gate does the same arithmetic per entry either way, so the single
+    // pass wins once rho no longer fits in the caches (1.5-1.9x from 11 qubits, 0.8-1.05x below). An
+    // antidiagonal gate (X, Y) has one entry per superoperator row, and the single pass wins from five
+    // qubits (1.1-1.5x, about 2x from 11). Two-qubit gates keep their structured passes: a dense 16x16
+    // map doubles the arithmetic and was 2-4x slower, a CX gains about 10% only from 11 qubits.
+    // QCSIM_DM_ONE_QUBIT_SUPEROPERATOR_QUBITS sets both thresholds, so the tests can run every gate this way.
+#ifdef QCSIM_DM_ONE_QUBIT_SUPEROPERATOR_QUBITS
+    static constexpr size_t OneQubitSuperoperatorQubits = QCSIM_DM_ONE_QUBIT_SUPEROPERATOR_QUBITS;
+    static constexpr size_t AntidiagonalSuperoperatorQubits = QCSIM_DM_ONE_QUBIT_SUPEROPERATOR_QUBITS;
+#else
+    static constexpr size_t OneQubitSuperoperatorQubits = 11;
+    static constexpr size_t AntidiagonalSuperoperatorQubits = 5;
+#endif
 
     void ApplyGate(const Gates::AppliedGate<MatrixClass> &gate)
     {
@@ -1326,6 +1349,17 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
         FlatView state(rho.data(), rho.size());
         FlatCalculator::template ApplyLocalMap<2 * Qubits>(state, matrix, bits, static_cast<size_t>(rho.size()),
                                                            UseParallel(static_cast<size_t>(rho.size())));
+    }
+
+    // rho -> U rho U^dagger as one local map on the ket and bra bits of the qubit: the block entry with
+    // local index row + 2 * column takes sum U(row, r) conj(U(column, c)) over the entries r + 2 * c.
+    void ApplyOneQubitGateSuperoperator(const MatrixClass &U, size_t qubit)
+    {
+        std::array<std::complex<double>, 16> coefficients;
+        for (size_t output = 0; output < 4; ++output)
+            for (size_t input = 0; input < 4; ++input)
+                coefficients[output * 4 + input] = U(output % 2, input % 2) * std::conj(U(output / 2, input / 2));
+        ApplyLocalSuperoperator<1>(coefficients.data(), {qubit, 0});
     }
 
     void ScaleCoherences(size_t qubit, double scale)

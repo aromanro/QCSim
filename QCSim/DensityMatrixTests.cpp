@@ -2426,6 +2426,72 @@ static bool DensityMatrixRareCollapseTest()
     return true;
 }
 
+// From DensityMatrix<>::OneQubitSuperoperatorQubits (dense) and AntidiagonalSuperoperatorQubits on,
+// non-diagonal one-qubit gates are applied as their superoperator in one pass instead of two. Checks
+// that path at both thresholds against the statevector, for column- and row-major storage.
+static bool DensityMatrixOneQubitSuperoperatorTest()
+{
+    std::cout << "\nDensity matrix simulator - one-qubit gates as superoperators on large registers" << std::endl;
+
+    using RowMatrix = Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> oneQubitGates, gates;
+    DM_FillOneQubitGates(oneQubitGates);
+    gates = oneQubitGates;
+    DM_FillTwoQubitGates(gates);
+    std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+    for (const size_t size :
+         {QC::DensityMatrix<>::AntidiagonalSuperoperatorQubits, QC::DensityMatrix<>::OneQubitSuperoperatorQubits})
+    {
+        const int nrQubits = static_cast<int>(std::max<size_t>(2, size));
+        std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+        std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+        QC::DensityMatrix<> dm(nrQubits);
+        QC::DensityMatrix<Eigen::VectorXcd, RowMatrix> rowDm(nrQubits);
+        QC::QubitRegister<> reg(nrQubits);
+        const auto apply = [&](const QC::Gates::QuantumGateWithOp<> &gate, int qubit1, int qubit2) {
+            dm.ApplyGate(gate, qubit1, qubit2);
+            // A row-major register takes row-major gates: the same matrix, whose structure is classified again.
+            rowDm.ApplyGate(QC::Gates::AppliedGate<RowMatrix>(RowMatrix(gate.getRawOperatorMatrix()), qubit1, qubit2));
+            reg.ApplyGate(gate, qubit1, qubit2);
+        };
+
+        // Every one-qubit gate at least once (dense, antidiagonal and diagonal), then a random circuit.
+        for (const auto &gate : oneQubitGates)
+            apply(*gate, qubitDistr(gen), 0);
+        for (int i = 0; i < 40; ++i)
+        {
+            const auto &gate = *gates[gateDistr(gen)];
+            if (gate.getQubitsNumber() == 2)
+            {
+                int qubit1 = qubitDistr2(gen), qubit2 = qubit1 + 1;
+                if (dist_bool(gen))
+                    std::swap(qubit1, qubit2);
+                apply(gate, qubit1, qubit2);
+            }
+            else
+                apply(gate, qubitDistr(gen), 0);
+        }
+
+        if (!CompareWithStatevector(dm, reg, nrQubits))
+            return false;
+        const Eigen::MatrixXcd &columns = dm.getDensityMatrix();
+        const RowMatrix &rows = rowDm.getDensityMatrix();
+        for (Eigen::Index r = 0; r < columns.rows(); ++r)
+            for (Eigen::Index c = 0; c < columns.cols(); ++c)
+                if (!approxEqual(columns(r, c), rows(r, c), 1E-9))
+                {
+                    std::cout << "Row-major density matrix differs at (" << r << ", " << c << ") for " << nrQubits
+                              << " qubits" << std::endl;
+                    return false;
+                }
+    }
+
+    std::cout << "Success" << std::endl;
+    return true;
+}
+
 bool DensityMatrixTests()
 {
     std::cout << "\nDensity matrix simulator tests" << std::endl;
@@ -2440,7 +2506,8 @@ bool DensityMatrixTests()
         DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
         DensityMatrixMeasurementStatisticsTest() && DensityMatrixCollapseTest() && DensityMatrixRareCollapseTest() &&
         DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
-        DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest();
+        DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest() &&
+        DensityMatrixOneQubitSuperoperatorTest();
     gen = savedGenerator;
     return result;
 }
