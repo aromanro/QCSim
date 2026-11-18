@@ -379,11 +379,9 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
         }
         if (gateQubits == 1 &&
             NrQubits >= (structure.kind == Gates::GateStructure::Kind::Antidiagonal ? AntidiagonalSuperoperatorQubits
-                                                                                    : OneQubitSuperoperatorQubits))
-        {
-            ApplyOneQubitGateSuperoperator(U, qubit);
+                                                                                    : OneQubitSuperoperatorQubits) &&
+            ApplyOneQubitGateSuperoperator(U, qubit))
             return;
-        }
         const MatrixClass Uconj = U.conjugate(); // only the small operator
         ApplyGateToBuffer(U, structure, gateQubits, qubit, controllingQubit1, controllingQubit2, true);
         ApplyGateToBuffer(Uconj, structure, gateQubits, qubit, controllingQubit1, controllingQubit2, false);
@@ -1353,13 +1351,23 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
 
     // rho -> U rho U^dagger as one local map on the ket and bra bits of the qubit: the block entry with
     // local index row + 2 * column takes sum U(row, r) conj(U(column, c)) over the entries r + 2 * c.
-    void ApplyOneQubitGateSuperoperator(const MatrixClass &U, size_t qubit)
+    // The operator need not be unitary. A coefficient is a product of two of its entries, which can
+    // overflow where every intermediate of the two passes stays finite (an entry of 1e200: infinity
+    // times a zero entry of rho is NaN). Then nothing is applied and false is returned, for the caller
+    // to use the two passes.
+    bool ApplyOneQubitGateSuperoperator(const MatrixClass &U, size_t qubit)
     {
         std::array<std::complex<double>, 16> coefficients;
         for (size_t output = 0; output < 4; ++output)
             for (size_t input = 0; input < 4; ++input)
-                coefficients[output * 4 + input] = U(output % 2, input % 2) * std::conj(U(output / 2, input / 2));
+            {
+                const std::complex<double> value = U(output % 2, input % 2) * std::conj(U(output / 2, input / 2));
+                if (!std::isfinite(value.real()) || !std::isfinite(value.imag()))
+                    return false;
+                coefficients[output * 4 + input] = value;
+            }
         ApplyLocalSuperoperator<1>(coefficients.data(), {qubit, 0});
+        return true;
     }
 
     void ScaleCoherences(size_t qubit, double scale)

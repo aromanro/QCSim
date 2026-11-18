@@ -2444,9 +2444,10 @@ static bool DensityMatrixRareCollapseTest()
     return true;
 }
 
-// From DensityMatrix<>::OneQubitSuperoperatorQubits (dense) and AntidiagonalSuperoperatorQubits on,
-// non-diagonal one-qubit gates are applied as their superoperator in one pass instead of two. Checks
-// that path at both thresholds against the statevector, for column- and row-major storage.
+// From DensityMatrix<>::OneQubitSuperoperatorQubits (dense, 11 by default) and
+// AntidiagonalSuperoperatorQubits (5) on, non-diagonal one-qubit gates are applied as their
+// superoperator in one pass instead of two. Checks that path at the default thresholds against the
+// statevector, for column- and row-major storage.
 static bool DensityMatrixOneQubitSuperoperatorTest()
 {
     std::cout << "\nDensity matrix simulator - one-qubit gates as superoperators on large registers" << std::endl;
@@ -2458,8 +2459,9 @@ static bool DensityMatrixOneQubitSuperoperatorTest()
     DM_FillTwoQubitGates(gates);
     std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
 
-    for (const size_t size :
-         {QC::DensityMatrix<>::AntidiagonalSuperoperatorQubits, QC::DensityMatrix<>::OneQubitSuperoperatorQubits})
+    // The default thresholds, as fixed sizes: an override that raises them keeps this test bounded
+    // (three density matrices of 4^n entries) and checks whichever path then applies.
+    for (const size_t size : {size_t{5}, size_t{11}})
     {
         const int nrQubits = static_cast<int>(std::max<size_t>(2, size));
         std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
@@ -2510,22 +2512,69 @@ static bool DensityMatrixOneQubitSuperoperatorTest()
     return true;
 }
 
+// Gates need not be unitary. A superoperator coefficient is a product of two operator entries and can
+// overflow where the two passes stay finite: the gate then takes the two passes. An antidiagonal and a
+// dense operator with an entry of 1e200, each at the size where it would take the superoperator.
+static bool DensityMatrixNonUnitaryOverflowTest()
+{
+    std::cout << "\nDensity matrix simulator - non-unitary one-qubit operators with large entries" << std::endl;
+
+    struct Case
+    {
+        int nrQubits;
+        Eigen::MatrixXcd op;
+        bool startInOne;  // prepare |1> on qubit 0 instead of |0>
+        Eigen::Index out; // the basis state the operator maps it to
+    };
+
+    Eigen::MatrixXcd antidiagonal(2, 2), dense(2, 2);
+    antidiagonal << 0., 1e200, 1., 0.; // |0> -> |1>
+    dense << 1e200, 1., 1., 0.;        // |1> -> |0>
+    const std::array<Case, 2> cases{{{5, antidiagonal, false, 1}, {11, dense, true, 0}}};
+
+    for (const auto &c : cases)
+    {
+        QC::DensityMatrix<> dm(c.nrQubits);
+        if (c.startInOne)
+            dm.ApplyGate(QC::Gates::PauliXGate<>(), 0);
+        dm.ApplyGate(QC::Gates::AppliedGate<>(c.op, 0), 0);
+        const Eigen::MatrixXcd &rho = dm.getDensityMatrix();
+        if (!rho.allFinite())
+        {
+            std::cout << "A finite non-unitary operator gave a non-finite density matrix for " << c.nrQubits
+                      << " qubits" << std::endl;
+            return false;
+        }
+        Eigen::MatrixXcd expected = Eigen::MatrixXcd::Zero(rho.rows(), rho.cols());
+        expected(c.out, c.out) = 1.;
+        if ((rho - expected).cwiseAbs().maxCoeff() > 1E-12)
+        {
+            std::cout << "A non-unitary operator with large entries gave the wrong density matrix for " << c.nrQubits
+                      << " qubits" << std::endl;
+            return false;
+        }
+    }
+
+    std::cout << "Success" << std::endl;
+    return true;
+}
+
 bool DensityMatrixTests()
 {
     std::cout << "\nDensity matrix simulator tests" << std::endl;
 
     const std::mt19937 savedGenerator = gen;
     gen.seed(0xD35A17U);
-    const bool result = DensityMatrixStructuredGateTests() && DensityMatrixUnitaryTest() &&
-                        DensityMatrixDenseGateReferenceTest() && DensityMatrixThreeQubitGateTest() &&
-                        DensityMatrixChannelsTest() && DensityMatrixGenericChannelTest() &&
-                        DensityMatrixSuperoperatorTest() && StatevectorKrausTrajectoryTest() &&
-                        DensityMatrixInitializationAndValidationTest() && DensityMatrixMeasurementTest() &&
-                        DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
-                        DensityMatrixMeasurementStatisticsTest() && DensityMatrixCollapseTest() &&
-                        DensityMatrixRareCollapseTest() && DensityMatrixExpectationExtrasTest() &&
-                        DensityMatrixSamplingTest() && DensityMatrixStateSaveRestoreCloneTest() &&
-                        DensityMatrixNewFeaturesTest() && DensityMatrixOneQubitSuperoperatorTest();
+    const bool result =
+        DensityMatrixStructuredGateTests() && DensityMatrixUnitaryTest() && DensityMatrixDenseGateReferenceTest() &&
+        DensityMatrixThreeQubitGateTest() && DensityMatrixChannelsTest() && DensityMatrixGenericChannelTest() &&
+        DensityMatrixSuperoperatorTest() && StatevectorKrausTrajectoryTest() &&
+        DensityMatrixInitializationAndValidationTest() && DensityMatrixMeasurementTest() &&
+        DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
+        DensityMatrixMeasurementStatisticsTest() && DensityMatrixCollapseTest() && DensityMatrixRareCollapseTest() &&
+        DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
+        DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest() &&
+        DensityMatrixOneQubitSuperoperatorTest() && DensityMatrixNonUnitaryOverflowTest();
     gen = savedGenerator;
     return result;
 }
