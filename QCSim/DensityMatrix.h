@@ -1351,18 +1351,24 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
 
     // rho -> U rho U^dagger as one local map on the ket and bra bits of the qubit: the block entry with
     // local index row + 2 * column takes sum U(row, r) conj(U(column, c)) over the entries r + 2 * c.
-    // The operator need not be unitary. A coefficient is a product of two of its entries, which can
-    // overflow where every intermediate of the two passes stays finite (an entry of 1e200: infinity
-    // times a zero entry of rho is NaN). Then nothing is applied and false is returned, for the caller
-    // to use the two passes.
+    // The operator need not be unitary. A coefficient is a product of two of its entries, and the
+    // product can leave the range of a double where every intermediate of the two passes stays in it:
+    // with an entry of 1e200 it overflows (infinity times a zero entry of rho is NaN), with one of
+    // 1e-200 it rounds to zero (and rho, scaled up by an earlier operator, loses what the two passes
+    // keep). If a product of two nonzero entries is not finite, or its magnitude is not a normal
+    // number, nothing is applied and false is returned, for the caller to use the two passes.
     bool ApplyOneQubitGateSuperoperator(const MatrixClass &U, size_t qubit)
     {
         std::array<std::complex<double>, 16> coefficients;
         for (size_t output = 0; output < 4; ++output)
             for (size_t input = 0; input < 4; ++input)
             {
-                const std::complex<double> value = U(output % 2, input % 2) * std::conj(U(output / 2, input / 2));
+                const std::complex<double> ket = U(output % 2, input % 2), bra = U(output / 2, input / 2);
+                const std::complex<double> value = ket * std::conj(bra);
                 if (!std::isfinite(value.real()) || !std::isfinite(value.imag()))
+                    return false;
+                if (ket != std::complex<double>(0.) && bra != std::complex<double>(0.) &&
+                    !std::isnormal(std::abs(ket) * std::abs(bra)))
                     return false;
                 coefficients[output * 4 + input] = value;
             }

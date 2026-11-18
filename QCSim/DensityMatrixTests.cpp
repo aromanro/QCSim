@@ -2513,8 +2513,9 @@ static bool DensityMatrixOneQubitSuperoperatorTest()
 }
 
 // Gates need not be unitary. A superoperator coefficient is a product of two operator entries and can
-// overflow where the two passes stay finite: the gate then takes the two passes. An antidiagonal and a
-// dense operator with an entry of 1e200, each at the size where it would take the superoperator.
+// overflow, or round to zero, where the two passes stay in range: the gate then takes the two passes.
+// An antidiagonal and a dense operator with an entry of 1e200, each at the size where it would take the
+// superoperator, then a sequence whose middle operator has entries of 1e-200.
 static bool DensityMatrixNonUnitaryOverflowTest()
 {
     std::cout << "\nDensity matrix simulator - non-unitary one-qubit operators with large entries" << std::endl;
@@ -2551,6 +2552,26 @@ static bool DensityMatrixNonUnitaryOverflowTest()
         {
             std::cout << "A non-unitary operator with large entries gave the wrong density matrix for " << c.nrQubits
                       << " qubits" << std::endl;
+            return false;
+        }
+    }
+
+    // Underflow: 1e100 X, 1e-200 X, 1e100 X multiply to X. The coefficient 1e-200 * 1e-200 of the
+    // middle one rounds to zero, while the two passes scale the 1e200 population down in two steps.
+    Eigen::MatrixXcd x(2, 2);
+    x << 0., 1., 1., 0.;
+    for (const int nrQubits : {5, 11})
+    {
+        QC::DensityMatrix<> dm(nrQubits);
+        for (const double scale : {1e100, 1e-200, 1e100})
+            dm.ApplyGate(QC::Gates::AppliedGate<>(Eigen::MatrixXcd(scale * x), 0), 0);
+        const Eigen::MatrixXcd &rho = dm.getDensityMatrix();
+        Eigen::MatrixXcd expected = Eigen::MatrixXcd::Zero(rho.rows(), rho.cols());
+        expected(1, 1) = 1.;
+        if (!rho.allFinite() || (rho - expected).cwiseAbs().maxCoeff() > 1E-12)
+        {
+            std::cout << "Operators with very small and very large entries gave the wrong density matrix for "
+                      << nrQubits << " qubits: population of |1> " << rho(1, 1).real() << std::endl;
             return false;
         }
     }
