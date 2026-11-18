@@ -1017,7 +1017,11 @@ static bool StatevectorKrausTrajectoryTest()
     if (!DM_ExpectInvalidArgument([&] { reg.ApplyKrausOperator({}, 0.5, 0); }, "Empty Kraus set") ||
         !DM_ExpectInvalidArgument([&] { reg.ApplyKrausOperator({Eigen::MatrixXcd::Identity(8, 8)}, 0.5, 0); },
                                   "Three-qubit Kraus operator") ||
-        !DM_ExpectInvalidArgument([&] { reg.ApplyKrausOperator({i2, i4}, 0.5, 0); }, "Mixed Kraus dimensions") ||
+        !DM_ExpectInvalidArgument(
+            [&] {
+                reg.ApplyKrausOperator({i2, i4}, 0.5, 0);
+            },
+            "Mixed Kraus dimensions") ||
         !DM_ExpectInvalidArgument([&] { reg.ApplyKrausOperator({i2}, 0.5, 3); }, "Out-of-range Kraus qubit") ||
         !DM_ExpectInvalidArgument([&] { reg.ApplyKrausOperator({i4}, 0.5, 1, 1); }, "Duplicate Kraus qubits") ||
         !DM_ExpectInvalidArgument([&] { reg.LocalDensityMatrix(0, 1, 3); }, "Out-of-range density-matrix qubit") ||
@@ -1088,7 +1092,11 @@ static bool DensityMatrixInitializationAndValidationTest()
         !DM_ExpectInvalidArgument([&] { dm.GetQubitProbability(2); }, "Out-of-range probability qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.MeasureQubit(2); }, "Out-of-range measured qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.DephaseMeasure(2); }, "Out-of-range dephased qubit") ||
-        !DM_ExpectInvalidArgument([&] { dm.MeasureNoCollapse(std::set<size_t>{0, 2}); }, "Out-of-range subset qubit") ||
+        !DM_ExpectInvalidArgument(
+            [&] {
+                dm.MeasureNoCollapse(std::set<size_t>{0, 2});
+            },
+            "Out-of-range subset qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.RepeatedMeasure(1, 0, 1); }, "Reversed measurement range") ||
         !DM_ExpectInvalidArgument([&] { dm.RepeatedMeasureUnordered(0, 2, 1); }, "Out-of-range measurement range"))
         return false;
@@ -1106,7 +1114,11 @@ static bool DensityMatrixInitializationAndValidationTest()
     nonFiniteKraus(1, 1) = std::numeric_limits<double>::infinity();
     if (!DM_ExpectInvalidArgument([&] { dm.ApplyChannel({}, 0); }, "Empty Kraus channel") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({0.5 * i2}, 0); }, "Non trace-preserving Kraus channel") ||
-        !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i2, i4}, 0); }, "Mismatched Kraus dimensions") ||
+        !DM_ExpectInvalidArgument(
+            [&] {
+                dm.ApplyChannel({i2, i4}, 0);
+            },
+            "Mismatched Kraus dimensions") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i4}, 0, 0); }, "Duplicate two-qubit channel arguments") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i2}, 2); }, "Out-of-range channel qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i8}, 0); }, "Unsupported three-qubit channel") ||
@@ -1126,10 +1138,16 @@ static bool DensityMatrixInitializationAndValidationTest()
         !DM_ExpectInvalidArgument([&] { dm.ExpectationValue(std::string("IA")); }, "Invalid Pauli operator") ||
         !DM_ExpectInvalidArgument([&] { dm.setToBasisState(4); }, "Out-of-range basis state") ||
         !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({}); }, "Empty basis-state mixture") ||
-        !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({{0, 0.}, {7, 1.}}); },
-                                  "Mixture without a valid positive weight") ||
-        !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({{0, std::numeric_limits<double>::infinity()}}); },
-                                  "Non-finite mixture weight"))
+        !DM_ExpectInvalidArgument(
+            [&] {
+                dm.setToMixtureOfBasisStates({{0, 0.}, {7, 1.}});
+            },
+            "Mixture without a valid positive weight") ||
+        !DM_ExpectInvalidArgument(
+            [&] {
+                dm.setToMixtureOfBasisStates({{0, std::numeric_limits<double>::infinity()}});
+            },
+            "Non-finite mixture weight"))
         return false;
 
     if ((dm.getDensityMatrix() - original).norm() > 1E-12)
@@ -2426,6 +2444,142 @@ static bool DensityMatrixRareCollapseTest()
     return true;
 }
 
+// From DensityMatrix<>::OneQubitSuperoperatorQubits (dense, 11 by default) and
+// AntidiagonalSuperoperatorQubits (5) on, non-diagonal one-qubit gates are applied as their
+// superoperator in one pass instead of two. Checks that path at the default thresholds against the
+// statevector, for column- and row-major storage.
+static bool DensityMatrixOneQubitSuperoperatorTest()
+{
+    std::cout << "\nDensity matrix simulator - one-qubit gates as superoperators on large registers" << std::endl;
+
+    using RowMatrix = Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    std::vector<std::shared_ptr<QC::Gates::QuantumGateWithOp<>>> oneQubitGates, gates;
+    DM_FillOneQubitGates(oneQubitGates);
+    gates = oneQubitGates;
+    DM_FillTwoQubitGates(gates);
+    std::uniform_int_distribution gateDistr(0, static_cast<int>(gates.size()) - 1);
+
+    // The default thresholds, as fixed sizes: an override that raises them keeps this test bounded
+    // (three density matrices of 4^n entries) and checks whichever path then applies.
+    for (const size_t size : {size_t{5}, size_t{11}})
+    {
+        const int nrQubits = static_cast<int>(std::max<size_t>(2, size));
+        std::uniform_int_distribution qubitDistr(0, nrQubits - 1);
+        std::uniform_int_distribution qubitDistr2(0, nrQubits - 2);
+
+        QC::DensityMatrix<> dm(nrQubits);
+        QC::DensityMatrix<Eigen::VectorXcd, RowMatrix> rowDm(nrQubits);
+        QC::QubitRegister<> reg(nrQubits);
+        const auto apply = [&](const QC::Gates::QuantumGateWithOp<> &gate, int qubit1, int qubit2) {
+            dm.ApplyGate(gate, qubit1, qubit2);
+            // A row-major register takes row-major gates: the same matrix, whose structure is classified again.
+            rowDm.ApplyGate(QC::Gates::AppliedGate<RowMatrix>(RowMatrix(gate.getRawOperatorMatrix()), qubit1, qubit2));
+            reg.ApplyGate(gate, qubit1, qubit2);
+        };
+
+        // Every one-qubit gate at least once (dense, antidiagonal and diagonal), then a random circuit.
+        for (const auto &gate : oneQubitGates)
+            apply(*gate, qubitDistr(gen), 0);
+        for (int i = 0; i < 40; ++i)
+        {
+            const auto &gate = *gates[gateDistr(gen)];
+            if (gate.getQubitsNumber() == 2)
+            {
+                int qubit1 = qubitDistr2(gen), qubit2 = qubit1 + 1;
+                if (dist_bool(gen))
+                    std::swap(qubit1, qubit2);
+                apply(gate, qubit1, qubit2);
+            }
+            else
+                apply(gate, qubitDistr(gen), 0);
+        }
+
+        if (!CompareWithStatevector(dm, reg, nrQubits))
+            return false;
+        const Eigen::MatrixXcd &columns = dm.getDensityMatrix();
+        const RowMatrix &rows = rowDm.getDensityMatrix();
+        for (Eigen::Index r = 0; r < columns.rows(); ++r)
+            for (Eigen::Index c = 0; c < columns.cols(); ++c)
+                if (!approxEqual(columns(r, c), rows(r, c), 1E-9))
+                {
+                    std::cout << "Row-major density matrix differs at (" << r << ", " << c << ") for " << nrQubits
+                              << " qubits" << std::endl;
+                    return false;
+                }
+    }
+
+    std::cout << "Success" << std::endl;
+    return true;
+}
+
+// Gates need not be unitary. A superoperator coefficient is a product of two operator entries and can
+// overflow, or round to zero, where the two passes stay in range: the gate then takes the two passes.
+// An antidiagonal and a dense operator with an entry of 1e200, each at the size where it would take the
+// superoperator, then a sequence whose middle operator has entries of 1e-200.
+static bool DensityMatrixNonUnitaryOverflowTest()
+{
+    std::cout << "\nDensity matrix simulator - non-unitary one-qubit operators with large entries" << std::endl;
+
+    struct Case
+    {
+        int nrQubits;
+        Eigen::MatrixXcd op;
+        bool startInOne;  // prepare |1> on qubit 0 instead of |0>
+        Eigen::Index out; // the basis state the operator maps it to
+    };
+
+    Eigen::MatrixXcd antidiagonal(2, 2), dense(2, 2);
+    antidiagonal << 0., 1e200, 1., 0.; // |0> -> |1>
+    dense << 1e200, 1., 1., 0.;        // |1> -> |0>
+    const std::array<Case, 2> cases{{{5, antidiagonal, false, 1}, {11, dense, true, 0}}};
+
+    for (const auto &c : cases)
+    {
+        QC::DensityMatrix<> dm(c.nrQubits);
+        if (c.startInOne)
+            dm.ApplyGate(QC::Gates::PauliXGate<>(), 0);
+        dm.ApplyGate(QC::Gates::AppliedGate<>(c.op, 0), 0);
+        const Eigen::MatrixXcd &rho = dm.getDensityMatrix();
+        if (!rho.allFinite())
+        {
+            std::cout << "A finite non-unitary operator gave a non-finite density matrix for " << c.nrQubits
+                      << " qubits" << std::endl;
+            return false;
+        }
+        Eigen::MatrixXcd expected = Eigen::MatrixXcd::Zero(rho.rows(), rho.cols());
+        expected(c.out, c.out) = 1.;
+        if ((rho - expected).cwiseAbs().maxCoeff() > 1E-12)
+        {
+            std::cout << "A non-unitary operator with large entries gave the wrong density matrix for " << c.nrQubits
+                      << " qubits" << std::endl;
+            return false;
+        }
+    }
+
+    // Underflow: 1e100 X, 1e-200 X, 1e100 X multiply to X. The coefficient 1e-200 * 1e-200 of the
+    // middle one rounds to zero, while the two passes scale the 1e200 population down in two steps.
+    Eigen::MatrixXcd x(2, 2);
+    x << 0., 1., 1., 0.;
+    for (const int nrQubits : {5, 11})
+    {
+        QC::DensityMatrix<> dm(nrQubits);
+        for (const double scale : {1e100, 1e-200, 1e100})
+            dm.ApplyGate(QC::Gates::AppliedGate<>(Eigen::MatrixXcd(scale * x), 0), 0);
+        const Eigen::MatrixXcd &rho = dm.getDensityMatrix();
+        Eigen::MatrixXcd expected = Eigen::MatrixXcd::Zero(rho.rows(), rho.cols());
+        expected(1, 1) = 1.;
+        if (!rho.allFinite() || (rho - expected).cwiseAbs().maxCoeff() > 1E-12)
+        {
+            std::cout << "Operators with very small and very large entries gave the wrong density matrix for "
+                      << nrQubits << " qubits: population of |1> " << rho(1, 1).real() << std::endl;
+            return false;
+        }
+    }
+
+    std::cout << "Success" << std::endl;
+    return true;
+}
+
 bool DensityMatrixTests()
 {
     std::cout << "\nDensity matrix simulator tests" << std::endl;
@@ -2440,7 +2594,8 @@ bool DensityMatrixTests()
         DensityMatrixPauliExpectationTest() && DensityMatrixInvariantsTest() &&
         DensityMatrixMeasurementStatisticsTest() && DensityMatrixCollapseTest() && DensityMatrixRareCollapseTest() &&
         DensityMatrixExpectationExtrasTest() && DensityMatrixSamplingTest() &&
-        DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest();
+        DensityMatrixStateSaveRestoreCloneTest() && DensityMatrixNewFeaturesTest() &&
+        DensityMatrixOneQubitSuperoperatorTest() && DensityMatrixNonUnitaryOverflowTest();
     gen = savedGenerator;
     return result;
 }
