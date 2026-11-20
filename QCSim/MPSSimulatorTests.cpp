@@ -2751,10 +2751,10 @@ static bool NonUnitaryGateTestMPS()
                 Close(mps.GetProbability(q, true), probabilityOfZero(psi, q), message);
         };
         // A filter far from unitary: singular values 1 and `small` between two rotations.
-        const auto filter = [](int size, double small, unsigned int seed) {
+        const auto filter = [](int size, double smallv, unsigned int seed) {
             Matrix values = Matrix::Identity(size, size);
             for (int k = 1; k < size; ++k)
-                values(k, k) = small + (1. - small) * (size - 1 - k) / (size - 1.);
+                values(k, k) = smallv + (1. - smallv) * (size - 1 - k) / (size - 1.);
             return Matrix(Unitary(size, seed) * values * Unitary(size, seed + 1));
         };
         const auto entangle = [](Simulator &mps, int qubits, unsigned int seed) {
