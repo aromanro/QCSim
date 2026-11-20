@@ -262,6 +262,17 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         });
     }
 
+    // The matrix of a one-qubit gate is 2x2 and that of a two-qubit gate 4x4. The number of qubits of a gate built
+    // on a matrix comes from its rows alone, and the tensor updates read the entries of the size they expect: a
+    // matrix of another shape (2x1, 3x3, 4x2) was read past its end, or applied as its upper left block.
+    static void RequireGateMatrixSize(const MatrixClass &matrix, size_t gateQubits)
+    {
+        const IndexType size = gateQubits == 1 ? 2 : 4;
+        if (matrix.rows() != size || matrix.cols() != size)
+            throw std::invalid_argument(gateQubits == 1 ? "The matrix of a one-qubit gate must be 2x2"
+                                                        : "The matrix of a two-qubit gate must be 4x4");
+    }
+
     // A one- or two-qubit operator that is not unitary, as the one operator of a channel. One that leaves nothing of
     // the state throws std::domain_error, and nothing was applied: the chain holds the state it held. The step may
     // by then have started to keep environments for an operator the chain does not hold; the chain goes back to how
@@ -304,6 +315,7 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         else if (gateQubits == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
             throw std::invalid_argument("Two qubit gates need to act on adjacent qubits");
         const auto &matrix = gate.getRawOperatorMatrix();
+        RequireGateMatrixSize(matrix, gateQubits);
         if (!matrix.allFinite())
             throw std::invalid_argument("Gate matrix contains a non-finite value");
 

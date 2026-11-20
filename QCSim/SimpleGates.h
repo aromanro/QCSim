@@ -666,6 +666,26 @@ struct StructuredPayload : Payload
         return core->operation.kind;
     }
 
+    // Whether the operation is unitary, to the tolerance of IsUnitaryMatrix: a diagonal when every entry has
+    // modulus one, a controlled matrix when the matrix is (the controls only choose where it acts), a multiplexed
+    // rotation always. A table of a diagonal is read through, once per call.
+    bool IsUnitary() const
+    {
+        if (OperationKind() == StructuredGate::Kind::Diagonal)
+        {
+            for (const auto &value : core->operation.diagonal)
+                if (!(std::abs(std::norm(value) - 1.) <= 1E-12))
+                    return false;
+            return true;
+        }
+        if (OperationKind() != StructuredGate::Kind::Controlled)
+            return true;
+        // row major: the columns are (matrix[0], matrix[2]) and (matrix[1], matrix[3])
+        return std::abs(std::norm(matrix[0]) + std::norm(matrix[2]) - 1.) <= 1E-12 &&
+               std::abs(std::norm(matrix[1]) + std::norm(matrix[3]) - 1.) <= 1E-12 &&
+               std::norm(std::conj(matrix[0]) * matrix[1] + std::conj(matrix[2]) * matrix[3]) <= 1E-24;
+    }
+
     RotationAxis Axis() const
     {
         return core->operation.axis;
@@ -1335,19 +1355,17 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
     // only after the matrix changes. A caller that knows can say so and spare the test (setUnitary). Copies and
     // assignments take over what the source knows. What is known is kept by the exact type only, which alone can
     // guarantee that every matrix mutation uses OperatorChanged (see CurrentStructure): a derived gate tests its
-    // matrix on every call, whatever it was told. A compact gate has no matrix here; whoever applies its tables
-    // validates them.
+    // matrix on every call, whatever it was told. A compact gate is tested on what it holds in place of a matrix:
+    // the entries of its diagonal, or the matrix its controls select.
     bool isUnitary() const override
     {
         if (!IsExactAppliedGate())
-            return HasCompact() || IsUnitaryMatrix(BaseClass::operatorMat);
+            return TestUnitary();
         uint8_t known = unitarity.value.load(std::memory_order_relaxed);
         if (known == AppliedGateDetail::KnownUnitarity::NotTested)
         {
-            if (HasCompact())
-                return true;
-            known = IsUnitaryMatrix(BaseClass::operatorMat) ? AppliedGateDetail::KnownUnitarity::Unitary
-                                                            : AppliedGateDetail::KnownUnitarity::NotUnitary;
+            known = TestUnitary() ? AppliedGateDetail::KnownUnitarity::Unitary
+                                  : AppliedGateDetail::KnownUnitarity::NotUnitary;
             unitarity.value.store(known, std::memory_order_relaxed);
         }
         return known == AppliedGateDetail::KnownUnitarity::Unitary;
@@ -1461,6 +1479,11 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         }
         else
             OperatorChanged();
+    }
+
+    bool TestUnitary() const
+    {
+        return HasCompact() ? Compact().IsUnitary() : IsUnitaryMatrix(BaseClass::operatorMat);
     }
 
     // What a copy may take over: what the exact type knows of its matrix, and nothing from a derived source, which

@@ -2957,6 +2957,46 @@ static bool NonUnitaryGateTestMPS()
             const Gate fromDerived(derived);
             Require(!fromDerived.isUnitary(), "A copy took over what a derived gate no longer holds");
 
+            // A compact gate holds a table or a controlled matrix in place of a dense one, and answers for that.
+            const std::complex<double> i(0., 1.);
+            Matrix half = Matrix::Identity(2, 2);
+            half(1, 1) = .5;
+            Require(Gate::Diagonal({1., i, -1., -i}, {0, 1}).isUnitary() &&
+                        !Gate::Diagonal({1., .5, .5, .25}, {0, 1}).isUnitary() &&
+                        Gate::MultiControlled(hadamard, 2, {0, 1}).isUnitary() &&
+                        !Gate::MultiControlled(half, 2, {0, 1}).isUnitary() &&
+                        Gate::MultiplexedRotation(QC::Gates::RotationAxis::Y, {.1, .2, .3, .4}, 2, {0, 1}).isUnitary(),
+                    "A compact gate does not say what its operation is");
+            {
+                // And a compact filter is applied as one, on neighbours and on qubits apart.
+                Simulator mps(qubits);
+                entangle(mps, qubits, 2100);
+                Eigen::VectorXcd psi = mps.getRegisterStorage();
+                Matrix table = Matrix::Zero(4, 4);
+                table.diagonal() << 1., .5, .5, .25;
+                mps.ApplyGate(Gate::Diagonal({1., .5, .5, .25}, {1, 4}));
+                psi = dense(psi, table, 1, 4);
+                matches(mps, psi, "MPS compact diagonal that is not unitary");
+            }
+
+            // The matrix of a gate has the size of its qubits: one of another shape was read past its end, or
+            // applied as its upper left block. It is refused before anything is routed.
+            {
+                Simulator mps(qubits);
+                entangle(mps, qubits, 2200);
+                const Eigen::VectorXcd before = mps.getRegisterStorage();
+                const auto bondsBefore = mps.getBondDimensions();
+                for (const auto &[rows, cols] :
+                     std::vector<std::pair<int, int>>{{2, 1}, {2, 3}, {3, 3}, {4, 2}, {5, 5}, {6, 6}, {1, 1}})
+                {
+                    const Matrix shaped = Matrix::Identity(rows, cols);
+                    Throws<std::invalid_argument>([&] { mps.ApplyGate(Gate(shaped, 0, 5)); },
+                                                  "An MPS gate with a matrix of the wrong shape was applied");
+                }
+                Require((mps.getRegisterStorage() - before).norm() < 1E-13 && mps.getBondDimensions() == bondsBefore,
+                        "A refused MPS gate matrix changed the chain");
+            }
+
             Simulator projected(2);
             projected.ApplyGate(Gate(hadamard, 0));
             projected.ApplyGate(Gate(cnot, 1, 0));
