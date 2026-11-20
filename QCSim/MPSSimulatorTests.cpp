@@ -2957,6 +2957,60 @@ static bool NonUnitaryGateTestMPS()
             const Gate fromDerived(derived);
             Require(!fromDerived.isUnitary(), "A copy took over what a derived gate no longer holds");
 
+            // Any gate that is handed a matrix answers for it, not only an AppliedGate: the one- and two-qubit
+            // gates built on a matrix, a named gate whose matrix is replaced, a controlled gate whose target is a
+            // matrix. Built by name or on a gate that is unitary, they are not tested.
+            {
+                Matrix halved = Matrix::Identity(2, 2);
+                halved(1, 1) = .5;
+                const Matrix pairFilter = filter(4, 0.2, 31);
+                QC::Gates::SingleQubitGate<> raw(halved), rawUnitary(hadamard);
+                QC::Gates::TwoQubitsGate<> rawPair(pairFilter), rawPairUnitary(Unitary(4, 9));
+                Require(!raw.isUnitary() && rawUnitary.isUnitary() && !rawPair.isUnitary() &&
+                            rawPairUnitary.isUnitary(),
+                        "A gate built on a matrix does not answer for it");
+                QC::Gates::SingleQubitGate<> rawCopy(raw), rawAssigned(rawUnitary);
+                rawAssigned = raw;
+                Require(!rawCopy.isUnitary() && !rawAssigned.isUnitary(), "A copy of a gate built on a matrix lost it");
+                raw = hadamard;
+                Require(raw.isUnitary(), "A gate did not test the matrix assigned to it");
+                QC::Gates::HadamardGate<> replaced;
+                replaced.setOperator(halved);
+                Require(!replaced.isUnitary(), "A named gate whose matrix was replaced still answers by its name");
+                QC::Gates::CNOTGate<> retargeted;
+                retargeted.SetOperation(halved);
+                Require(!retargeted.isUnitary(), "A controlled gate did not test the target it was given");
+                QC::Gates::ControlledGate<> controlled(halved), controlledNamed{QC::Gates::HadamardGate<>()};
+                QC::Gates::DoublyControlledGate<> doubly(halved), doublyNamed{QC::Gates::HadamardGate<>()};
+                Require(!controlled.isUnitary() && controlledNamed.isUnitary() && !doubly.isUnitary() &&
+                            doublyNamed.isUnitary(),
+                        "A controlled gate does not answer for its target");
+                controlledNamed.SetOperation(halved);
+                Require(!controlledNamed.isUnitary(), "A controlled gate kept the answer of its former target");
+                controlledNamed.SetOperation(raw);   // a gate on a unitary matrix, tested above
+                QC::Gates::CCRxGate<> rotation(0.3); // a named gate on a named target, set again
+                rotation.SetTheta(1.1);
+                Require(controlledNamed.isUnitary() && rotation.isUnitary() &&
+                            !QC::Operators::SigmaPlus<>().isUnitary() && !QC::Operators::SigmaMinus<>().isUnitary(),
+                        "A gate does not answer for what it was built on");
+
+                // And the matrix product state applies them as it applies an AppliedGate with the same matrix.
+                Simulator mps(qubits);
+                entangle(mps, qubits, 2300);
+                Eigen::VectorXcd psi = mps.getRegisterStorage();
+                mps.ApplyGate(rawPair, 1, 4);
+                psi = dense(psi, pairFilter, 1, 4);
+                matches(mps, psi, "MPS two-qubit gate built on a matrix that is not unitary");
+                mps.ApplyGate(QC::Gates::SingleQubitGate<>(halved), 3);
+                psi = dense(psi, halved, 3);
+                matches(mps, psi, "MPS one-qubit gate built on a matrix that is not unitary");
+                mps.ApplyGate(controlled, 2, 0); // the control is the high bit: diag(1, 1, 1, .5)
+                Matrix controlledMatrix = Matrix::Identity(4, 4);
+                controlledMatrix(3, 3) = .5;
+                psi = dense(psi, controlledMatrix, 2, 0);
+                matches(mps, psi, "MPS controlled gate on a target that is not unitary");
+            }
+
             // A compact gate holds a table or a controlled matrix in place of a dense one, and answers for that.
             const std::complex<double> i(0., 1.);
             Matrix half = Matrix::Identity(2, 2);

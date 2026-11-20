@@ -22,6 +22,12 @@ template <class MatrixClass = Eigen::MatrixXcd> class SigmaPlus : public Gates::
     {
         return true;
     }
+
+    // A ladder operator is no gate: a matrix product state applies it as a filter.
+    bool isUnitary() const override
+    {
+        return false;
+    }
 };
 
 template <class MatrixClass = Eigen::MatrixXcd> class SigmaMinus : public Gates::SingleQubitGate<MatrixClass>
@@ -38,6 +44,12 @@ template <class MatrixClass = Eigen::MatrixXcd> class SigmaMinus : public Gates:
     bool isAntidiagonal() const override
     {
         return true;
+    }
+
+    // A ladder operator is no gate: a matrix product state applies it as a filter.
+    bool isUnitary() const override
+    {
+        return false;
     }
 };
 
