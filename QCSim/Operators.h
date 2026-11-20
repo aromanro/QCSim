@@ -56,6 +56,12 @@ template <class MatrixClass = Eigen::MatrixXcd> class ZeroProjection : public Ga
     {
         return true;
     }
+
+    // A projection is no gate: a matrix product state applies it as a filter.
+    bool isUnitary() const override
+    {
+        return false;
+    }
 };
 
 template <class MatrixClass = Eigen::MatrixXcd> class OneProjection : public Gates::SingleQubitGate<MatrixClass>
@@ -72,6 +78,12 @@ template <class MatrixClass = Eigen::MatrixXcd> class OneProjection : public Gat
     bool isDiagonal() const override
     {
         return true;
+    }
+
+    // A projection is no gate: a matrix product state applies it as a filter.
+    bool isUnitary() const override
+    {
+        return false;
     }
 };
 

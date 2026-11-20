@@ -262,28 +262,29 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         });
     }
 
-    // Whether the matrix of a one- or two-qubit gate is unitary, to the rounding a product of many gates carries (the
-    // tolerance of the three-qubit gates, see ThreeSite::IsUnitary). What is not is applied as a filter: see
-    // ApplyGate. Evaluated in the fixed size of the matrix, on the stack: every gate is tested.
-    static bool IsUnitaryGate(const MatrixClass &matrix)
+    // A one- or two-qubit operator that is not unitary, as the one operator of a channel. One that leaves nothing of
+    // the state throws std::domain_error, and nothing was applied: the chain holds the state it held. The step may
+    // by then have started to keep environments for an operator the chain does not hold; the chain goes back to how
+    // it kept them, so that the gates after a refused filter go the way they went before it. (Copying the chain to
+    // restore it, as the three-qubit filters do, would cost every filter what a sweep costs.)
+    void ApplyFilter(const MatrixClass &matrix, size_t gateQubits, IndexType qubit, IndexType controllingQubit1)
     {
-        if (matrix.rows() == 2 && matrix.cols() == 2)
+        const bool wasGauge = gaugeMode, wasForReads = gaugeForReads;
+        try
         {
-            // The two columns are orthonormal: the test of every one-qubit gate, so spelled out.
-            const std::complex<double> a = matrix(0, 0), b = matrix(0, 1), c = matrix(1, 0), d = matrix(1, 1);
-            return std::abs(std::norm(a) + std::norm(c) - 1.) <= 1E-12 &&
-                   std::abs(std::norm(b) + std::norm(d) - 1.) <= 1E-12 &&
-                   std::norm(std::conj(a) * b + std::conj(c) * d) <= 1E-24;
+            if (gateQubits == 1)
+                ApplyKrausOperator({matrix}, 0., qubit);
+            else
+                ApplyKrausOperator({matrix}, 0., qubit, controllingQubit1);
         }
-        if (matrix.rows() == 4 && matrix.cols() == 4)
-            return IsUnitaryGate(Eigen::Matrix4cd(matrix));
-        return (matrix.adjoint() * matrix).isIdentity(1E-12);
-    }
-
-    // The same for a matrix of fixed size, as a caller may hold one.
-    template <class Derived> static bool IsUnitaryGate(const Eigen::MatrixBase<Derived> &matrix)
-    {
-        return (matrix.adjoint() * matrix).eval().isIdentity(1E-12);
+        catch (...)
+        {
+            if (gaugeMode && !wasGauge)
+                LeaveGaugeMode(); // entered for the operator: the tensors are those of the canonical path
+            else if (gaugeMode && wasForReads)
+                gaugeForReads = true; // the environments it had for reads are still those of its tensors
+            throw;
+        }
     }
 
     // Two- and three-qubit gates need to act on consecutive sites.
@@ -312,14 +313,13 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         // other qubit had been projected was still measured as 1 half the time), and it left the chain off its norm
         // where a two-qubit update did not happen to restore it. It is a filter, the one operator of a channel, and
         // is applied as one: weighed on the state, normalized, with the environments kept from there on (see
-        // ApplyKrausOperator), as the three-qubit gates already apply theirs. One that leaves nothing of the state
-        // throws std::domain_error, and the chain is as it was.
-        if (!IsUnitaryGate(matrix))
+        // ApplyKrausOperator), as the three-qubit gates already apply theirs. The gate says whether it is one: a
+        // gate defined by name is unitary and nothing is tested for it, an AppliedGate tests the matrix it was given,
+        // once (see QuantumGate::isUnitary). A caller that knows its operator is a filter can also call
+        // ApplyKrausOperator with it directly.
+        if (!gate.isUnitary())
         {
-            if (gateQubits == 1)
-                ApplyKrausOperator({matrix}, 0., qubit);
-            else
-                ApplyKrausOperator({matrix}, 0., qubit, controllingQubit1);
+            ApplyFilter(matrix, gateQubits, qubit, controllingQubit1);
             return;
         }
 

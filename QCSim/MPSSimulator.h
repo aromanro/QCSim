@@ -398,13 +398,6 @@ class MPSSimulator : public MPSSimulatorInterface,
             NotifyBondDimensions();
     }
 
-    // Whether ApplyGate takes the matrix of a one- or two-qubit gate for unitary. One that is not is applied as a
-    // filter, normalized: see MPSSimulatorImpl::ApplyGate.
-    template <class Derived> static bool IsUnitaryGate(const Eigen::MatrixBase<Derived> &matrix)
-    {
-        return MPSSimulatorImpl::IsUnitaryGate(matrix);
-    }
-
     // One sampled Kraus operator of a one-qubit channel, a step of a quantum trajectory: see
     // MPSSimulatorImpl::ApplyKrausOperator, also for the precision of the weights and for what is refused.
     // Returns the index of the operator applied.

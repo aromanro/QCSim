@@ -21,6 +21,34 @@ namespace QC
 namespace Gates
 {
 
+// Whether a matrix is unitary, to the rounding a product of many gates carries (1e-12, the tolerance of the
+// three-qubit gates of the matrix product state): its columns are orthonormal. Spelled out on the entries, so that
+// the small matrices of the usual gates need no temporary.
+template <class MatrixClass> bool IsUnitaryMatrix(const MatrixClass &matrix)
+{
+    const Eigen::Index size = matrix.rows();
+    if (size != matrix.cols())
+        return false;
+    if (size == 2) // every one-qubit matrix: written out
+    {
+        const std::complex<double> a = matrix(0, 0), b = matrix(0, 1), c = matrix(1, 0), d = matrix(1, 1);
+        return std::abs(std::norm(a) + std::norm(c) - 1.) <= 1E-12 &&
+               std::abs(std::norm(b) + std::norm(d) - 1.) <= 1E-12 &&
+               std::norm(std::conj(a) * b + std::conj(c) * d) <= 1E-24;
+    }
+    for (Eigen::Index j = 0; j < size; ++j)
+        for (Eigen::Index k = j; k < size; ++k)
+        {
+            std::complex<double> product = 0.;
+            for (Eigen::Index i = 0; i < size; ++i)
+                product += std::conj(std::complex<double>(matrix(i, j))) * std::complex<double>(matrix(i, k));
+            // A NaN fails either comparison.
+            if (!(j == k ? std::abs(product.real() - 1.) <= 1E-12 : std::norm(product) <= 1E-24))
+                return false;
+        }
+    return true;
+}
+
 template <class MatrixClass = Eigen::MatrixXcd> class QuantumGate
 {
   public:
@@ -71,6 +99,15 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGate
     virtual bool IsISwapDagGate() const
     {
         return false;
+    }
+
+    // Whether the matrix of the gate is unitary. The gates defined by name (X, H, CX, the rotations and so on) are
+    // by construction, and nothing is tested for them. A gate built on a matrix that was handed over (AppliedGate)
+    // tests it, once; an operator that is no gate (a projection) says so. A simulator for which it matters asks: the
+    // matrix product state applies what is not unitary as a filter, see MPSSimulatorImpl::ApplyGate.
+    virtual bool isUnitary() const
+    {
+        return true;
     }
 };
 
@@ -492,6 +529,31 @@ template <class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public Q
 
 namespace AppliedGateDetail
 {
+// What an applied gate knows of its matrix: whether it is unitary, once it was tested or told. Copies carry it, and
+// it is atomic because a gate that threads share may be asked by several of them (they would all find the same).
+struct KnownUnitarity
+{
+    enum : uint8_t
+    {
+        NotTested,
+        Unitary,
+        NotUnitary
+    };
+
+    std::atomic<uint8_t> value{NotTested};
+    KnownUnitarity() = default;
+
+    KnownUnitarity(const KnownUnitarity &other) noexcept : value(other.value.load(std::memory_order_relaxed))
+    {
+    }
+
+    KnownUnitarity &operator=(const KnownUnitarity &other) noexcept
+    {
+        value.store(other.value.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        return *this;
+    }
+};
+
 // Dense raw gates keep a null pointer. Compact operations and explicitly
 // typed provenance share the existing pointer-sized representation field.
 struct Payload
@@ -1265,11 +1327,40 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         return false;
     }
 
+    // The matrix was handed over, so nothing is known of it until it is tested: once, on the first call, and again
+    // only after the matrix changes. A caller that knows can say so and spare the test (setUnitary). A compact gate
+    // has no matrix here; whoever applies its tables validates them.
+    bool isUnitary() const override
+    {
+        uint8_t known = unitarity.value.load(std::memory_order_relaxed);
+        if (known == AppliedGateDetail::KnownUnitarity::NotTested)
+        {
+            if (HasCompact())
+                return true;
+            known = IsUnitaryMatrix(BaseClass::operatorMat) ? AppliedGateDetail::KnownUnitarity::Unitary
+                                                            : AppliedGateDetail::KnownUnitarity::NotUnitary;
+            // Kept by the exact type only, which alone can guarantee that every matrix mutation uses
+            // OperatorChanged (see CurrentStructure): a derived gate is tested on every call.
+            if (IsExactAppliedGate())
+                unitarity.value.store(known, std::memory_order_relaxed);
+        }
+        return known == AppliedGateDetail::KnownUnitarity::Unitary;
+    }
+
+    // For a caller that knows whether its matrix is unitary: the matrix is then not tested, until it changes.
+    void setUnitary(bool unitary) noexcept
+    {
+        unitarity.value.store(unitary ? AppliedGateDetail::KnownUnitarity::Unitary
+                                      : AppliedGateDetail::KnownUnitarity::NotUnitary,
+                              std::memory_order_relaxed);
+    }
+
   protected:
     void OperatorChanged() override
     {
         payload.reset();
         structure = ClassifyGateMatrix(BaseClass::operatorMat);
+        unitarity.value.store(AppliedGateDetail::KnownUnitarity::NotTested, std::memory_order_relaxed);
     }
 
   private:
@@ -1358,7 +1449,10 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
     void AssignStructure(const GateStructure &known)
     {
         if (IsExactAppliedGate())
+        {
             structure = known;
+            unitarity.value.store(AppliedGateDetail::KnownUnitarity::NotTested, std::memory_order_relaxed);
+        }
         else
             OperatorChanged();
     }
@@ -1398,6 +1492,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
     size_t q2;
     size_t q3;
     std::shared_ptr<const AppliedGateDetail::Payload> payload;
+    mutable AppliedGateDetail::KnownUnitarity unitarity;
 };
 
 template <class MatrixClass = Eigen::MatrixXcd> class HadamardGate : public SingleQubitGate<MatrixClass>

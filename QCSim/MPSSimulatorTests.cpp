@@ -2848,7 +2848,9 @@ static bool NonUnitaryGateTestMPS()
             Close(lone.getRegisterStorage().squaredNorm(), 1., "MPS norm of a lone qubit after a projection");
         }
 
-        // A matrix that leaves nothing of the state is refused, and the chain is as it was.
+        // A matrix that leaves nothing of the state is refused: the chain holds the state it held, and goes on as
+        // it did (the step that weighs the operator starts to keep environments, which a refused one must not
+        // leave behind).
         {
             Simulator mps(3);
             mps.ApplyGate(Gate(flip, 0));
@@ -2862,14 +2864,78 @@ static bool NonUnitaryGateTestMPS()
             Throws<std::domain_error>([&] { mps.ApplyGate(Gate(both, 0, 2)); },
                                       "An MPS two-qubit gate that leaves no state was applied");
             Require((mps.getRegisterStorage() - before).norm() < 1E-13, "A refused MPS gate changed the state");
+
+            using Impl = QC::TensorNetworks::MPSSimulatorImpl;
+            for (const bool truncated : {false, true})
+            {
+                Impl chain(4);
+                if (truncated)
+                    chain.setLimitBondDimension(2);
+                chain.ApplyGate(Gate(flip, 0));
+                unsigned int seed = 60;
+                for (int layer = 0; layer < 4; ++layer)
+                    for (int q = 1 + layer % 2; q + 1 < 4; q += 2)
+                    {
+                        chain.ApplyGate(Gate(Unitary(2, ++seed), q));
+                        chain.ApplyGate(Gate(Unitary(4, ++seed), q, q + 1));
+                    }
+                Eigen::VectorXcd psi = chain.getRegisterStorage();
+                psi /= psi.norm();
+                Throws<std::domain_error>([&] { chain.ApplyGate(Gate(zero, 0)); },
+                                          "An MPS one-qubit gate that leaves no state was applied");
+                Require(!chain.InGaugeMode(), "A refused MPS one-qubit gate left the chain keeping environments");
+                Matrix first = Matrix::Zero(4, 4);
+                first(0, 0) = first(2, 2) = 1.; // qubit 0, the low bit, onto zero
+                Throws<std::domain_error>([&] { chain.ApplyGate(Gate(first, 0, 1)); },
+                                          "An MPS two-qubit gate that leaves no state was applied");
+                Require(!chain.InGaugeMode(), "A refused MPS two-qubit gate left the chain keeping environments");
+                Eigen::VectorXcd after = chain.getRegisterStorage();
+                after /= after.norm();
+                Require((after - psi).norm() < 1E-12, "A refused MPS gate changed the state of the chain");
+                // After a read of a truncated chain, which keeps environments for reads only, a refused gate leaves
+                // them as the reads' again.
+                (void)chain.GetProbability(2, true);
+                const bool forReads = chain.InGaugeMode();
+                Throws<std::domain_error>([&] { chain.ApplyGate(Gate(zero, 0)); },
+                                          "An MPS one-qubit gate that leaves no state was applied");
+                Require(chain.InGaugeMode() == forReads, "A refused MPS gate changed how the chain keeps environments");
+                const Matrix next = Unitary(4, 77);
+                chain.ApplyGate(Gate(next, 1, 2));
+                Require(!chain.InGaugeMode(), "A unitary gate after a refused one did not go the canonical path");
+            }
         }
 
-        // A matrix unitary to rounding stays a gate of the canonical path.
+        // The gate says whether its matrix is unitary. One defined by name is, and nothing is tested; one built on
+        // a matrix tests it once, and again after the matrix changes; a projection is no gate, and is applied as
+        // the filter it is.
         {
-            Require(Simulator::IsUnitaryGate(Unitary(2, 5)) && Simulator::IsUnitaryGate(Unitary(4, 6)) &&
-                        !Simulator::IsUnitaryGate(Matrix((1. - 1E-11) * Matrix::Identity(2, 2))) &&
-                        !Simulator::IsUnitaryGate(filter(4, 0.9, 7)),
-                    "MPS takes a unitary matrix for a filter, or a filter for a unitary matrix");
+            QC::Gates::HadamardGate<> named;
+            QC::Gates::CNOTGate<> namedPair;
+            Gate applied(Unitary(2, 5), 0);
+            Require(named.isUnitary() && namedPair.isUnitary() && applied.isUnitary() &&
+                        Gate(Unitary(4, 6), 0, 1).isUnitary() && Gate(Unitary(8, 8), 0, 1, 2).isUnitary() &&
+                        !Gate(Matrix((1. - 1E-11) * Matrix::Identity(2, 2)), 0).isUnitary() &&
+                        !Gate(filter(4, 0.9, 7), 0, 1).isUnitary() && !QC::Operators::ZeroProjection<>().isUnitary() &&
+                        !QC::Operators::OneProjection<>().isUnitary(),
+                    "A gate does not say what its matrix is");
+            applied = zero;
+            Require(!applied.isUnitary(), "An applied gate did not test the matrix it was given anew");
+            Gate copy(applied);
+            Require(!copy.isUnitary(), "The copy of an applied gate takes another matrix for its own");
+            applied = hadamard;
+            Require(applied.isUnitary() && !copy.isUnitary(), "An applied gate did not test its new matrix");
+            applied.setUnitary(false); // the caller's word is taken until the matrix changes
+            Require(!applied.isUnitary(), "An applied gate did not take the caller's word");
+            applied = hadamard;
+            Require(applied.isUnitary(), "An applied gate kept the caller's word for another matrix");
+
+            Simulator projected(2);
+            projected.ApplyGate(Gate(hadamard, 0));
+            projected.ApplyGate(Gate(cnot, 1, 0));
+            projected.ApplyGate(QC::Operators::ZeroProjection<>(), 1);
+            Close(projected.GetProbability(0, true), 1., "MPS projection applied as a gate");
+            Close(projected.getRegisterStorage().squaredNorm(), 1., "MPS norm after a projection operator");
+
             QC::TensorNetworks::MPSSimulatorImpl chain(4);
             unsigned int seed = 40;
             for (int layer = 0; layer < 6; ++layer)
