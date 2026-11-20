@@ -2705,6 +2705,403 @@ static bool KrausGaugeModeRegressionTestMPS()
     }
 }
 
+// Gates whose matrix is not unitary. On the canonical path they left the Schmidt values of the other bonds stale, and
+// the chain off its norm: what was read, measured or sampled on another qubit afterwards came from a state the chain
+// no longer held. They are applied as the one operator of a channel instead. Every value is compared with the dense
+// state, on which the same matrix is applied by hand and which is then normalized.
+static bool NonUnitaryGateTestMPS()
+{
+    using namespace QC::TensorNetworkRegression;
+    using Simulator = QC::TensorNetworks::MPSSimulator;
+    std::cout << "\nMPS gates with a matrix that is not unitary" << std::endl;
+    try
+    {
+        // Gate(matrix, qubit, control): the qubit is the low bit of the matrix index, the control the high one.
+        const auto dense = [](const Eigen::VectorXcd &psi, const Matrix &m, int qubit, int control = -1) {
+            Eigen::VectorXcd out = Eigen::VectorXcd::Zero(psi.size());
+            for (Eigen::Index i = 0; i < psi.size(); ++i)
+            {
+                Eigen::Index rest = i & ~(Eigen::Index(1) << qubit);
+                int in = static_cast<int>((i >> qubit) & 1);
+                if (control >= 0)
+                {
+                    rest &= ~(Eigen::Index(1) << control);
+                    in += 2 * static_cast<int>((i >> control) & 1);
+                }
+                for (int o = 0; o < m.rows(); ++o)
+                {
+                    Eigen::Index j = rest | (Eigen::Index(o & 1) << qubit);
+                    if (control >= 0)
+                        j |= Eigen::Index((o >> 1) & 1) << control;
+                    out[j] += m(o, in) * psi[i];
+                }
+            }
+            return Eigen::VectorXcd(out / out.norm());
+        };
+        const auto probabilityOfZero = [](const Eigen::VectorXcd &psi, int qubit) {
+            double p = 0.;
+            for (Eigen::Index i = 0; i < psi.size(); ++i)
+                if (!((i >> qubit) & 1))
+                    p += std::norm(psi[i]);
+            return p;
+        };
+        const auto matches = [&](Simulator &mps, const Eigen::VectorXcd &psi, const char *message) {
+            Close(Matrix(mps.getRegisterStorage()), Matrix(psi), message);
+            for (int q = 0; q < static_cast<int>(mps.getNrQubits()); ++q)
+                Close(mps.GetProbability(q, true), probabilityOfZero(psi, q), message);
+        };
+        // A filter far from unitary: singular values 1 and `small` between two rotations.
+        const auto filter = [](int size, double small, unsigned int seed) {
+            Matrix values = Matrix::Identity(size, size);
+            for (int k = 1; k < size; ++k)
+                values(k, k) = small + (1. - small) * (size - 1 - k) / (size - 1.);
+            return Matrix(Unitary(size, seed) * values * Unitary(size, seed + 1));
+        };
+        const auto entangle = [](Simulator &mps, int qubits, unsigned int seed) {
+            for (int layer = 0; layer < 4; ++layer)
+            {
+                for (int q = 0; q < qubits; ++q)
+                    mps.ApplyGate(Gate(Unitary(2, ++seed), q));
+                for (int q = layer % 2; q + 1 < qubits; q += 2)
+                    mps.ApplyGate(Gate(Unitary(4, ++seed), q, q + 1));
+            }
+        };
+        Matrix hadamard(2, 2), cnot = Matrix::Zero(4, 4), zero = Matrix::Zero(2, 2), flip = Matrix::Zero(2, 2);
+        hadamard << 1., 1., 1., -1.;
+        hadamard /= std::sqrt(2.);
+        cnot(0, 0) = cnot(1, 1) = cnot(2, 3) = cnot(3, 2) = 1.; // Gate(cnot, target, control)
+        zero(0, 0) = 1.;
+        flip(0, 1) = flip(1, 0) = 1.;
+
+        const int qubits = 6;
+        // One-qubit filters, on every qubit of an entangled chain, each followed by gates and by a second filter:
+        // the gates after the first go on a chain that keeps its environments.
+        for (int q = 0; q < qubits; ++q)
+        {
+            Simulator mps(qubits);
+            entangle(mps, qubits, 300 + 20 * q);
+            Eigen::VectorXcd psi = mps.getRegisterStorage();
+            const Matrix first = filter(2, 0.3, 700 + q);
+            mps.ApplyGate(Gate(first, q));
+            psi = dense(psi, first, q);
+            matches(mps, psi, "MPS one-qubit gate that is not unitary");
+            unsigned int seed = 900 + 20 * q;
+            for (int pair = 0; pair + 1 < qubits; ++pair)
+            {
+                const Matrix one = Unitary(2, ++seed), two = Unitary(4, ++seed);
+                mps.ApplyGate(Gate(one, pair));
+                psi = dense(psi, one, pair);
+                mps.ApplyGate(Gate(two, pair, pair + 1));
+                psi = dense(psi, two, pair, pair + 1);
+            }
+            matches(mps, psi, "MPS gates after a one-qubit gate that is not unitary");
+            const Matrix second = filter(2, 0.05, 800 + q);
+            mps.ApplyGate(Gate(second, (q + 3) % qubits));
+            psi = dense(psi, second, (q + 3) % qubits);
+            matches(mps, psi, "MPS second one-qubit gate that is not unitary");
+        }
+
+        // Two-qubit filters, on neighbours and on qubits apart, in both orders of the two.
+        for (const auto &[low, high] : std::vector<std::pair<int, int>>{{0, 1}, {3, 2}, {0, 5}, {4, 1}, {5, 4}})
+        {
+            Simulator mps(qubits);
+            entangle(mps, qubits, 1300 + 10 * low + high);
+            Eigen::VectorXcd psi = mps.getRegisterStorage();
+            const Matrix unitary = Unitary(4, 1500 + low);
+            mps.ApplyGate(Gate(unitary, low, high));
+            psi = dense(psi, unitary, low, high);
+            matches(mps, psi, "MPS two-qubit gate (the reference of the test)");
+            const Matrix first = filter(4, 0.2, 1600 + low);
+            mps.ApplyGate(Gate(first, low, high));
+            psi = dense(psi, first, low, high);
+            matches(mps, psi, "MPS two-qubit gate that is not unitary");
+            const Matrix after = Unitary(4, 1700 + low);
+            mps.ApplyGate(Gate(after, (low + 1) % qubits, (low + 3) % qubits));
+            psi = dense(psi, after, (low + 1) % qubits, (low + 3) % qubits);
+            matches(mps, psi, "MPS gate after a two-qubit gate that is not unitary");
+        }
+
+        // A qubit of a Bell pair whose other qubit is projected onto zero is zero: it was still measured as one half
+        // the time, from the Schmidt values the projection had left stale.
+        {
+            Simulator pair(2);
+            pair.ApplyGate(Gate(hadamard, 0));
+            pair.ApplyGate(Gate(cnot, 1, 0));
+            pair.ApplyGate(Gate(Matrix(std::sqrt(2.) * zero), 0));
+            Close(pair.GetProbability(1, true), 1., "MPS probability of the partner of a projected qubit");
+            Close(pair.getRegisterStorage().squaredNorm(), 1., "MPS norm after a projection applied as a gate");
+            for (int shot = 0; shot < 64; ++shot)
+            {
+                const auto outcome = pair.MeasureNoCollapse();
+                Require(!outcome.at(0) && !outcome.at(1),
+                        "MPS sampled an outcome that the projected state does not hold");
+            }
+            Require(!pair.MeasureQubit(1), "MPS measured an outcome that the projected state does not hold");
+        }
+
+        // A chain of one qubit has no bond to normalize at.
+        {
+            Simulator lone(1);
+            lone.ApplyGate(Gate(hadamard, 0));
+            lone.ApplyGate(Gate(Matrix(0.25 * zero), 0));
+            Close(lone.GetProbability(0, true), 1., "MPS lone qubit after a projection applied as a gate");
+            Close(lone.getRegisterStorage().squaredNorm(), 1., "MPS norm of a lone qubit after a projection");
+        }
+
+        // A matrix that leaves nothing of the state is refused: the chain holds the state it held, and goes on as
+        // it did (the step that weighs the operator starts to keep environments, which a refused one must not
+        // leave behind).
+        {
+            Simulator mps(3);
+            mps.ApplyGate(Gate(flip, 0));
+            mps.ApplyGate(Gate(hadamard, 1));
+            mps.ApplyGate(Gate(cnot, 2, 1));
+            const Eigen::VectorXcd before = mps.getRegisterStorage();
+            Throws<std::domain_error>([&] { mps.ApplyGate(Gate(zero, 0)); },
+                                      "An MPS one-qubit gate that leaves no state was applied");
+            Matrix both = Matrix::Zero(4, 4);
+            both(0, 0) = 1.;
+            Throws<std::domain_error>([&] { mps.ApplyGate(Gate(both, 0, 2)); },
+                                      "An MPS two-qubit gate that leaves no state was applied");
+            Require((mps.getRegisterStorage() - before).norm() < 1E-13, "A refused MPS gate changed the state");
+
+            using Impl = QC::TensorNetworks::MPSSimulatorImpl;
+            for (const bool truncated : {false, true})
+            {
+                Impl chain(4);
+                if (truncated)
+                    chain.setLimitBondDimension(2);
+                chain.ApplyGate(Gate(flip, 0));
+                unsigned int seed = 60;
+                for (int layer = 0; layer < 4; ++layer)
+                    for (int q = 1 + layer % 2; q + 1 < 4; q += 2)
+                    {
+                        chain.ApplyGate(Gate(Unitary(2, ++seed), q));
+                        chain.ApplyGate(Gate(Unitary(4, ++seed), q, q + 1));
+                    }
+                Eigen::VectorXcd psi = chain.getRegisterStorage();
+                psi /= psi.norm();
+                Throws<std::domain_error>([&] { chain.ApplyGate(Gate(zero, 0)); },
+                                          "An MPS one-qubit gate that leaves no state was applied");
+                Require(!chain.InGaugeMode(), "A refused MPS one-qubit gate left the chain keeping environments");
+                Matrix first = Matrix::Zero(4, 4);
+                first(0, 0) = first(2, 2) = 1.; // qubit 0, the low bit, onto zero
+                Throws<std::domain_error>([&] { chain.ApplyGate(Gate(first, 0, 1)); },
+                                          "An MPS two-qubit gate that leaves no state was applied");
+                Require(!chain.InGaugeMode(), "A refused MPS two-qubit gate left the chain keeping environments");
+                Eigen::VectorXcd after = chain.getRegisterStorage();
+                after /= after.norm();
+                Require((after - psi).norm() < 1E-12, "A refused MPS gate changed the state of the chain");
+                // After a read of a truncated chain, which keeps environments for reads only, a refused gate leaves
+                // them as the reads' again.
+                (void)chain.GetProbability(2, true);
+                const bool forReads = chain.InGaugeMode();
+                Throws<std::domain_error>([&] { chain.ApplyGate(Gate(zero, 0)); },
+                                          "An MPS one-qubit gate that leaves no state was applied");
+                Require(chain.InGaugeMode() == forReads, "A refused MPS gate changed how the chain keeps environments");
+                const Matrix next = Unitary(4, 77);
+                chain.ApplyGate(Gate(next, 1, 2));
+                Require(!chain.InGaugeMode(), "A unitary gate after a refused one did not go the canonical path");
+            }
+        }
+
+        // The gate says whether its matrix is unitary. One defined by name is, and nothing is tested; one built on
+        // a matrix tests it once, and again after the matrix changes; a projection is no gate, and is applied as
+        // the filter it is.
+        {
+            QC::Gates::HadamardGate<> named;
+            QC::Gates::CNOTGate<> namedPair;
+            Gate applied(Unitary(2, 5), 0);
+            Require(named.isUnitary() && namedPair.isUnitary() && applied.isUnitary() &&
+                        Gate(Unitary(4, 6), 0, 1).isUnitary() && Gate(Unitary(8, 8), 0, 1, 2).isUnitary() &&
+                        !Gate(Matrix((1. - 1E-11) * Matrix::Identity(2, 2)), 0).isUnitary() &&
+                        !Gate(filter(4, 0.9, 7), 0, 1).isUnitary() && !QC::Operators::ZeroProjection<>().isUnitary() &&
+                        !QC::Operators::OneProjection<>().isUnitary(),
+                    "A gate does not say what its matrix is");
+            applied = zero;
+            Require(!applied.isUnitary(), "An applied gate did not test the matrix it was given anew");
+            Gate copy(applied);
+            Require(!copy.isUnitary(), "The copy of an applied gate takes another matrix for its own");
+            applied = hadamard;
+            Require(applied.isUnitary() && !copy.isUnitary(), "An applied gate did not test its new matrix");
+            applied.setUnitary(false); // the caller's word is taken until the matrix changes
+            Require(!applied.isUnitary(), "An applied gate did not take the caller's word");
+            // Copies and assignments take over what the gate knows, the caller's word included (told wrongly
+            // here, so that a copy that tested the matrix again would answer otherwise).
+            Gate copied(applied), assigned(zero, 1), movedTo(zero, 1);
+            assigned = applied;
+            Gate source(applied);
+            Gate moved(std::move(source));
+            Gate another(applied);
+            movedTo = std::move(another);
+            Require(!copied.isUnitary() && !assigned.isUnitary() && !moved.isUnitary() && !movedTo.isUnitary(),
+                    "A copy of an applied gate does not know what the gate knew");
+            applied = hadamard;
+            Require(applied.isUnitary(), "An applied gate kept the caller's word for another matrix");
+
+            // A derived gate may change its matrix without saying so: it is tested on every call.
+            struct Derived : Gate
+            {
+                using Gate::Gate;
+
+                void Replace(const Matrix &matrix)
+                {
+                    operatorMat = matrix;
+                }
+            };
+
+            Derived derived(hadamard, 0);
+            Require(derived.isUnitary(), "A derived applied gate does not test its matrix");
+            derived.Replace(zero);
+            Require(!derived.isUnitary(), "A derived applied gate kept what it found for another matrix");
+            const Gate fromDerived(derived);
+            Require(!fromDerived.isUnitary(), "A copy took over what a derived gate no longer holds");
+
+            // Any gate that is handed a matrix answers for it, not only an AppliedGate: the one- and two-qubit
+            // gates built on a matrix, a named gate whose matrix is replaced, a controlled gate whose target is a
+            // matrix. Built by name or on a gate that is unitary, they are not tested.
+            {
+                Matrix halved = Matrix::Identity(2, 2);
+                halved(1, 1) = .5;
+                const Matrix pairFilter = filter(4, 0.2, 31);
+                QC::Gates::SingleQubitGate<> raw(halved), rawUnitary(hadamard);
+                QC::Gates::TwoQubitsGate<> rawPair(pairFilter), rawPairUnitary(Unitary(4, 9));
+                Require(!raw.isUnitary() && rawUnitary.isUnitary() && !rawPair.isUnitary() &&
+                            rawPairUnitary.isUnitary(),
+                        "A gate built on a matrix does not answer for it");
+                QC::Gates::SingleQubitGate<> rawCopy(raw), rawAssigned(rawUnitary);
+                rawAssigned = raw;
+                Require(!rawCopy.isUnitary() && !rawAssigned.isUnitary(), "A copy of a gate built on a matrix lost it");
+                raw = hadamard;
+                Require(raw.isUnitary(), "A gate did not test the matrix assigned to it");
+                QC::Gates::HadamardGate<> replaced;
+                replaced.setOperator(halved);
+                Require(!replaced.isUnitary(), "A named gate whose matrix was replaced still answers by its name");
+                QC::Gates::CNOTGate<> retargeted;
+                retargeted.SetOperation(halved);
+                Require(!retargeted.isUnitary(), "A controlled gate did not test the target it was given");
+                QC::Gates::ControlledGate<> controlled(halved), controlledNamed{QC::Gates::HadamardGate<>()};
+                QC::Gates::DoublyControlledGate<> doubly(halved), doublyNamed{QC::Gates::HadamardGate<>()};
+                Require(!controlled.isUnitary() && controlledNamed.isUnitary() && !doubly.isUnitary() &&
+                            doublyNamed.isUnitary(),
+                        "A controlled gate does not answer for its target");
+                controlledNamed.SetOperation(halved);
+                Require(!controlledNamed.isUnitary(), "A controlled gate kept the answer of its former target");
+                controlledNamed.SetOperation(raw);   // a gate on a unitary matrix, tested above
+                QC::Gates::CCRxGate<> rotation(0.3); // a named gate on a named target, set again
+                rotation.SetTheta(1.1);
+                Require(controlledNamed.isUnitary() && rotation.isUnitary() &&
+                            !QC::Operators::SigmaPlus<>().isUnitary() && !QC::Operators::SigmaMinus<>().isUnitary(),
+                        "A gate does not answer for what it was built on");
+
+                // And the matrix product state applies them as it applies an AppliedGate with the same matrix.
+                Simulator mps(qubits);
+                entangle(mps, qubits, 2300);
+                Eigen::VectorXcd psi = mps.getRegisterStorage();
+                mps.ApplyGate(rawPair, 1, 4);
+                psi = dense(psi, pairFilter, 1, 4);
+                matches(mps, psi, "MPS two-qubit gate built on a matrix that is not unitary");
+                mps.ApplyGate(QC::Gates::SingleQubitGate<>(halved), 3);
+                psi = dense(psi, halved, 3);
+                matches(mps, psi, "MPS one-qubit gate built on a matrix that is not unitary");
+                mps.ApplyGate(controlled, 2, 0); // the control is the high bit: diag(1, 1, 1, .5)
+                Matrix controlledMatrix = Matrix::Identity(4, 4);
+                controlledMatrix(3, 3) = .5;
+                psi = dense(psi, controlledMatrix, 2, 0);
+                matches(mps, psi, "MPS controlled gate on a target that is not unitary");
+            }
+
+            // The test itself, on complex entries: the squared moduli of a column add up to one, whatever their
+            // phases, and two columns are orthogonal as complex vectors.
+            {
+                const std::complex<double> unit(0., 1.);
+                Matrix phases = Matrix::Zero(4, 4);
+                phases.diagonal() << (1. + unit) / std::sqrt(2.), unit, -1., (1. - unit) / std::sqrt(2.);
+                Matrix heavy = phases; // a column of modulus sqrt(2): 1 + i where a phase was
+                heavy(0, 0) = 1. + unit;
+                Matrix leaning = Matrix::Identity(4, 4); // unit columns that are not orthogonal: their product is i/2
+                leaning(0, 0) = leaning(1, 1) = std::sqrt(.75);
+                leaning(1, 0) = .5;
+                leaning(0, 1) = .5 * unit;
+                Matrix heavyOne = Matrix::Zero(2, 2), nonFinite = Matrix::Identity(4, 4);
+                heavyOne << 1. + unit, 0., 0., 1.;
+                nonFinite(2, 2) = std::numeric_limits<double>::quiet_NaN();
+                Require(QC::Gates::IsUnitaryMatrix(phases) && QC::Gates::IsUnitaryMatrix(Unitary(8, 3)) &&
+                            !QC::Gates::IsUnitaryMatrix(heavy) && !QC::Gates::IsUnitaryMatrix(leaning) &&
+                            !QC::Gates::IsUnitaryMatrix(heavyOne) && !QC::Gates::IsUnitaryMatrix(nonFinite) &&
+                            !QC::Gates::IsUnitaryMatrix(Matrix(Matrix::Identity(2, 3))),
+                        "The test of a matrix takes one that is not unitary for unitary, or the reverse");
+            }
+
+            // A compact gate holds a table or a controlled matrix in place of a dense one, and answers for that.
+            const std::complex<double> i(0., 1.);
+            Matrix half = Matrix::Identity(2, 2);
+            half(1, 1) = .5;
+            Require(Gate::Diagonal({1., i, -1., -i}, {0, 1}).isUnitary() &&
+                        !Gate::Diagonal({1., .5, .5, .25}, {0, 1}).isUnitary() &&
+                        Gate::MultiControlled(hadamard, 2, {0, 1}).isUnitary() &&
+                        !Gate::MultiControlled(half, 2, {0, 1}).isUnitary() &&
+                        Gate::MultiplexedRotation(QC::Gates::RotationAxis::Y, {.1, .2, .3, .4}, 2, {0, 1}).isUnitary(),
+                    "A compact gate does not say what its operation is");
+            {
+                // And a compact filter is applied as one, on neighbours and on qubits apart.
+                Simulator mps(qubits);
+                entangle(mps, qubits, 2100);
+                Eigen::VectorXcd psi = mps.getRegisterStorage();
+                Matrix table = Matrix::Zero(4, 4);
+                table.diagonal() << 1., .5, .5, .25;
+                mps.ApplyGate(Gate::Diagonal({1., .5, .5, .25}, {1, 4}));
+                psi = dense(psi, table, 1, 4);
+                matches(mps, psi, "MPS compact diagonal that is not unitary");
+            }
+
+            // The matrix of a gate has the size of its qubits: one of another shape was read past its end, or
+            // applied as its upper left block. It is refused before anything is routed.
+            {
+                Simulator mps(qubits);
+                entangle(mps, qubits, 2200);
+                const Eigen::VectorXcd before = mps.getRegisterStorage();
+                const auto bondsBefore = mps.getBondDimensions();
+                for (const auto &[rows, cols] :
+                     std::vector<std::pair<int, int>>{{2, 1}, {2, 3}, {3, 3}, {4, 2}, {5, 5}, {6, 6}, {1, 1}})
+                {
+                    const Matrix shaped = Matrix::Identity(rows, cols);
+                    Throws<std::invalid_argument>([&] { mps.ApplyGate(Gate(shaped, 0, 5)); },
+                                                  "An MPS gate with a matrix of the wrong shape was applied");
+                }
+                Require((mps.getRegisterStorage() - before).norm() < 1E-13 && mps.getBondDimensions() == bondsBefore,
+                        "A refused MPS gate matrix changed the chain");
+            }
+
+            Simulator projected(2);
+            projected.ApplyGate(Gate(hadamard, 0));
+            projected.ApplyGate(Gate(cnot, 1, 0));
+            projected.ApplyGate(QC::Operators::ZeroProjection<>(), 1);
+            Close(projected.GetProbability(0, true), 1., "MPS projection applied as a gate");
+            Close(projected.getRegisterStorage().squaredNorm(), 1., "MPS norm after a projection operator");
+
+            QC::TensorNetworks::MPSSimulatorImpl chain(4);
+            unsigned int seed = 40;
+            for (int layer = 0; layer < 6; ++layer)
+            {
+                for (int q = 0; q < 4; ++q)
+                    chain.ApplyGate(Gate(Unitary(2, ++seed), q));
+                for (int q = layer % 2; q + 1 < 4; q += 2)
+                    chain.ApplyGate(Gate(Unitary(4, ++seed), q, q + 1));
+            }
+            Require(!chain.InGaugeMode(), "Unitary MPS gates left the canonical path");
+        }
+
+        std::cout << "Success" << std::endl;
+        return true;
+    }
+    catch (const std::exception &error)
+    {
+        std::cout << "MPS non-unitary gate regression: " << error.what() << std::endl;
+        return false;
+    }
+}
+
 bool MPSSimulatorTests()
 {
     std::cout << "\nMPS Simulator Tests" << std::endl;
@@ -2736,9 +3133,9 @@ bool MPSSimulatorTests()
 
     return QC::MPSThreeSiteAudit::Run() && QC::ThreeQubitTensorRegression::Run(false) &&
            QC::ProductSwapRegression::Run(false) && ObservableAndSummaryRegressionTestMPS() &&
-           KrausGaugeModeRegressionTestMPS() && MeetingPositionFallbackTestMPS() && SwapRelabelTestMPS() &&
-           WideBasisInitializationTestMPS() && StateSimulationTest() && NumericalRankStabilityTestMPS() &&
-           checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() && CloneTestMPS() &&
-           ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() && MultithreadingSettingTestMPS() &&
-           LongChainSamplingAndValidationTestMPS();
+           KrausGaugeModeRegressionTestMPS() && NonUnitaryGateTestMPS() && MeetingPositionFallbackTestMPS() &&
+           SwapRelabelTestMPS() && WideBasisInitializationTestMPS() && StateSimulationTest() &&
+           NumericalRankStabilityTestMPS() && checkExpectationValuesMPS() && TrimTestMPS() && TruncationModeTestMPS() &&
+           CloneTestMPS() && ReCanonicalizeRegressionTestMPS() && CanonicalFormTestMPS() &&
+           MultithreadingSettingTestMPS() && LongChainSamplingAndValidationTestMPS();
 }

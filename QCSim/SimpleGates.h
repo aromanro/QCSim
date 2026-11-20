@@ -21,6 +21,80 @@ namespace QC
 namespace Gates
 {
 
+// Whether a matrix is unitary, to the rounding a product of many gates carries (1e-12, the tolerance of the
+// three-qubit gates of the matrix product state): its columns are orthonormal. Spelled out on the entries, so that
+// the small matrices of the usual gates need no temporary.
+template <class MatrixClass> bool IsUnitaryMatrix(const MatrixClass &matrix)
+{
+    const Eigen::Index size = matrix.rows();
+    if (size != matrix.cols())
+        return false;
+    if (size == 2) // every one-qubit matrix: written out
+    {
+        const std::complex<double> a = matrix(0, 0), b = matrix(0, 1), c = matrix(1, 0), d = matrix(1, 1);
+        return std::abs(std::norm(a) + std::norm(c) - 1.) <= 1E-12 &&
+               std::abs(std::norm(b) + std::norm(d) - 1.) <= 1E-12 &&
+               std::norm(std::conj(a) * b + std::conj(c) * d) <= 1E-24;
+    }
+    for (Eigen::Index j = 0; j < size; ++j)
+    {
+        // The product of a column with itself is the sum of the squared moduli of its entries, a real number: it is
+        // summed as one. (A NaN fails either comparison.)
+        double squared = 0.;
+        for (Eigen::Index i = 0; i < size; ++i)
+            squared += std::norm(std::complex<double>(matrix(i, j)));
+        if (!(std::abs(squared - 1.) <= 1E-12))
+            return false;
+        for (Eigen::Index k = j + 1; k < size; ++k)
+        {
+            std::complex<double> product = 0.;
+            for (Eigen::Index i = 0; i < size; ++i)
+                product += std::conj(std::complex<double>(matrix(i, j))) * std::complex<double>(matrix(i, k));
+            if (!(std::norm(product) <= 1E-24))
+                return false;
+        }
+    }
+    return true;
+}
+
+// What a gate knows of its matrix: whether it is unitary, once that was tested or told. It is atomic because a gate
+// that threads share may be asked by several of them (they would all find the same), and copyable so that a gate
+// stays so.
+struct KnownUnitarity
+{
+    enum : uint8_t
+    {
+        NotTested,
+        Unitary,
+        NotUnitary
+    };
+
+    std::atomic<uint8_t> value{NotTested};
+    KnownUnitarity() = default;
+
+    KnownUnitarity(const KnownUnitarity &other) noexcept : value(other.value.load(std::memory_order_relaxed))
+    {
+    }
+
+    KnownUnitarity &operator=(const KnownUnitarity &other) noexcept
+    {
+        value.store(other.value.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        return *this;
+    }
+};
+
+// What a gate that is built on another takes over from it: what that one answers, or nothing for a type that
+// does not say.
+template <class Gate> auto UnitarityOf(const Gate &gate, int) -> decltype(gate.isUnitary(), uint8_t())
+{
+    return gate.isUnitary() ? KnownUnitarity::Unitary : KnownUnitarity::NotUnitary;
+}
+
+template <class Gate> uint8_t UnitarityOf(const Gate &, long)
+{
+    return KnownUnitarity::NotTested;
+}
+
 template <class MatrixClass = Eigen::MatrixXcd> class QuantumGate
 {
   public:
@@ -72,6 +146,14 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGate
     {
         return false;
     }
+
+    // Whether the matrix of the gate is unitary. A simulator for which it matters asks: the matrix product state
+    // applies what is not unitary as a filter, see MPSSimulatorImpl::ApplyGate. A gate that holds a matrix answers
+    // for it (QuantumGateWithOp::isUnitary).
+    virtual bool isUnitary() const
+    {
+        return true;
+    }
 };
 
 template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public QuantumGate<MatrixClass>
@@ -79,11 +161,11 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
   public:
     using BaseClass = QuantumGate<MatrixClass>;
 
-    QuantumGateWithOp(const QuantumGateWithOp &other) : operatorMat(other.operatorMat)
+    QuantumGateWithOp(const QuantumGateWithOp &other) : operatorMat(other.operatorMat), unitarity(other.unitarity)
     {
     }
 
-    QuantumGateWithOp(QuantumGateWithOp &&other) : operatorMat(std::move(other.operatorMat))
+    QuantumGateWithOp(QuantumGateWithOp &&other) : operatorMat(std::move(other.operatorMat)), unitarity(other.unitarity)
     {
     }
 
@@ -102,6 +184,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
         if (other.getStructuredGate())
             throw std::invalid_argument("Assign compact gates through AppliedGate to preserve their representation");
         operatorMat = other.operatorMat;
+        unitarity = other.unitarity;
         OperatorChanged();
         return *this;
     }
@@ -113,6 +196,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
         if (other.getStructuredGate())
             throw std::invalid_argument("Assign compact gates through AppliedGate to preserve their representation");
         operatorMat = std::move(other.operatorMat);
+        unitarity = other.unitarity;
         OperatorChanged();
         return *this;
     }
@@ -120,6 +204,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
     QuantumGateWithOp &operator=(const MatrixClass &U)
     {
         operatorMat = U;
+        MatrixGiven();
         OperatorChanged();
         return *this;
     }
@@ -127,8 +212,25 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
     QuantumGateWithOp &operator=(MatrixClass &&U)
     {
         operatorMat = std::move(U);
+        MatrixGiven();
         OperatorChanged();
         return *this;
+    }
+
+    // Whether the matrix is unitary. A gate defined by name (X, H, CX, the rotations and so on) is by construction
+    // and says so when it is built: nothing is tested for it. A matrix that was handed over (the constructors that
+    // take one, an assignment, setOperator, the target of a controlled gate) is tested, to the tolerance of
+    // IsUnitaryMatrix, on the first call after it was given and not again until another is. A gate built on
+    // another takes over what that one answers.
+    bool isUnitary() const override
+    {
+        uint8_t known = unitarity.value.load(std::memory_order_relaxed);
+        if (known == KnownUnitarity::NotTested)
+        {
+            known = IsUnitaryMatrix(operatorMat) ? KnownUnitarity::Unitary : KnownUnitarity::NotUnitary;
+            unitarity.value.store(known, std::memory_order_relaxed);
+        }
+        return known == KnownUnitarity::Unitary;
     }
 
     virtual GateStructure getStructure() const
@@ -178,6 +280,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
         // assert(U.rows() == 1ULL << getQubitsNumber());
 
         operatorMat = U;
+        MatrixGiven();
         OperatorChanged();
     }
 
@@ -187,7 +290,22 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
     {
     }
 
+    // The matrix, or a part of it, was handed over: nothing is known of it until it is tested.
+    void MatrixGiven() noexcept
+    {
+        unitarity.value.store(KnownUnitarity::NotTested, std::memory_order_relaxed);
+    }
+
+    // For a gate that fills its matrix itself, with a unitary one: no test is needed. The gates defined by name
+    // start from the default constructors of the one-, two- and three-qubit gates, which say this for them, and
+    // then write their entries.
+    void UnitaryByConstruction() noexcept
+    {
+        unitarity.value.store(KnownUnitarity::Unitary, std::memory_order_relaxed);
+    }
+
     MatrixClass operatorMat;
+    mutable KnownUnitarity unitarity;
 };
 
 template <class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public QuantumGateWithOp<MatrixClass>
@@ -195,16 +313,20 @@ template <class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public Q
   public:
     using BaseClass = QuantumGateWithOp<MatrixClass>;
 
+    // The start of a gate defined by name, which then writes its entries: unitary by construction.
     SingleQubitGate() noexcept : BaseClass(MatrixClass::Zero(2, 2))
     {
+        BaseClass::UnitaryByConstruction();
     }
 
     SingleQubitGate(const SingleQubitGate &other) noexcept : BaseClass(other.operatorMat)
     {
+        BaseClass::unitarity = other.unitarity;
     }
 
     SingleQubitGate(SingleQubitGate &&other) noexcept : BaseClass(std::move(other.operatorMat))
     {
+        BaseClass::unitarity = other.unitarity;
     }
 
     SingleQubitGate(const MatrixClass &U) noexcept : BaseClass(U)
@@ -224,6 +346,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public Q
         assert(other.operatorMat.rows() == 2);
         assert(other.operatorMat.cols() == 2);
         BaseClass::operator=(other.operatorMat);
+        BaseClass::unitarity = other.unitarity; // the source's, where the matrix alone would be tested anew
         return *this;
     }
 
@@ -232,6 +355,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class SingleQubitGate : public Q
         assert(other.operatorMat.rows() == 2);
         assert(other.operatorMat.cols() == 2);
         BaseClass::operator=(std::move(other.operatorMat));
+        BaseClass::unitarity = other.unitarity; // the source's, where the matrix alone would be tested anew
         return *this;
     }
 
@@ -296,16 +420,20 @@ template <class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public Qua
   public:
     using BaseClass = QuantumGateWithOp<MatrixClass>;
 
+    // The start of a gate defined by name, which then writes its entries: unitary by construction.
     TwoQubitsGate() noexcept : BaseClass(MatrixClass::Identity(4, 4))
     {
+        BaseClass::UnitaryByConstruction();
     }
 
     TwoQubitsGate(const TwoQubitsGate &other) noexcept : BaseClass(other.operatorMat)
     {
+        BaseClass::unitarity = other.unitarity;
     }
 
     TwoQubitsGate(TwoQubitsGate &&other) noexcept : BaseClass(std::move(other.operatorMat))
     {
+        BaseClass::unitarity = other.unitarity;
     }
 
     TwoQubitsGate(const MatrixClass &U) noexcept : BaseClass(U)
@@ -325,6 +453,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public Qua
         assert(other.operatorMat.rows() == 4);
         assert(other.operatorMat.cols() == 4);
         BaseClass::operator=(other.operatorMat);
+        BaseClass::unitarity = other.unitarity; // the source's, where the matrix alone would be tested anew
         return *this;
     }
 
@@ -333,6 +462,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class TwoQubitsGate : public Qua
         assert(other.operatorMat.rows() == 4);
         assert(other.operatorMat.cols() == 4);
         BaseClass::operator=(std::move(other.operatorMat));
+        BaseClass::unitarity = other.unitarity; // the source's, where the matrix alone would be tested anew
         return *this;
     }
 
@@ -395,16 +525,20 @@ template <class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public Q
   public:
     using BaseClass = QuantumGateWithOp<MatrixClass>;
 
+    // The start of a gate defined by name, which then writes its entries: unitary by construction.
     ThreeQubitsGate() noexcept : BaseClass(MatrixClass::Identity(8, 8))
     {
+        BaseClass::UnitaryByConstruction();
     }
 
     ThreeQubitsGate(const ThreeQubitsGate &other) noexcept : BaseClass(other.operatorMat)
     {
+        BaseClass::unitarity = other.unitarity;
     }
 
     ThreeQubitsGate(ThreeQubitsGate &&other) noexcept : BaseClass(std::move(other.operatorMat))
     {
+        BaseClass::unitarity = other.unitarity;
     }
 
     ThreeQubitsGate(const MatrixClass &U) noexcept : BaseClass(U)
@@ -424,6 +558,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public Q
         assert(other.operatorMat.rows() == 8);
         assert(other.operatorMat.cols() == 8);
         BaseClass::operator=(other.operatorMat);
+        BaseClass::unitarity = other.unitarity; // the source's, where the matrix alone would be tested anew
         return *this;
     }
 
@@ -432,6 +567,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public Q
         assert(other.operatorMat.rows() == 8);
         assert(other.operatorMat.cols() == 8);
         BaseClass::operator=(std::move(other.operatorMat));
+        BaseClass::unitarity = other.unitarity; // the source's, where the matrix alone would be tested anew
         return *this;
     }
 
@@ -601,6 +737,26 @@ struct StructuredPayload : Payload
     StructuredGate::Kind OperationKind() const
     {
         return core->operation.kind;
+    }
+
+    // Whether the operation is unitary, to the tolerance of IsUnitaryMatrix: a diagonal when every entry has
+    // modulus one, a controlled matrix when the matrix is (the controls only choose where it acts), a multiplexed
+    // rotation always. A table of a diagonal is read through, once per call.
+    bool IsUnitary() const
+    {
+        if (OperationKind() == StructuredGate::Kind::Diagonal)
+        {
+            for (const auto &value : core->operation.diagonal)
+                if (!(std::abs(std::norm(value) - 1.) <= 1E-12))
+                    return false;
+            return true;
+        }
+        if (OperationKind() != StructuredGate::Kind::Controlled)
+            return true;
+        // row major: the columns are (matrix[0], matrix[2]) and (matrix[1], matrix[3])
+        return std::abs(std::norm(matrix[0]) + std::norm(matrix[2]) - 1.) <= 1E-12 &&
+               std::abs(std::norm(matrix[1]) + std::norm(matrix[3]) - 1.) <= 1E-12 &&
+               std::norm(std::conj(matrix[0]) * matrix[1] + std::conj(matrix[2]) * matrix[3]) <= 1E-24;
     }
 
     RotationAxis Axis() const
@@ -834,6 +990,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
           payload(other.payload)
     {
         structure = other.CurrentStructure();
+        BaseClass::unitarity.value.store(other.CurrentUnitarity(), std::memory_order_relaxed);
     }
 
     AppliedGate(AppliedGate &&other) noexcept
@@ -843,6 +1000,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         // A derived source may have changed its protected matrix directly.
         // Its matrix has already moved, so classify the destination instead.
         structure = other.IsExactAppliedGate() ? other.structure : ClassifyGateMatrix(BaseClass::operatorMat);
+        BaseClass::unitarity.value.store(other.CurrentUnitarity(), std::memory_order_relaxed);
     }
 
     AppliedGate(const MatrixClass &op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
@@ -1073,7 +1231,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         if (this == &other)
             return *this;
         BaseClass::operatorMat = other.operatorMat;
-        AssignStructure(other.CurrentStructure());
+        AssignStructure(other.CurrentStructure(), other.CurrentUnitarity());
         q1 = other.q1;
         q2 = other.q2;
         q3 = other.q3;
@@ -1086,8 +1244,9 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         if (this == &other)
             return *this;
         const GateStructure otherStructure = other.CurrentStructure();
+        const uint8_t otherUnitarity = other.CurrentUnitarity();
         BaseClass::operatorMat = std::move(other.operatorMat);
-        AssignStructure(otherStructure);
+        AssignStructure(otherStructure, otherUnitarity);
         q1 = other.q1;
         q2 = other.q2;
         q3 = other.q3;
@@ -1265,11 +1424,38 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         return false;
     }
 
+    // The matrix was handed over, so nothing is known of it until it is tested: once, on the first call, and again
+    // only after the matrix changes. A caller that knows can say so and spare the test (setUnitary). Copies and
+    // assignments take over what the source knows. What is known is kept by the exact type only, which alone can
+    // guarantee that every matrix mutation uses OperatorChanged (see CurrentStructure): a derived gate tests its
+    // matrix on every call, whatever it was told. A compact gate is tested on what it holds in place of a matrix:
+    // the entries of its diagonal, or the matrix its controls select.
+    bool isUnitary() const override
+    {
+        if (!IsExactAppliedGate())
+            return TestUnitary();
+        uint8_t known = BaseClass::unitarity.value.load(std::memory_order_relaxed);
+        if (known == KnownUnitarity::NotTested)
+        {
+            known = TestUnitary() ? KnownUnitarity::Unitary : KnownUnitarity::NotUnitary;
+            BaseClass::unitarity.value.store(known, std::memory_order_relaxed);
+        }
+        return known == KnownUnitarity::Unitary;
+    }
+
+    // For a caller that knows whether its matrix is unitary: the matrix is then not tested, until it changes.
+    void setUnitary(bool unitary) noexcept
+    {
+        BaseClass::unitarity.value.store(unitary ? KnownUnitarity::Unitary : KnownUnitarity::NotUnitary,
+                                         std::memory_order_relaxed);
+    }
+
   protected:
     void OperatorChanged() override
     {
         payload.reset();
         structure = ClassifyGateMatrix(BaseClass::operatorMat);
+        BaseClass::unitarity.value.store(KnownUnitarity::NotTested, std::memory_order_relaxed);
     }
 
   private:
@@ -1355,12 +1541,28 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
 
     // After the matrix was assigned: the exact type takes the known descriptor, a derived
     // destination (which may override OperatorChanged) is refreshed through its hook.
-    void AssignStructure(const GateStructure &known)
+    void AssignStructure(const GateStructure &known, uint8_t knownUnitarity)
     {
         if (IsExactAppliedGate())
+        {
             structure = known;
+            BaseClass::unitarity.value.store(knownUnitarity, std::memory_order_relaxed);
+        }
         else
             OperatorChanged();
+    }
+
+    bool TestUnitary() const
+    {
+        return HasCompact() ? Compact().IsUnitary() : IsUnitaryMatrix(BaseClass::operatorMat);
+    }
+
+    // What a copy may take over: what the exact type knows of its matrix, and nothing from a derived source, which
+    // may have changed its matrix since.
+    uint8_t CurrentUnitarity() const
+    {
+        return IsExactAppliedGate() ? BaseClass::unitarity.value.load(std::memory_order_relaxed)
+                                    : static_cast<uint8_t>(KnownUnitarity::NotTested);
     }
 
     // don't use it!

@@ -262,6 +262,42 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         });
     }
 
+    // The matrix of a one-qubit gate is 2x2 and that of a two-qubit gate 4x4. The number of qubits of a gate built
+    // on a matrix comes from its rows alone, and the tensor updates read the entries of the size they expect: a
+    // matrix of another shape (2x1, 3x3, 4x2) was read past its end, or applied as its upper left block.
+    static void RequireGateMatrixSize(const MatrixClass &matrix, size_t gateQubits)
+    {
+        const IndexType size = gateQubits == 1 ? 2 : 4;
+        if (matrix.rows() != size || matrix.cols() != size)
+            throw std::invalid_argument(gateQubits == 1 ? "The matrix of a one-qubit gate must be 2x2"
+                                                        : "The matrix of a two-qubit gate must be 4x4");
+    }
+
+    // A one- or two-qubit operator that is not unitary, as the one operator of a channel. One that leaves nothing of
+    // the state throws std::domain_error, and nothing was applied: the chain holds the state it held. The step may
+    // by then have started to keep environments for an operator the chain does not hold; the chain goes back to how
+    // it kept them, so that the gates after a refused filter go the way they went before it. (Copying the chain to
+    // restore it, as the three-qubit filters do, would cost every filter what a sweep costs.)
+    void ApplyFilter(const MatrixClass &matrix, size_t gateQubits, IndexType qubit, IndexType controllingQubit1)
+    {
+        const bool wasGauge = gaugeMode, wasForReads = gaugeForReads;
+        try
+        {
+            if (gateQubits == 1)
+                ApplyKrausOperator({matrix}, 0., qubit);
+            else
+                ApplyKrausOperator({matrix}, 0., qubit, controllingQubit1);
+        }
+        catch (...)
+        {
+            if (gaugeMode && !wasGauge)
+                LeaveGaugeMode(); // entered for the operator: the tensors are those of the canonical path
+            else if (gaugeMode && wasForReads)
+                gaugeForReads = true; // the environments it had for reads are still those of its tensors
+            throw;
+        }
+    }
+
     // Two- and three-qubit gates need to act on consecutive sites.
     // don't try to apply a gate that doesn't satisfy these conditions
     // use swap gates to move qubits around
@@ -279,8 +315,25 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         else if (gateQubits == 2 && std::abs(static_cast<int>(qubit) - static_cast<int>(controllingQubit1)) != 1)
             throw std::invalid_argument("Two qubit gates need to act on adjacent qubits");
         const auto &matrix = gate.getRawOperatorMatrix();
+        RequireGateMatrixSize(matrix, gateQubits);
         if (!matrix.allFinite())
             throw std::invalid_argument("Gate matrix contains a non-finite value");
+
+        // A matrix that is not unitary is no gate of the canonical path: it leaves the tensor of its site off the
+        // orthonormal form and the Schmidt values of the other bonds stale, so that what was read, measured or
+        // sampled after it on another qubit came from a state the chain no longer held (a qubit of a Bell pair whose
+        // other qubit had been projected was still measured as 1 half the time), and it left the chain off its norm
+        // where a two-qubit update did not happen to restore it. It is a filter, the one operator of a channel, and
+        // is applied as one: weighed on the state, normalized, with the environments kept from there on (see
+        // ApplyKrausOperator), as the three-qubit gates already apply theirs. The gate says whether it is one: a
+        // gate defined by name is unitary and nothing is tested for it, an AppliedGate tests the matrix it was given,
+        // once (see QuantumGate::isUnitary). A caller that knows its operator is a filter can also call
+        // ApplyKrausOperator with it directly.
+        if (!gate.isUnitary())
+        {
+            ApplyFilter(matrix, gateQubits, qubit, controllingQubit1);
+            return;
+        }
 
         // Environments kept only for reads (see EnvironmentsForRead) end with them: a gate goes the way it always
         // went on a chain that holds no Kraus operator.

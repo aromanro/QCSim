@@ -116,6 +116,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class TwoQubitsControlledGate : 
     {
         assert(U.rows() == 2 && U.cols() == 2);
         OpClass::operatorMat.block(2, 2, 2, 2) = U;
+        OpClass::MatrixGiven();
     }
 };
 
@@ -495,6 +496,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsControlledGate 
     {
         assert(U.rows() == 4 && U.cols() == 4);
         OpClass::operatorMat.block(4, 4, 4, 4) = U;
+        OpClass::MatrixGiven();
     }
 };
 
@@ -743,6 +745,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class ControlledGate : public Tw
         descriptor = {};
         this->operatorMat.setIdentity();
         this->operatorMat.block(2, 2, 2, 2) = matrix;
+        this->MatrixGiven();
     }
 
     bool isDiagonal() const override
@@ -767,6 +770,8 @@ template <class MatrixClass = Eigen::MatrixXcd> class ControlledGate : public Tw
     template <class Gate> auto SetOperation(const Gate &gate) -> decltype(gate.getRawOperatorMatrix(), void())
     {
         SetOperation(gate.getRawOperatorMatrix());
+        // A controlled gate is unitary when its target is: what the gate given answers, with no test here.
+        this->unitarity.value.store(UnitarityOf(gate, 0), std::memory_order_relaxed);
         auto candidate = GetUnitaryGateDescriptor(gate);
         if (candidate && candidate.controls == 0)
         {
@@ -807,6 +812,7 @@ class DoublyControlledGate : public ThreeQubitsControlledGate<MatrixClass>
         descriptor = {};
         this->operatorMat.setIdentity();
         this->operatorMat.block(6, 6, 2, 2) = matrix;
+        this->MatrixGiven();
     }
 
     bool isControlQubit(size_t qubit) const override
@@ -835,6 +841,8 @@ class DoublyControlledGate : public ThreeQubitsControlledGate<MatrixClass>
     template <class Gate> auto SetOperation(const Gate &gate) -> decltype(gate.getRawOperatorMatrix(), void())
     {
         SetOperation(gate.getRawOperatorMatrix());
+        // A controlled gate is unitary when its target is: what the gate given answers, with no test here.
+        this->unitarity.value.store(UnitarityOf(gate, 0), std::memory_order_relaxed);
         auto candidate = GetUnitaryGateDescriptor(gate);
         if (candidate && candidate.controls == 0)
         {

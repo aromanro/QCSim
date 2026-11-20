@@ -291,10 +291,10 @@ class MPSSimulator : public MPSSimulatorInterface,
         else if (gateQubits > 1 &&
                  (controllingQubit1 < 0 || controllingQubit1 >= static_cast<IndexType>(impl.getNrQubits())))
             throw std::invalid_argument("Qubit index out of bounds");
-        // Compact payloads have no dense matrix; reject them before any routing.
-        // The impl validates and reuses the matrix for a one-site application.
+        // Compact payloads have no dense matrix; reject them before any routing, and a matrix of the wrong shape
+        // with them. The impl validates and reuses the matrix for a one-site application.
         if (gateQubits > 1)
-            (void)gate.getRawOperatorMatrix();
+            MPSSimulatorImpl::RequireGateMatrixSize(gate.getRawOperatorMatrix(), gateQubits);
 
         // A SWAP only exchanges where the two logical qubits live, so it is applied to the map:
         // no routing, no tensor update, no truncation and no bond dimension change to report
