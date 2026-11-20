@@ -262,6 +262,30 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         });
     }
 
+    // Whether the matrix of a one- or two-qubit gate is unitary, to the rounding a product of many gates carries (the
+    // tolerance of the three-qubit gates, see ThreeSite::IsUnitary). What is not is applied as a filter: see
+    // ApplyGate. Evaluated in the fixed size of the matrix, on the stack: every gate is tested.
+    static bool IsUnitaryGate(const MatrixClass &matrix)
+    {
+        if (matrix.rows() == 2 && matrix.cols() == 2)
+        {
+            // The two columns are orthonormal: the test of every one-qubit gate, so spelled out.
+            const std::complex<double> a = matrix(0, 0), b = matrix(0, 1), c = matrix(1, 0), d = matrix(1, 1);
+            return std::abs(std::norm(a) + std::norm(c) - 1.) <= 1E-12 &&
+                   std::abs(std::norm(b) + std::norm(d) - 1.) <= 1E-12 &&
+                   std::norm(std::conj(a) * b + std::conj(c) * d) <= 1E-24;
+        }
+        if (matrix.rows() == 4 && matrix.cols() == 4)
+            return IsUnitaryGate(Eigen::Matrix4cd(matrix));
+        return (matrix.adjoint() * matrix).isIdentity(1E-12);
+    }
+
+    // The same for a matrix of fixed size, as a caller may hold one.
+    template <class Derived> static bool IsUnitaryGate(const Eigen::MatrixBase<Derived> &matrix)
+    {
+        return (matrix.adjoint() * matrix).eval().isIdentity(1E-12);
+    }
+
     // Two- and three-qubit gates need to act on consecutive sites.
     // don't try to apply a gate that doesn't satisfy these conditions
     // use swap gates to move qubits around
@@ -281,6 +305,23 @@ class MPSSimulatorImpl : public MPSSimulatorBase,
         const auto &matrix = gate.getRawOperatorMatrix();
         if (!matrix.allFinite())
             throw std::invalid_argument("Gate matrix contains a non-finite value");
+
+        // A matrix that is not unitary is no gate of the canonical path: it leaves the tensor of its site off the
+        // orthonormal form and the Schmidt values of the other bonds stale, so that what was read, measured or
+        // sampled after it on another qubit came from a state the chain no longer held (a qubit of a Bell pair whose
+        // other qubit had been projected was still measured as 1 half the time), and it left the chain off its norm
+        // where a two-qubit update did not happen to restore it. It is a filter, the one operator of a channel, and
+        // is applied as one: weighed on the state, normalized, with the environments kept from there on (see
+        // ApplyKrausOperator), as the three-qubit gates already apply theirs. One that leaves nothing of the state
+        // throws std::domain_error, and the chain is as it was.
+        if (!IsUnitaryGate(matrix))
+        {
+            if (gateQubits == 1)
+                ApplyKrausOperator({matrix}, 0., qubit);
+            else
+                ApplyKrausOperator({matrix}, 0., qubit, controllingQubit1);
+            return;
+        }
 
         // Environments kept only for reads (see EnvironmentsForRead) end with them: a gate goes the way it always
         // went on a chain that holds no Kraus operator.
