@@ -37,15 +37,23 @@ template <class MatrixClass> bool IsUnitaryMatrix(const MatrixClass &matrix)
                std::norm(std::conj(a) * b + std::conj(c) * d) <= 1E-24;
     }
     for (Eigen::Index j = 0; j < size; ++j)
-        for (Eigen::Index k = j; k < size; ++k)
+    {
+        // The product of a column with itself is the sum of the squared moduli of its entries, a real number: it is
+        // summed as one. (A NaN fails either comparison.)
+        double squared = 0.;
+        for (Eigen::Index i = 0; i < size; ++i)
+            squared += std::norm(std::complex<double>(matrix(i, j)));
+        if (!(std::abs(squared - 1.) <= 1E-12))
+            return false;
+        for (Eigen::Index k = j + 1; k < size; ++k)
         {
             std::complex<double> product = 0.;
             for (Eigen::Index i = 0; i < size; ++i)
                 product += std::conj(std::complex<double>(matrix(i, j))) * std::complex<double>(matrix(i, k));
-            // A NaN fails either comparison.
-            if (!(j == k ? std::abs(product.real() - 1.) <= 1E-12 : std::norm(product) <= 1E-24))
+            if (!(std::norm(product) <= 1E-24))
                 return false;
         }
+    }
     return true;
 }
 

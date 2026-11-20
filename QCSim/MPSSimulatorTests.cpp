@@ -3011,6 +3011,28 @@ static bool NonUnitaryGateTestMPS()
                 matches(mps, psi, "MPS controlled gate on a target that is not unitary");
             }
 
+            // The test itself, on complex entries: the squared moduli of a column add up to one, whatever their
+            // phases, and two columns are orthogonal as complex vectors.
+            {
+                const std::complex<double> unit(0., 1.);
+                Matrix phases = Matrix::Zero(4, 4);
+                phases.diagonal() << (1. + unit) / std::sqrt(2.), unit, -1., (1. - unit) / std::sqrt(2.);
+                Matrix heavy = phases; // a column of modulus sqrt(2): 1 + i where a phase was
+                heavy(0, 0) = 1. + unit;
+                Matrix leaning = Matrix::Identity(4, 4); // unit columns that are not orthogonal: their product is i/2
+                leaning(0, 0) = leaning(1, 1) = std::sqrt(.75);
+                leaning(1, 0) = .5;
+                leaning(0, 1) = .5 * unit;
+                Matrix heavyOne = Matrix::Zero(2, 2), nonFinite = Matrix::Identity(4, 4);
+                heavyOne << 1. + unit, 0., 0., 1.;
+                nonFinite(2, 2) = std::numeric_limits<double>::quiet_NaN();
+                Require(QC::Gates::IsUnitaryMatrix(phases) && QC::Gates::IsUnitaryMatrix(Unitary(8, 3)) &&
+                            !QC::Gates::IsUnitaryMatrix(heavy) && !QC::Gates::IsUnitaryMatrix(leaning) &&
+                            !QC::Gates::IsUnitaryMatrix(heavyOne) && !QC::Gates::IsUnitaryMatrix(nonFinite) &&
+                            !QC::Gates::IsUnitaryMatrix(Matrix(Matrix::Identity(2, 3))),
+                        "The test of a matrix takes one that is not unitary for unitary, or the reverse");
+            }
+
             // A compact gate holds a table or a controlled matrix in place of a dense one, and answers for that.
             const std::complex<double> i(0., 1.);
             Matrix half = Matrix::Identity(2, 2);
