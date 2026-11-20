@@ -2926,8 +2926,36 @@ static bool NonUnitaryGateTestMPS()
             Require(applied.isUnitary() && !copy.isUnitary(), "An applied gate did not test its new matrix");
             applied.setUnitary(false); // the caller's word is taken until the matrix changes
             Require(!applied.isUnitary(), "An applied gate did not take the caller's word");
+            // Copies and assignments take over what the gate knows, the caller's word included (told wrongly
+            // here, so that a copy that tested the matrix again would answer otherwise).
+            Gate copied(applied), assigned(zero, 1), movedTo(zero, 1);
+            assigned = applied;
+            Gate source(applied);
+            Gate moved(std::move(source));
+            Gate another(applied);
+            movedTo = std::move(another);
+            Require(!copied.isUnitary() && !assigned.isUnitary() && !moved.isUnitary() && !movedTo.isUnitary(),
+                    "A copy of an applied gate does not know what the gate knew");
             applied = hadamard;
             Require(applied.isUnitary(), "An applied gate kept the caller's word for another matrix");
+
+            // A derived gate may change its matrix without saying so: it is tested on every call.
+            struct Derived : Gate
+            {
+                using Gate::Gate;
+
+                void Replace(const Matrix &matrix)
+                {
+                    operatorMat = matrix;
+                }
+            };
+
+            Derived derived(hadamard, 0);
+            Require(derived.isUnitary(), "A derived applied gate does not test its matrix");
+            derived.Replace(zero);
+            Require(!derived.isUnitary(), "A derived applied gate kept what it found for another matrix");
+            const Gate fromDerived(derived);
+            Require(!fromDerived.isUnitary(), "A copy took over what a derived gate no longer holds");
 
             Simulator projected(2);
             projected.ApplyGate(Gate(hadamard, 0));

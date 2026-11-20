@@ -529,8 +529,9 @@ template <class MatrixClass = Eigen::MatrixXcd> class ThreeQubitsGate : public Q
 
 namespace AppliedGateDetail
 {
-// What an applied gate knows of its matrix: whether it is unitary, once it was tested or told. Copies carry it, and
-// it is atomic because a gate that threads share may be asked by several of them (they would all find the same).
+// What an applied gate knows of its matrix: whether it is unitary, once it was tested or told. It is atomic because
+// a gate that threads share may be asked by several of them (they would all find the same), and copyable so that
+// the gate stays so. The gate decides what a copy of it takes over: see AppliedGate::CurrentUnitarity.
 struct KnownUnitarity
 {
     enum : uint8_t
@@ -896,6 +897,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
           payload(other.payload)
     {
         structure = other.CurrentStructure();
+        unitarity.value.store(other.CurrentUnitarity(), std::memory_order_relaxed);
     }
 
     AppliedGate(AppliedGate &&other) noexcept
@@ -905,6 +907,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         // A derived source may have changed its protected matrix directly.
         // Its matrix has already moved, so classify the destination instead.
         structure = other.IsExactAppliedGate() ? other.structure : ClassifyGateMatrix(BaseClass::operatorMat);
+        unitarity.value.store(other.CurrentUnitarity(), std::memory_order_relaxed);
     }
 
     AppliedGate(const MatrixClass &op, size_t q1 = 0, size_t q2 = 0, size_t q3 = 0)
@@ -1135,7 +1138,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         if (this == &other)
             return *this;
         BaseClass::operatorMat = other.operatorMat;
-        AssignStructure(other.CurrentStructure());
+        AssignStructure(other.CurrentStructure(), other.CurrentUnitarity());
         q1 = other.q1;
         q2 = other.q2;
         q3 = other.q3;
@@ -1148,8 +1151,9 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
         if (this == &other)
             return *this;
         const GateStructure otherStructure = other.CurrentStructure();
+        const uint8_t otherUnitarity = other.CurrentUnitarity();
         BaseClass::operatorMat = std::move(other.operatorMat);
-        AssignStructure(otherStructure);
+        AssignStructure(otherStructure, otherUnitarity);
         q1 = other.q1;
         q2 = other.q2;
         q3 = other.q3;
@@ -1328,10 +1332,15 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
     }
 
     // The matrix was handed over, so nothing is known of it until it is tested: once, on the first call, and again
-    // only after the matrix changes. A caller that knows can say so and spare the test (setUnitary). A compact gate
-    // has no matrix here; whoever applies its tables validates them.
+    // only after the matrix changes. A caller that knows can say so and spare the test (setUnitary). Copies and
+    // assignments take over what the source knows. What is known is kept by the exact type only, which alone can
+    // guarantee that every matrix mutation uses OperatorChanged (see CurrentStructure): a derived gate tests its
+    // matrix on every call, whatever it was told. A compact gate has no matrix here; whoever applies its tables
+    // validates them.
     bool isUnitary() const override
     {
+        if (!IsExactAppliedGate())
+            return HasCompact() || IsUnitaryMatrix(BaseClass::operatorMat);
         uint8_t known = unitarity.value.load(std::memory_order_relaxed);
         if (known == AppliedGateDetail::KnownUnitarity::NotTested)
         {
@@ -1339,10 +1348,7 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
                 return true;
             known = IsUnitaryMatrix(BaseClass::operatorMat) ? AppliedGateDetail::KnownUnitarity::Unitary
                                                             : AppliedGateDetail::KnownUnitarity::NotUnitary;
-            // Kept by the exact type only, which alone can guarantee that every matrix mutation uses
-            // OperatorChanged (see CurrentStructure): a derived gate is tested on every call.
-            if (IsExactAppliedGate())
-                unitarity.value.store(known, std::memory_order_relaxed);
+            unitarity.value.store(known, std::memory_order_relaxed);
         }
         return known == AppliedGateDetail::KnownUnitarity::Unitary;
     }
@@ -1446,15 +1452,23 @@ template <class MatrixClass = Eigen::MatrixXcd> class AppliedGate : public Gates
 
     // After the matrix was assigned: the exact type takes the known descriptor, a derived
     // destination (which may override OperatorChanged) is refreshed through its hook.
-    void AssignStructure(const GateStructure &known)
+    void AssignStructure(const GateStructure &known, uint8_t knownUnitarity)
     {
         if (IsExactAppliedGate())
         {
             structure = known;
-            unitarity.value.store(AppliedGateDetail::KnownUnitarity::NotTested, std::memory_order_relaxed);
+            unitarity.value.store(knownUnitarity, std::memory_order_relaxed);
         }
         else
             OperatorChanged();
+    }
+
+    // What a copy may take over: what the exact type knows of its matrix, and nothing from a derived source, which
+    // may have changed its matrix since.
+    uint8_t CurrentUnitarity() const
+    {
+        return IsExactAppliedGate() ? unitarity.value.load(std::memory_order_relaxed)
+                                    : static_cast<uint8_t>(AppliedGateDetail::KnownUnitarity::NotTested);
     }
 
     // don't use it!
