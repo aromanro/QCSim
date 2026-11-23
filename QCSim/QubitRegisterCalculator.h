@@ -259,6 +259,14 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         return parallel ? LocalDensity<Bits, true>(state, bits, count) : LocalDensity<Bits, false>(state, bits, count);
     }
 
+    template <unsigned Bits>
+    static inline std::array<double, (size_t{1} << Bits)> LocalPopulations(
+        const VectorClass &state, const std::array<size_t, Bits> &bits, size_t count, bool parallel)
+    {
+        return parallel ? LocalDensity<Bits, true, true>(state, bits, count)
+                        : LocalDensity<Bits, false, true>(state, bits, count);
+    }
+
     // ApplyLocalMap for a dense map on up to three index bits that also returns the squared norm the state has
     // afterwards, the sum of |amplitude|^2, from the same pass. A quantum trajectory applies the operators that
     // the noise channels of a block leave when nothing happens and learns from that norm, without reading the
@@ -1481,10 +1489,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         });
     }
 
-    // LocalDensityMatrix. Only the lower triangle is accumulated; the matrix is Hermitian.
-    template <unsigned Bits, bool Parallel>
-    static inline std::array<std::complex<double>, (size_t{1} << (2 * Bits))> LocalDensity(
-        const VectorClass &vector, const std::array<size_t, Bits> &bits, size_t count)
+    // Only the lower triangle is accumulated; for populations only its real diagonal is needed.
+    template <unsigned Bits, bool Parallel, bool PopulationsOnly = false>
+    static inline auto LocalDensity(const VectorClass &vector, const std::array<size_t, Bits> &bits, size_t count)
     {
         static_assert(Bits >= 1 && Bits <= 3, "A local density matrix covers one to three index bits");
         constexpr size_t dimension = size_t{1} << Bits;
@@ -1503,8 +1510,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         while (active / blockSize > 4096)
             blockSize <<= 1;
         const size_t blocks = active / blockSize;
-        std::array<double, 2 * dimension * dimension> single{};
-        std::vector<std::array<double, 2 * dimension * dimension>> several(blocks > 1 ? blocks : 0);
+        using Sums = std::array<double, PopulationsOnly ? dimension : 2 * dimension * dimension>;
+        Sums single{};
+        std::vector<Sums> several(blocks > 1 ? blocks : 0);
         auto *const partial = blocks > 1 ? several.data() : &single;
         const auto *const data = vector.data();
         const Eigen::Index stride = vector.innerStride();
@@ -1515,11 +1523,11 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         const size_t run = std::min(plan.tileSize, blockSize);
         ForEachTile<Parallel>(Parallel ? TeamThreads(count) : 1, blocks, [&](size_t block) {
             constexpr size_t dim = size_t{1} << Bits;
-            double sums[2 * dim * dim] = {};
+            Sums sums{};
 #ifdef QCSIM_SSE2
             if constexpr (std::is_same_v<typename VectorClass::Scalar, std::complex<double>>)
             {
-                constexpr size_t entries = dim * (dim + 1) / 2;
+                constexpr size_t entries = PopulationsOnly ? dim : dim * (dim + 1) / 2;
 #ifdef QCSIM_AVX2
                 if (Amplitudes::contiguous && plan.strideShift == 0 && run >= 2)
                 {
@@ -1536,11 +1544,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             {
                                 v[r] =
                                     _mm256_loadu_pd(reinterpret_cast<const double *>(&data[(first + k) | offsets[r]]));
-                                swapped[r] = _mm256_permute_pd(v[r], 5);
+                                if constexpr (!PopulationsOnly)
+                                    swapped[r] = _mm256_permute_pd(v[r], 5);
                             }
                             size_t p = 0;
                             for (size_t r = 0; r < dim; ++r)
-                                for (size_t c = 0; c <= r; ++c, ++p)
+                                for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c, ++p)
                                 {
                                     accRe[p] = MultiplyAdd(v[r], v[c], accRe[p]);
                                     if (c != r)
@@ -1550,13 +1559,17 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                     }
                     size_t p = 0;
                     for (size_t r = 0; r < dim; ++r)
-                        for (size_t c = 0; c <= r; ++c, ++p)
+                        for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c, ++p)
                         {
                             alignas(32) double re[4], im[4];
                             _mm256_store_pd(re, accRe[p]);
-                            _mm256_store_pd(im, accIm[p]);
-                            sums[2 * (r * dim + c)] = (re[0] + re[1]) + (re[2] + re[3]);
-                            sums[2 * (r * dim + c) + 1] = (im[1] - im[0]) + (im[3] - im[2]);
+                            const size_t index = PopulationsOnly ? r : 2 * (r * dim + c);
+                            sums[index] = (re[0] + re[1]) + (re[2] + re[3]);
+                            if constexpr (!PopulationsOnly)
+                            {
+                                _mm256_store_pd(im, accIm[p]);
+                                sums[index + 1] = (im[1] - im[0]) + (im[3] - im[2]);
+                            }
                         }
                 }
                 else
@@ -1573,11 +1586,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         {
                             v[r] = _mm_loadu_pd(reinterpret_cast<const double *>(
                                 &data[static_cast<Eigen::Index>(base | offsets[r]) * stride]));
-                            swapped[r] = _mm_shuffle_pd(v[r], v[r], 1);
+                            if constexpr (!PopulationsOnly)
+                                swapped[r] = _mm_shuffle_pd(v[r], v[r], 1);
                         }
                         size_t p = 0;
                         for (size_t r = 0; r < dim; ++r)
-                            for (size_t c = 0; c <= r; ++c, ++p)
+                            for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c, ++p)
                             {
                                 accRe[p] = _mm_add_pd(accRe[p], _mm_mul_pd(v[r], v[c]));
                                 if (c != r)
@@ -1586,17 +1600,20 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                     }
                     size_t p = 0;
                     for (size_t r = 0; r < dim; ++r)
-                        for (size_t c = 0; c <= r; ++c, ++p)
+                        for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c, ++p)
                         {
                             double re[2], im[2];
                             _mm_storeu_pd(re, accRe[p]);
-                            _mm_storeu_pd(im, accIm[p]);
-                            sums[2 * (r * dim + c)] = re[0] + re[1];
-                            sums[2 * (r * dim + c) + 1] = im[1] - im[0];
+                            const size_t index = PopulationsOnly ? r : 2 * (r * dim + c);
+                            sums[index] = re[0] + re[1];
+                            if constexpr (!PopulationsOnly)
+                            {
+                                _mm_storeu_pd(im, accIm[p]);
+                                sums[index + 1] = im[1] - im[0];
+                            }
                         }
                 }
-                for (size_t k = 0; k < 2 * dim * dim; ++k)
-                    partial[block][k] = sums[k];
+                partial[block] = sums;
                 return;
             }
 #endif
@@ -1611,29 +1628,35 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                     im[r] = amplitude.imag();
                 }
                 for (size_t r = 0; r < dim; ++r)
-                    for (size_t c = 0; c <= r; ++c)
+                    for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c)
                     {
-                        sums[2 * (r * dim + c)] += re[r] * re[c] + im[r] * im[c];
-                        sums[2 * (r * dim + c) + 1] += im[r] * re[c] - re[r] * im[c];
+                        const size_t index = PopulationsOnly ? r : 2 * (r * dim + c);
+                        sums[index] += re[r] * re[c] + im[r] * im[c];
+                        if constexpr (!PopulationsOnly)
+                            sums[index + 1] += im[r] * re[c] - re[r] * im[c];
                     }
             }
-            for (size_t k = 0; k < 2 * dim * dim; ++k)
-                partial[block][k] = sums[k];
+            partial[block] = sums;
         });
 
-        std::array<double, 2 * dimension * dimension> total{};
+        Sums total{};
         for (size_t block = 0; block < blocks; ++block)
             for (size_t k = 0; k < total.size(); ++k)
                 total[k] += partial[block][k];
-        std::array<std::complex<double>, dimension * dimension> rho{};
-        for (size_t r = 0; r < dimension; ++r)
-            for (size_t c = 0; c <= r; ++c)
-            {
-                const std::complex<double> value(total[2 * (r * dimension + c)], total[2 * (r * dimension + c) + 1]);
-                rho[r * dimension + c] = value;
-                rho[c * dimension + r] = std::conj(value);
-            }
-        return rho;
+        if constexpr (PopulationsOnly)
+            return total;
+        else
+        {
+            std::array<std::complex<double>, dimension * dimension> rho{};
+            for (size_t r = 0; r < dimension; ++r)
+                for (size_t c = 0; c <= r; ++c)
+                {
+                    const std::complex<double> value(total[2 * (r * dimension + c)], total[2 * (r * dimension + c) + 1]);
+                    rho[r * dimension + c] = value;
+                    rho[c * dimension + r] = std::conj(value);
+                }
+            return rho;
+        }
     }
 
     // ApplyLocalMap. Every input of a block is read before any output is written. The nonzero entries of each row

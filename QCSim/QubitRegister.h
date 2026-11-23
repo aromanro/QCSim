@@ -642,6 +642,23 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         return LocalDensity<3>({qubit, qubit2, qubit3});
     }
 
+    // Raw squared-amplitude sums in the same basis order as LocalDensityMatrix. Their sum is the state's
+    // squared norm, including for an unnormalized state.
+    std::array<double, 2> LocalPopulations(size_t qubit) const
+    {
+        return Populations<1>({qubit});
+    }
+
+    std::array<double, 4> LocalPopulations(size_t qubit, size_t qubit2) const
+    {
+        return Populations<2>({qubit, qubit2});
+    }
+
+    std::array<double, 8> LocalPopulations(size_t qubit, size_t qubit2, size_t qubit3) const
+    {
+        return Populations<3>({qubit, qubit2, qubit3});
+    }
+
     // Applies a 2x2, 4x4 or 8x8 matrix, which need not be unitary, to one, two or three qubits and returns the
     // squared norm the state has afterwards, from the same pass. The first qubit is the least significant bit of
     // the matrix index. The state is not renormalized. A trajectory uses this to apply, on speculation, the
@@ -667,8 +684,9 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
     // reproduces the channel. The operators are 2x2, on `qubit`, or 4x4, with `qubit` the low bit of the matrix
     // index and `controllingQubit1` the high one. `random` is uniform in [0, 1).
     //
-    // The probabilities tr(E_k rho E_k^dagger) all come from the reduced density matrix of the targets, one
-    // read of the state whatever the number of operators; the chosen operator then costs one gate application.
+    // The probabilities tr(E_k rho E_k^dagger) come from the reduced density matrix of the targets. When every
+    // operator has at most one nonzero per row (as in amplitude damping), only the target populations are
+    // needed. Both take one pass whatever the number of operators; the chosen operator costs one gate application.
     // Trace preservation is not checked: the weights are taken relative to their sum, and the state leaves with
     // unit norm. Returns the index of the operator applied.
     //
@@ -693,16 +711,45 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
             if (e.rows() != dimension || e.cols() != dimension || !e.allFinite())
                 throw std::invalid_argument("Kraus operators must be finite square matrices of the same size");
 
-        const MatrixClass rho =
-            dimension == 2 ? LocalDensityMatrix(qubit) : LocalDensityMatrix(qubit, controllingQubit1);
         // Stack storage for the usual few operators: the weight of each, and its reach when the weight is in doubt.
         double fewWeights[16], fewReaches[16];
         std::vector<double> manyValues(kraus.size() > 16 ? 2 * kraus.size() : 0);
         double *const weights = kraus.size() > 16 ? manyValues.data() : fewWeights;
         double *const reaches = kraus.size() > 16 ? manyValues.data() + kraus.size() : fewReaches;
+        const bool usePopulations = std::all_of(kraus.begin(), kraus.end(), [](const MatrixClass &op) {
+            // Distinct input columns have disjoint row support, so E^dagger E is diagonal without cancellation.
+            for (Eigen::Index row = 0; row < op.rows(); ++row)
+            {
+                bool occupied = false;
+                for (Eigen::Index col = 0; col < op.cols(); ++col)
+                    if (op(row, col) != typename MatrixClass::Scalar(0))
+                    {
+                        if (occupied)
+                            return false;
+                        occupied = true;
+                    }
+            }
+            return true;
+        });
+        MatrixClass rho;
+        if (usePopulations)
+        {
+            if (dimension == 2)
+                KrausPopulationWeights(kraus, LocalPopulations(qubit), weights);
+            else
+                KrausPopulationWeights(kraus, LocalPopulations(qubit, controllingQubit1), weights);
+        }
+        else
+            rho = dimension == 2 ? LocalDensityMatrix(qubit) : LocalDensityMatrix(qubit, controllingQubit1);
         double total = 0., doubt = 0.;
         for (size_t k = 0; k < kraus.size(); ++k)
         {
+            if (usePopulations)
+            {
+                reaches[k] = -1.; // A sum of nonnegative terms cannot cancel.
+                total += weights[k];
+                continue;
+            }
             // The weight, and what the terms of its sum can add up to: a bound on them, d * sum_a |column a of E|^2
             // rho(a, a), by Cauchy-Schwarz. The entries of rho are known to their own rounding, so the weight is
             // known to that rounding of its reach. A weight that is a small fraction of its reach is what the
@@ -986,16 +1033,7 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         constexpr Eigen::Index dimension = Eigen::Index{1} << Qubits;
         if (matrix.rows() != dimension || matrix.cols() != dimension || !matrix.allFinite())
             throw std::invalid_argument("The matrix must be finite and match its qubits");
-        std::array<size_t, Qubits> bits{};
-        for (unsigned k = 0; k < Qubits; ++k)
-        {
-            if (qubits[k] >= NrQubits)
-                throw std::invalid_argument("Qubit number is too high");
-            for (unsigned j = 0; j < k; ++j)
-                if (qubits[j] == qubits[k])
-                    throw std::invalid_argument("Qubits must be different");
-            bits[k] = size_t{1} << qubits[k];
-        }
+        const auto bits = LocalBits<Qubits>(qubits);
         std::array<std::complex<double>, (size_t{1} << (2 * Qubits))> coefficients;
         for (Eigen::Index row = 0; row < dimension; ++row)
             for (Eigen::Index col = 0; col < dimension; ++col)
@@ -1071,7 +1109,31 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         return weight;
     }
 
-    template <unsigned Qubits> MatrixClass LocalDensity(const std::array<size_t, Qubits> &qubits) const
+    // Keep the multiplication order of the density path. Squaring the coefficient first could overflow for an
+    // incomplete Kraus family on an unnormalized state even when its branch weight is representable.
+    template <size_t Dimension>
+    static void KrausPopulationWeights(const std::vector<MatrixClass> &kraus, const std::array<double, Dimension> &p,
+                                       double *weights)
+    {
+        for (size_t k = 0; k < kraus.size(); ++k)
+        {
+            double weight = 0.;
+            for (size_t row = 0; row < Dimension; ++row)
+                for (size_t col = 0; col < Dimension; ++col)
+                {
+                    const std::complex<double> value(kraus[k](row, col));
+                    if (value != std::complex<double>{})
+                    {
+                        weight += std::real((value * p[col]) * std::conj(value));
+                        break;
+                    }
+                }
+            weights[k] = weight;
+        }
+    }
+
+    template <unsigned Qubits>
+    std::array<size_t, Qubits> LocalBits(const std::array<size_t, Qubits> &qubits) const
     {
         std::array<size_t, Qubits> bits{};
         for (unsigned k = 0; k < Qubits; ++k)
@@ -1083,6 +1145,19 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
                     throw std::invalid_argument("Qubits must be different");
             bits[k] = size_t{1} << qubits[k];
         }
+        return bits;
+    }
+
+    template <unsigned Qubits>
+    std::array<double, (size_t{1} << Qubits)> Populations(const std::array<size_t, Qubits> &qubits) const
+    {
+        return BaseClass::template LocalPopulations<Qubits>(registerStorage, LocalBits<Qubits>(qubits),
+                                                             NrBasisStates, UseMultithreading());
+    }
+
+    template <unsigned Qubits> MatrixClass LocalDensity(const std::array<size_t, Qubits> &qubits) const
+    {
+        const auto bits = LocalBits<Qubits>(qubits);
         const auto rho =
             BaseClass::template LocalDensityMatrix<Qubits>(registerStorage, bits, NrBasisStates, UseMultithreading());
         constexpr Eigen::Index dimension = Eigen::Index{1} << Qubits;
