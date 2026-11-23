@@ -1342,6 +1342,29 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         {
             if (count < 2 * dimension)
                 return false;
+            // Adjacent blocks share a vector. A real matrix scales both components of each complex input by
+            // the same coefficient. Keep the column order and multiply-add rounding of the complex kernel.
+            if (std::all_of(coefficients, coefficients + dimension * dimension,
+                            [](const auto &value) { return value.imag() == 0.; }))
+            {
+                alignas(32) __m256d real[dimension * dimension];
+                for (size_t i = 0; i < dimension * dimension; ++i)
+                    real[i] = _mm256_set1_pd(coefficients[i].real());
+                ForEachSelected<Parallel>(count, targets | controls.zeros | 1, controls.ones, [&](size_t base) {
+                    constexpr size_t dim = size_t{1} << Bits;
+                    __m256d v[dim];
+                    for (size_t c = 0; c < dim; ++c)
+                        v[c] = _mm256_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                    for (size_t r = 0; r < dim; ++r)
+                    {
+                        __m256d acc = _mm256_setzero_pd();
+                        for (size_t c = 0; c < dim; ++c)
+                            acc = MultiplyAdd(real[r * dim + c], v[c], acc);
+                        _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                    }
+                });
+                return true;
+            }
             alignas(32) __m256d re[dimension * dimension], im[dimension * dimension];
             for (size_t i = 0; i < dimension * dimension; ++i)
             {
