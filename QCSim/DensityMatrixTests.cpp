@@ -736,11 +736,27 @@ static bool StatevectorKrausTrajectoryTest()
                        : qubits.size() == 2 ? reg.LocalDensityMatrix(qubits[0], qubits[1])
                                             : reg.LocalDensityMatrix(qubits[0], qubits[1], qubits[2]);
             };
+            const auto checkPopulations = [&](const Eigen::MatrixXcd &rho) {
+                const auto same = [&](const auto &populations) {
+                    // The compiler can contract the scalar population and density reductions differently.
+                    for (size_t i = 0; i < populations.size(); ++i)
+                        if (!approxEqual(populations[i], rho(i, i).real(), 1E-14))
+                            return false;
+                    return true;
+                };
+                if (qubits.size() == 1)
+                    return same(reg.LocalPopulations(qubits[0]));
+                if (qubits.size() == 2)
+                    return same(reg.LocalPopulations(qubits[0], qubits[1]));
+                return same(reg.LocalPopulations(qubits[0], qubits[1], qubits[2]));
+            };
             const Eigen::MatrixXcd parallel = evaluate();
+            const bool parallelPopulations = checkPopulations(parallel);
             reg.SetMultithreading(false);
             const Eigen::MatrixXcd serial = evaluate();
+            const bool serialPopulations = checkPopulations(serial);
             reg.SetMultithreading(true);
-            if ((parallel - expected).norm() > 1E-12 || parallel != serial)
+            if ((parallel - expected).norm() > 1E-12 || parallel != serial || !parallelPopulations || !serialPopulations)
             {
                 std::cout << "Reduced density matrix of " << qubits.size() << " qubits is wrong on " << nrQubits
                           << " qubits (error " << (parallel - expected).norm()
@@ -829,6 +845,59 @@ static bool StatevectorKrausTrajectoryTest()
             many.emplace_back(e / std::sqrt(7.));
     if (!check(many, {2}, "Kraus set with 21 operators"))
         return false;
+
+    // A sparse two-qubit channel, including complex phases and a jump between different columns. Each branch
+    // must preserve the rest of an entangled register and renormalize even if the state came from a filter.
+    {
+        Eigen::MatrixXcd stay = Eigen::MatrixXcd::Identity(4, 4), jump = Eigen::MatrixXcd::Zero(4, 4);
+        stay(1, 1) = std::sqrt(0.25);
+        stay(2, 2) = std::sqrt(0.75);
+        jump(3, 1) = std::complex<double>(0., std::sqrt(0.75));
+        jump(1, 2) = -0.5;
+        if (!check({stay, jump}, {3, 0}, "Two-qubit population-weighted channel"))
+            return false;
+        QC::QubitRegister<> reg(nrQubits);
+        Eigen::VectorXcd scaled = 3. * psi;
+        reg.setRegisterStorageFastNoNormalize(scaled);
+        const Eigen::VectorXcd jumped = DM_EmbedOperator(jump, {3, 0}, nrQubits) * psi;
+        if (reg.ApplyKrausOperator({stay, jump}, std::nextafter(1., 0.), 3, 0) != 1 ||
+            (reg.getRegisterStorage() - jumped.normalized()).norm() > 1E-12)
+        {
+            std::cout << "A population-weighted branch on an unnormalized register is wrong" << std::endl;
+            return false;
+        }
+    }
+
+    // A nonzero overlap in a row, however small, can decide the branch at a boundary.
+    {
+        QC::QubitRegister<> reg(1);
+        reg.ApplyGate(QC::Gates::HadamardGate<>(), 0);
+        Eigen::MatrixXcd projector = Eigen::MatrixXcd::Zero(2, 2);
+        projector(0, 0) = 1.;
+        Eigen::MatrixXcd tilted = projector;
+        tilted(0, 1) = 1E-12;
+        if (reg.ApplyKrausOperator({tilted, projector}, 0.5, 0) != 0)
+        {
+            std::cout << "A nearly diagonal Kraus effect lost its coherence" << std::endl;
+            return false;
+        }
+    }
+
+    // Squaring the coefficient first would overflow although the image and branch weight are finite.
+    {
+        QC::QubitRegister<> reg(1);
+        Eigen::VectorXcd input(2);
+        input << 1., 1E-150;
+        reg.setRegisterStorageFastNoNormalize(input);
+        Eigen::MatrixXcd gain = Eigen::MatrixXcd::Zero(2, 2);
+        gain(0, 1) = 1E200;
+        reg.ApplyKrausOperator({gain}, 0.5, 0);
+        if (std::abs(reg.getBasisStateProbability(0) - 1.) > 1E-12)
+        {
+            std::cout << "A sparse Kraus operator on a small amplitude was normalized incorrectly" << std::endl;
+            return false;
+        }
+    }
 
     // An operator without weight on the state is never selected: |0> under a Z-basis measurement channel.
     {
