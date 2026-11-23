@@ -4,6 +4,7 @@
 #include "ExtendedStabilizer.h"
 #include "PauliPropagator.h"
 #include "QuantumGate.h"
+#include "QubitRegisterCalculator.h"
 #include <iostream>
 
 namespace QC
@@ -39,6 +40,57 @@ inline Vector Apply(const Vector &state, const Matrix &matrix, const std::vector
         }
     }
     return output;
+}
+
+inline void RealDenseStatevectorGates()
+{
+    // A nonsymmetric, dense real orthogonal matrix.
+    const auto mixingGate = [](unsigned dim) {
+        const Eigen::VectorXd axis = Eigen::VectorXd::LinSpaced(dim, 1., dim).normalized();
+        Matrix gate = (Eigen::MatrixXd::Identity(dim, dim) - 2. * axis * axis.transpose()).cast<std::complex<double>>();
+        gate.row(0).swap(gate.row(1));
+        return gate;
+    };
+    for (unsigned n : {5U, 14U})
+    {
+        Vector initial(1U << n);
+        for (Eigen::Index i = 0; i < initial.size(); ++i)
+            initial(i) = {std::sin(.13 * i + .4), std::cos(.37 * i - .1)};
+        initial.normalize();
+        for (const std::vector<unsigned> &qubits : std::vector<std::vector<unsigned>>{
+                 {1, 3}, {3, 1}, {1, 2, n - 1}, {n - 1, 2, 1}, {n - 1, 0, 2}})
+        {
+            const unsigned arity = static_cast<unsigned>(qubits.size()), dim = 1U << arity;
+            std::array<size_t, 3> bits{};
+            for (unsigned i = 0; i < arity; ++i)
+                bits[i] = size_t{1} << qubits[i];
+            Matrix gate = mixingGate(dim);
+            const auto check = [&](const Vector &state, const Matrix &matrix) {
+                const Vector expected = Apply(state, matrix, qubits);
+                const auto structure = Gates::ClassifyGateMatrix(matrix);
+                for (bool parallel : {false, true})
+                {
+                    Vector actual = state;
+                    QubitRegisterCalculator<>::ApplyGateInPlace(actual, matrix, structure, bits, arity, state.size(),
+                                                               parallel);
+                    Require((actual - expected).norm() < 2e-15, "Real dense gate changed its amplitudes or target order");
+                    // Compare the imaginary part separately: tiny imaginary coefficients must survive dispatch.
+                    const double scale = expected.imag().cwiseAbs().maxCoeff();
+                    Require((actual.imag() - expected.imag()).cwiseAbs().maxCoeff() <= 2e-14 * scale,
+                            "Dense gate lost an imaginary contribution");
+                }
+            };
+            check(initial, gate);
+            if (arity == 3)
+            {
+                Matrix controlled = Matrix::Identity(8, 8);
+                controlled.bottomRightCorner(4, 4) = mixingGate(4);
+                check(initial, controlled);
+            }
+            gate(dim - 1, dim - 1).imag(1e-180);
+            check(initial.real().cast<std::complex<double>>(), gate);
+        }
+    }
 }
 
 inline double Expectation(const Vector &state, const std::string &pauli)
@@ -260,6 +312,7 @@ inline bool Run()
     try
     {
         Definitions();
+        RealDenseStatevectorGates();
         CheckGeneric(Gates::RXXGate<>(.337));
         CheckGeneric(Gates::RYYGate<>(-.733));
         CheckGeneric(Gates::RZZGate<>(.173));
