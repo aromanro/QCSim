@@ -738,8 +738,9 @@ static bool StatevectorKrausTrajectoryTest()
             };
             const auto checkPopulations = [&](const Eigen::MatrixXcd &rho) {
                 const auto same = [&](const auto &populations) {
+                    // The compiler can contract the scalar population and density reductions differently.
                     for (size_t i = 0; i < populations.size(); ++i)
-                        if (populations[i] != rho(i, i).real())
+                        if (!approxEqual(populations[i], rho(i, i).real(), 1E-14))
                             return false;
                     return true;
                 };
