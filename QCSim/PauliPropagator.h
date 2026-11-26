@@ -1223,13 +1223,12 @@ class PauliPropagator
         AddCompiled(q0, q1, q2, PauliDetail::CachedMatrixTransfer(matrix, static_cast<unsigned>(gate.Arity())));
     }
 
-    // Whether a gate keeps a matrix. A compact gate keeps none, and the
-    // matrix accessor of its base class then answers with an arity of zero
-    // without a virtual call. Types that are not built on that class are asked
-    // for a compact operation whenever they can hold one.
+    // Whether a gate keeps a matrix. A compact gate keeps none, which its
+    // base class answers without a virtual call. Types that are not built on
+    // that class are asked for a compact operation whenever they can hold one.
     template <class Matrix> static bool KeepsMatrix(const Gates::QuantumGateWithOp<Matrix> *gate)
     {
-        return gate->Gates::QuantumGateWithOp<Matrix>::getQubitsNumber() != 0;
+        return gate && gate->hasOperatorMatrix();
     }
 
     static bool KeepsMatrix(const void *)

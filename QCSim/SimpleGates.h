@@ -251,6 +251,13 @@ template <class MatrixClass = Eigen::MatrixXcd> class QuantumGateWithOp : public
         return operatorMat;
     }
 
+    // Whether the gate stores a dense matrix. A compact AppliedGate keeps an
+    // empty one as a sentinel. Not virtual: it only inspects the stored matrix.
+    bool hasOperatorMatrix() const noexcept
+    {
+        return operatorMat.rows() != 0;
+    }
+
     virtual UnitaryGateDescriptor getUnitaryDescriptor() const
     {
         return {};
