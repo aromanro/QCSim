@@ -1523,6 +1523,79 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         });
     }
 
+#ifdef QCSIM_AVX2
+    static constexpr size_t ThreeQubitDensityTileSize = 64;
+
+    // Form the complex 8x8 Gram matrix in 2x2 pieces. Each pair of columns fits in one AVX register.
+    // Packing 64 groups at a time lets the dot products reuse the same amplitudes in L1 while keeping
+    // their running sums in registers. Separate real and imaginary products retain the reduction order.
+    template <bool SeparatePairs>
+    static EIGEN_DONT_INLINE void ThreeQubitDensityBlock(const std::complex<double> *data,
+                                                         const std::array<size_t, 8> &offsets,
+                                                         const IndexPlan &plan, size_t begin, size_t end,
+                                                         std::array<double, 128> &sums)
+    {
+        constexpr size_t tileSize = ThreeQubitDensityTileSize;
+        // When physical bit zero is free, the existing AVX reduction sums even and odd groups separately.
+        constexpr size_t parts = SeparatePairs ? 2 : 1;
+        // The two vectors hold one row component times [Re(c), Im(c), Re(c+1), Im(c+1)].
+        struct Products
+        {
+            __m256d rowReal, rowImag;
+        };
+        Products products[parts][8][4]{};
+        alignas(32) std::complex<double> panel[tileSize][8];
+        for (size_t tile = begin; tile < end; tile += tileSize)
+        {
+            for (size_t j = 0; j < tileSize; ++j)
+            {
+                const size_t base = plan.template Expand<3>(tile + j);
+                for (size_t c = 0; c < 8; ++c)
+                    panel[j][c] = data[base | offsets[c]];
+            }
+            for (size_t c = 0; c < 8; c += 2)
+                for (size_t r = c; r < 8; r += 2)
+                    for (size_t part = 0; part < parts; ++part)
+                    {
+                        auto &first = products[part][r][c / 2];
+                        auto &second = products[part][r + 1][c / 2];
+                        auto a = first, b = second;
+                        for (size_t j = part; j < tileSize; j += parts)
+                        {
+                            const auto columns = _mm256_load_pd(reinterpret_cast<const double *>(&panel[j][c]));
+                            const auto add = [&](double component, __m256d acc) {
+                                const auto x = _mm256_set1_pd(component);
+                                if constexpr (SeparatePairs)
+                                    return MultiplyAdd(x, columns, acc);
+                                return _mm256_add_pd(acc, _mm256_mul_pd(x, columns));
+                            };
+                            a.rowReal = add(panel[j][r].real(), a.rowReal);
+                            a.rowImag = add(panel[j][r].imag(), a.rowImag);
+                            b.rowReal = add(panel[j][r + 1].real(), b.rowReal);
+                            b.rowImag = add(panel[j][r + 1].imag(), b.rowImag);
+                        }
+                        first = a;
+                        second = b;
+                    }
+        }
+        for (size_t r = 0; r < 8; ++r)
+            for (size_t c = 0; c <= r; c += 2)
+                for (size_t part = 0; part < parts; ++part)
+                {
+                    alignas(32) double re[4], im[4];
+                    _mm256_store_pd(re, products[part][r][c / 2].rowReal);
+                    _mm256_store_pd(im, products[part][r][c / 2].rowImag);
+                    for (size_t k = 0; k < 2 && c + k <= r; ++k)
+                    {
+                        const size_t idx = 2 * (8 * r + c + k);
+                        sums[idx] += re[2 * k] + im[2 * k + 1];
+                        if (r != c + k)
+                            sums[idx + 1] += im[2 * k] - re[2 * k + 1];
+                    }
+                }
+    }
+#endif
+
     // Only the lower triangle is accumulated; for populations only its real diagonal is needed.
     template <unsigned Bits, bool Parallel, bool PopulationsOnly = false, bool RealPartOnly = false>
     static inline auto LocalDensity(const VectorClass &vector, const std::array<size_t, Bits> &bits, size_t count)
@@ -1557,6 +1630,19 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         // amplitudes where the same amplitude of two consecutive blocks is adjacent (no target on index bit 0).
         const size_t run = std::min(plan.tileSize, blockSize);
         ForEachTile<Parallel>(Parallel ? TeamThreads(count) : 1, blocks, [&](size_t block) {
+#ifdef QCSIM_AVX2
+            if constexpr (Bits == 3 && !PopulationsOnly && !RealPartOnly && Amplitudes::contiguous &&
+                          std::is_same_v<typename VectorClass::Scalar, std::complex<double>>)
+                if (blockSize % ThreeQubitDensityTileSize == 0)
+                {
+                    const size_t begin = block * blockSize, end = begin + blockSize;
+                    if (plan.strideShift == 0)
+                        ThreeQubitDensityBlock<true>(data, offsets, plan, begin, end, partial[block]);
+                    else
+                        ThreeQubitDensityBlock<false>(data, offsets, plan, begin, end, partial[block]);
+                    return;
+                }
+#endif
             constexpr size_t dim = size_t{1} << Bits;
             constexpr bool complexOffDiagonal = !PopulationsOnly && !RealPartOnly;
             Sums sums{};

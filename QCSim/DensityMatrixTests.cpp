@@ -761,6 +761,27 @@ static bool StatevectorKrausTrajectoryTest()
 {
     std::cout << "\nStatevector simulator - Kraus trajectory steps against the density matrix" << std::endl;
 
+    // The low-level calculator also accepts an explicit number of complete local groups.
+    // A partial final panel must leave the NaN padding out of the reduction.
+    for (const size_t groups : {63u, 64u, 65u, 127u, 128u})
+    {
+        Eigen::VectorXcd local(8);
+        for (int i = 0; i < 8; ++i)
+            local[i] = std::complex<double>(i + 1., 2. * i - 3.);
+        Eigen::VectorXcd storage = Eigen::VectorXcd::Constant(8 * (groups + 63),
+                                                              std::numeric_limits<double>::quiet_NaN());
+        for (size_t i = 0; i < groups; ++i)
+            storage.segment<8>(8 * i) = local;
+        const auto rho = QC::QubitRegisterCalculator<>::LocalDensityMatrix<3>(storage, {1, 2, 4}, 8 * groups, false);
+        for (int r = 0; r < 8; ++r)
+            for (int c = 0; c < 8; ++c)
+                if (rho[8 * r + c] != double(groups) * local[r] * std::conj(local[c]))
+                {
+                    std::cout << "Incorrect partial reduced-density panel for " << groups << " groups" << std::endl;
+                    return false;
+                }
+    }
+
     // All sixteen output amplitudes have squared magnitude below one subnormal unit.
     // Together they have a representable norm, for both placements of the paired SIMD lanes.
     const double tinyScale = std::ldexp(1., -537);
@@ -938,6 +959,60 @@ static bool StatevectorKrausTrajectoryTest()
         !check(DM_RandomKraus(8, 3, random, true), {3, 2, 1}, "Dense real three-qubit Kraus set") ||
         !check(DM_RandomKraus(8, 2, random), {2, 3, 0}, "Dense complex three-qubit Kraus set"))
         return false;
+    // Opposite relative phases cause exact destructive interference in different spectator sectors.
+    // The sectors lie in separate reduction blocks. The two dense maps have relative weights 4:1.
+    {
+        using Complex = std::complex<double>;
+        const std::array<Complex, 4> phase{1., Complex(0., 1.), -1., Complex(0., -1.)};
+        Eigen::MatrixXcd op(8, 8);
+        for (int r = 0; r < 8; ++r)
+            for (int c = 0; c < 8; ++c)
+                op(r, c) = phase[(r + c) % 4] / 8.;
+        const std::vector<Eigen::MatrixXcd> operators{op, op.conjugate()};
+        for (const std::array<size_t, 3> qubits :
+             {std::array<size_t, 3>{0, 12, 2}, {2, 0, 12}, {12, 2, 0}, {1, 12, 3}})
+        {
+            const auto offset = [&](unsigned local) {
+                size_t index = 0;
+                for (unsigned b = 0; b < 3; ++b)
+                    if (local & (1u << b))
+                        index |= size_t{1} << qubits[b];
+                return index;
+            };
+            const size_t mask = offset(7);
+            const size_t other = (size_t{1} << 15) | ((mask + 1) & ~mask);
+            Eigen::VectorXcd input = Eigen::VectorXcd::Zero(1 << 16);
+            input[0] = 0.25;
+            input[offset(5)] = Complex(0., 0.25);
+            input[other] = 0.5;
+            input[other | offset(5)] = Complex(0., -0.5);
+            for (size_t k = 0; k < 2; ++k)
+            {
+                QC::QubitRegister<> reg(16);
+                reg.setRegisterStorage(input);
+                reg.ComputeStart();
+                const size_t selected = reg.ApplyKrausOperator(operators, k == 0 ? 0.79 : 0.81, qubits[0], qubits[1],
+                                                               qubits[2]);
+                reg.ComputeEnd();
+                Eigen::VectorXcd expected = Eigen::VectorXcd::Zero(input.size());
+                for (unsigned r = 0; r < 8; ++r)
+                    expected[(k == 0 ? other : 0) | offset(r)] =
+                        (k == 0 ? phase[r % 4] : std::conj(phase[r % 4])) / std::sqrt(8.);
+                if (selected != k || !reg.getRegisterStorage().isApprox(expected, 1E-12))
+                {
+                    std::cout << "Dense complex Kraus interference selected or normalized the wrong branch" << std::endl;
+                    return false;
+                }
+                reg.setRegisterStorage(input);
+                reg.Compute();
+                if (!reg.getRegisterStorage().isApprox(expected, 1E-12))
+                {
+                    std::cout << "Dense complex Kraus interference did not replay" << std::endl;
+                    return false;
+                }
+            }
+        }
+    }
     // Even a tiny imaginary Kraus coefficient can cancel a real one through the state's coherence.
     {
         const double scale = 1E-140;
