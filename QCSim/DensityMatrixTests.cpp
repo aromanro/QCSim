@@ -681,6 +681,35 @@ static bool DensityMatrixSuperoperatorTest()
             return false;
     }
 
+    // This trace-preserving map has a positive, diagonally dominant Choi matrix. On |+><+|,
+    // the first three terms in this channel's off-diagonal row cancel exactly.
+    QC::DensityMatrix<> ordered(1);
+    const Eigen::MatrixXcd plus = Eigen::MatrixXcd::Constant(2, 2, 0.5);
+    const double residual = std::ldexp(1., -60);
+    Eigen::MatrixXcd map(4, 4);
+    map.row(0) << .5, 1. / 64, 1. / 64, .5;
+    map.row(1) << 1. / 16, 1. / 16, -1. / 8, residual;
+    map.row(2) << 1. / 16, -1. / 8, 1. / 16, residual;
+    map.row(3) << .5, -1. / 64, -1. / 64, .5;
+    ordered.setDensityMatrix(plus);
+    ordered.ApplySuperoperator(map, 0);
+    if (ordered.getDensityMatrix()(1, 0) != 0.5 * residual || ordered.getDensityMatrix()(0, 1) != 0.5 * residual)
+    {
+        std::cout << "A dense channel lost a representable coherence after cancellation" << std::endl;
+        return false;
+    }
+    // ApplySuperoperator also accepts finite linear maps. A reordered sum of
+    // three positive terms would overflow before the negative term is added.
+    const double large = 1.7E308;
+    map.row(1) << large, large, -large, large;
+    ordered.setDensityMatrix(plus);
+    ordered.ApplySuperoperator(map, 0);
+    if (ordered.getDensityMatrix()(1, 0) != large)
+    {
+        std::cout << "A finite dense local map overflowed during summation" << std::endl;
+        return false;
+    }
+
     QC::DensityMatrix<> dm(2);
     const Eigen::MatrixXcd identity4 = Eigen::MatrixXcd::Identity(4, 4);
     Eigen::MatrixXcd nonFinite = identity4;
@@ -731,6 +760,24 @@ static Eigen::MatrixXcd DM_ReducedDensity(const Eigen::VectorXcd &psi, const std
 static bool StatevectorKrausTrajectoryTest()
 {
     std::cout << "\nStatevector simulator - Kraus trajectory steps against the density matrix" << std::endl;
+
+    // All sixteen output amplitudes have squared magnitude below one subnormal unit.
+    // Together they have a representable norm, for both placements of the paired SIMD lanes.
+    const double tinyScale = std::ldexp(1., -537);
+    for (size_t first : {size_t{0}, size_t{3}})
+        for (const auto coefficient : {std::complex<double>(tinyScale, 0.), std::complex<double>(0., tinyScale)})
+        {
+            QC::QubitRegister<> reg(4);
+            reg.setToEqualSuperposition();
+            const Eigen::MatrixXcd map = coefficient * Eigen::MatrixXcd::Identity(4, 4);
+            const double weight = reg.ApplyLocalMapNorm(map, first, 1);
+            if (weight != std::numeric_limits<double>::denorm_min() ||
+                reg.getBasisStateAmplitude(0) != coefficient * 0.25)
+            {
+                std::cout << "A local map lost a representable subnormal squared norm" << std::endl;
+                return false;
+            }
+        }
 
     std::mt19937_64 random(0xC0FFEEULL);
     std::normal_distribution<double> normal;
@@ -996,6 +1043,107 @@ static bool StatevectorKrausTrajectoryTest()
         }
     }
 
+    // In a projective measurement a positive branch can be smaller than the squared-weight range.
+    // Splitting that projector into four equal Kraus operators makes even its amplitude underflow.
+    for (const double amplitude : {1.2 * std::ldexp(1., -537), std::ldexp(1., -540),
+                                   std::numeric_limits<double>::denorm_min()})
+    {
+        Eigen::MatrixXcd projector = Eigen::MatrixXcd::Zero(8, 8);
+        projector(7, 7) = 1.;
+        const Eigen::MatrixXcd other = Eigen::MatrixXcd::Identity(8, 8) - projector;
+        const size_t count = amplitude == std::numeric_limits<double>::denorm_min() ? 4 : 1;
+        std::vector<Eigen::MatrixXcd> family(count, projector / std::sqrt(double(count)));
+        family.emplace_back(other);
+        Eigen::VectorXcd input = Eigen::VectorXcd::Zero(8);
+        input(0) = 1.;
+        input(7) = amplitude;
+        QC::QubitRegister<> reg(3);
+        reg.setRegisterStorage(input);
+        reg.ComputeStart();
+        // The first branch weighs about 1.44 denorm_min in the first case.
+        const double draw = amplitude > std::ldexp(1., -537) ? std::numeric_limits<double>::denorm_min() : 0.;
+        if (reg.ApplyKrausOperator(family, draw, 2, 0, 1) != 0 ||
+            std::abs(reg.getBasisStateAmplitude(7) - 1.) > 1E-13 ||
+            std::abs(reg.getRegisterStorage().squaredNorm() - 1.) > 1E-13)
+            return false;
+        reg.ComputeEnd();
+        reg.setRegisterStorage(input);
+        reg.Compute();
+        if (std::abs(reg.getBasisStateAmplitude(7) - 1.) > 1E-13)
+            return false;
+    }
+    // The selected matrix times its normalization factor would overflow on an unoccupied column.
+    // Recording must still act on that column if the same gate sequence is replayed on another input.
+    {
+        Eigen::MatrixXcd filter = Eigen::MatrixXcd::Zero(8, 8);
+        filter(0, 0) = 1E-150;
+        filter(7, 7) = 1E200;
+        QC::QubitRegister<> reg(3);
+        reg.ComputeStart();
+        reg.ApplyKrausOperator({filter}, 0.5, 0, 1, 2);
+        reg.ComputeEnd();
+        if (!reg.getRegisterStorage().allFinite() || std::abs(reg.getBasisStateAmplitude(0) - 1.) > 1E-13)
+            return false;
+        Eigen::VectorXcd probe = Eigen::VectorXcd::Zero(8);
+        probe(7) = 1E-300;
+        reg.setRegisterStorageFastNoNormalize(probe);
+        reg.Compute();
+        if (std::abs(reg.getBasisStateAmplitude(7) / 1E50 - 1.) > 1E-13)
+            return false;
+    }
+    // The draw lies exactly at the end of the first branch and inside the next, however small it is.
+    {
+        const Eigen::MatrixXcd halfI = 0.5 * Eigen::MatrixXcd::Identity(8, 8);
+        Eigen::MatrixXcd halfP = Eigen::MatrixXcd::Zero(8, 8);
+        halfP(7, 7) = 0.5;
+        Eigen::VectorXcd input = Eigen::VectorXcd::Zero(8);
+        input(0) = 1.;
+        input(7) = std::ldexp(1., -540);
+        QC::QubitRegister<> reg(3);
+        reg.setRegisterStorage(input);
+        if (reg.ApplyKrausOperator({halfI, halfP, halfI - halfP, halfI, halfI}, 0.25, 0, 2, 1) != 1 ||
+            std::abs(reg.getBasisStateAmplitude(7) - 1.) > 1E-13)
+            return false;
+    }
+    // An earlier tiny weight moves the midpoint strictly inside the first of two equal large branches.
+    {
+        std::vector<Eigen::MatrixXcd> projectors(4, Eigen::MatrixXcd::Zero(4, 4));
+        for (int i = 0; i < 4; ++i)
+            projectors[i](i, i) = 1.;
+        Eigen::VectorXcd input(4);
+        input << std::ldexp(1., -530), 1., 1., 0.;
+        QC::QubitRegister<> reg(2);
+        reg.setRegisterStorage(input);
+        if (reg.ApplyKrausOperator(projectors, 0.5, 0, 1) != 1 ||
+            std::abs(reg.getBasisStateAmplitude(1) - 1.) > 1E-13)
+            return false;
+    }
+    // A small common scale forces the exceptional path. Cancel first and normalize the actual image.
+    {
+        const double delta = std::ldexp(1., -35), scale = std::ldexp(1., -600);
+        Eigen::VectorXcd input = Eigen::VectorXcd::Zero(8), expected = Eigen::VectorXcd::Zero(8);
+        input(0) = 0.5;
+        input(7) = 0.5 * (1. - delta);
+        Eigen::MatrixXcd filter = Eigen::MatrixXcd::Zero(8, 8);
+        filter(0, 0) = 1.5 * scale;
+        filter(0, 7) = -1.5 * scale;
+        filter(2, 0) = delta * scale;
+        expected(0) = 1.5;
+        expected(2) = 1.;
+        expected.normalize();
+        QC::QubitRegister<> reg(3);
+        Eigen::VectorXcd original = input;
+        reg.setRegisterStorageFastNoNormalize(original);
+        reg.ComputeStart();
+        reg.ApplyKrausOperator({filter}, 0.5, 0, 1, 2);
+        reg.ComputeEnd();
+        if (!reg.getRegisterStorage().isApprox(expected, 1E-12))
+            return false;
+        reg.setRegisterStorageFastNoNormalize(input);
+        reg.Compute();
+        if (!reg.getRegisterStorage().isApprox(expected, 1E-12))
+            return false;
+    }
     // An operator without weight on the state is never selected: |0> under a Z-basis measurement channel.
     {
         Eigen::MatrixXcd p0 = Eigen::MatrixXcd::Zero(2, 2), p1 = Eigen::MatrixXcd::Zero(2, 2);

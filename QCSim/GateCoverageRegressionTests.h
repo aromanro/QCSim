@@ -44,6 +44,22 @@ inline Vector Apply(const Vector &state, const Matrix &matrix, const std::vector
 
 inline void RealDenseStatevectorGates()
 {
+    // In row 1 of H tensor H, the first three input contributions cancel exactly.
+    // The fourth remains representable even when it is far smaller than the others.
+    Matrix hadamards(4, 4);
+    hadamards << .5, .5, .5, .5, .5, -.5, .5, -.5, .5, .5, -.5, -.5, .5, -.5, -.5, .5;
+    Vector input(4);
+    input << 1., -1., -2., -std::ldexp(1., -60);
+    input.normalize();
+    for (const auto phase : {std::complex<double>(1.), std::complex<double>(0., 1.)})
+    {
+        const Matrix gate = phase * hadamards;
+        Vector actual = input;
+        QubitRegisterCalculator<>::ApplyGateInPlace(actual, gate, Gates::ClassifyGateMatrix(gate), {1, 2, 0}, 2, 4,
+                                                   false);
+        Require(actual[1] == (-.5 * input[3]) * phase, "Dense gate lost a representable amplitude after cancellation");
+    }
+
     // A nonsymmetric, dense real orthogonal matrix.
     const auto mixingGate = [](unsigned dim) {
         const Eigen::VectorXd axis = Eigen::VectorXd::LinSpaced(dim, 1., dim).normalized();

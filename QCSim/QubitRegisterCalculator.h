@@ -269,11 +269,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         : LocalDensity<Bits, false, true>(state, bits, count);
     }
 
-    // ApplyLocalMap for a dense map on up to three index bits that also returns the squared norm the state has
-    // afterwards, the sum of |amplitude|^2, from the same pass. A quantum trajectory applies the operators that
-    // the noise channels of a block leave when nothing happens and learns from that norm, without reading the
-    // state again, how probable that was. Partial sums are taken over fixed blocks of indices and added in
-    // order, as for LocalDensityMatrix, so the value does not depend on the number of threads.
+    // Apply a dense map on up to three index bits and return the squared norm of the resulting state.
+    // The map pass sums |amplitude|^2 in a fixed order independent of the thread count. If individual
+    // squares may have underflowed, a second pass recomputes the norm with scaled amplitudes.
     template <unsigned Bits>
     static inline double ApplyLocalMapNorm(VectorClass &state, const std::complex<double> *matrix,
                                            const std::array<size_t, Bits> &bits, size_t count, bool parallel)
@@ -1393,75 +1391,60 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
 
         if (std::all_of(coefficients, coefficients + dimension * dimension,
                         [](const auto &value) { return value.imag() == 0.; }))
-            ApplyWidePairedBlocks<Bits, Parallel, true>(state, coefficients, offsets, targets, controls, count);
+            ApplyOrderedDenseBlocks<Bits, Parallel, true>(state, coefficients, offsets, targets, controls, count);
         else
-            ApplyWidePairedBlocks<Bits, Parallel, false>(state, coefficients, offsets, targets, controls, count);
+            ApplyOrderedDenseBlocks<Bits, Parallel, false>(state, coefficients, offsets, targets, controls, count);
         return true;
     }
 
-    // The target on qubit 0 is local bit `lowBit`: pair (j, j | lowBit) shares a vector.
+    // With index bit zero targeted, two consecutive outputs share an AVX register.
+    // Broadcast each input to both halves so both rows sum columns in matrix order.
+    // Reordering a row can erase a small residual or overflow an otherwise finite sum.
     template <unsigned Bits, bool Parallel, bool Real>
-    static EIGEN_DONT_INLINE void ApplyWidePairedBlocks(const Amplitudes &state,
-                                                        const std::complex<double> *coefficients,
-                                                        const std::array<size_t, size_t{1} << Bits> &offsets,
-                                                        size_t targets, ControlMasks controls, size_t count)
+    static EIGEN_DONT_INLINE void ApplyOrderedDenseBlocks(const Amplitudes &state, const std::complex<double> *matrix,
+                                                          const std::array<size_t, size_t{1} << Bits> &offsets,
+                                                          size_t targets, ControlMasks controls, size_t count)
     {
-        constexpr size_t dimension = size_t{1} << Bits;
-        constexpr size_t half = dimension / 2;
+        constexpr size_t dim = size_t{1} << Bits;
         size_t lowBit = 1;
         while (!(offsets[lowBit] & 1))
             lowBit <<= 1;
-        std::array<size_t, half> pairs{};
-        for (size_t j = 0, index = 0; j < dimension; ++j)
-            if (!(j & lowBit))
-                pairs[index++] = j;
-        // direct: [m(i0, j0), m(i1, j1)] on [x0, x1]; crossed: [m(i0, j1), m(i1, j0)] on [x1, x0].
-        alignas(32) __m256d directRe[half * half], directIm[half * half], crossedRe[half * half],
-            crossedIm[half * half];
-        for (size_t i = 0; i < half; ++i)
-            for (size_t j = 0; j < half; ++j)
+        std::array<size_t, dim / 2> outputOffsets;
+        __m256d re[dim / 2][dim], im[dim / 2][dim];
+        for (size_t pair = 0, row = 0; row < dim; ++row)
+        {
+            if (row & lowBit)
+                continue;
+            outputOffsets[pair] = offsets[row];
+            for (size_t col = 0; col < dim; ++col)
             {
-                const size_t i0 = pairs[i], i1 = i0 | lowBit, j0 = pairs[j], j1 = j0 | lowBit;
-                const auto a = coefficients[i0 * dimension + j0], d = coefficients[i1 * dimension + j1];
-                const auto b = coefficients[i0 * dimension + j1], c = coefficients[i1 * dimension + j0];
-                directRe[i * half + j] = _mm256_set_pd(d.real(), d.real(), a.real(), a.real());
-                crossedRe[i * half + j] = _mm256_set_pd(c.real(), c.real(), b.real(), b.real());
+                const auto a = matrix[row * dim + col], b = matrix[(row | lowBit) * dim + col];
+                re[pair][col] = _mm256_set_pd(b.real(), b.real(), a.real(), a.real());
                 if constexpr (!Real)
-                {
-                    directIm[i * half + j] = _mm256_set_pd(d.imag(), -d.imag(), a.imag(), -a.imag());
-                    crossedIm[i * half + j] = _mm256_set_pd(c.imag(), -c.imag(), b.imag(), -b.imag());
-                }
+                    im[pair][col] = _mm256_set_pd(b.imag(), -b.imag(), a.imag(), -a.imag());
             }
+            ++pair;
+        }
         ForEachSelected<Parallel>(count, targets | controls.zeros, controls.ones, [&](size_t base) {
-            constexpr size_t hl = (size_t{1} << Bits) / 2;
-            __m256d v[hl], vSwapped[hl], x[hl], xSwapped[hl];
-            for (size_t j = 0; j < hl; ++j)
+            constexpr size_t size = size_t{1} << Bits;
+            __m256d input[size], swapped[size];
+            for (size_t col = 0; col < size; ++col)
             {
-                v[j] = _mm256_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[pairs[j]])));
-                x[j] = _mm256_permute2f128_pd(v[j], v[j], 1);
+                input[col] = _mm256_broadcast_pd(reinterpret_cast<const __m128d *>(&state(base | offsets[col])));
                 if constexpr (!Real)
-                {
-                    vSwapped[j] = _mm256_permute_pd(v[j], 5);
-                    xSwapped[j] = _mm256_permute_pd(x[j], 5);
-                }
+                    swapped[col] = _mm256_permute_pd(input[col], 5);
             }
-            for (size_t i = 0; i < hl; ++i)
+            for (size_t pair = 0; pair < size / 2; ++pair)
             {
-                __m256d acc = _mm256_setzero_pd();
-                for (size_t j = 0; j < hl; ++j)
+                __m256d sum = _mm256_setzero_pd();
+                for (size_t col = 0; col < size; ++col)
                 {
-                    if constexpr (Real)
-                    {
-                        acc = MultiplyAdd(directRe[i * hl + j], v[j], acc);
-                        acc = MultiplyAdd(crossedRe[i * hl + j], x[j], acc);
-                    }
-                    else
-                    {
-                        acc = AddProduct(acc, directRe[i * hl + j], directIm[i * hl + j], v[j], vSwapped[j]);
-                        acc = AddProduct(acc, crossedRe[i * hl + j], crossedIm[i * hl + j], x[j], xSwapped[j]);
-                    }
+                    __m256d term = _mm256_mul_pd(re[pair][col], input[col]);
+                    if constexpr (!Real)
+                        term = _mm256_add_pd(term, _mm256_mul_pd(im[pair][col], swapped[col]));
+                    sum = _mm256_add_pd(sum, term);
                 }
-                _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[pairs[i]])), acc);
+                _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | outputOffsets[pair])), sum);
             }
         });
     }
@@ -1959,6 +1942,20 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             double sum = 0.;
             for (size_t block = 0; block < blocks; ++block)
                 sum += partial[block];
+            // Individual squares can round to zero before their representable sum is formed.
+            // At this scale, multiplying the amplitudes by 2^512 keeps their squares in range.
+            if (sum < std::numeric_limits<double>::min() * static_cast<double>(count))
+            {
+                double scaled = 0.;
+                for (size_t i = 0; i < count; ++i)
+                {
+                    const auto amplitude = state(i);
+                    const double re = static_cast<double>(amplitude.real()) * 0x1p512;
+                    const double im = static_cast<double>(amplitude.imag()) * 0x1p512;
+                    scaled += re * re + im * im;
+                }
+                return std::ldexp(scaled, -1024);
+            }
             return sum;
         };
 #ifdef QCSIM_SSE2
