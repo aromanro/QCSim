@@ -68,7 +68,6 @@ template <class Function> static double timeOperation(Function &&operation, int 
     return times[times.size() / 2];
 }
 
-#ifndef NATIVE_THREE_KRAUS
 static void applyTrajectoryReference(State &state, const std::vector<Matrix> &ops, double draw, const Targets &q)
 {
     const Matrix reduced = state.LocalDensityMatrix(q[0], q[1], q[2]);
@@ -78,11 +77,11 @@ static void applyTrajectoryReference(State &state, const std::vector<Matrix> &op
     const auto k = draw * (weights[0] + weights[1]) < weights[0] ? 0 : 1;
     state.ApplyGate(Gate(Matrix(ops[k] / std::sqrt(weights[k])), q[0], q[1], q[2]));
 }
-#endif
 
 int main(int argc, char **argv)
 {
     const std::string filter = argc > 1 ? argv[1] : "all";
+    const bool referenceTrajectory = filter == "composed-trajectory";
     const int batches = argc > 2 ? std::stoi(argv[2]) : 5;
     const int repetitions = argc > 3 ? std::stoi(argv[3]) : 8;
     const int densityQubits = argc > 4 ? std::stoi(argv[4]) : 9;
@@ -104,7 +103,8 @@ int main(int argc, char **argv)
     for (const std::string op :
          {"density-gate", "density-channel", "state-channel", "state-local-norm", "density-sparse", "state-sparse"})
     {
-        if (filter != "all" && filter != "real" && op != filter)
+        const bool complexTrajectory = (filter == "complex-trajectory" || referenceTrajectory) && op == "state-channel";
+        if (filter != "all" && filter != "real" && op != filter && !complexTrajectory)
             continue;
         const bool density = op.compare(0, 7, "density") == 0;
         const bool sparse = op == "density-sparse" || op == "state-sparse";
@@ -117,6 +117,8 @@ int main(int argc, char **argv)
                     if (sparse && complex)
                         continue;
                     if (filter == "real" && (complex || sparse || width < 2 || op == "state-local-norm"))
+                        continue;
+                    if (complexTrajectory && (width != 3 || !complex))
                         continue;
                     const Targets q =
                         separated ? Targets{size_t(qubits - 2), 2, size_t(qubits / 2 + 1)} : Targets{0, 1, 2};
@@ -180,12 +182,12 @@ int main(int argc, char **argv)
                                     const double draw = index % 2 ? .87 : .13;
                                     if (width == 2)
                                         simulator.ApplyKrausOperator(ops, draw, q[0], q[1]);
-                                    else
 #ifdef NATIVE_THREE_KRAUS
+                                    else if (!referenceTrajectory)
                                         simulator.ApplyKrausOperator(ops, draw, q[0], q[1], q[2]);
-#else
-                                        applyTrajectoryReference(simulator, ops, draw, q);
 #endif
+                                    else
+                                        applyTrajectoryReference(simulator, ops, draw, q);
                                 },
                                 batches, repetitions);
                         else
