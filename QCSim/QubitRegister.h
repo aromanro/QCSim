@@ -775,7 +775,10 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         MatrixClass rho;
         if (usePopulations)
         {
-            const auto [p, support] = populationsWithSupport();
+            const bool mayAmplify = std::any_of(kraus.begin(), kraus.end(),
+                                                [](const MatrixClass &op) { return op.cwiseAbs().maxCoeff() > 1.; });
+            const auto [p, support] =
+                mayAmplify ? populationsWithSupport() : std::make_pair(Populations<Qubits>(qubits), ~0u);
             for (size_t c = 0; c < dimension; ++c)
                 if ((support & (1u << c)) && unreliablePopulation(p[c], c))
                     return ApplyScaledKraus<Qubits>(kraus, random, qubits);
