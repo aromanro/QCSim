@@ -681,12 +681,13 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
 
     // One step of a quantum trajectory through the channel rho -> sum_k E_k rho E_k^dagger: applies one Kraus
     // operator, chosen with the probability the state gives it, and renormalizes. Averaging the trajectories
-    // reproduces the channel. The operators are 2x2, on `qubit`, or 4x4, with `qubit` the low bit of the matrix
-    // index and `controllingQubit1` the high one. `random` is uniform in [0, 1).
+    // reproduces the channel. The operators are 2x2, 4x4 or 8x8, on one, two or three qubits respectively.
+    // The first target is the low bit of the matrix index. `random` is uniform in [0, 1).
     //
     // The probabilities tr(E_k rho E_k^dagger) come from the reduced density matrix of the targets. When every
     // operator has at most one nonzero per row (as in amplitude damping), only the target populations are
-    // needed. Both take one pass whatever the number of operators; the chosen operator costs one gate application.
+    // needed. Real operators need only the real part of the reduced density matrix. Each takes one pass
+    // whatever the number of operators; the chosen operator costs one gate application.
     // Trace preservation is not checked: the weights are taken relative to their sum, and the state leaves with
     // unit norm. Returns the index of the operator applied.
     //
@@ -702,14 +703,39 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
     size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, size_t qubit,
                               size_t controllingQubit1 = 0)
     {
+        if (!kraus.empty() && kraus.front().rows() == 2)
+            return ApplyKraus<1>(kraus, random, {qubit});
+        return ApplyKraus<2>(kraus, random, {qubit, controllingQubit1});
+    }
+
+    size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, size_t qubit, size_t qubit2,
+                              size_t qubit3)
+    {
+        return ApplyKraus<3>(kraus, random, {qubit, qubit2, qubit3});
+    }
+
+    // The same, drawing from this register's own random stream.
+    size_t SampleKrausOperator(const std::vector<MatrixClass> &kraus, size_t qubit, size_t controllingQubit1 = 0)
+    {
+        return ApplyKrausOperator(kraus, uniformZeroOne(rng), qubit, controllingQubit1);
+    }
+
+    size_t SampleKrausOperator(const std::vector<MatrixClass> &kraus, size_t qubit, size_t qubit2, size_t qubit3)
+    {
+        return ApplyKrausOperator(kraus, uniformZeroOne(rng), qubit, qubit2, qubit3);
+    }
+
+  private:
+    template <unsigned Qubits>
+    size_t ApplyKraus(const std::vector<MatrixClass> &kraus, double random, const std::array<size_t, Qubits> &qubits)
+    {
+        constexpr Eigen::Index dimension = Eigen::Index{1} << Qubits;
         if (kraus.empty())
             throw std::invalid_argument("A channel must contain at least one Kraus operator");
-        const auto dimension = kraus.front().rows();
-        if (dimension != 2 && dimension != 4)
-            throw std::invalid_argument("Statevector Kraus operators must be 2x2 or 4x4 matrices");
         for (const auto &e : kraus)
             if (e.rows() != dimension || e.cols() != dimension || !e.allFinite())
-                throw std::invalid_argument("Kraus operators must be finite square matrices of the same size");
+                throw std::invalid_argument(
+                    "Kraus operators must be finite square matrices matching their target qubits");
 
         // Stack storage for the usual few operators: the weight of each, and its reach when the weight is in doubt.
         double fewWeights[16], fewReaches[16];
@@ -733,14 +759,13 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         });
         MatrixClass rho;
         if (usePopulations)
-        {
-            if (dimension == 2)
-                KrausPopulationWeights(kraus, LocalPopulations(qubit), weights);
-            else
-                KrausPopulationWeights(kraus, LocalPopulations(qubit, controllingQubit1), weights);
-        }
+            KrausPopulationWeights(kraus, Populations<Qubits>(qubits), weights);
         else
-            rho = dimension == 2 ? LocalDensityMatrix(qubit) : LocalDensityMatrix(qubit, controllingQubit1);
+        {
+            const bool real = std::all_of(kraus.begin(), kraus.end(),
+                                          [](const MatrixClass &op) { return (op.imag().array() == 0.).all(); });
+            rho = real ? LocalDensity<Qubits, true>(qubits) : LocalDensity<Qubits>(qubits);
+        }
         double total = 0., doubt = 0.;
         for (size_t k = 0; k < kraus.size(); ++k)
         {
@@ -814,8 +839,7 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
                 {
                     if (reaches[k] >= 0.)
                     {
-                        const double exact = dimension == 2 ? LocalMapWeight<1>(kraus[k], {qubit})
-                                                            : LocalMapWeight<2>(kraus[k], {qubit, controllingQubit1});
+                        const double exact = LocalMapWeight<Qubits>(kraus[k], qubits);
                         const double cutoff = AmplitudeRounding * AmplitudeRounding * reaches[k];
                         if (exact > largestFound)
                         {
@@ -849,44 +873,35 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         // An operator whose weight was in doubt takes the state almost to nothing: what it leaves is the difference
         // of nearly equal amplitudes. It is applied as it is, as a gate, and the state is then scaled by the norm it
         // actually has, as a second gate. A recording holds the two, and replays exactly what was done here.
+        const size_t qubit2 = Qubits > 1 ? qubits[1] : 0, qubit3 = Qubits > 2 ? qubits[2] : 0;
         if (reaches[chosen] >= 0.)
         {
-            ApplyGate(Gates::AppliedGate<MatrixClass>(kraus[chosen], qubit, controllingQubit1));
+            ApplyGate(Gates::AppliedGate<MatrixClass>(kraus[chosen], qubits[0], qubit2, qubit3));
             const double norm = registerStorage.squaredNorm();
             if (!(norm > 0.) || !std::isfinite(norm))
                 throw std::domain_error("The Kraus operator drawn leaves nothing of this state");
             ApplyGate(
-                Gates::AppliedGate<MatrixClass>(MatrixClass(MatrixClass::Identity(2, 2) / std::sqrt(norm)), qubit));
+                Gates::AppliedGate<MatrixClass>(MatrixClass(MatrixClass::Identity(2, 2) / std::sqrt(norm)), qubits[0]));
             return chosen;
         }
 
         // The scaled operator goes straight to the local-map kernel: no gate object, and a diagonal or
         // single-entry operator (the no-jump and jump operators of a damping channel) costs what it holds.
         const double scale = 1. / std::sqrt(weights[chosen]);
-        std::array<std::complex<double>, 16> coefficients;
+        std::array<std::complex<double>, dimension * dimension> coefficients;
         for (Eigen::Index row = 0; row < dimension; ++row)
             for (Eigen::Index col = 0; col < dimension; ++col)
                 coefficients[static_cast<size_t>(row * dimension + col)] =
                     std::complex<double>(kraus[chosen](row, col)) * scale;
-        if (dimension == 2)
-            BaseClass::template ApplyLocalMap<1>(registerStorage, coefficients.data(), {size_t{1} << qubit},
-                                                 NrBasisStates, UseMultithreading());
-        else
-            BaseClass::template ApplyLocalMap<2>(registerStorage, coefficients.data(),
-                                                 {size_t{1} << qubit, size_t{1} << controllingQubit1}, NrBasisStates,
-                                                 UseMultithreading());
+        BaseClass::template ApplyLocalMap<Qubits>(registerStorage, coefficients.data(), LocalBits<Qubits>(qubits),
+                                                  NrBasisStates, UseMultithreading());
         if (recordGates)
             computeGates.emplace_back(
-                Gates::AppliedGate<MatrixClass>(MatrixClass(kraus[chosen] * scale), qubit, controllingQubit1));
+                Gates::AppliedGate<MatrixClass>(MatrixClass(kraus[chosen] * scale), qubits[0], qubit2, qubit3));
         return chosen;
     }
 
-    // The same, drawing from this register's own random stream.
-    size_t SampleKrausOperator(const std::vector<MatrixClass> &kraus, size_t qubit, size_t controllingQubit1 = 0)
-    {
-        return ApplyKrausOperator(kraus, uniformZeroOne(rng), qubit, controllingQubit1);
-    }
-
+  public:
     void SaveState()
     {
         savedStateStorage = registerStorage;
@@ -1155,11 +1170,12 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
                                                              NrBasisStates, UseMultithreading());
     }
 
-    template <unsigned Qubits> MatrixClass LocalDensity(const std::array<size_t, Qubits> &qubits) const
+    template <unsigned Qubits, bool RealPartOnly = false>
+    MatrixClass LocalDensity(const std::array<size_t, Qubits> &qubits) const
     {
         const auto bits = LocalBits<Qubits>(qubits);
-        const auto rho =
-            BaseClass::template LocalDensityMatrix<Qubits>(registerStorage, bits, NrBasisStates, UseMultithreading());
+        const auto rho = BaseClass::template LocalDensityMatrix<Qubits, RealPartOnly>(
+            registerStorage, bits, NrBasisStates, UseMultithreading());
         constexpr Eigen::Index dimension = Eigen::Index{1} << Qubits;
         MatrixClass result(dimension, dimension);
         for (Eigen::Index row = 0; row < dimension; ++row)

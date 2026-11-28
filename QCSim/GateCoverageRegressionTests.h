@@ -57,8 +57,9 @@ inline void RealDenseStatevectorGates()
         for (Eigen::Index i = 0; i < initial.size(); ++i)
             initial(i) = {std::sin(.13 * i + .4), std::cos(.37 * i - .1)};
         initial.normalize();
-        for (const std::vector<unsigned> &qubits : std::vector<std::vector<unsigned>>{
-                 {1, 3}, {3, 1}, {1, 2, n - 1}, {n - 1, 2, 1}, {n - 1, 0, 2}})
+        const std::vector<std::vector<unsigned>> placements{{1, 3}, {3, 1}, {0, 3}, {3, 0}, {1, 2, n - 1},
+                                                           {n - 1, 2, 1}, {0, n - 1, 2}, {n - 1, 0, 2}, {n - 1, 2, 0}};
+        for (const auto &qubits : placements)
         {
             const unsigned arity = static_cast<unsigned>(qubits.size()), dim = 1U << arity;
             std::array<size_t, 3> bits{};

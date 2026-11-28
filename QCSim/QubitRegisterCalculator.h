@@ -252,11 +252,13 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     // Every probability a local operation needs follows from this one pass: for a Kraus operator E it is
     // tr(E rho E^dagger). Partial sums are taken over fixed blocks of indices and added in order, so the result
     // does not depend on the number of threads, and a branch drawn from it is the same on every run.
-    template <unsigned Bits>
+    // RealPartOnly omits the imaginary components when all Kraus operators are real.
+    template <unsigned Bits, bool RealPartOnly = false>
     static inline std::array<std::complex<double>, (size_t{1} << (2 * Bits))> LocalDensityMatrix(
         const VectorClass &state, const std::array<size_t, Bits> &bits, size_t count, bool parallel)
     {
-        return parallel ? LocalDensity<Bits, true>(state, bits, count) : LocalDensity<Bits, false>(state, bits, count);
+        return parallel ? LocalDensity<Bits, true, false, RealPartOnly>(state, bits, count)
+                        : LocalDensity<Bits, false, false, RealPartOnly>(state, bits, count);
     }
 
     template <unsigned Bits>
@@ -1389,7 +1391,22 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             return true;
         }
 
-        // The target on qubit 0 is local bit `low`: pair (j, j | lowBit) shares a vector.
+        if (std::all_of(coefficients, coefficients + dimension * dimension,
+                        [](const auto &value) { return value.imag() == 0.; }))
+            ApplyWidePairedBlocks<Bits, Parallel, true>(state, coefficients, offsets, targets, controls, count);
+        else
+            ApplyWidePairedBlocks<Bits, Parallel, false>(state, coefficients, offsets, targets, controls, count);
+        return true;
+    }
+
+    // The target on qubit 0 is local bit `lowBit`: pair (j, j | lowBit) shares a vector.
+    template <unsigned Bits, bool Parallel, bool Real>
+    static EIGEN_DONT_INLINE void ApplyWidePairedBlocks(const Amplitudes &state,
+                                                        const std::complex<double> *coefficients,
+                                                        const std::array<size_t, size_t{1} << Bits> &offsets,
+                                                        size_t targets, ControlMasks controls, size_t count)
+    {
+        constexpr size_t dimension = size_t{1} << Bits;
         constexpr size_t half = dimension / 2;
         size_t lowBit = 1;
         while (!(offsets[lowBit] & 1))
@@ -1408,9 +1425,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 const auto a = coefficients[i0 * dimension + j0], d = coefficients[i1 * dimension + j1];
                 const auto b = coefficients[i0 * dimension + j1], c = coefficients[i1 * dimension + j0];
                 directRe[i * half + j] = _mm256_set_pd(d.real(), d.real(), a.real(), a.real());
-                directIm[i * half + j] = _mm256_set_pd(d.imag(), -d.imag(), a.imag(), -a.imag());
                 crossedRe[i * half + j] = _mm256_set_pd(c.real(), c.real(), b.real(), b.real());
-                crossedIm[i * half + j] = _mm256_set_pd(c.imag(), -c.imag(), b.imag(), -b.imag());
+                if constexpr (!Real)
+                {
+                    directIm[i * half + j] = _mm256_set_pd(d.imag(), -d.imag(), a.imag(), -a.imag());
+                    crossedIm[i * half + j] = _mm256_set_pd(c.imag(), -c.imag(), b.imag(), -b.imag());
+                }
             }
         ForEachSelected<Parallel>(count, targets | controls.zeros, controls.ones, [&](size_t base) {
             constexpr size_t hl = (size_t{1} << Bits) / 2;
@@ -1418,22 +1438,32 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             for (size_t j = 0; j < hl; ++j)
             {
                 v[j] = _mm256_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[pairs[j]])));
-                vSwapped[j] = _mm256_permute_pd(v[j], 5);
                 x[j] = _mm256_permute2f128_pd(v[j], v[j], 1);
-                xSwapped[j] = _mm256_permute_pd(x[j], 5);
+                if constexpr (!Real)
+                {
+                    vSwapped[j] = _mm256_permute_pd(v[j], 5);
+                    xSwapped[j] = _mm256_permute_pd(x[j], 5);
+                }
             }
             for (size_t i = 0; i < hl; ++i)
             {
                 __m256d acc = _mm256_setzero_pd();
                 for (size_t j = 0; j < hl; ++j)
                 {
-                    acc = AddProduct(acc, directRe[i * hl + j], directIm[i * hl + j], v[j], vSwapped[j]);
-                    acc = AddProduct(acc, crossedRe[i * hl + j], crossedIm[i * hl + j], x[j], xSwapped[j]);
+                    if constexpr (Real)
+                    {
+                        acc = MultiplyAdd(directRe[i * hl + j], v[j], acc);
+                        acc = MultiplyAdd(crossedRe[i * hl + j], x[j], acc);
+                    }
+                    else
+                    {
+                        acc = AddProduct(acc, directRe[i * hl + j], directIm[i * hl + j], v[j], vSwapped[j]);
+                        acc = AddProduct(acc, crossedRe[i * hl + j], crossedIm[i * hl + j], x[j], xSwapped[j]);
+                    }
                 }
                 _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[pairs[i]])), acc);
             }
         });
-        return true;
     }
 #endif
 
@@ -1511,7 +1541,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     }
 
     // Only the lower triangle is accumulated; for populations only its real diagonal is needed.
-    template <unsigned Bits, bool Parallel, bool PopulationsOnly = false>
+    template <unsigned Bits, bool Parallel, bool PopulationsOnly = false, bool RealPartOnly = false>
     static inline auto LocalDensity(const VectorClass &vector, const std::array<size_t, Bits> &bits, size_t count)
     {
         static_assert(Bits >= 1 && Bits <= 3, "A local density matrix covers one to three index bits");
@@ -1531,7 +1561,8 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         while (active / blockSize > 4096)
             blockSize <<= 1;
         const size_t blocks = active / blockSize;
-        using Sums = std::array<double, PopulationsOnly ? dimension : 2 * dimension * dimension>;
+        constexpr size_t components = RealPartOnly ? 1 : 2;
+        using Sums = std::array<double, PopulationsOnly ? dimension : components * dimension * dimension>;
         Sums single{};
         std::vector<Sums> several(blocks > 1 ? blocks : 0);
         auto *const partial = blocks > 1 ? several.data() : &single;
@@ -1544,6 +1575,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         const size_t run = std::min(plan.tileSize, blockSize);
         ForEachTile<Parallel>(Parallel ? TeamThreads(count) : 1, blocks, [&](size_t block) {
             constexpr size_t dim = size_t{1} << Bits;
+            constexpr bool complexOffDiagonal = !PopulationsOnly && !RealPartOnly;
             Sums sums{};
 #ifdef QCSIM_SSE2
             if constexpr (std::is_same_v<typename VectorClass::Scalar, std::complex<double>>)
@@ -1565,7 +1597,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             {
                                 v[r] =
                                     _mm256_loadu_pd(reinterpret_cast<const double *>(&data[(first + k) | offsets[r]]));
-                                if constexpr (!PopulationsOnly)
+                                if constexpr (complexOffDiagonal)
                                     swapped[r] = _mm256_permute_pd(v[r], 5);
                             }
                             size_t p = 0;
@@ -1573,8 +1605,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                                 for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c, ++p)
                                 {
                                     accRe[p] = MultiplyAdd(v[r], v[c], accRe[p]);
-                                    if (c != r)
-                                        accIm[p] = MultiplyAdd(v[r], swapped[c], accIm[p]);
+                                    if constexpr (complexOffDiagonal)
+                                        if (c != r)
+                                            accIm[p] = MultiplyAdd(v[r], swapped[c], accIm[p]);
                                 }
                         }
                     }
@@ -1584,9 +1617,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         {
                             alignas(32) double re[4], im[4];
                             _mm256_store_pd(re, accRe[p]);
-                            const size_t index = PopulationsOnly ? r : 2 * (r * dim + c);
+                            const size_t index = PopulationsOnly ? r : components * (r * dim + c);
                             sums[index] = (re[0] + re[1]) + (re[2] + re[3]);
-                            if constexpr (!PopulationsOnly)
+                            if constexpr (complexOffDiagonal)
                             {
                                 _mm256_store_pd(im, accIm[p]);
                                 sums[index + 1] = (im[1] - im[0]) + (im[3] - im[2]);
@@ -1607,7 +1640,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         {
                             v[r] = _mm_loadu_pd(reinterpret_cast<const double *>(
                                 &data[static_cast<Eigen::Index>(base | offsets[r]) * stride]));
-                            if constexpr (!PopulationsOnly)
+                            if constexpr (complexOffDiagonal)
                                 swapped[r] = _mm_shuffle_pd(v[r], v[r], 1);
                         }
                         size_t p = 0;
@@ -1615,8 +1648,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c, ++p)
                             {
                                 accRe[p] = _mm_add_pd(accRe[p], _mm_mul_pd(v[r], v[c]));
-                                if (c != r)
-                                    accIm[p] = _mm_add_pd(accIm[p], _mm_mul_pd(v[r], swapped[c]));
+                                if constexpr (complexOffDiagonal)
+                                    if (c != r)
+                                        accIm[p] = _mm_add_pd(accIm[p], _mm_mul_pd(v[r], swapped[c]));
                             }
                     }
                     size_t p = 0;
@@ -1625,9 +1659,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         {
                             double re[2], im[2];
                             _mm_storeu_pd(re, accRe[p]);
-                            const size_t index = PopulationsOnly ? r : 2 * (r * dim + c);
+                            const size_t index = PopulationsOnly ? r : components * (r * dim + c);
                             sums[index] = re[0] + re[1];
-                            if constexpr (!PopulationsOnly)
+                            if constexpr (complexOffDiagonal)
                             {
                                 _mm_storeu_pd(im, accIm[p]);
                                 sums[index + 1] = im[1] - im[0];
@@ -1651,9 +1685,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 for (size_t r = 0; r < dim; ++r)
                     for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c)
                     {
-                        const size_t index = PopulationsOnly ? r : 2 * (r * dim + c);
+                        const size_t index = PopulationsOnly ? r : components * (r * dim + c);
                         sums[index] += re[r] * re[c] + im[r] * im[c];
-                        if constexpr (!PopulationsOnly)
+                        if constexpr (complexOffDiagonal)
                             sums[index + 1] += im[r] * re[c] - re[r] * im[c];
                     }
             }
@@ -1672,7 +1706,8 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             for (size_t r = 0; r < dimension; ++r)
                 for (size_t c = 0; c <= r; ++c)
                 {
-                    const std::complex<double> value(total[2 * (r * dimension + c)], total[2 * (r * dimension + c) + 1]);
+                    const size_t index = components * (r * dimension + c);
+                    const std::complex<double> value(total[index], RealPartOnly ? 0. : total[index + 1]);
                     rho[r * dimension + c] = value;
                     rho[c * dimension + r] = std::conj(value);
                 }
@@ -1726,6 +1761,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             // 256 bit vector holds both and each block pair costs what a single block does.
             if constexpr (Amplitudes::contiguous)
             {
+                // A fully populated map has the same dot products as a dense gate. Fixed column
+                // indices let the compiler unroll them; maps with any exact zeros keep the sparse kernel.
+                if constexpr (Bits >= 2)
+                    if (std::all_of(counts.begin(), counts.end(), [](unsigned n) { return n == (1U << Bits); }) &&
+                        TryWideDenseBlocks<Bits, Parallel>(state, matrix, offsets, targets, {}, count))
+                        return;
                 const IndexPlan plan(targets);
                 const size_t active = count >> Bits;
                 size_t tileSize = std::min(plan.tileSize, active);
@@ -1846,6 +1887,43 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         });
     }
 
+#ifdef QCSIM_SSE2
+    // Separate SSE2 loops keep MSVC from slowing down the complex dot product when a real map is specialized.
+    template <unsigned Bits, bool Parallel>
+    static void RealLocalMapNormBlocks(const Amplitudes &state, const std::complex<double> *matrix,
+                                       const std::array<size_t, size_t{1} << Bits> &offsets, const IndexPlan &plan,
+                                       size_t blockSize, size_t blocks, int threads, double *partial)
+    {
+        constexpr size_t dimension = size_t{1} << Bits;
+        __m128d re[dimension][dimension];
+        for (size_t r = 0; r < dimension; ++r)
+            for (size_t c = 0; c < dimension; ++c)
+                re[r][c] = _mm_set1_pd(matrix[r * dimension + c].real());
+        ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
+            constexpr size_t dim = size_t{1} << Bits;
+            __m128d norm = _mm_setzero_pd();
+            for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
+            {
+                const size_t base = plan.template Expand<Bits>(i);
+                __m128d v[dim];
+                for (size_t c = 0; c < dim; ++c)
+                    v[c] = _mm_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
+                for (size_t r = 0; r < dim; ++r)
+                {
+                    __m128d acc = _mm_setzero_pd();
+                    for (size_t c = 0; c < dim; ++c)
+                        acc = _mm_add_pd(acc, _mm_mul_pd(re[r][c], v[c]));
+                    _mm_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
+                    norm = _mm_add_pd(norm, _mm_mul_pd(acc, acc));
+                }
+            }
+            double lanes[2];
+            _mm_storeu_pd(lanes, norm);
+            partial[block] = lanes[0] + lanes[1];
+        });
+    }
+#endif
+
     // ApplyLocalMapNorm. Dense: the product of the gates and operators of a block has no structure to use. Every
     // input of a block of amplitudes is read before any output is written.
     template <unsigned Bits, bool Parallel>
@@ -1887,6 +1965,13 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         if constexpr (std::is_same_v<Scalar, std::complex<double>>)
         {
 #ifdef QCSIM_AVX2
+            // Pick the arithmetic once per map and keep the same norm reduction for both coefficient types.
+            const auto applyBlocks = [&](bool real, const auto &apply) {
+                if (real)
+                    ForEachTile<Parallel>(threads, blocks, [&](size_t block) { apply(std::true_type{}, block); });
+                else
+                    ForEachTile<Parallel>(threads, blocks, [&](size_t block) { apply(std::false_type{}, block); });
+            };
             if constexpr (Amplitudes::contiguous)
             {
                 // Without a target on index bit 0 the same amplitude of two consecutive blocks is adjacent, so one
@@ -1895,14 +1980,16 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 if (plan.strideShift == 0 && run >= 2)
                 {
                     alignas(32) __m256d re[dimension][dimension], im[dimension][dimension];
+                    bool real = true;
                     for (size_t r = 0; r < dimension; ++r)
                         for (size_t c = 0; c < dimension; ++c)
                         {
                             const std::complex<double> value = matrix[r * dimension + c];
                             re[r][c] = _mm256_set1_pd(value.real());
                             im[r][c] = _mm256_set_pd(value.imag(), -value.imag(), value.imag(), -value.imag());
+                            real &= value.imag() == 0.;
                         }
-                    ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
+                    applyBlocks(real, [&](auto realCoefficients, size_t block) {
                         constexpr size_t dim = size_t{1} << Bits;
                         __m256d norm = _mm256_setzero_pd();
                         for (size_t i = block * blockSize; i < (block + 1) * blockSize; i += run)
@@ -1915,13 +2002,17 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                                 for (size_t c = 0; c < dim; ++c)
                                 {
                                     v[c] = _mm256_loadu_pd(reinterpret_cast<const double *>(&state(base | offsets[c])));
-                                    swapped[c] = _mm256_permute_pd(v[c], 5);
+                                    if constexpr (!decltype(realCoefficients)::value)
+                                        swapped[c] = _mm256_permute_pd(v[c], 5);
                                 }
                                 for (size_t r = 0; r < dim; ++r)
                                 {
                                     __m256d acc = _mm256_setzero_pd();
                                     for (size_t c = 0; c < dim; ++c)
-                                        acc = AddProduct(acc, re[r][c], im[r][c], v[c], swapped[c]);
+                                        if constexpr (decltype(realCoefficients)::value)
+                                            acc = MultiplyAdd(re[r][c], v[c], acc);
+                                        else
+                                            acc = AddProduct(acc, re[r][c], im[r][c], v[c], swapped[c]);
                                     _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
                                     norm = _mm256_add_pd(norm, _mm256_mul_pd(acc, acc));
                                 }
@@ -1935,6 +2026,13 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 }
             }
 #endif
+            if (std::all_of(matrix, matrix + dimension * dimension,
+                            [](std::complex<double> value) { return value.imag() == 0.; }))
+            {
+                RealLocalMapNormBlocks<Bits, Parallel>(state, matrix, offsets, plan, blockSize, blocks, threads,
+                                                       partial);
+                return total();
+            }
             __m128d re[dimension][dimension], im[dimension][dimension];
             for (size_t r = 0; r < dimension; ++r)
                 for (size_t c = 0; c < dimension; ++c)

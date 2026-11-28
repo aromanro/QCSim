@@ -592,23 +592,36 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
   public:
     // Generic completely positive trace preserving channel: rho' = sum_k E_k rho E_k^dagger.
     // The completeness relation sum_k E_k^dagger E_k = I is validated before changing the state.
-    // The Kraus operators are small matrices (2x2 for a single qubit, 4x4 for two qubits) acting
-    // on the given qubit(s). This is the fundamental non-unitary operation; a unitary gate is just
-    // the special case of a single Kraus operator E_0 = U.
+    // For a 2x2, 4x4 or 8x8 operator, qubit is its low index bit. Three-qubit channels
+    // require all three targets. A unitary gate is the case of a single Kraus operator E_0 = U.
     void ApplyChannel(const std::vector<MatrixClass> &kraus, size_t qubit, size_t controllingQubit1 = 0)
+    {
+        if (!kraus.empty() && kraus.front().rows() == 2)
+            ApplyChannelImpl<1>(kraus, {qubit, 0, 0});
+        else
+            ApplyChannelImpl<2>(kraus, {qubit, controllingQubit1, 0});
+    }
+
+    void ApplyChannel(const std::vector<MatrixClass> &kraus, size_t qubit, size_t qubit2, size_t qubit3)
+    {
+        ApplyChannelImpl<3>(kraus, {qubit, qubit2, qubit3});
+    }
+
+  private:
+    template <unsigned Qubits>
+    void ApplyChannelImpl(const std::vector<MatrixClass> &kraus, const std::array<size_t, 3> &qubits)
     {
         if (kraus.empty())
             throw std::invalid_argument("A channel must contain at least one Kraus operator");
 
-        const size_t gateQubits = GetOperatorQubits(kraus.front(), 2);
-        ValidateQubits(gateQubits, qubit, controllingQubit1, 0);
+        ValidateQubits(Qubits, qubits[0], qubits[1], qubits[2]);
 
-        const size_t operatorDimension = static_cast<size_t>(kraus.front().rows());
-        std::array<Scalar, 16> completeness{};
+        constexpr size_t operatorDimension = size_t{1} << Qubits;
+        std::array<Scalar, operatorDimension * operatorDimension> completeness{};
         for (const auto &E : kraus)
         {
-            if (GetOperatorQubits(E, 2) != gateQubits)
-                throw std::invalid_argument("All Kraus operators must have the same dimensions");
+            if (E.rows() != operatorDimension || E.cols() != operatorDimension)
+                throw std::invalid_argument("All Kraus operator dimensions must match the channel targets");
 
             if (!E.allFinite())
                 throw std::invalid_argument("Kraus operators must contain only finite values");
@@ -627,12 +640,15 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
         if (!std::isfinite(errorSquared) || errorSquared > completenessTolerance * completenessTolerance)
             throw std::invalid_argument("Kraus operators do not define a trace-preserving channel");
 
-        if (gateQubits == 1)
-            ApplyLocalChannel<1>(kraus, {qubit, 0});
+        if constexpr (Qubits < 3)
+            ApplyLocalChannel<Qubits>(kraus, {qubits[0], qubits[1]});
+        else if (kraus.size() == 1)
+            ApplyGate(Gates::AppliedGate<MatrixClass>(kraus.front(), qubits[0], qubits[1], qubits[2]));
         else
-            ApplyLocalChannel<2>(kraus, {qubit, controllingQubit1});
+            ApplyThreeQubitChannel(kraus, qubits);
     }
 
+  public:
     // A channel in superoperator form, applied in one pass: every local density block, indexed
     // row + d * column with d = 2 (one qubit) or 4 (two qubits, `qubit` the low bit of row and of
     // column), is multiplied by the 4x4 or 16x16 matrix. For Kraus operators E_k the matrix is
@@ -1328,6 +1344,79 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
                 coefficients[output * blockSize + input] = value;
             }
         ApplyLocalSuperoperator<Qubits>(coefficients.data(), qubits);
+    }
+
+    // A tile includes all six ket/bra bits, so every branch can run both gate passes
+    // there. Pack the lowest remaining bits for contiguous copies and vector loads.
+    void ApplyThreeQubitChannel(const std::vector<MatrixClass> &kraus, const std::array<size_t, 3> &qubits)
+    {
+        const size_t elements = static_cast<size_t>(rho.size());
+        static constexpr size_t maxTile = 4096;
+        const size_t tileSize = std::min(elements, maxTile);
+        size_t targets = 0;
+        for (size_t q : qubits)
+            targets |= (size_t{1} << q) | (size_t{1} << (q + NrQubits));
+        size_t tileMask = targets, outside = (elements - 1) ^ targets;
+        for (size_t filled = 64; filled < tileSize; filled *= 2)
+        {
+            tileMask |= outside & -outside;
+            outside &= outside - 1;
+        }
+        std::array<size_t, 3> ketBits{}, braBits{};
+        const auto packedBit = [&](size_t bit) {
+            return size_t{1} << Clifford::detail::Popcount(tileMask & ((size_t{1} << bit) - 1));
+        };
+        for (unsigned i = 0; i < 3; ++i)
+        {
+            ketBits[i] = packedBit(qubits[i] + (MatrixClass::IsRowMajor ? NrQubits : 0));
+            braBits[i] = packedBit(qubits[i] + (MatrixClass::IsRowMajor ? 0 : NrQubits));
+        }
+        // Deposit the packed index into the set positions of bits. Tile indices use
+        // outside, while run offsets within a tile use its complementary mask.
+        const auto expand = [](size_t index, size_t bits) {
+            size_t offset = 0;
+            for (; index; index >>= 1, bits &= bits - 1)
+                if (index & 1)
+                    offset |= bits & -bits;
+            return offset;
+        };
+        const size_t run = (tileMask + 1) & ~tileMask;
+        std::vector<size_t> offsets(tileSize / run);
+        for (size_t i = 0; i < offsets.size(); ++i)
+            offsets[i] = expand(i * run, tileMask);
+
+        struct Prepared
+        {
+            Gates::GateStructure structure;
+            MatrixClass conjugate;
+        };
+        std::vector<Prepared> prepared;
+        prepared.reserve(kraus.size());
+        for (const auto &op : kraus)
+            prepared.push_back({Gates::ClassifyGateMatrix(op), op.conjugate()});
+
+        ForEachRange(elements / tileSize, elements, [&](size_t begin, size_t end) {
+            std::array<Scalar, maxTile> sumStorage, branchStorage;
+            FlatView sum(sumStorage.data(), tileSize), branch(branchStorage.data(), tileSize);
+            for (size_t t = begin; t < end; ++t)
+            {
+                Scalar *const base = rho.data() + expand(t, outside);
+                for (size_t k = 0; k < kraus.size(); ++k)
+                {
+                    FlatView &output = k == 0 ? sum : branch;
+                    for (size_t i = 0; i < offsets.size(); ++i)
+                        std::copy_n(base + offsets[i], run, output.data() + i * run);
+                    FlatCalculator::ApplyGateInPlace(output, kraus[k], prepared[k].structure, ketBits, 3, tileSize,
+                                                     false);
+                    FlatCalculator::ApplyGateInPlace(output, prepared[k].conjugate, prepared[k].structure, braBits, 3,
+                                                     tileSize, false);
+                    if (k > 0)
+                        sum += branch;
+                }
+                for (size_t i = 0; i < offsets.size(); ++i)
+                    std::copy_n(sum.data() + i * run, run, base + offsets[i]);
+            }
+        });
     }
 
     // One pass of the statevector kernels over the flat matrix: a local map on the ket and bra
