@@ -76,14 +76,20 @@ static void DM_FillThreeQubitGates(std::vector<std::shared_ptr<QC::Gates::Quantu
     gates.emplace_back(std::make_shared<QC::Gates::ThreeQubitsGate<>>(DM_FourierMatrix(8)));
 }
 
-template <class Callable> static bool DM_ExpectInvalidArgument(Callable &&callable, const char *description)
+template <class Callable>
+static bool DM_ExpectInvalidArgument(Callable &&callable, const char *description, const char *messagePart = nullptr)
 {
     try
     {
         callable();
     }
-    catch (const std::invalid_argument &)
+    catch (const std::invalid_argument &ex)
     {
+        if (messagePart && std::string(ex.what()).find(messagePart) == std::string::npos)
+        {
+            std::cout << description << " reported an unrelated error: " << ex.what() << std::endl;
+            return false;
+        }
         return true;
     }
     catch (const std::exception &ex)
@@ -768,8 +774,8 @@ static bool StatevectorKrausTrajectoryTest()
         Eigen::VectorXcd local(8);
         for (int i = 0; i < 8; ++i)
             local[i] = std::complex<double>(i + 1., 2. * i - 3.);
-        Eigen::VectorXcd storage = Eigen::VectorXcd::Constant(8 * (groups + 63),
-                                                              std::numeric_limits<double>::quiet_NaN());
+        Eigen::VectorXcd storage =
+            Eigen::VectorXcd::Constant(8 * (groups + 63), std::numeric_limits<double>::quiet_NaN());
         for (size_t i = 0; i < groups; ++i)
             storage.segment<8>(8 * i) = local;
         const auto rho = QC::QubitRegisterCalculator<>::LocalDensityMatrix<3>(storage, {1, 2, 4}, 8 * groups, false);
@@ -799,6 +805,36 @@ static bool StatevectorKrausTrajectoryTest()
                 return false;
             }
         }
+
+    // Some reduction blocks contain only zeros, and each square in the others rounds to zero.
+    // The map must distinguish their representable total from exact cancellation.
+    {
+        constexpr size_t count = size_t{1} << 16;
+        Eigen::VectorXcd input = Eigen::VectorXcd::Zero(count);
+        input.tail(count / 2).setConstant(std::complex<double>(1. / 256., -1. / 256.));
+        const Eigen::MatrixXcd tiny = std::complex<double>(0., tinyScale) * Eigen::MatrixXcd::Identity(4, 4);
+        Eigen::MatrixXcd cancel = Eigen::MatrixXcd::Zero(4, 4);
+        cancel(0, 0) = 1.;
+        cancel(0, 1) = -1.;
+        for (bool parallel : {false, true})
+        {
+            QC::QubitRegister<> reg(16);
+            reg.SetMultithreading(parallel);
+            reg.setRegisterStorage(input);
+            if (reg.ApplyLocalMapNorm(tiny, 2, 5) != std::numeric_limits<double>::denorm_min())
+            {
+                std::cout << "A local map lost a subnormal norm distributed across blocks" << std::endl;
+                return false;
+            }
+            reg.setRegisterStorage(input);
+            if (reg.ApplyLocalMapNorm(cancel, 0, 5) != 0. ||
+                (reg.getRegisterStorage().array() != std::complex<double>(0.)).any())
+            {
+                std::cout << "An exactly cancelling local map produced a nonzero result" << std::endl;
+                return false;
+            }
+        }
+    }
 
     std::mt19937_64 random(0xC0FFEEULL);
     std::normal_distribution<double> normal;
@@ -846,7 +882,8 @@ static bool StatevectorKrausTrajectoryTest()
             const Eigen::MatrixXcd serial = evaluate();
             const bool serialPopulations = checkPopulations(serial);
             reg.SetMultithreading(true);
-            if ((parallel - expected).norm() > 1E-12 || parallel != serial || !parallelPopulations || !serialPopulations)
+            if ((parallel - expected).norm() > 1E-12 || parallel != serial || !parallelPopulations ||
+                !serialPopulations)
             {
                 std::cout << "Reduced density matrix of " << qubits.size() << " qubits is wrong on " << nrQubits
                           << " qubits (error " << (parallel - expected).norm()
@@ -969,8 +1006,7 @@ static bool StatevectorKrausTrajectoryTest()
             for (int c = 0; c < 8; ++c)
                 op(r, c) = phase[(r + c) % 4] / 8.;
         const std::vector<Eigen::MatrixXcd> operators{op, op.conjugate()};
-        for (const std::array<size_t, 3> qubits :
-             {std::array<size_t, 3>{0, 12, 2}, {2, 0, 12}, {12, 2, 0}, {1, 12, 3}})
+        for (const std::array<size_t, 3> qubits : {std::array<size_t, 3>{0, 12, 2}, {2, 0, 12}, {12, 2, 0}, {1, 12, 3}})
         {
             const auto offset = [&](unsigned local) {
                 size_t index = 0;
@@ -991,8 +1027,8 @@ static bool StatevectorKrausTrajectoryTest()
                 QC::QubitRegister<> reg(16);
                 reg.setRegisterStorage(input);
                 reg.ComputeStart();
-                const size_t selected = reg.ApplyKrausOperator(operators, k == 0 ? 0.79 : 0.81, qubits[0], qubits[1],
-                                                               qubits[2]);
+                const size_t selected =
+                    reg.ApplyKrausOperator(operators, k == 0 ? 0.79 : 0.81, qubits[0], qubits[1], qubits[2]);
                 reg.ComputeEnd();
                 Eigen::VectorXcd expected = Eigen::VectorXcd::Zero(input.size());
                 for (unsigned r = 0; r < 8; ++r)
@@ -1000,7 +1036,8 @@ static bool StatevectorKrausTrajectoryTest()
                         (k == 0 ? phase[r % 4] : std::conj(phase[r % 4])) / std::sqrt(8.);
                 if (selected != k || !reg.getRegisterStorage().isApprox(expected, 1E-12))
                 {
-                    std::cout << "Dense complex Kraus interference selected or normalized the wrong branch" << std::endl;
+                    std::cout << "Dense complex Kraus interference selected or normalized the wrong branch"
+                              << std::endl;
                     return false;
                 }
                 reg.setRegisterStorage(input);
@@ -1120,8 +1157,8 @@ static bool StatevectorKrausTrajectoryTest()
 
     // In a projective measurement a positive branch can be smaller than the squared-weight range.
     // Splitting that projector into four equal Kraus operators makes even its amplitude underflow.
-    for (const double amplitude : {1.2 * std::ldexp(1., -537), std::ldexp(1., -540),
-                                   std::numeric_limits<double>::denorm_min()})
+    for (const double amplitude :
+         {1.2 * std::ldexp(1., -537), std::ldexp(1., -540), std::numeric_limits<double>::denorm_min()})
     {
         Eigen::MatrixXcd projector = Eigen::MatrixXcd::Zero(8, 8);
         projector(7, 7) = 1.;
@@ -1166,6 +1203,32 @@ static bool StatevectorKrausTrajectoryTest()
         if (std::abs(reg.getBasisStateAmplitude(7) / 1E50 - 1.) > 1E-13)
             return false;
     }
+    // A zero population can be an empty column or a nonzero amplitude whose square underflows.
+    // Put the only such amplitude in the last reduction block, including the odd AVX group.
+    for (size_t q : {size_t{0}, size_t{4}})
+        for (bool dense : {false, true})
+            for (bool occupied : {false, true})
+            {
+                constexpr size_t n = 16, q2 = 7, q3 = 13;
+                const size_t spectator =
+                    ((size_t{1} << n) - 1) ^ ((size_t{1} << q) | (size_t{1} << q2) | (size_t{1} << q3));
+                Eigen::VectorXcd input = Eigen::VectorXcd::Zero(size_t{1} << n);
+                input[0] = 1.;
+                input[spectator | (size_t{1} << q) | (size_t{1} << q3)] = {-0., occupied ? -1E-200 : -0.};
+                Eigen::MatrixXcd stay = Eigen::MatrixXcd::Zero(8, 8), gain = stay;
+                stay(0, 0) = 1.;
+                gain(6, 5) = 1E200;
+                if (dense)
+                    gain(6, 3) = {0.25, 0.125};
+                QC::QubitRegister<> reg(n);
+                reg.setRegisterStorageFastNoNormalize(input);
+                const size_t chosen = reg.ApplyKrausOperator({stay, gain}, 0.75, q, q2, q3);
+                const size_t expectedIndex = occupied ? spectator | (size_t{1} << q2) | (size_t{1} << q3) : 0;
+                const std::complex<double> expected = occupied ? std::complex<double>(0., -1.) : 1.;
+                if (chosen != size_t(occupied) ||
+                    std::abs(reg.getBasisStateAmplitude(expectedIndex) - expected) > 1E-13)
+                    return false;
+            }
     // The draw lies exactly at the end of the first branch and inside the next, however small it is.
     {
         const Eigen::MatrixXcd halfI = 0.5 * Eigen::MatrixXcd::Identity(8, 8);
@@ -1189,8 +1252,7 @@ static bool StatevectorKrausTrajectoryTest()
         input << std::ldexp(1., -530), 1., 1., 0.;
         QC::QubitRegister<> reg(2);
         reg.setRegisterStorage(input);
-        if (reg.ApplyKrausOperator(projectors, 0.5, 0, 1) != 1 ||
-            std::abs(reg.getBasisStateAmplitude(1) - 1.) > 1E-13)
+        if (reg.ApplyKrausOperator(projectors, 0.5, 0, 1) != 1 || std::abs(reg.getBasisStateAmplitude(1) - 1.) > 1E-13)
             return false;
     }
     // A small common scale forces the exceptional path. Cancel first and normalize the actual image.
@@ -1482,11 +1544,7 @@ static bool DensityMatrixInitializationAndValidationTest()
         !DM_ExpectInvalidArgument([&] { dm.GetQubitProbability(2); }, "Out-of-range probability qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.MeasureQubit(2); }, "Out-of-range measured qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.DephaseMeasure(2); }, "Out-of-range dephased qubit") ||
-        !DM_ExpectInvalidArgument(
-            [&] {
-                dm.MeasureNoCollapse(std::set<size_t>{0, 2});
-            },
-            "Out-of-range subset qubit") ||
+        !DM_ExpectInvalidArgument([&] { dm.MeasureNoCollapse(std::set<size_t>{0, 2}); }, "Out-of-range subset qubit") ||
         !DM_ExpectInvalidArgument([&] { dm.RepeatedMeasure(1, 0, 1); }, "Reversed measurement range") ||
         !DM_ExpectInvalidArgument([&] { dm.RepeatedMeasureUnordered(0, 2, 1); }, "Out-of-range measurement range"))
         return false;
@@ -1507,7 +1565,12 @@ static bool DensityMatrixInitializationAndValidationTest()
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i2, i4}, 0); }, "Mismatched Kraus dimensions") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i4}, 0, 0); }, "Duplicate two-qubit channel arguments") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i2}, 2); }, "Out-of-range channel qubit") ||
-        !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i8}, 0); }, "Missing targets for an 8x8 channel") ||
+        !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i8}, 0); }, "Missing targets for an 8x8 channel",
+                                  "three target qubits") ||
+        !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({Eigen::MatrixXcd::Identity(3, 3)}, 0); },
+                                  "3x3 channel operator", "dimensions") ||
+        !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({Eigen::MatrixXcd::Zero(4, 3)}, 0); }, "4x3 channel operator",
+                                  "dimensions") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i8}, 0, 1, 1); }, "Duplicate three-qubit channel targets") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({i4}, 0, 1, 0); }, "4x4 channel on three targets") ||
         !DM_ExpectInvalidArgument([&] { dm.ApplyChannel({nonFiniteKraus}, 0); }, "Non-finite Kraus operator"))
@@ -1526,16 +1589,10 @@ static bool DensityMatrixInitializationAndValidationTest()
         !DM_ExpectInvalidArgument([&] { dm.ExpectationValue(std::string("IA")); }, "Invalid Pauli operator") ||
         !DM_ExpectInvalidArgument([&] { dm.setToBasisState(4); }, "Out-of-range basis state") ||
         !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({}); }, "Empty basis-state mixture") ||
-        !DM_ExpectInvalidArgument(
-            [&] {
-                dm.setToMixtureOfBasisStates({{0, 0.}, {7, 1.}});
-            },
-            "Mixture without a valid positive weight") ||
-        !DM_ExpectInvalidArgument(
-            [&] {
-                dm.setToMixtureOfBasisStates({{0, std::numeric_limits<double>::infinity()}});
-            },
-            "Non-finite mixture weight"))
+        !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({{0, 0.}, {7, 1.}}); },
+                                  "Mixture without a valid positive weight") ||
+        !DM_ExpectInvalidArgument([&] { dm.setToMixtureOfBasisStates({{0, std::numeric_limits<double>::infinity()}}); },
+                                  "Non-finite mixture weight"))
         return false;
 
     if ((dm.getDensityMatrix() - original).norm() > 1E-12)
@@ -1543,6 +1600,9 @@ static bool DensityMatrixInitializationAndValidationTest()
         std::cout << "An invalid operation changed the density matrix" << std::endl;
         return false;
     }
+    dm.ApplyChannel({i4}, 1); // The omitted second target defaults to qubit zero.
+    if (dm.getDensityMatrix() != original)
+        return false;
 
     // Non-normalized finite vectors are accepted and normalized into a unit-trace pure state.
     Eigen::VectorXcd psi(4);

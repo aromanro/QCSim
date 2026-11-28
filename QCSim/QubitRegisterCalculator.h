@@ -24,9 +24,12 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <numeric>
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #if !defined(QCSIM_DISABLE_SIMD) && (defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64))
@@ -261,17 +264,19 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         : LocalDensity<Bits, false, false, RealPartOnly>(state, bits, count);
     }
 
-    template <unsigned Bits>
-    static inline std::array<double, (size_t{1} << Bits)> LocalPopulations(
-        const VectorClass &state, const std::array<size_t, Bits> &bits, size_t count, bool parallel)
+    // When requested, return the populations together with a mask of the columns with at least
+    // one nonzero amplitude. A positive amplitude magnitude can square to zero.
+    template <unsigned Bits, bool TrackSupport = false>
+    static inline auto LocalPopulations(const VectorClass &state, const std::array<size_t, Bits> &bits, size_t count,
+                                        bool parallel)
     {
-        return parallel ? LocalDensity<Bits, true, true>(state, bits, count)
-                        : LocalDensity<Bits, false, true>(state, bits, count);
+        return parallel ? LocalDensity<Bits, true, true, false, TrackSupport>(state, bits, count)
+                        : LocalDensity<Bits, false, true, false, TrackSupport>(state, bits, count);
     }
 
     // Apply a dense map on up to three index bits and return the squared norm of the resulting state.
     // The map pass sums |amplitude|^2 in a fixed order independent of the thread count. If individual
-    // squares may have underflowed, a second pass recomputes the norm with scaled amplitudes.
+    // squares may have underflowed, check the output in fixed blocks and scale the nonzero blocks.
     template <unsigned Bits>
     static inline double ApplyLocalMapNorm(VectorClass &state, const std::complex<double> *matrix,
                                            const std::array<size_t, Bits> &bits, size_t count, bool parallel)
@@ -1531,18 +1536,19 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     // their running sums in registers. Separate real and imaginary products retain the reduction order.
     template <bool SeparatePairs>
     static EIGEN_DONT_INLINE void ThreeQubitDensityBlock(const std::complex<double> *data,
-                                                         const std::array<size_t, 8> &offsets,
-                                                         const IndexPlan &plan, size_t begin, size_t end,
-                                                         std::array<double, 128> &sums)
+                                                         const std::array<size_t, 8> &offsets, const IndexPlan &plan,
+                                                         size_t begin, size_t end, std::array<double, 128> &sums)
     {
         constexpr size_t tileSize = ThreeQubitDensityTileSize;
         // When physical bit zero is free, the existing AVX reduction sums even and odd groups separately.
         constexpr size_t parts = SeparatePairs ? 2 : 1;
+
         // The two vectors hold one row component times [Re(c), Im(c), Re(c+1), Im(c+1)].
         struct Products
         {
             __m256d rowReal, rowImag;
         };
+
         Products products[parts][8][4]{};
         alignas(32) std::complex<double> panel[tileSize][8];
         for (size_t tile = begin; tile < end; tile += tileSize)
@@ -1597,10 +1603,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
 #endif
 
     // Only the lower triangle is accumulated; for populations only its real diagonal is needed.
-    template <unsigned Bits, bool Parallel, bool PopulationsOnly = false, bool RealPartOnly = false>
+    template <unsigned Bits, bool Parallel, bool PopulationsOnly = false, bool RealPartOnly = false,
+              bool TrackSupport = false>
     static inline auto LocalDensity(const VectorClass &vector, const std::array<size_t, Bits> &bits, size_t count)
     {
         static_assert(Bits >= 1 && Bits <= 3, "A local density matrix covers one to three index bits");
+        static_assert(!TrackSupport || PopulationsOnly, "Column support is accumulated with populations");
         constexpr size_t dimension = size_t{1} << Bits;
         std::array<size_t, dimension> offsets{};
         size_t targets = 0;
@@ -1618,7 +1626,8 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             blockSize <<= 1;
         const size_t blocks = active / blockSize;
         constexpr size_t components = RealPartOnly ? 1 : 2;
-        using Sums = std::array<double, PopulationsOnly ? dimension : components * dimension * dimension>;
+        using Sums = std::array<double, PopulationsOnly ? (TrackSupport ? 2 * dimension : dimension)
+                                                        : components * dimension * dimension>;
         Sums single{};
         std::vector<Sums> several(blocks > 1 ? blocks : 0);
         auto *const partial = blocks > 1 ? several.data() : &single;
@@ -1666,6 +1675,8 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             {
                                 v[r] =
                                     _mm256_loadu_pd(reinterpret_cast<const double *>(&data[(first + k) | offsets[r]]));
+                                if constexpr (TrackSupport)
+                                    accIm[r] = _mm256_or_pd(accIm[r], v[r]);
                                 if constexpr (complexOffDiagonal)
                                     swapped[r] = _mm256_permute_pd(v[r], 5);
                             }
@@ -1688,6 +1699,13 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             _mm256_store_pd(re, accRe[p]);
                             const size_t index = PopulationsOnly ? r : components * (r * dim + c);
                             sums[index] = (re[0] + re[1]) + (re[2] + re[3]);
+                            if constexpr (TrackSupport)
+                            {
+                                // OR the original component bits. Dropping the sign bits counts both
+                                // signed zeros as empty and retains even the smallest subnormal.
+                                const auto occupied = _mm256_slli_epi64(_mm256_castpd_si256(accIm[r]), 1);
+                                sums[dim + r] = !_mm256_testz_si256(occupied, occupied);
+                            }
                             if constexpr (complexOffDiagonal)
                             {
                                 _mm256_store_pd(im, accIm[p]);
@@ -1709,6 +1727,8 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         {
                             v[r] = _mm_loadu_pd(reinterpret_cast<const double *>(
                                 &data[static_cast<Eigen::Index>(base | offsets[r]) * stride]));
+                            if constexpr (TrackSupport)
+                                accIm[r] = _mm_or_pd(accIm[r], v[r]);
                             if constexpr (complexOffDiagonal)
                                 swapped[r] = _mm_shuffle_pd(v[r], v[r], 1);
                         }
@@ -1730,6 +1750,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             _mm_storeu_pd(re, accRe[p]);
                             const size_t index = PopulationsOnly ? r : components * (r * dim + c);
                             sums[index] = re[0] + re[1];
+                            if constexpr (TrackSupport)
+                            {
+                                const auto occupied = _mm_slli_epi64(_mm_castpd_si128(accIm[r]), 1);
+                                sums[dim + r] =
+                                    _mm_movemask_epi8(_mm_cmpeq_epi8(occupied, _mm_setzero_si128())) != 0xffff;
+                            }
                             if constexpr (complexOffDiagonal)
                             {
                                 _mm_storeu_pd(im, accIm[p]);
@@ -1750,6 +1776,9 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                     const auto &amplitude = data[static_cast<Eigen::Index>(base | offsets[r]) * stride];
                     re[r] = amplitude.real();
                     im[r] = amplitude.imag();
+                    if constexpr (TrackSupport)
+                        if (re[r] != 0. || im[r] != 0.)
+                            sums[dim + r] = 1.;
                 }
                 for (size_t r = 0; r < dim; ++r)
                     for (size_t c = PopulationsOnly ? r : 0; c <= r; ++c)
@@ -1767,7 +1796,17 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         for (size_t block = 0; block < blocks; ++block)
             for (size_t k = 0; k < total.size(); ++k)
                 total[k] += partial[block][k];
-        if constexpr (PopulationsOnly)
+        if constexpr (TrackSupport)
+        {
+            std::array<double, dimension> populations;
+            std::copy_n(total.begin(), dimension, populations.begin());
+            unsigned support = 0;
+            for (size_t c = 0; c < dimension; ++c)
+                if (total[dimension + c] != 0.)
+                    support |= 1u << c;
+            return std::make_pair(populations, support);
+        }
+        else if constexpr (PopulationsOnly)
             return total;
         else
         {
@@ -1993,6 +2032,46 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     }
 #endif
 
+    // A projector can annihilate its input, but a small positive image can also have every individual
+    // square round to zero. Check whole blocks of the output in parallel and sum them in a fixed order.
+    template <bool Parallel>
+    static EIGEN_DONT_INLINE double SmallMapSquaredNorm(const Amplitudes &state, size_t count, size_t blocks,
+                                                        int threads, double *partial)
+    {
+        const size_t elementsPerBlock = count / blocks;
+        ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
+            const size_t begin = block * elementsPerBlock;
+            const size_t end = block + 1 == blocks ? count : begin + elementsPerBlock;
+            if constexpr (std::is_same_v<typename VectorClass::Scalar, std::complex<double>> &&
+                          sizeof(double) == sizeof(uint64_t) && std::numeric_limits<double>::is_iec559)
+            {
+                // OR both components without squaring, then discard their sign bits.
+                uint64_t occupied = 0;
+                for (size_t i = begin; i < end; ++i)
+                {
+                    uint64_t bits[2];
+                    std::memcpy(bits, &state(i), sizeof(bits));
+                    occupied |= bits[0] | bits[1];
+                }
+                if ((occupied << 1) == 0)
+                {
+                    partial[block] = 0.;
+                    return;
+                }
+            }
+            double scaled = 0.;
+            for (size_t i = begin; i < end; ++i)
+            {
+                const auto amplitude = state(i);
+                const double re = static_cast<double>(amplitude.real()) * 0x1p512;
+                const double im = static_cast<double>(amplitude.imag()) * 0x1p512;
+                scaled += re * re + im * im;
+            }
+            partial[block] = scaled;
+        });
+        return std::ldexp(std::accumulate(partial, partial + blocks, 0.), -1024);
+    }
+
     // ApplyLocalMapNorm. Dense: the product of the gates and operators of a block has no structure to use. Every
     // input of a block of amplitudes is read before any output is written.
     template <unsigned Bits, bool Parallel>
@@ -2025,22 +2104,13 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         const int threads = Parallel ? TeamThreads(count) : 1;
         const Amplitudes state(vector);
         const auto total = [&] {
-            double sum = 0.;
-            for (size_t block = 0; block < blocks; ++block)
-                sum += partial[block];
-            // Individual squares can round to zero before their representable sum is formed.
-            // At this scale, multiplying the amplitudes by 2^512 keeps their squares in range.
+            const double sum = std::accumulate(partial, partial + blocks, 0.);
             if (sum < std::numeric_limits<double>::min() * static_cast<double>(count))
             {
-                double scaled = 0.;
-                for (size_t i = 0; i < count; ++i)
-                {
-                    const auto amplitude = state(i);
-                    const double re = static_cast<double>(amplitude.real()) * 0x1p512;
-                    const double im = static_cast<double>(amplitude.imag()) * 0x1p512;
-                    scaled += re * re + im * im;
-                }
-                return std::ldexp(scaled, -1024);
+                if (sum == 0. && std::all_of(matrix, matrix + dimension * dimension,
+                                             [](auto coefficient) { return coefficient == 0.; }))
+                    return 0.;
+                return SmallMapSquaredNorm<Parallel>(state, count, blocks, threads, partial);
             }
             return sum;
         };

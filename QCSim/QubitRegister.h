@@ -765,16 +765,19 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         const auto unreliablePopulation = [&](double p, size_t c) {
             if (p != 0.)
                 return !std::isfinite(p) || p < std::numeric_limits<double>::min();
-            return std::any_of(kraus.begin(), kraus.end(), [&](const MatrixClass &op) {
-                return op.col(c).cwiseAbs().maxCoeff() > 1.;
-            });
+            return std::any_of(kraus.begin(), kraus.end(),
+                               [&](const MatrixClass &op) { return op.col(c).cwiseAbs().maxCoeff() > 1.; });
+        };
+        const auto populationsWithSupport = [&] {
+            return BaseClass::template LocalPopulations<Qubits, true>(registerStorage, LocalBits<Qubits>(qubits),
+                                                                      NrBasisStates, UseMultithreading());
         };
         MatrixClass rho;
         if (usePopulations)
         {
-            const auto p = Populations<Qubits>(qubits);
+            const auto [p, support] = populationsWithSupport();
             for (size_t c = 0; c < dimension; ++c)
-                if (unreliablePopulation(p[c], c))
+                if ((support & (1u << c)) && unreliablePopulation(p[c], c))
                     return ApplyScaledKraus<Qubits>(kraus, random, qubits);
             KrausPopulationWeights(kraus, p, weights);
         }
@@ -783,9 +786,21 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
             const bool real = std::all_of(kraus.begin(), kraus.end(),
                                           [](const MatrixClass &op) { return (op.imag().array() == 0.).all(); });
             rho = real ? LocalDensity<Qubits, true>(qubits) : LocalDensity<Qubits>(qubits);
+            unsigned suspect = 0;
             for (size_t c = 0; c < dimension; ++c)
-                if (unreliablePopulation(double(rho(c, c).real()), c))
-                    return ApplyScaledKraus<Qubits>(kraus, random, qubits);
+            {
+                const double p = rho(c, c).real();
+                if (unreliablePopulation(p, c))
+                {
+                    if (p != 0.)
+                        return ApplyScaledKraus<Qubits>(kraus, random, qubits);
+                    suspect |= 1u << c;
+                }
+            }
+            // The density pass computes coherences. Read support separately only if an unreliable
+            // population needs to be distinguished from a truly empty column.
+            if (suspect && (populationsWithSupport().second & suspect))
+                return ApplyScaledKraus<Qubits>(kraus, random, qubits);
         }
         double total = 0., doubt = 0.;
         for (size_t k = 0; k < kraus.size(); ++k)
@@ -987,11 +1002,13 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         }
 
         constexpr int precision = std::numeric_limits<double>::digits;
+
         struct Weight
         {
             std::uint64_t significand = 0;
             int exponent = 0, imageExponent = 0;
         };
+
         std::vector<Weight> weights(kraus.size());
         int smallestExponent = std::numeric_limits<int>::max();
         int largestExponent = std::numeric_limits<int>::min();
@@ -1016,14 +1033,14 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
             for (size_t r = 0; r < dimension; ++r)
                 for (size_t c = 0; c < dimension; ++c)
                 {
-                    const auto z = maxima[c] > 0. ? shift(kraus[k](r, c), columns[c] - imageExponent)
-                                                  : std::complex<double>{};
+                    const auto z =
+                        maxima[c] > 0. ? shift(kraus[k](r, c), columns[c] - imageExponent) : std::complex<double>{};
                     coefficients[r * dimension + c] = z;
                     diagonal += std::norm(z) * populations[c];
                 }
             image = scaled;
-            const double weight = BaseClass::template ApplyLocalMapNorm<Qubits>(
-                image, coefficients.data(), bits, NrBasisStates, UseMultithreading());
+            const double weight = BaseClass::template ApplyLocalMapNorm<Qubits>(image, coefficients.data(), bits,
+                                                                                NrBasisStates, UseMultithreading());
             if (weight <= 0. || weight < (AmplitudeRounding * AmplitudeRounding * dimension) * diagonal)
                 continue;
             w.significand = static_cast<std::uint64_t>(std::ldexp(std::frexp(weight, &w.exponent), precision));
@@ -1071,7 +1088,8 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
                 continue;
             chosen = k;
             addProduct(cumulative, w, 1, 0);
-            if (std::lexicographical_compare(threshold.rbegin(), threshold.rend(), cumulative.rbegin(), cumulative.rend()))
+            if (std::lexicographical_compare(threshold.rbegin(), threshold.rend(), cumulative.rbegin(),
+                                             cumulative.rend()))
                 break;
         }
         const auto &w = weights[chosen];
@@ -1375,8 +1393,7 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         }
     }
 
-    template <unsigned Qubits>
-    std::array<size_t, Qubits> LocalBits(const std::array<size_t, Qubits> &qubits) const
+    template <unsigned Qubits> std::array<size_t, Qubits> LocalBits(const std::array<size_t, Qubits> &qubits) const
     {
         std::array<size_t, Qubits> bits{};
         for (unsigned k = 0; k < Qubits; ++k)
@@ -1394,8 +1411,8 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
     template <unsigned Qubits>
     std::array<double, (size_t{1} << Qubits)> Populations(const std::array<size_t, Qubits> &qubits) const
     {
-        return BaseClass::template LocalPopulations<Qubits>(registerStorage, LocalBits<Qubits>(qubits),
-                                                             NrBasisStates, UseMultithreading());
+        return BaseClass::template LocalPopulations<Qubits>(registerStorage, LocalBits<Qubits>(qubits), NrBasisStates,
+                                                            UseMultithreading());
     }
 
     template <unsigned Qubits, bool RealPartOnly = false>

@@ -596,6 +596,8 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
     // require all three targets. A unitary gate is the case of a single Kraus operator E_0 = U.
     void ApplyChannel(const std::vector<MatrixClass> &kraus, size_t qubit, size_t controllingQubit1 = 0)
     {
+        if (!kraus.empty() && kraus.front().rows() == 8 && kraus.front().cols() == 8)
+            throw std::invalid_argument("An 8x8 Kraus operator requires three target qubits");
         if (!kraus.empty() && kraus.front().rows() == 2)
             ApplyChannelImpl<1>(kraus, {qubit, 0, 0});
         else
@@ -614,8 +616,6 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
         if (kraus.empty())
             throw std::invalid_argument("A channel must contain at least one Kraus operator");
 
-        ValidateQubits(Qubits, qubits[0], qubits[1], qubits[2]);
-
         constexpr size_t operatorDimension = size_t{1} << Qubits;
         std::array<Scalar, operatorDimension * operatorDimension> completeness{};
         for (const auto &E : kraus)
@@ -631,6 +631,8 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
                     for (size_t k = 0; k < operatorDimension; ++k)
                         completeness[r * operatorDimension + c] += std::conj(E(k, r)) * E(k, c);
         }
+
+        ValidateQubits(Qubits, qubits[0], qubits[1], qubits[2]);
 
         double errorSquared = 0.;
         for (size_t r = 0; r < operatorDimension; ++r)
@@ -1359,7 +1361,7 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
         size_t tileMask = targets, outside = (elements - 1) ^ targets;
         for (size_t filled = 64; filled < tileSize; filled *= 2)
         {
-            tileMask |= outside & -outside;
+            tileMask |= outside & (~outside + 1);
             outside &= outside - 1;
         }
         std::array<size_t, 3> ketBits{}, braBits{};
@@ -1377,7 +1379,7 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
             size_t offset = 0;
             for (; index; index >>= 1, bits &= bits - 1)
                 if (index & 1)
-                    offset |= bits & -bits;
+                    offset |= bits & (~bits + 1);
             return offset;
         };
         const size_t run = (tileMask + 1) & ~tileMask;
@@ -1390,6 +1392,7 @@ class DensityMatrix : public StructuredGateOperations<DensityMatrix<VectorClass,
             Gates::GateStructure structure;
             MatrixClass conjugate;
         };
+
         std::vector<Prepared> prepared;
         prepared.reserve(kraus.size());
         for (const auto &op : kraus)

@@ -56,7 +56,7 @@ inline void RealDenseStatevectorGates()
         const Matrix gate = phase * hadamards;
         Vector actual = input;
         QubitRegisterCalculator<>::ApplyGateInPlace(actual, gate, Gates::ClassifyGateMatrix(gate), {1, 2, 0}, 2, 4,
-                                                   false);
+                                                    false);
         Require(actual[1] == (-.5 * input[3]) * phase, "Dense gate lost a representable amplitude after cancellation");
     }
 
@@ -73,8 +73,8 @@ inline void RealDenseStatevectorGates()
         for (Eigen::Index i = 0; i < initial.size(); ++i)
             initial(i) = {std::sin(.13 * i + .4), std::cos(.37 * i - .1)};
         initial.normalize();
-        const std::vector<std::vector<unsigned>> placements{{1, 3}, {3, 1}, {0, 3}, {3, 0}, {1, 2, n - 1},
-                                                           {n - 1, 2, 1}, {0, n - 1, 2}, {n - 1, 0, 2}, {n - 1, 2, 0}};
+        const std::vector<std::vector<unsigned>> placements{
+            {1, 3}, {3, 1}, {0, 3}, {3, 0}, {1, 2, n - 1}, {n - 1, 2, 1}, {0, n - 1, 2}, {n - 1, 0, 2}, {n - 1, 2, 0}};
         for (const auto &qubits : placements)
         {
             const unsigned arity = static_cast<unsigned>(qubits.size()), dim = 1U << arity;
@@ -89,8 +89,9 @@ inline void RealDenseStatevectorGates()
                 {
                     Vector actual = state;
                     QubitRegisterCalculator<>::ApplyGateInPlace(actual, matrix, structure, bits, arity, state.size(),
-                                                               parallel);
-                    Require((actual - expected).norm() < 2e-15, "Real dense gate changed its amplitudes or target order");
+                                                                parallel);
+                    Require((actual - expected).norm() < 2e-15,
+                            "Real dense gate changed its amplitudes or target order");
                     // Compare the imaginary part separately: tiny imaginary coefficients must survive dispatch.
                     const double scale = expected.imag().cwiseAbs().maxCoeff();
                     Require((actual.imag() - expected.imag()).cwiseAbs().maxCoeff() <= 2e-14 * scale,
