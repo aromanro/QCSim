@@ -182,6 +182,11 @@ notifications are delivered after a successful commit. MPO also accepts three-qu
 operators through `ApplyOperator`, `ApplyOperators`,
 and `ApplyOperatorAndNormalize`; its Kraus-channel interface remains limited to two qubits.
 
+For a family of 8x8 Kraus operators, `reg.SampleKrausOperator(kraus, q0, q1, q2)`
+samples a branch and normalizes the statevector. `dm.ApplyChannel(kraus, q0, q1, q2)`
+applies the full trace-preserving channel to a density matrix. In both calls, `q0`
+is the least significant local bit and all three targets must be distinct.
+
 Pauli propagation and extended stabilizer expose generic `ApplyGate` entry points for
 one- to three-qubit gates as well as named interaction methods. Their cost depends on
 Pauli-term or stabilizer-component growth. Both backends cache compiled matrix operations

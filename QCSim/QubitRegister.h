@@ -2,7 +2,9 @@
 
 #include "QubitRegisterCalculator.h"
 
+#include <cstdint>
 #include <iomanip>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -660,10 +662,9 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
     }
 
     // Applies a 2x2, 4x4 or 8x8 matrix, which need not be unitary, to one, two or three qubits and returns the
-    // squared norm the state has afterwards, from the same pass. The first qubit is the least significant bit of
-    // the matrix index. The state is not renormalized. A trajectory uses this to apply, on speculation, the
-    // operators the channels of a block leave when nothing happens: the norm is the probability of that, so the
-    // state is read a second time only when something did happen.
+    // squared norm of the resulting, unnormalized state. The first qubit is the least significant bit of the
+    // matrix index. A trajectory can apply the no-jump operators of a block and obtain their probability in
+    // the same pass. A very small squared norm is recomputed from the output to recover underflowed terms.
     double ApplyLocalMapNorm(const MatrixClass &matrix, size_t qubit)
     {
         return LocalNorm<1>(matrix, {qubit});
@@ -681,12 +682,13 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
 
     // One step of a quantum trajectory through the channel rho -> sum_k E_k rho E_k^dagger: applies one Kraus
     // operator, chosen with the probability the state gives it, and renormalizes. Averaging the trajectories
-    // reproduces the channel. The operators are 2x2, on `qubit`, or 4x4, with `qubit` the low bit of the matrix
-    // index and `controllingQubit1` the high one. `random` is uniform in [0, 1).
+    // reproduces the channel. The operators are 2x2, 4x4 or 8x8, on one, two or three qubits respectively.
+    // The first target is the low bit of the matrix index. `random` is uniform in [0, 1).
     //
     // The probabilities tr(E_k rho E_k^dagger) come from the reduced density matrix of the targets. When every
     // operator has at most one nonzero per row (as in amplitude damping), only the target populations are
-    // needed. Both take one pass whatever the number of operators; the chosen operator costs one gate application.
+    // needed. Real operators need only the real part of the reduced density matrix. In the ordinary range,
+    // one pass supplies the weights for all operators and one gate application produces the selected branch.
     // Trace preservation is not checked: the weights are taken relative to their sum, and the state leaves with
     // unit norm. Returns the index of the operator applied.
     //
@@ -694,22 +696,48 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
     // UnresolvedWeight). What the amplitudes cannot tell from their own rounding counts as no weight: one below
     // (64 epsilon)^2 times the bound on those terms, that is, an amplitude left below about 1.4e-14 of the
     // amplitudes that cancelled to give it. An operator without weight is never drawn. When none is left the call
-    // throws std::domain_error, with the largest weight found and the bound it fell below, and the register is as
-    // it was. This refuses, too, a branch that small which is exact (amplitudes that are binary fractions, for
-    // one): on a state that came out of gates the rounding of a branch that is exactly zero reaches the same size,
-    // and the two are not told apart. A channel that preserves the trace is not concerned: one of its operators
-    // always has an ordinary weight.
+    // throws std::domain_error and preserves the register. The diagnostic includes the largest directly measured
+    // weight and its cutoff when available. The cutoff also applies to exact binary inputs: roundoff in a state
+    // produced by gates can leave a residual of the same size for a branch whose true weight is zero.
+    // When amplitudes or coefficients reach the limits of the scalar range,
+    // powers of two keep the products and normalization representable. In that case the cumulative draw is
+    // exact for the computed weights; the dot products giving those weights still have ordinary roundoff.
     size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, size_t qubit,
                               size_t controllingQubit1 = 0)
     {
+        if (!kraus.empty() && kraus.front().rows() == 2)
+            return ApplyKraus<1>(kraus, random, {qubit});
+        return ApplyKraus<2>(kraus, random, {qubit, controllingQubit1});
+    }
+
+    size_t ApplyKrausOperator(const std::vector<MatrixClass> &kraus, double random, size_t qubit, size_t qubit2,
+                              size_t qubit3)
+    {
+        return ApplyKraus<3>(kraus, random, {qubit, qubit2, qubit3});
+    }
+
+    // The same, drawing from this register's own random stream.
+    size_t SampleKrausOperator(const std::vector<MatrixClass> &kraus, size_t qubit, size_t controllingQubit1 = 0)
+    {
+        return ApplyKrausOperator(kraus, uniformZeroOne(rng), qubit, controllingQubit1);
+    }
+
+    size_t SampleKrausOperator(const std::vector<MatrixClass> &kraus, size_t qubit, size_t qubit2, size_t qubit3)
+    {
+        return ApplyKrausOperator(kraus, uniformZeroOne(rng), qubit, qubit2, qubit3);
+    }
+
+  private:
+    template <unsigned Qubits>
+    size_t ApplyKraus(const std::vector<MatrixClass> &kraus, double random, const std::array<size_t, Qubits> &qubits)
+    {
+        constexpr Eigen::Index dimension = Eigen::Index{1} << Qubits;
         if (kraus.empty())
             throw std::invalid_argument("A channel must contain at least one Kraus operator");
-        const auto dimension = kraus.front().rows();
-        if (dimension != 2 && dimension != 4)
-            throw std::invalid_argument("Statevector Kraus operators must be 2x2 or 4x4 matrices");
         for (const auto &e : kraus)
             if (e.rows() != dimension || e.cols() != dimension || !e.allFinite())
-                throw std::invalid_argument("Kraus operators must be finite square matrices of the same size");
+                throw std::invalid_argument(
+                    "Kraus operators must be finite square matrices matching their target qubits");
 
         // Stack storage for the usual few operators: the weight of each, and its reach when the weight is in doubt.
         double fewWeights[16], fewReaches[16];
@@ -731,16 +759,52 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
             }
             return true;
         });
+        // A population rounded to zero can hide a finite contribution from a large coefficient.
+        // With bounded Kraus coefficients its contribution is itself below the weight range, and
+        // only the tiny-weight or boundary checks below need to recover it.
+        const auto unreliablePopulation = [&](double p, size_t c) {
+            if (p != 0.)
+                return !std::isfinite(p) || p < std::numeric_limits<double>::min();
+            return std::any_of(kraus.begin(), kraus.end(),
+                               [&](const MatrixClass &op) { return op.col(c).cwiseAbs().maxCoeff() > 1.; });
+        };
+        const auto populationsWithSupport = [&] {
+            return BaseClass::template LocalPopulations<Qubits, true>(registerStorage, LocalBits<Qubits>(qubits),
+                                                                      NrBasisStates, UseMultithreading());
+        };
         MatrixClass rho;
         if (usePopulations)
         {
-            if (dimension == 2)
-                KrausPopulationWeights(kraus, LocalPopulations(qubit), weights);
-            else
-                KrausPopulationWeights(kraus, LocalPopulations(qubit, controllingQubit1), weights);
+            const bool mayAmplify = std::any_of(kraus.begin(), kraus.end(),
+                                                [](const MatrixClass &op) { return op.cwiseAbs().maxCoeff() > 1.; });
+            const auto [p, support] =
+                mayAmplify ? populationsWithSupport() : std::make_pair(Populations<Qubits>(qubits), ~0u);
+            for (size_t c = 0; c < dimension; ++c)
+                if ((support & (1u << c)) && unreliablePopulation(p[c], c))
+                    return ApplyScaledKraus<Qubits>(kraus, random, qubits);
+            KrausPopulationWeights(kraus, p, weights);
         }
         else
-            rho = dimension == 2 ? LocalDensityMatrix(qubit) : LocalDensityMatrix(qubit, controllingQubit1);
+        {
+            const bool real = std::all_of(kraus.begin(), kraus.end(),
+                                          [](const MatrixClass &op) { return (op.imag().array() == 0.).all(); });
+            rho = real ? LocalDensity<Qubits, true>(qubits) : LocalDensity<Qubits>(qubits);
+            unsigned suspect = 0;
+            for (size_t c = 0; c < dimension; ++c)
+            {
+                const double p = rho(c, c).real();
+                if (unreliablePopulation(p, c))
+                {
+                    if (p != 0.)
+                        return ApplyScaledKraus<Qubits>(kraus, random, qubits);
+                    suspect |= 1u << c;
+                }
+            }
+            // The density pass computes coherences. Read support separately only if an unreliable
+            // population needs to be distinguished from a truly empty column.
+            if (suspect && (populationsWithSupport().second & suspect))
+                return ApplyScaledKraus<Qubits>(kraus, random, qubits);
+        }
         double total = 0., doubt = 0.;
         for (size_t k = 0; k < kraus.size(); ++k)
         {
@@ -768,6 +832,8 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
                             diagonal += term;
                     }
             const double reach = static_cast<double>(dimension) * diagonal;
+            if (!std::isfinite(weight) || !std::isfinite(reach))
+                return ApplyScaledKraus<Qubits>(kraus, random, qubits);
             weights[k] = weight > 0. ? weight : 0.;
             if (weight >= UnresolvedWeight * reach)
                 reaches[k] = -1.; // resolved
@@ -780,11 +846,13 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         }
 
         size_t chosen = kraus.size();
+        bool boundaryAtZero = false;
         // Draws the operator for `random`; says whether the threshold is clear of the ends of its interval by more
         // than the weights in doubt can move them.
         const auto draw = [&]() {
             const double threshold = random * total;
             double accumulated = 0., lower = 0.;
+            boundaryAtZero = false;
             for (size_t k = 0; k < kraus.size(); ++k)
             {
                 if (weights[k] <= 0.)
@@ -793,7 +861,13 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
                 lower = accumulated;
                 accumulated += weights[k];
                 if (threshold < accumulated)
+                {
+                    if (threshold == lower && random > 0.)
+                        boundaryAtZero = std::any_of(weights, weights + kraus.size(), [&](double w) {
+                            return w <= std::numeric_limits<double>::epsilon() * total;
+                        });
                     break;
+                }
             }
             return threshold - lower > 2. * doubt && accumulated - threshold > 2. * doubt;
         };
@@ -814,8 +888,7 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
                 {
                     if (reaches[k] >= 0.)
                     {
-                        const double exact = dimension == 2 ? LocalMapWeight<1>(kraus[k], {qubit})
-                                                            : LocalMapWeight<2>(kraus[k], {qubit, controllingQubit1});
+                        const double exact = LocalMapWeight<Qubits>(kraus[k], qubits);
                         const double cutoff = AmplitudeRounding * AmplitudeRounding * reaches[k];
                         if (exact > largestFound)
                         {
@@ -831,7 +904,13 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         }
         if (!drawn)
         {
-            if (!std::isfinite(total) || total <= 0.)
+            // Tiny squared norms can round to zero or retain only a few significant bits. This can
+            // affect a draw even in a trace-preserving family if the first interval is that small.
+            constexpr double minimum = std::numeric_limits<double>::min();
+            if (!std::isfinite(total) || (total <= minimum && largestFound == 0.) ||
+                (random * total <= minimum && weights[0] <= minimum && total > 0.))
+                return ApplyScaledKraus<Qubits>(kraus, random, qubits);
+            if (total <= 0.)
             {
                 // A positive weight that was read from the amplitudes and fell below its cutoff is reported: it is
                 // not told from the rounding of amplitudes that cancel, and counts as none.
@@ -845,48 +924,233 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
             }
             draw();
         }
+        if (boundaryAtZero || weights[chosen] < std::numeric_limits<double>::min())
+            return ApplyScaledKraus<Qubits>(kraus, random, qubits);
 
         // An operator whose weight was in doubt takes the state almost to nothing: what it leaves is the difference
         // of nearly equal amplitudes. It is applied as it is, as a gate, and the state is then scaled by the norm it
         // actually has, as a second gate. A recording holds the two, and replays exactly what was done here.
+        const size_t qubit2 = Qubits > 1 ? qubits[1] : 0, qubit3 = Qubits > 2 ? qubits[2] : 0;
         if (reaches[chosen] >= 0.)
         {
-            ApplyGate(Gates::AppliedGate<MatrixClass>(kraus[chosen], qubit, controllingQubit1));
+            ApplyGate(Gates::AppliedGate<MatrixClass>(kraus[chosen], qubits[0], qubit2, qubit3));
             const double norm = registerStorage.squaredNorm();
             if (!(norm > 0.) || !std::isfinite(norm))
                 throw std::domain_error("The Kraus operator drawn leaves nothing of this state");
             ApplyGate(
-                Gates::AppliedGate<MatrixClass>(MatrixClass(MatrixClass::Identity(2, 2) / std::sqrt(norm)), qubit));
+                Gates::AppliedGate<MatrixClass>(MatrixClass(MatrixClass::Identity(2, 2) / std::sqrt(norm)), qubits[0]));
             return chosen;
         }
 
         // The scaled operator goes straight to the local-map kernel: no gate object, and a diagonal or
         // single-entry operator (the no-jump and jump operators of a damping channel) costs what it holds.
         const double scale = 1. / std::sqrt(weights[chosen]);
-        std::array<std::complex<double>, 16> coefficients;
+        std::array<std::complex<double>, dimension * dimension> coefficients;
         for (Eigen::Index row = 0; row < dimension; ++row)
             for (Eigen::Index col = 0; col < dimension; ++col)
                 coefficients[static_cast<size_t>(row * dimension + col)] =
                     std::complex<double>(kraus[chosen](row, col)) * scale;
-        if (dimension == 2)
-            BaseClass::template ApplyLocalMap<1>(registerStorage, coefficients.data(), {size_t{1} << qubit},
-                                                 NrBasisStates, UseMultithreading());
-        else
-            BaseClass::template ApplyLocalMap<2>(registerStorage, coefficients.data(),
-                                                 {size_t{1} << qubit, size_t{1} << controllingQubit1}, NrBasisStates,
-                                                 UseMultithreading());
+        // An unoccupied input column can hold a finite coefficient too large to premultiply by scale.
+        if (scale > 1. && !std::all_of(coefficients.begin(), coefficients.end(), [](std::complex<double> z) {
+                return std::isfinite(z.real()) && std::isfinite(z.imag());
+            }))
+            return ApplyScaledKraus<Qubits>(kraus, random, qubits);
+        BaseClass::template ApplyLocalMap<Qubits>(registerStorage, coefficients.data(), LocalBits<Qubits>(qubits),
+                                                  NrBasisStates, UseMultithreading());
         if (recordGates)
             computeGates.emplace_back(
-                Gates::AppliedGate<MatrixClass>(MatrixClass(kraus[chosen] * scale), qubit, controllingQubit1));
+                Gates::AppliedGate<MatrixClass>(MatrixClass(kraus[chosen] * scale), qubits[0], qubit2, qubit3));
         return chosen;
     }
 
-    // The same, drawing from this register's own random stream.
-    size_t SampleKrausOperator(const std::vector<MatrixClass> &kraus, size_t qubit, size_t controllingQubit1 = 0)
+    // Exceptional range only. Factor a power of two from each populated input column and a second
+    // power from each operator's image. The matrix and state seen by the ordinary dot products then
+    // have bounded entries, even when the original probability lies outside the double range.
+    template <unsigned Qubits>
+    size_t ApplyScaledKraus(const std::vector<MatrixClass> &kraus, double random,
+                            const std::array<size_t, Qubits> &qubits)
     {
-        return ApplyKrausOperator(kraus, uniformZeroOne(rng), qubit, controllingQubit1);
+        constexpr size_t dimension = size_t{1} << Qubits;
+        const auto bits = LocalBits<Qubits>(qubits);
+        const auto column = [&](size_t index) {
+            size_t c = 0;
+            for (unsigned b = 0; b < Qubits; ++b)
+                if (index & bits[b])
+                    c |= size_t{1} << b;
+            return c;
+        };
+        const auto magnitude = [](std::complex<double> z) { return std::max(std::abs(z.real()), std::abs(z.imag())); };
+        const auto shift = [](std::complex<double> z, int exponent) {
+            return std::complex<double>(std::ldexp(z.real(), exponent), std::ldexp(z.imag(), exponent));
+        };
+        if (!registerStorage.allFinite())
+            throw std::domain_error("Kraus weights require a finite state");
+        std::array<double, dimension> maxima{}, populations{};
+        std::array<int, dimension> columns{};
+        for (size_t i = 0; i < NrBasisStates; ++i)
+        {
+            const size_t c = column(i);
+            maxima[c] = std::max(maxima[c], magnitude(registerStorage[i]));
+        }
+        for (size_t c = 0; c < dimension; ++c)
+            if (maxima[c] > 0.)
+                columns[c] = std::ilogb(maxima[c]);
+        VectorClass scaled = registerStorage;
+        for (size_t i = 0; i < NrBasisStates; ++i)
+        {
+            const size_t c = column(i);
+            const auto z = shift(registerStorage[i], -columns[c]);
+            scaled[i] = typename VectorClass::Scalar(z);
+            populations[c] += std::norm(z);
+        }
+
+        constexpr int precision = std::numeric_limits<double>::digits;
+
+        struct Weight
+        {
+            std::uint64_t significand = 0;
+            int exponent = 0, imageExponent = 0;
+        };
+
+        std::vector<Weight> weights(kraus.size());
+        int smallestExponent = std::numeric_limits<int>::max();
+        int largestExponent = std::numeric_limits<int>::min();
+        VectorClass image;
+        std::array<std::complex<double>, dimension * dimension> coefficients;
+        for (size_t k = 0; k < kraus.size(); ++k)
+        {
+            auto &w = weights[k];
+            int imageExponent = std::numeric_limits<int>::min();
+            for (size_t c = 0; c < dimension; ++c)
+                if (maxima[c] > 0.)
+                    for (size_t r = 0; r < dimension; ++r)
+                    {
+                        const double m = magnitude(kraus[k](r, c));
+                        if (m > 0.)
+                            imageExponent = std::max(imageExponent, columns[c] + std::ilogb(m));
+                    }
+            if (imageExponent == std::numeric_limits<int>::min())
+                continue;
+            w.imageExponent = imageExponent;
+            double diagonal = 0.;
+            for (size_t r = 0; r < dimension; ++r)
+                for (size_t c = 0; c < dimension; ++c)
+                {
+                    const auto z =
+                        maxima[c] > 0. ? shift(kraus[k](r, c), columns[c] - imageExponent) : std::complex<double>{};
+                    coefficients[r * dimension + c] = z;
+                    diagonal += std::norm(z) * populations[c];
+                }
+            image = scaled;
+            const double weight = BaseClass::template ApplyLocalMapNorm<Qubits>(image, coefficients.data(), bits,
+                                                                                NrBasisStates, UseMultithreading());
+            if (weight <= 0. || weight < (AmplitudeRounding * AmplitudeRounding * dimension) * diagonal)
+                continue;
+            w.significand = static_cast<std::uint64_t>(std::ldexp(std::frexp(weight, &w.exponent), precision));
+            w.exponent += 2 * imageExponent - precision;
+            smallestExponent = std::min(smallestExponent, w.exponent);
+            largestExponent = std::max(largestExponent, w.exponent);
+        }
+        if (largestExponent == std::numeric_limits<int>::min())
+            throw std::domain_error("No Kraus operator has any probability on this state");
+
+        // Each computed weight and the draw are dyadic. Compare the cumulative weight with
+        // random * total in base 2^16, exactly for those values. Floating addition would discard
+        // a tiny interval beside a large one and could move a draw across their shared boundary.
+        int drawExponent = 0;
+        const double fraction = std::frexp(std::min(1., std::max(0., random)), &drawExponent);
+        const auto draw = static_cast<std::uint64_t>(std::ldexp(fraction, precision));
+        drawExponent -= precision;
+        const int low = smallestExponent + drawExponent;
+        const int high = largestExponent + precision + std::numeric_limits<size_t>::digits;
+        using Digits = std::vector<std::uint16_t>;
+        Digits threshold((high - low) / 16 + 2), cumulative(threshold.size());
+        const auto addProduct = [&](Digits &sum, const Weight &w, std::uint64_t multiplier, int shift) {
+            for (std::uint64_t x = w.significand; x; x >>= 16, shift += 16)
+            {
+                int bit = w.exponent + shift - low;
+                for (std::uint64_t y = multiplier; y; y >>= 16, bit += 16)
+                {
+                    std::uint64_t carry = ((x & 0xffffu) * (y & 0xffffu)) << (bit % 16);
+                    for (size_t pos = static_cast<size_t>(bit / 16); carry; ++pos)
+                    {
+                        carry += sum[pos];
+                        sum[pos] = static_cast<std::uint16_t>(carry);
+                        carry >>= 16;
+                    }
+                }
+            }
+        };
+        for (const auto &w : weights)
+            addProduct(threshold, w, draw, drawExponent);
+        size_t chosen = 0;
+        for (size_t k = 0; k < weights.size(); ++k)
+        {
+            const auto &w = weights[k];
+            if (w.significand == 0)
+                continue;
+            chosen = k;
+            addProduct(cumulative, w, 1, 0);
+            if (std::lexicographical_compare(threshold.rbegin(), threshold.rend(), cumulative.rbegin(),
+                                             cumulative.rend()))
+                break;
+        }
+        const auto &w = weights[chosen];
+        MatrixClass bounded(dimension, dimension);
+        for (size_t c = 0; c < dimension; ++c)
+        {
+            // Factor empty columns too, so a recording still represents the original linear operator
+            // when replayed on a different state.
+            if (maxima[c] == 0.)
+            {
+                double m = 0.;
+                for (size_t r = 0; r < dimension; ++r)
+                    m = std::max(m, magnitude(kraus[chosen](r, c)));
+                if (m > 0.)
+                    columns[c] = w.imageExponent - std::ilogb(m);
+            }
+            for (size_t r = 0; r < dimension; ++r)
+                bounded(r, c) = typename MatrixClass::Scalar(shift(kraus[chosen](r, c), columns[c] - w.imageExponent));
+        }
+        const size_t q2 = Qubits > 1 ? qubits[1] : 0, q3 = Qubits > 2 ? qubits[2] : 0;
+        // Apply to scratch before changing the register or its recording. In particular, keep the
+        // normalization after the dot products: scaling their coefficients first can magnify rounding
+        // when the selected branch almost cancels.
+        image = registerStorage;
+        const std::array<size_t, 3> gateBits{bits[0], Qubits > 1 ? bits[1] : 0, Qubits > 2 ? bits[2] : 0};
+        std::vector<Gates::AppliedGate<MatrixClass>> recording;
+        const auto apply = [&](const MatrixClass &matrix) {
+            Gates::AppliedGate<MatrixClass> gate(matrix, qubits[0], q2, q3);
+            BaseClass::ApplyGateInPlace(image, matrix, gate.getStructure(), gateBits, Qubits, NrBasisStates,
+                                        UseMultithreading());
+            if (recordGates)
+                recording.emplace_back(std::move(gate));
+        };
+        // Split large exponents so every recorded diagonal is representable in the matrix scalar.
+        constexpr int step = std::numeric_limits<typename MatrixClass::RealScalar>::max_exponent / 2;
+        while (std::any_of(columns.begin(), columns.end(), [](int e) { return e != 0; }))
+        {
+            MatrixClass diagonal = MatrixClass::Zero(dimension, dimension);
+            for (size_t c = 0; c < dimension; ++c)
+            {
+                const int e = std::clamp(columns[c], -step, step);
+                diagonal(c, c) = std::ldexp(1., -e);
+                columns[c] -= e;
+            }
+            apply(diagonal);
+        }
+        apply(bounded);
+        const double norm = image.stableNorm();
+        if (!(norm > 0.) || !std::isfinite(norm))
+            throw std::domain_error("The Kraus operator drawn leaves nothing of this state");
+        apply(MatrixClass::Identity(dimension, dimension) / norm);
+        computeGates.insert(computeGates.end(), std::make_move_iterator(recording.begin()),
+                            std::make_move_iterator(recording.end()));
+        registerStorage.swap(image);
+        return chosen;
     }
 
+  public:
     void SaveState()
     {
         savedStateStorage = registerStorage;
@@ -1132,8 +1396,7 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
         }
     }
 
-    template <unsigned Qubits>
-    std::array<size_t, Qubits> LocalBits(const std::array<size_t, Qubits> &qubits) const
+    template <unsigned Qubits> std::array<size_t, Qubits> LocalBits(const std::array<size_t, Qubits> &qubits) const
     {
         std::array<size_t, Qubits> bits{};
         for (unsigned k = 0; k < Qubits; ++k)
@@ -1151,15 +1414,16 @@ class QubitRegister : public QubitRegisterCalculator<VectorClass, MatrixClass>,
     template <unsigned Qubits>
     std::array<double, (size_t{1} << Qubits)> Populations(const std::array<size_t, Qubits> &qubits) const
     {
-        return BaseClass::template LocalPopulations<Qubits>(registerStorage, LocalBits<Qubits>(qubits),
-                                                             NrBasisStates, UseMultithreading());
+        return BaseClass::template LocalPopulations<Qubits>(registerStorage, LocalBits<Qubits>(qubits), NrBasisStates,
+                                                            UseMultithreading());
     }
 
-    template <unsigned Qubits> MatrixClass LocalDensity(const std::array<size_t, Qubits> &qubits) const
+    template <unsigned Qubits, bool RealPartOnly = false>
+    MatrixClass LocalDensity(const std::array<size_t, Qubits> &qubits) const
     {
         const auto bits = LocalBits<Qubits>(qubits);
-        const auto rho =
-            BaseClass::template LocalDensityMatrix<Qubits>(registerStorage, bits, NrBasisStates, UseMultithreading());
+        const auto rho = BaseClass::template LocalDensityMatrix<Qubits, RealPartOnly>(
+            registerStorage, bits, NrBasisStates, UseMultithreading());
         constexpr Eigen::Index dimension = Eigen::Index{1} << Qubits;
         MatrixClass result(dimension, dimension);
         for (Eigen::Index row = 0; row < dimension; ++row)

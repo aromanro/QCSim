@@ -44,6 +44,22 @@ inline Vector Apply(const Vector &state, const Matrix &matrix, const std::vector
 
 inline void RealDenseStatevectorGates()
 {
+    // In row 1 of H tensor H, the first three input contributions cancel exactly.
+    // The fourth remains representable even when it is far smaller than the others.
+    Matrix hadamards(4, 4);
+    hadamards << .5, .5, .5, .5, .5, -.5, .5, -.5, .5, .5, -.5, -.5, .5, -.5, -.5, .5;
+    Vector input(4);
+    input << 1., -1., -2., -std::ldexp(1., -60);
+    input.normalize();
+    for (const auto phase : {std::complex<double>(1.), std::complex<double>(0., 1.)})
+    {
+        const Matrix gate = phase * hadamards;
+        Vector actual = input;
+        QubitRegisterCalculator<>::ApplyGateInPlace(actual, gate, Gates::ClassifyGateMatrix(gate), {1, 2, 0}, 2, 4,
+                                                    false);
+        Require(actual[1] == (-.5 * input[3]) * phase, "Dense gate lost a representable amplitude after cancellation");
+    }
+
     // A nonsymmetric, dense real orthogonal matrix.
     const auto mixingGate = [](unsigned dim) {
         const Eigen::VectorXd axis = Eigen::VectorXd::LinSpaced(dim, 1., dim).normalized();
@@ -57,8 +73,9 @@ inline void RealDenseStatevectorGates()
         for (Eigen::Index i = 0; i < initial.size(); ++i)
             initial(i) = {std::sin(.13 * i + .4), std::cos(.37 * i - .1)};
         initial.normalize();
-        for (const std::vector<unsigned> &qubits : std::vector<std::vector<unsigned>>{
-                 {1, 3}, {3, 1}, {1, 2, n - 1}, {n - 1, 2, 1}, {n - 1, 0, 2}})
+        const std::vector<std::vector<unsigned>> placements{
+            {1, 3}, {3, 1}, {0, 3}, {3, 0}, {1, 2, n - 1}, {n - 1, 2, 1}, {0, n - 1, 2}, {n - 1, 0, 2}, {n - 1, 2, 0}};
+        for (const auto &qubits : placements)
         {
             const unsigned arity = static_cast<unsigned>(qubits.size()), dim = 1U << arity;
             std::array<size_t, 3> bits{};
@@ -72,8 +89,9 @@ inline void RealDenseStatevectorGates()
                 {
                     Vector actual = state;
                     QubitRegisterCalculator<>::ApplyGateInPlace(actual, matrix, structure, bits, arity, state.size(),
-                                                               parallel);
-                    Require((actual - expected).norm() < 2e-15, "Real dense gate changed its amplitudes or target order");
+                                                                parallel);
+                    Require((actual - expected).norm() < 2e-15,
+                            "Real dense gate changed its amplitudes or target order");
                     // Compare the imaginary part separately: tiny imaginary coefficients must survive dispatch.
                     const double scale = expected.imag().cwiseAbs().maxCoeff();
                     Require((actual.imag() - expected.imag()).cwiseAbs().maxCoeff() <= 2e-14 * scale,
