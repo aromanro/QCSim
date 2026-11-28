@@ -24,7 +24,6 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <numeric>
 #include <string>
 #include <thread>
@@ -1018,6 +1017,21 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
     }
 
 #ifdef QCSIM_SSE2
+    // OR-ing the original component bits preserves subnormal support even when their squares round
+    // to zero. Discard the sign bits so that both signed zeros count as empty.
+    static inline bool HasNonzeroComponent(__m128d components)
+    {
+        const __m128i magnitude = _mm_slli_epi64(_mm_castpd_si128(components), 1);
+        return _mm_movemask_epi8(_mm_cmpeq_epi8(magnitude, _mm_setzero_si128())) != 0xffff;
+    }
+#ifdef QCSIM_AVX2
+    static inline bool HasNonzeroComponent(__m256d components)
+    {
+        const __m256i magnitude = _mm256_slli_epi64(_mm256_castpd_si256(components), 1);
+        return !_mm256_testz_si256(magnitude, magnitude);
+    }
+#endif
+
     // Complex coefficient times amplitude v = [re, im], with the coefficient prepared once as
     // re = [cr, cr] and im = [-ci, ci]: [cr * vr - ci * vi, cr * vi + ci * vr].
     static inline __m128d MultiplyByCoefficient(__m128d re, __m128d im, __m128d v)
@@ -1700,12 +1714,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             const size_t index = PopulationsOnly ? r : components * (r * dim + c);
                             sums[index] = (re[0] + re[1]) + (re[2] + re[3]);
                             if constexpr (TrackSupport)
-                            {
-                                // OR the original component bits. Dropping the sign bits counts both
-                                // signed zeros as empty and retains even the smallest subnormal.
-                                const auto occupied = _mm256_slli_epi64(_mm256_castpd_si256(accIm[r]), 1);
-                                sums[dim + r] = !_mm256_testz_si256(occupied, occupied);
-                            }
+                                sums[dim + r] = HasNonzeroComponent(accIm[r]);
                             if constexpr (complexOffDiagonal)
                             {
                                 _mm256_store_pd(im, accIm[p]);
@@ -1751,11 +1760,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             const size_t index = PopulationsOnly ? r : components * (r * dim + c);
                             sums[index] = re[0] + re[1];
                             if constexpr (TrackSupport)
-                            {
-                                const auto occupied = _mm_slli_epi64(_mm_castpd_si128(accIm[r]), 1);
-                                sums[dim + r] =
-                                    _mm_movemask_epi8(_mm_cmpeq_epi8(occupied, _mm_setzero_si128())) != 0xffff;
-                            }
+                                sums[dim + r] = HasNonzeroComponent(accIm[r]);
                             if constexpr (complexOffDiagonal)
                             {
                                 _mm_storeu_pd(im, accIm[p]);
@@ -1995,12 +2000,18 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         });
     }
 
+    struct MapNormBlock
+    {
+        double norm;
+        bool occupied;
+    };
+
 #ifdef QCSIM_SSE2
     // Separate SSE2 loops keep MSVC from slowing down the complex dot product when a real map is specialized.
     template <unsigned Bits, bool Parallel>
     static void RealLocalMapNormBlocks(const Amplitudes &state, const std::complex<double> *matrix,
                                        const std::array<size_t, size_t{1} << Bits> &offsets, const IndexPlan &plan,
-                                       size_t blockSize, size_t blocks, int threads, double *partial)
+                                       size_t blockSize, size_t blocks, int threads, MapNormBlock *partial)
     {
         constexpr size_t dimension = size_t{1} << Bits;
         __m128d re[dimension][dimension];
@@ -2010,6 +2021,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
             constexpr size_t dim = size_t{1} << Bits;
             __m128d norm = _mm_setzero_pd();
+            __m128d components = _mm_setzero_pd();
             for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
             {
                 const size_t base = plan.template Expand<Bits>(i);
@@ -2023,42 +2035,25 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                         acc = _mm_add_pd(acc, _mm_mul_pd(re[r][c], v[c]));
                     _mm_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
                     norm = _mm_add_pd(norm, _mm_mul_pd(acc, acc));
+                    components = _mm_or_pd(components, acc);
                 }
             }
             double lanes[2];
             _mm_storeu_pd(lanes, norm);
-            partial[block] = lanes[0] + lanes[1];
+            partial[block] = {lanes[0] + lanes[1], HasNonzeroComponent(components)};
         });
     }
 #endif
 
-    // A projector can annihilate its input, but a small positive image can also have every individual
-    // square round to zero. Check whole blocks of the output in parallel and sum them in a fixed order.
+    // Recover a small positive norm using a fixed physical order even when individual squares underflow.
     template <bool Parallel>
     static EIGEN_DONT_INLINE double SmallMapSquaredNorm(const Amplitudes &state, size_t count, size_t blocks,
-                                                        int threads, double *partial)
+                                                        int threads, MapNormBlock *partial)
     {
         const size_t elementsPerBlock = count / blocks;
         ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
             const size_t begin = block * elementsPerBlock;
             const size_t end = block + 1 == blocks ? count : begin + elementsPerBlock;
-            if constexpr (std::is_same_v<typename VectorClass::Scalar, std::complex<double>> &&
-                          sizeof(double) == sizeof(uint64_t) && std::numeric_limits<double>::is_iec559)
-            {
-                // OR both components without squaring, then discard their sign bits.
-                uint64_t occupied = 0;
-                for (size_t i = begin; i < end; ++i)
-                {
-                    uint64_t bits[2];
-                    std::memcpy(bits, &state(i), sizeof(bits));
-                    occupied |= bits[0] | bits[1];
-                }
-                if ((occupied << 1) == 0)
-                {
-                    partial[block] = 0.;
-                    return;
-                }
-            }
             double scaled = 0.;
             for (size_t i = begin; i < end; ++i)
             {
@@ -2067,9 +2062,11 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                 const double im = static_cast<double>(amplitude.imag()) * 0x1p512;
                 scaled += re * re + im * im;
             }
-            partial[block] = scaled;
+            partial[block].norm = scaled;
         });
-        return std::ldexp(std::accumulate(partial, partial + blocks, 0.), -1024);
+        return std::ldexp(
+            std::accumulate(partial, partial + blocks, 0., [](double s, const MapNormBlock &b) { return s + b.norm; }),
+            -1024);
     }
 
     // ApplyLocalMapNorm. Dense: the product of the gates and operators of a block has no structure to use. Every
@@ -2098,17 +2095,18 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         while (active / blockSize > 4096)
             blockSize <<= 1;
         const size_t blocks = active / blockSize;
-        double single = 0.;
-        std::vector<double> several(blocks > 1 ? blocks : 0);
-        double *const partial = blocks > 1 ? several.data() : &single;
+        MapNormBlock single{};
+        std::vector<MapNormBlock> several(blocks > 1 ? blocks : 0);
+        MapNormBlock *const partial = blocks > 1 ? several.data() : &single;
         const int threads = Parallel ? TeamThreads(count) : 1;
         const Amplitudes state(vector);
         const auto total = [&] {
-            const double sum = std::accumulate(partial, partial + blocks, 0.);
+            const double sum = std::accumulate(partial, partial + blocks, 0.,
+                                               [](double s, const MapNormBlock &b) { return s + b.norm; });
             if (sum < std::numeric_limits<double>::min() * static_cast<double>(count))
             {
-                if (sum == 0. && std::all_of(matrix, matrix + dimension * dimension,
-                                             [](auto coefficient) { return coefficient == 0.; }))
+                if (sum == 0. &&
+                    std::none_of(partial, partial + blocks, [](const MapNormBlock &b) { return b.occupied; }))
                     return 0.;
                 return SmallMapSquaredNorm<Parallel>(state, count, blocks, threads, partial);
             }
@@ -2145,6 +2143,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                     applyBlocks(real, [&](auto realCoefficients, size_t block) {
                         constexpr size_t dim = size_t{1} << Bits;
                         __m256d norm = _mm256_setzero_pd();
+                        __m256d components = _mm256_setzero_pd();
                         for (size_t i = block * blockSize; i < (block + 1) * blockSize; i += run)
                         {
                             const size_t first = plan.template Expand<Bits>(i);
@@ -2168,12 +2167,14 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                                             acc = AddProduct(acc, re[r][c], im[r][c], v[c], swapped[c]);
                                     _mm256_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
                                     norm = _mm256_add_pd(norm, _mm256_mul_pd(acc, acc));
+                                    components = _mm256_or_pd(components, acc);
                                 }
                             }
                         }
                         alignas(32) double lanes[4];
                         _mm256_store_pd(lanes, norm);
-                        partial[block] = (lanes[0] + lanes[1]) + (lanes[2] + lanes[3]);
+                        partial[block] = {(lanes[0] + lanes[1]) + (lanes[2] + lanes[3]),
+                                          HasNonzeroComponent(components)};
                     });
                     return total();
                 }
@@ -2197,6 +2198,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
             ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
                 constexpr size_t dim = size_t{1} << Bits;
                 __m128d norm = _mm_setzero_pd();
+                __m128d components = _mm_setzero_pd();
                 for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
                 {
                     const size_t base = plan.template Expand<Bits>(i);
@@ -2210,11 +2212,12 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                             acc = _mm_add_pd(acc, MultiplyByCoefficient(re[r][c], im[r][c], v[c]));
                         _mm_storeu_pd(reinterpret_cast<double *>(&state(base | offsets[r])), acc);
                         norm = _mm_add_pd(norm, _mm_mul_pd(acc, acc));
+                        components = _mm_or_pd(components, acc);
                     }
                 }
                 double lanes[2];
                 _mm_storeu_pd(lanes, norm);
-                partial[block] = lanes[0] + lanes[1];
+                partial[block] = {lanes[0] + lanes[1], HasNonzeroComponent(components)};
             });
             return total();
         }
@@ -2223,6 +2226,7 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
         ForEachTile<Parallel>(threads, blocks, [&](size_t block) {
             constexpr size_t dim = size_t{1} << Bits;
             double norm = 0.;
+            bool any = false;
             for (size_t i = block * blockSize; i < (block + 1) * blockSize; ++i)
             {
                 const size_t base = plan.template Expand<Bits>(i);
@@ -2243,9 +2247,10 @@ template <class VectorClass = Eigen::VectorXcd, class MatrixClass = Eigen::Matri
                     state(base | offsets[r]) = Scalar(sumRe, sumIm);
                     norm += static_cast<double>(sumRe) * static_cast<double>(sumRe) +
                             static_cast<double>(sumIm) * static_cast<double>(sumIm);
+                    any |= sumRe != 0. || sumIm != 0.;
                 }
             }
-            partial[block] = norm;
+            partial[block] = {norm, any};
         });
         return total();
     }

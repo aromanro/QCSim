@@ -3,6 +3,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "StructuredGateRegressionTests.h"
@@ -833,6 +834,41 @@ static bool StatevectorKrausTrajectoryTest()
                 std::cout << "An exactly cancelling local map produced a nonzero result" << std::endl;
                 return false;
             }
+        }
+    }
+
+    // The sole output is in the upper physical half of the vector, but its input group is in
+    // the first reduction block. Each component squares to zero; together they round to denorm_min.
+    {
+        constexpr size_t count = size_t{1} << 16;
+        const std::array<size_t, 3> bits{size_t{1} << 4, size_t{1} << 15, size_t{1} << 2};
+        constexpr size_t source = 1; // odd group in an AVX pair
+        const size_t target = source | bits[0] | bits[1] | bits[2];
+        const std::complex<double> input{0.625, -0.625}, guard{4., 3.};
+        const auto check = [&](auto &state) {
+            using Storage = std::decay_t<decltype(state)>;
+            std::array<std::complex<double>, 64> map{};
+            for (const auto coefficient : {std::complex<double>{tinyScale, 0.}, std::complex<double>{0., tinyScale}})
+                for (bool parallel : {false, true})
+                {
+                    state.setZero();
+                    state[source] = input;
+                    map[7 * 8] = coefficient;
+                    const double weight = QC::QubitRegisterCalculator<Storage>::template ApplyLocalMapNorm<3>(
+                        state, map.data(), bits, count, parallel);
+                    if (weight != std::numeric_limits<double>::denorm_min() || state[target] != coefficient * input ||
+                        (state.array() != std::complex<double>{}).count() != 1)
+                        return false;
+                }
+            return true;
+        };
+        Eigen::VectorXcd contiguous(count), padded = Eigen::VectorXcd::Constant(2 * count, guard);
+        using Strided = Eigen::Map<Eigen::VectorXcd, 0, Eigen::InnerStride<2>>;
+        Strided strided(padded.data(), count), gaps(padded.data() + 1, count);
+        if (!check(contiguous) || !check(strided) || !(gaps.array() == guard).all())
+        {
+            std::cout << "A local map lost an isolated tiny image or wrote outside the vector stride" << std::endl;
+            return false;
         }
     }
 
